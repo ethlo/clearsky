@@ -1,0 +1,86 @@
+// The page itself, in a real browser: every view renders without errors, with Slack off (the
+// case that once broke the inbox). Skipped when Playwright isn't installed.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
+import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { mkdtempSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
+
+let chromium;
+try { ({ chromium } = createRequire(import.meta.url)('playwright')); } catch { /* not installed */ }
+
+const ago = (h) => new Date(Date.now() - h * 36e5).toISOString();
+const pr = (o) => ({
+  number: 1, title: 'SSP-5: Fix capture', url: 'https://github.com/acme/api/pull/1', state: 'OPEN', isDraft: false, createdAt: ago(48), updatedAt: ago(1),
+  reviewDecision: null, mergeable: 'MERGEABLE', headRefName: 'feature/SSP-5', additions: 3, deletions: 1, changedFiles: 1,
+  repository: { nameWithOwner: 'acme/api' }, author: { login: 'me' }, reviews: { nodes: [] }, reviewRequests: { nodes: [] }, reviewThreads: { nodes: [] },
+  commits: { nodes: [{ commit: { committedDate: ago(2), statusCheckRollup: { state: 'SUCCESS' } } }] }, closingIssuesReferences: { nodes: [] }, timelineItems: { nodes: [] }, ...o,
+});
+
+test('every view renders without page errors', { skip: !chromium && 'Playwright is not installed' }, async (t) => {
+  const gh = createServer(async (req, res) => {
+    let body = '';
+    for await (const c of req) body += c;
+    const q = body ? JSON.parse(body).query : '';
+    const send = (o) => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
+    if (q.includes('assignableUsers')) return send({ data: { viewer: { login: 'me' }, repository: { assignableUsers: { nodes: [{ login: 'anna', name: 'Anna' }, { login: 'bob', name: null }] },
+      pullRequest: { author: { login: 'me' }, suggestedReviewers: [{ reviewer: { login: 'anna', name: 'Anna' } }], reviewRequests: { nodes: [] }, reviews: { nodes: [] } } } } });
+    if (q.includes('viewer { login }') && !q.includes('search')) return send({ data: { viewer: { login: 'me' } } });
+    if (q.includes('reviewRequested: search')) return send({ data: {
+      reviewRequested: { nodes: [pr({ number: 7, title: 'Their change', url: 'https://github.com/acme/api/pull/7', author: { login: 'anna' } })] },
+      myPrs: { nodes: [pr({})] }, mentions: { nodes: [] }, assigned: { nodes: [] } } });
+    send({ data: {} });
+  });
+  await new Promise((r) => gh.listen(0, '127.0.0.1', r));
+  const port = 7700 + Math.floor(Math.random() * 80);
+  const server = spawn(process.execPath, [fileURLToPath(new URL('../bin/clearsky.mjs', import.meta.url)), 'serve', '--port', String(port)], {
+    stdio: 'ignore', env: { PATH: process.env.PATH, HOME: mkdtempSync(join(tmpdir(), 'clearsky-page-')), CLEARSKY_POLL_MINUTES: '0',
+      GITHUB_TOKEN: 'x', GITHUB_API_URL: `http://127.0.0.1:${gh.address().port}`, GITHUB_ORGS: 'acme',
+      ACLI_BIN: fileURLToPath(new URL('./fake-acli.mjs', import.meta.url)), COPILOT_BIN: fileURLToPath(new URL('./fake-copilot.mjs', import.meta.url)) },
+  });
+  const browser = await chromium.launch();
+  t.after(async () => { await browser.close(); server.kill(); gh.close(); });
+  const base = `http://127.0.0.1:${port}`;
+  for (let i = 0; i < 50; i++) { try { await fetch(base); break; } catch { await new Promise((r) => setTimeout(r, 100)); } }
+
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto(base);
+  await page.waitForSelector('#list li.r', { timeout: 10_000 });
+  assert.ok(await page.locator('#list li.r').count() >= 2, 'the inbox lists the PRs');
+  assert.match(await page.locator("#list").innerText(), /no reviewer yet/i);
+
+  // An item page, and the review picker on it.
+  await page.locator('#list li.r', { hasText: 'SSP-5' }).first().click();
+  await page.waitForSelector('#v-item:not([hidden]) [data-rv-open]');
+  await page.click('[data-rv-open]');
+  await page.waitForSelector('.rv-pick li[data-q]');
+  assert.equal(await page.locator('.rv-pick li[data-q]').count(), 2);
+
+  for (const view of ['calendar', 'standup', 'notifications', 'reviews', 'prs', 'tickets']) {
+    await page.goto(`${base}/#${view}`);
+    await page.waitForTimeout(400);
+  }
+
+  // A Copilot chat; afterwards the menu lists it.
+  await page.goto(`${base}/#copilot`);
+  await page.selectOption('#cp-perm', 'full');
+  await page.fill('#chat-text', 'hello');
+  await page.press('#chat-text', 'Enter');
+  await page.waitForFunction(() => document.querySelector('#chat-send').textContent === 'Send', null, { timeout: 10_000 });
+  await page.goto(`${base}/#inbox`);
+  await page.waitForSelector('#side-cp .ni', { timeout: 15_000 });
+
+  for (const w of [390, 360]) {
+    await page.setViewportSize({ width: w, height: 800 });
+    await page.goto(base);
+    await page.waitForTimeout(500);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `no sideways scrolling at ${w}px`);
+  }
+  assert.deepEqual(errors, []);
+});

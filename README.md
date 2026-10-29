@@ -67,6 +67,7 @@ The config is read from `./.env`, then the repo's `.env`, then `~/.config/clears
 
 ```sh
 clearsky serve        # dashboard at http://127.0.0.1:7777, refreshes every 5 minutes
+clearsky restart      # restart once no Copilot chat is working (--now: right away)
 clearsky              # Markdown summary in the terminal
 clearsky --json       # everything as JSON, for scripts and Copilot
 clearsky standup      # stand-up summary (add --json for the data)
@@ -109,9 +110,15 @@ There is no public API. This uses the one the portal itself uses, as documented 
 
 Each row says whose move it is. Copilot's PR reviewer bot doesn't count as a reviewer: its comments show as a note ("Copilot left 3 suggestions") and never make a PR your move. Review threads you answered last, and outdated ones, aren't yours either. A PR nobody has been asked to review says **No reviewer yet**; open it and use **Request review** to pick people (GitHub's suggestions first, with who is already asked or has reviewed marked). Jira tickets in review, QA, testing or blocked statuses sit under Waiting on others. **Done** hides an item until something new happens on it, such as a person reviewing or its state changing, not a bot comment or your own push. What you did from Clearsky shows on the item ("You: Asked anna to review, 5 min ago"). The ↻ next to the page title shows how fresh the data is and refreshes everything; merged PRs drop out even before GitHub's search catches up.
 
+## Running it
+
+`clearsky restart` asks the running server to restart once no Copilot chat is working or waiting for your OK, so updating never cuts a turn off; idle chats carry on afterwards. To start Clearsky at login and keep it running, `contrib/clearsky.service` is a systemd user service (instructions inside); it sets `CLEARSKY_SUPERVISED=1`, so a restart hands over to systemd.
+
+`npm test` includes a browser check of every view when Playwright is installed, and skips it otherwise.
+
 ## Notifications
 
-While `clearsky serve` runs, it checks GitHub, Jira mentions and Slack every 3 minutes (`CLEARSKY_POLL_MINUTES`). When something new needs you (a review request, a PR turning to your move, a mention), you get a desktop notification with an **Open** button on workdays from 07:00 until two hours after your workday ends. Dismissed and muted items stay quiet. Banners go straight to the desktop over D-Bus (`gdbus`), because Ubuntu's AppArmor profile for `notify-send` blocks the click on **Open**; a newer banner for the same item replaces the old one. Without D-Bus it falls back to `notify-send` (`CLEARSKY_NOTIFY=notify-send` forces it), and without either, the bell at the bottom of the menu turns on browser notifications instead. `CLEARSKY_NOTIFY=off` turns them off. New things also get a dot in the page and a count in the tab title until you've looked. A review request notifies when it's (re-)requested, not on every push or comment; a GitHub thread you were mentioned in notifies once; a status that flips back and forth notifies once; more than two at a time become one banner. `GET /api/notifications/log` lists the last 100 sent, to see why something came.
+While `clearsky serve` runs, it checks GitHub, Jira mentions and Slack every 3 minutes (`CLEARSKY_POLL_MINUTES`). When something new needs you (a review request, a PR turning to your move, a mention), you get a desktop notification with an **Open** button on workdays from 07:00 until two hours after your workday ends. Dismissed and muted items stay quiet. Banners go straight to the desktop over D-Bus (`gdbus`), because Ubuntu's AppArmor profile for `notify-send` blocks the click on **Open**; a newer banner for the same item replaces the old one. Without D-Bus it falls back to `notify-send` (`CLEARSKY_NOTIFY=notify-send` forces it), and without either, the bell at the bottom of the menu turns on browser notifications instead. `CLEARSKY_NOTIFY=off` turns them off. New things also get a dot in the page and a count in the tab title until you've looked. A review request notifies when it's (re-)requested, not on every push or comment; a GitHub thread you were mentioned in notifies once; a status that flips back and forth notifies once; more than two at a time become one banner. **Notifications** in the menu lists the last 100 sent (kept across restarts), with links, to see why something came.
 
 ## Copilot chat
 

@@ -1676,7 +1676,7 @@ async function pollOnce(force) {
     if (fresh.length > 2) sendBanner({ key: 'clearsky:summary', title: `${fresh.length} new things need you`, body: fresh.slice(0, 4).map((x) => x.title).join('\n'), url: `http://127.0.0.1:${config.port}/` });
     else for (const it of fresh) sendBanner(it);
   }
-  if (fresh.length) localState.logNotified(stateFile, fresh.map((x) => ({ key: x.key, kind: x.kind, stamp: String(x.stamp ?? ''), at: new Date().toISOString(), via: poller.notifier, quiet: !notifyNow() })));
+  if (fresh.length) localState.logNotified(stateFile, fresh.map((x) => ({ key: x.key, kind: x.kind, stamp: String(x.stamp ?? ''), title: x.title, body: (x.body || '').slice(0, 200), url: x.url, at: new Date().toISOString(), via: poller.notifier, quiet: !notifyNow() })));
   return { items, seen, fresh };
 }
 
@@ -1727,7 +1727,7 @@ function restartWhenIdle({ maxWaitMinutes = 60, force = false } = {}) {
     console.log('clearsky: restarting');
     for (const c of acpChats.values()) c.agent.close();
     restart.server?.close();
-    if (process.env.INVOCATION_ID) process.exit(75); // systemd starts us again
+    if (process.env.CLEARSKY_SUPERVISED === '1') process.exit(75); // a supervisor (systemd) starts us again
     spawn(process.execPath, process.argv.slice(1), { detached: true, stdio: 'inherit', env: process.env, cwd: process.cwd() }).unref();
     setTimeout(() => process.exit(0), 200);
   };

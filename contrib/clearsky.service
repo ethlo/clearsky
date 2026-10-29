@@ -1,0 +1,21 @@
+# A systemd user service for Clearsky: starts at login, restarts after `clearsky restart`
+# or a crash, and runs with a clean environment.
+#
+#   cp contrib/clearsky.service ~/.config/systemd/user/
+#   (edit WorkingDirectory and the node path below)
+#   systemctl --user daemon-reload && systemctl --user enable --now clearsky
+#   journalctl --user -u clearsky -f
+[Unit]
+Description=Clearsky work dashboard
+After=graphical-session.target
+
+[Service]
+WorkingDirectory=%h/dev/ethlo/clearsky
+ExecStart=%h/.nvm/versions/node/v22.23.4/bin/node bin/clearsky.mjs serve
+Environment=CLEARSKY_SUPERVISED=1
+Environment=PATH=%h/.nvm/versions/node/v22.23.4/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target

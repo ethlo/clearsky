@@ -214,6 +214,12 @@
   .rv-pick li.off label { color: var(--muted); cursor: default; }
   .rv-pick .rv-foot { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
   .last-act { color: var(--text-2); font-size: 12.5px; margin-top: 4px; }
+  .notes { list-style: none; margin: 0; padding: 0; }
+  .notes li { display: grid; grid-template-columns: 90px minmax(0, 1fr) auto; gap: 12px; padding: 9px 4px; border-bottom: 1px solid var(--line); font-size: 13px; align-items: baseline; }
+  .notes .when, .notes .kind { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .notes .what { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .notes .what small { display: block; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  @media (max-width: 560px) { .notes li { grid-template-columns: 1fr; gap: 2px; } }
   .fresh { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: var(--muted); font-size: 12px; padding: 4px 6px; border-radius: 6px; margin-left: 6px; white-space: nowrap; }
   .fresh:hover { color: var(--text); background: var(--bg); }
   .fresh.spin svg { animation: spin 1s linear infinite; }
@@ -528,6 +534,7 @@
     <a class="ni" href="#" data-nav="inbox"><span class="ico">▤</span><span class="lab">Inbox</span><b id="n-inbox"></b></a>
     <a class="ni" href="#calendar" data-nav="calendar"><span class="ico">◷</span><span class="lab">Calendar</span><b id="n-calendar"></b></a>
     <a class="ni" href="#standup" data-nav="standup"><span class="ico">☰</span><span class="lab">Stand-up</span></a>
+    <a class="ni" href="#notifications" data-nav="notifications"><span class="ico">🔔</span><span class="lab">Notifications</span></a>
   </nav>
   <div class="sg">Copilot <button type="button" id="cp-new-side" title="New chat (Alt+N)" aria-label="New chat">＋</button></div>
   <div id="side-cp"></div>
@@ -584,6 +591,10 @@
   </section>
 
   <!-- A source on its own page, such as School. -->
+  <section class="view" id="v-notes" hidden>
+    <header class="vh"><h1>Recent notifications</h1><span class="sub" id="notes-sub"></span><span class="spacer"></span></header>
+    <div class="view-b"><div id="notes"></div></div>
+  </section>
   <section class="view" id="v-src" hidden>
     <header class="vh"><h1 id="src-title"></h1><button class="fresh" data-fresh title="Refresh everything"></button><span class="spacer"></span><button class="nowline" data-nowline></button></header>
     <div class="view-b"><div class="page src-page" id="src-body"></div></div>
@@ -1499,6 +1510,23 @@ document.addEventListener('click', async (e) => {
     } catch (err) { $('#rv-msg').textContent = err.message; sendBtn.disabled = false; }
   });
 });
+
+// What Clearsky notified you about, newest first, kept across restarts (the last 100).
+const NOTE_KIND = { review: 'Review requested', pr: 'Your PR', mention: 'Mention', slack: 'Slack' };
+async function renderNotes() {
+  const el = $('#notes');
+  el.innerHTML = skeleton(4);
+  let d;
+  try { d = await getJson('/api/notifications/log'); } catch (e) { el.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  $('#notes-sub').textContent = `checked every ${d.pollMinutes} min · ${d.notifier === 'desktop' ? 'desktop banners' : d.notifier === 'browser' ? 'browser notifications' : 'off'}`;
+  const log = [...(d.log || [])].reverse();
+  el.innerHTML = log.length ? `<ul class="notes">${log.map((n) => `<li>
+      <span class="when" title="${esc(new Date(n.at).toLocaleString())}">${esc(ago(n.at))}</span>
+      <span class="what">${n.url ? `<a href="${esc(n.url)}" target="_blank" rel="noopener">${esc(n.title || n.key)}</a>` : esc(n.title || n.key)}
+        ${n.body ? `<small>${esc(n.body.split('\n')[0])}</small>` : ''}</span>
+      <span class="kind">${esc(NOTE_KIND[n.kind] || n.kind || '')}${n.quiet ? ' · quiet hours, no banner' : ''}</span></li>`).join('')}</ul>`
+    : '<div class="empty">Nothing yet. New review requests, PRs that turn your move, and mentions show up here.</div>';
+}
 
 // Done or snoozed from the item page: back to the list.
 document.addEventListener('click', (e) => { if (e.target.closest('[data-back-after]')) setTimeout(back, 0); });
@@ -2436,6 +2464,7 @@ function route() {
   $('#v-calendar').hidden = h !== 'calendar';
   $('#v-standup').hidden = h !== 'standup';
   $('#v-src').hidden = !h.startsWith('src-');
+  $('#v-notes').hidden = h !== 'notifications';
   $('#chat').hidden = h !== 'copilot';
   for (const a of document.querySelectorAll('[data-nav]')) a.classList.toggle('on', a.dataset.nav === (h === 'item' ? returnTo : h));
   menu_(false);
@@ -2443,6 +2472,7 @@ function route() {
   hideEvent(true);
   if (list) { listView = h; $('#list-title').textContent = LIST_VIEWS[h]; renderList(); $('#list').focus({ preventScroll: true }); }
   if (h === 'calendar') renderCalendar();
+  if (h === 'notifications') renderNotes();
   if (h === 'standup' && !standupData) { renderStandup(); loadStandup(false); }
   if (h.startsWith('src-')) { $('#src-body').innerHTML = ''; renderExtra(); }
   if (h === 'copilot') { showChat(openChatSkip); openChatSkip = false; }
