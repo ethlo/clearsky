@@ -11,6 +11,12 @@ const print = (o) => process.stdout.write(JSON.stringify(o));
 
 if (args[1] === 'workitem' && args[2] === 'search') {
   const jql = arg('--jql');
+  // Real acli rejects some fields in search.
+  const refused = arg('--fields').split(',').filter((f) => ['duedate', 'updated', 'project'].includes(f));
+  if (refused.length) {
+    process.stderr.write(`✗ Error: fields '${refused.join(', ')}' are not allowed\n`);
+    process.exit(1);
+  }
   if (jql.startsWith('assignee = currentUser() ORDER')) {
     print([{ key: 'OPS-1', self: self('OPS-1'), fields: { assignee: { accountId: 'abc123', displayName: 'Morten' } } }]);
   } else if (jql.startsWith('assignee')) {

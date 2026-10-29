@@ -255,9 +255,22 @@ const listOf = (out, ...keys) => {
 const fieldsOf = (i) => i.fields || i;
 const nameOf = (v) => (v && typeof v === 'object' ? v.name ?? v.displayName ?? v.value : v) ?? null;
 
+// acli only accepts some fields in search (e.g. it rejects duedate, updated, project).
+// Drop whatever it refuses and remember that for later searches.
+const refusedFields = new Set();
+
 async function jiraSearch(jql, fields, limit = 50) {
-  const out = await acli(['workitem', 'search', '--jql', jql, '--fields', fields.join(','), '--limit', String(limit), '--json']);
-  return listOf(out, 'issues', 'workItems', 'values', 'results');
+  const wanted = fields.filter((f) => !refusedFields.has(f));
+  try {
+    const out = await acli(['workitem', 'search', '--jql', jql, '--fields', wanted.join(','), '--limit', String(limit), '--json']);
+    return listOf(out, 'issues', 'workItems', 'values', 'results');
+  } catch (e) {
+    const m = e.message.match(/fields? '([^']+)' (?:are|is) not allowed/);
+    const refused = m ? m[1].split(',').map((f) => f.trim()).filter((f) => wanted.includes(f)) : [];
+    if (!refused.length) throw e;
+    refused.forEach((f) => refusedFields.add(f));
+    return jiraSearch(jql, fields, limit);
+  }
 }
 
 async function jiraComments(key) {
@@ -302,7 +315,7 @@ const userId = (u) => u?.accountId || u?.name || u?.key || null;
 async function jiraMe() {
   if (config.jira.accountId) return { id: config.jira.accountId, name: null };
   for (const [jql, field] of [['assignee = currentUser() ORDER BY updated DESC', 'assignee'], ['reporter = currentUser() ORDER BY updated DESC', 'reporter']]) {
-    const [issue] = await jiraSearch(jql, ['key', field], 1);
+    const [issue] = await jiraSearch(jql, ['key', field], 1).catch(() => []);
     const u = issue && fieldsOf(issue)[field];
     if (userId(u)) return { id: userId(u), name: u.displayName || null };
   }
@@ -336,7 +349,7 @@ async function fetchJira() {
       statusCategory: f.status?.statusCategory?.key || null, // new | indeterminate | done
       priority: nameOf(f.priority),
       type: nameOf(f.issuetype),
-      project: f.project?.key || null,
+      project: f.project?.key || i.key?.split('-')[0] || null,
       due: f.duedate || null,
       updatedAt: f.updated || null,
     };

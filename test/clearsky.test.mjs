@@ -113,6 +113,7 @@ test('collects GitHub, Jira and Slack into one view', async () => {
   assert.ok(acliCalls.every((a) => a[0] === 'jira' && a.includes('--json')));
   assert.ok(acliCalls.some((a) => a[a.indexOf('--jql') + 1]?.startsWith('updated >= -14d AND (watcher')));
   assert.equal(d.jira.assigned[0].url, 'https://acme.atlassian.net/browse/OPS-1');
+  assert.equal(d.jira.assigned[0].project, 'OPS');
   assert.equal(d.jira.mentions[0].url, 'https://acme.atlassian.net/browse/OPS-2?focusedCommentId=10');
 
   const md = toMarkdown(d);
