@@ -1435,7 +1435,10 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin })
     if (u.sessionUpdate === 'available_commands_update') { copilotCommands = agent.commands; c.emit({ type: 'commands', commands: agent.commands }); return; }
     const e = chatEvent(u); if (e && (e.type !== 'text' || e.text)) c.emit(e);
   };
+  const autoAllow = copilot.PERMISSIONS[options.permission]?.autoAllow || [];
   agent.onPermission = (p) => new Promise((resolve) => {
+    const once = (p.options || []).find((o) => o.kind === 'allow_once');
+    if (once && autoAllow.includes(p.toolCall?.kind)) return resolve({ outcome: 'selected', optionId: once.optionId });
     const id = randomBytes(6).toString('hex');
     const ev = { type: 'permission', id, title: p.toolCall?.title || 'Copilot wants to use a tool', kind: p.toolCall?.kind,
       detail: toolDetail(p.toolCall), options: (p.options || []).map((o) => ({ id: o.optionId, name: o.name, kind: o.kind })) };

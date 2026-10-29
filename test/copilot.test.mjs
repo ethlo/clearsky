@@ -64,6 +64,12 @@ test('the chat panel talks to the local Copilot CLI with the chosen options', as
   assert.match(textOf(fullEvs), /answer=yes/);
   assert.equal((await ask({ message: 'x', session: 'sess-1234', model: 'bad model; rm' })).status, 400);
 
+  // Assisted: reads go ahead on their own; anything else still asks.
+  const readEvs = await events(await ask({ message: 'just read it', session: 'sess-1234', resume: true, permission: 'assisted' }));
+  assert.ok(!readEvs.some((e) => e.type === 'permission' || e.type === 'error'));
+  assert.match(textOf(readEvs), /answer=yes/);
+  assert.ok(!info0(readEvs).flags.includes('--assisted-approval'), "Copilot's judge doesn't work over ACP");
+
   // Ask mode: Copilot's approval question shows up in the stream and the answer goes back.
   const res = await ask({ message: 'Check the repo', session: 'sess-ask-1', permission: 'ask' });
   const reader = res.body.getReader(), dec = new TextDecoder();

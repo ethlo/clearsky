@@ -8,6 +8,10 @@ const out = (o) => process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', ...o
 
 if (args[0] === 'skill' && args[1] === 'list') {
   process.stdout.write('Personal skills:\n  standup - Write my stand-up\n\nBuiltin skills:\n  github-pr-media - Add media to PRs\n');
+} else if (args.includes('--acp') && args.includes('--assisted-approval')) {
+  // Like the real CLI 1.0.105: the judge only works in one-shot runs.
+  process.stderr.write('--assisted-approval is only supported in non-interactive prompt mode or direct workflow mode.\n');
+  process.exit(1);
 } else if (args.includes('--acp')) {
   let waiting = null;
   // FAKE_COPILOT_IDS=random gives each new chat its own id (for trying several chats by hand).
@@ -44,7 +48,7 @@ if (args[0] === 'skill' && args[1] === 'list') {
       if (args.includes('--allow-all-tools') && !m.params.prompt[0].text.includes('gated')) { out({ id: m.id, result: { stopReason: 'end_turn' } }); return; }
       out({ method: 'session/update', params: { update: { sessionUpdate: 'tool_call', toolCallId: 't1', title: 'git status', kind: 'execute', status: 'pending' } } });
       waiting = { prompt: m.id, say };
-      out({ id: 900, method: 'session/request_permission', params: { sessionId: sid, toolCall: { toolCallId: 't1', title: 'Run git status', rawInput: { command: 'git status' } },
+      out({ id: 900, method: 'session/request_permission', params: { sessionId: sid, toolCall: { toolCallId: 't1', title: 'Run git status', kind: m.params.prompt[0].text.includes('just read') ? 'read' : 'execute', rawInput: { command: 'git status' } },
         options: [{ optionId: 'yes', name: 'Allow once', kind: 'allow_once' }, { optionId: 'no', name: 'Deny', kind: 'reject_once' }] } });
     } else if (m.id === 900 && waiting) {
       out({ method: 'session/update', params: { update: { sessionUpdate: 'tool_call_update', toolCallId: 't1', status: 'completed' } } });
