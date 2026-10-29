@@ -1429,7 +1429,7 @@ async function renderItem() {
   const sessions = cpLinks.links[itemKey(it.url || '')] || [];
   $('#it-crumb').textContent = `${it.src || ''}${it.ref ? ` · ${it.ref}` : ''}`;
   const head = `<div class="src"><span class="st ${esc(it.glyph)}"></span>${esc(it.ref || '')}</div>
-    <h2>${esc(it.title)}</h2><div class="why">${whyLine(it)}</div>${lastActs[it.url] ? `<div class="last-act">You: ${esc(lastActs[it.url].text)}, ${esc(ago(lastActs[it.url].at))}.</div>` : ''}`;
+    <h2>${esc(it.title)}</h2><div class="why">${whyLine(it)}</div>${lastActLine(it)}`;
   const acts = `<div class="acts-row">${it.url ? `<a class="icon-btn primary" href="${esc(it.url)}" target="_blank" rel="noopener">${where} ↗</a>` : ''}
     ${it.kind === 'pr' ? `<button class="icon-btn" data-rv-open>👥 Request review</button>` : ''}
     ${refFromUrl(it.url) ? `<button class="icon-btn" data-ask="${esc(it.url)}" data-title="${esc(it.title)}">✦ Copilot on this</button>` : ''}
@@ -1455,6 +1455,12 @@ async function renderItem() {
 // Ask people to review your PR: a list of everyone who can, GitHub's suggestions first, with
 // who is already asked or has reviewed marked, so nobody is asked twice by accident.
 let lastActs = {};
+// The latest thing done on an item: by you from Clearsky, or by Copilot in a linked session.
+function lastActLine(it) {
+  const mine = lastActs[it.url], cp = cpLinks.actions?.[itemKey(it.url || '')];
+  const a = mine && (!cp || mine.at >= cp.at) ? { who: 'You', ...mine } : cp ? { who: 'Copilot', ...cp } : null;
+  return a ? `<div class="last-act">${a.who}: ${esc(a.text)}, ${esc(ago(a.at))}.</div>` : '';
+}
 const loadActs = () => fetch('/api/actions').then((r) => r.json()).then((d) => { lastActs = d.actions || {}; }).catch(() => {});
 loadActs();
 const RV_STATE = { APPROVED: 'approved', CHANGES_REQUESTED: 'asked for changes', COMMENTED: 'commented', DISMISSED: 'dismissed' };

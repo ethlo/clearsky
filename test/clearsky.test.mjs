@@ -274,6 +274,10 @@ test('links Copilot sessions to the PRs and tickets they work on', async () => {
   assert.deepEqual(links['issue:ABC-12'].map((x) => x.id), ['s1'], 'ticket from the branch name');
   assert.deepEqual(links['pr:acme/web#9'].map((x) => [x.id, x.status]), [['s2', 'closed'], ['s3', 'closed']], 'by number in the repo, or by URL');
   assert.deepEqual(links['issue:XYZ-1'].map((x) => x.id), ['s4'], 'refs attached in Clearsky');
+  // A session that worked on a branch before its PR existed links once the PR is opened.
+  const later = linkSessions([{ id: 'b1', title: 'Work', updatedAt: '2026-10-29T08:00:00Z' }],
+    { prs: [{ repo: 'acme/api', number: 8, branch: 'feat/later' }], workspace: () => ({ repository: 'acme/api', branch: 'main', branches: ['main', 'feat/later'] }) });
+  assert.deepEqual(later['pr:acme/api#8'].map((x) => x.id), ['b1']);
 
   // A ticket's sessions show on its PR and the other way round.
   const cross = linkSessions([{ id: 't1', title: 'SSP-5 · Fix capture', updatedAt: '2026-10-29T08:00:00Z' }],

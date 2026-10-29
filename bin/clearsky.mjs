@@ -11,7 +11,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, realpathSync, statS
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { eventsBetween } from '../lib/ics.mjs';
 import { edsCalendars, pickCalendars, ownCalendars, edsCalendarText } from '../lib/eds.mjs';
@@ -20,6 +20,7 @@ import * as settings from '../lib/settings.mjs';
 import * as localState from '../lib/state.mjs';
 import * as copilot from '../lib/copilot.mjs';
 import { AcpAgent, chatEvent } from '../lib/acp.mjs';
+import { sessionEvents } from '../lib/copilot-events.mjs';
 import { attentionItems, diffAttention, desktopNotify, DbusNotifier } from '../lib/notify.mjs';
 import { loadSources, makeContext, hook, asList } from '../lib/sources.mjs';
 
@@ -1373,8 +1374,8 @@ export function linkSessions(sessions, { prs = [], refs = {}, workspace = () => 
     const keys = new Set(refs[x.id] || []);
     const ws = workspace(x.id);
     const repo = repoOf(ws.repository);
-    if (repo && ws.branch) {
-      const pr = byBranch.get(`${repo}@${ws.branch}`);
+    for (const branch of ws.branches || [ws.branch]) {
+      const pr = repo && branch && byBranch.get(`${repo}@${branch}`);
       if (pr) keys.add(pr);
     }
     // A PR named in the title: its URL anywhere, or "#123" / "PR 123" in a session in that repo.
@@ -1387,7 +1388,7 @@ export function linkSessions(sessions, { prs = [], refs = {}, workspace = () => 
       const pr = byNumber.get(`${repo}#${m[1]}`);
       if (pr) keys.add(pr);
     }
-    for (const m of `${ws.branch || ''} ${x.title || ''}`.toUpperCase().matchAll(/\b([A-Z][A-Z0-9_]+-\d+)\b/g)) keys.add(`issue:${m[1]}`);
+    for (const m of `${(ws.branches || [ws.branch]).join(' ')} ${x.title || ''}`.toUpperCase().matchAll(/\b([A-Z][A-Z0-9_]+-\d+)\b/g)) keys.add(`issue:${m[1]}`);
     for (const k of keys) (links[k] ||= []).push({ id: x.id, title: x.title || 'Untitled session', updatedAt: x.updatedAt, cwd: x.cwd, status: x.status || 'closed' });
   }
   // A PR, its Jira ticket (the key in its title or branch) and the GitHub issues it closes are
@@ -1425,7 +1426,19 @@ async function copilotLinks(bin) {
   const sessions = await copilotSessions(bin);
   const recent = sessions.filter((x) => x.status !== 'closed' || Date.now() - (Date.parse(x.updatedAt) || 0) < 60 * 864e5);
   const gh = sourceCache.get('github')?.data || {};
-  const links = linkSessions(recent, { prs: [...(gh.myPrs || []), ...(gh.reviewRequested || [])], refs: localState.sessionRefs(stateFile), workspace: workspaceInfo });
+  // Copilot's own log: every branch a session worked on (workspace.yaml only has the one it
+  // started or last resumed on), and the steps it took, for sessions from the last two weeks.
+  const events = new Map(recent.filter((x) => Date.now() - (Date.parse(x.updatedAt) || 0) < 14 * 864e5).map((x) => [x.id, sessionEvents(copilotHome(), x.id)]));
+  const workspace = (id) => { const ws = workspaceInfo(id); return { ...ws, branches: [...new Set([...(events.get(id)?.branches || []), ws.branch].filter(Boolean))] }; };
+  const links = linkSessions(recent, { prs: [...(gh.myPrs || []), ...(gh.reviewRequested || [])], refs: localState.sessionRefs(stateFile), workspace });
+  // The latest step Copilot took on each item, from any session linked to it.
+  const actions = {};
+  for (const [k, list] of Object.entries(links)) {
+    for (const x of list) for (const a of events.get(x.id)?.actions || []) {
+      if ((a.key && a.key !== k) || (actions[k] && actions[k].at >= a.at)) continue;
+      actions[k] = { text: a.text, at: a.at, session: x.id };
+    }
+  }
   // Every session that is busy or waiting on you, linked to an item or not.
   const live = sessions.filter((x) => x.status !== 'closed').map(({ id, title, updatedAt, cwd, status }) => ({ id, title: title || 'Untitled session', updatedAt, cwd, status }));
   // Chats running here that Copilot doesn't list yet (before their first answer is saved).
@@ -1434,7 +1447,7 @@ async function copilotLinks(bin) {
     live.push({ id, title: names[id] || titles[id] || 'New chat', updatedAt: new Date(c.lastUsed).toISOString(), cwd: c.cwd || null,
       status: c.waiting.size ? 'needs-you' : c.busy ? 'working' : 'waiting' });
   }
-  return { links, live };
+  return { links, live, actions };
 }
 
 const refKey = (r) => (r.kind === 'issue' ? `issue:${r.key}` : `${r.kind}:${r.repo}#${r.number}`);
@@ -1697,6 +1710,32 @@ function startPolling() {
   poller.timer.unref?.();
 }
 
+// Restart without cutting off Copilot: wait until no chat here is working or waiting for an OK,
+// then start a fresh server (or, under systemd, exit for it to restart us). Idle chats carry on
+// after the restart, because a new message reopens the session.
+const restart = { pending: null, timer: null, server: null };
+const chatsBusy = () => [...acpChats.values()].filter((c) => c.busy || c.waiting.size).length;
+function restartWhenIdle({ maxWaitMinutes = 60, force = false } = {}) {
+  if (restart.pending) return restart.pending;
+  restart.pending = { since: new Date().toISOString(), until: new Date(Date.now() + maxWaitMinutes * 6e4).toISOString(), busy: chatsBusy() };
+  const check = () => {
+    if (!force && chatsBusy()) {
+      if (Date.now() > Date.parse(restart.pending.until)) { console.log('clearsky: restart given up, Copilot is still working'); clearInterval(restart.timer); restart.pending = null; }
+      return;
+    }
+    clearInterval(restart.timer);
+    console.log('clearsky: restarting');
+    for (const c of acpChats.values()) c.agent.close();
+    restart.server?.close();
+    if (process.env.INVOCATION_ID) process.exit(75); // systemd starts us again
+    spawn(process.execPath, process.argv.slice(1), { detached: true, stdio: 'inherit', env: process.env, cwd: process.cwd() }).unref();
+    setTimeout(() => process.exit(0), 200);
+  };
+  restart.timer = setInterval(check, 3000);
+  check();
+  return restart.pending;
+}
+
 function serve() {
   // Every state-changing request must carry this token and come from this origin, so other
   // websites open in the browser can't change settings or start logins. It's kept across
@@ -1714,13 +1753,17 @@ function serve() {
   // DNS name it controls that points here.
   const hosts = new Set([`127.0.0.1:${config.port}`, `localhost:${config.port}`]);
 
-  createServer(async (req, res) => {
+  const server = createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
     if (!hosts.has(req.headers.host)) return json(res, 421, { error: 'wrong host' });
     try {
       if (req.method === 'POST') {
         if (req.headers['x-clearsky-token'] !== csrf || (req.headers.origin && !origins.has(req.headers.origin))) {
           return json(res, 403, { error: 'forbidden' });
+        }
+        if (url.pathname === '/api/restart') {
+          const { maxWaitMinutes, force } = await readJson(req).catch(() => ({}));
+          return json(res, 200, { restart: restartWhenIdle({ maxWaitMinutes: Math.min(Math.max(Number(maxWaitMinutes) || 60, 1), 240), force: force === true }) });
         }
         if (url.pathname === '/api/copilot/stop') {
           const { chat } = await readJson(req);
@@ -1943,10 +1986,29 @@ function serve() {
     } catch (e) {
       json(res, e instanceof SyntaxError || /^(unknown setting|.* must |the |workday)/.test(e.message) ? 400 : 500, { error: e.message });
     }
-  }).listen(config.port, '127.0.0.1', () => {
+  });
+  restart.server = server;
+  // Right after a restart the old server may still hold the port for a moment.
+  let tries = 0;
+  server.on('error', (e) => {
+    if (e.code !== 'EADDRINUSE' || ++tries > 20) throw e;
+    setTimeout(() => server.listen(config.port, '127.0.0.1'), 500);
+  });
+  server.once('listening', () => {
     console.log(`clearsky: http://127.0.0.1:${config.port}  (settings and logins: http://127.0.0.1:${config.port}/settings)`);
     if (process.env.CLEARSKY_POLL_MINUTES !== '0') startPolling();
   });
+  server.listen(config.port, '127.0.0.1');
+}
+
+// `clearsky restart`: ask the running server to restart once Copilot is idle.
+async function restartCommand(args) {
+  const csrf = readFileSync(join(dirname(userEnvFile), 'csrf'), 'utf8').trim();
+  const base = `http://127.0.0.1:${config.port}`;
+  const res = await fetch(`${base}/api/restart`, { method: 'POST', headers: { 'X-Clearsky-Token': csrf, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ force: args.includes('--now'), maxWaitMinutes: Number(args[args.indexOf('--wait') + 1]) || undefined }) });
+  const { restart: r } = await res.json();
+  console.log(r.busy && !args.includes('--now') ? `Restarting once Copilot is done (${r.busy} chat${r.busy > 1 ? 's' : ''} working; gives up at ${r.until}).` : 'Restarting now.');
 }
 
 // ---------------------------------------------------------------- main
@@ -1954,10 +2016,14 @@ function serve() {
 if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
   const args = process.argv.slice(2);
   if (args.includes('-h') || args.includes('--help')) {
-    console.log('usage: clearsky [--json] | clearsky standup [--json] | clearsky serve [--port N] | clearsky jira-debug');
+    console.log('usage: clearsky [--json] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky jira-debug');
   } else if (args[0] === 'standup') {
     const s = await standup();
     console.log(args.includes('--json') ? JSON.stringify(s, null, 2) : s.text);
+  } else if (args[0] === 'restart') {
+    const p = args.indexOf('--port');
+    if (p > -1) config.port = Number(args[p + 1]);
+    await restartCommand(args);
   } else if (args[0] === 'jira-debug') {
     await jiraDebug();
   } else if (args[0] === 'serve') {
