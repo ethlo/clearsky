@@ -81,13 +81,17 @@ Dismissed and muted items are saved in `~/.config/clearsky/state.json`, so the p
 
 "Has feedback" on your PR means someone commented after your latest commit; once you push, the PR shows as waiting for review.
 
-The server also answers JSON on 127.0.0.1: `/api/source/<github|jira|jiraMentions|slack|calendar>`, `/api/plan`, `/api/work` (everything), `/api/standup`, `/api/issue/<KEY>`, `/api/pr?repo=<org/repo>&number=<n>` and `/api/dismissed`. Add `?refresh=1` to skip the cache.
+The server also answers JSON on 127.0.0.1: `/api/source/<github|jira|jiraMentions|slack|calendar>`, `/api/plan`, `/api/work` (everything), `/api/standup`, `/api/issue/<KEY>`, `/api/pr?repo=<org/repo>&number=<n>` `/api/dismissed`, `/api/copilot/sessions` and `/api/copilot/sessions/<id>`. Add `?refresh=1` to skip the cache.
 
 ## Copilot chat
 
 **✦ Copilot** in the top bar opens a chat with the GitHub Copilot CLI on your machine (`copilot`, logged in with your work account). The first message includes what's on your dashboard, so you can ask things like "what should I do first?". Answers link Jira keys and PRs with hover cards.
 
 In the panel you can pick the model and reasoning effort, how much Copilot may do: **Ask** (Allow/Deny buttons for each step, using Copilot's Agent Client Protocol mode), **Assisted** (Copilot's safety judge approves steps), **Full**, Read only, or Plan only, extra allowed or denied tool patterns, and click a skill to use it. Copilot runs in the Clearsky folder (or `COPILOT_CWD`), so the skills below are available. If `copilot` isn't on your PATH, Clearsky looks under nvm, or set `COPILOT_BIN`. Clearsky's own tokens are not passed to it.
+
+**＋ PR or ticket** attaches pull requests and Jira tickets to your next message: pick from what's on your dashboard, or paste a key (SSP-1234), `org/repo#12` or a link. Clearsky adds their details (description, status, files and reviews, latest comments) in front of your message, so you don't have to explain what you mean.
+
+**History** lists your Copilot sessions as Copilot itself knows them, whether you started them here, in a terminal or in your editor, with ones open elsewhere marked. Click one to see the conversation and carry on with it. The chat you had open comes back after a page reload.
 
 ## Copilot skills
 

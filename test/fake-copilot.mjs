@@ -12,7 +12,21 @@ if (args[0] === 'skill' && args[1] === 'list') {
   let waiting = null;
   createInterface({ input: process.stdin }).on('line', (line) => {
     const m = JSON.parse(line);
-    if (m.method === 'initialize') out({ id: m.id, result: { protocolVersion: 1, agentCapabilities: { loadSession: false } } });
+    const upd = (sessionId, update) => out({ method: 'session/update', params: { sessionId, update } });
+    if (m.method === 'initialize') out({ id: m.id, result: { protocolVersion: 1, agentCapabilities: { loadSession: true, sessionCapabilities: { list: {} } } } });
+    else if (m.method === 'session/list') {
+      out({ id: m.id, result: m.params.cursor
+        ? { sessions: [{ sessionId: 'cli-old-session', cwd: '/tmp', title: 'From the terminal', updatedAt: '2026-10-01T10:00:00Z' }] }
+        : { sessions: [{ sessionId: 'acp-session-1', cwd: process.cwd(), title: 'Check the repo', updatedAt: '2026-10-29T10:00:00Z' }], nextCursor: 'p2' } });
+    } else if (m.method === 'session/load') {
+      if (m.params.sessionId !== 'cli-old-session') { out({ id: m.id, error: { code: -32002, message: 'no such session' } }); return; }
+      upd(m.params.sessionId, { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: 'You are helping me with my work. This is my work dashboard right now:\n\nstuff\n\n---\nMy message:\nWhat broke?' } });
+      upd(m.params.sessionId, { sessionUpdate: 'tool_call', toolCallId: 'x', title: 'Read log', status: 'pending' });
+      upd(m.params.sessionId, { sessionUpdate: 'tool_call_update', toolCallId: 'x', status: 'completed' });
+      upd(m.params.sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'The build ' } });
+      upd(m.params.sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'broke.' } });
+      out({ id: m.id, result: {} });
+    }
     else if (m.method === 'session/new') out({ id: m.id, result: { sessionId: 'acp-session-1' } });
     else if (m.method === 'session/prompt') {
       const say = (text) => out({ method: 'session/update', params: { sessionId: 'acp-session-1', update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text } } } });

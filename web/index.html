@@ -174,7 +174,7 @@
   /* Copilot chat */
   .icon-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   .icon-btn.primary:hover { color: #fff; filter: brightness(1.08); }
-  .icon-btn.small { height: 28px; font-size: 12.5px; padding: 0 10px; }
+  .icon-btn.small { height: 28px; font-size: 12.5px; padding: 0 10px; white-space: nowrap; }
   .chat { position: fixed; z-index: 40; top: 0; right: 0; bottom: 0; width: min(460px, 100vw); background: var(--surface);
     border-left: 1px solid var(--line); box-shadow: var(--shadow-lg); display: flex; flex-direction: column; }
   .chat.max { width: 100vw; }
@@ -221,6 +221,29 @@
   .perm-done { font-size: 12.5px; color: var(--text-2); }
   .typing { color: var(--muted); font-size: 12.5px; }
   .typing::after { content: '…'; animation: pulse 1.2s infinite; }
+  .chat-hist { position: absolute; z-index: 2; left: 0; right: 0; top: 53px; bottom: 0; background: var(--surface); display: flex; flex-direction: column; }
+  .chat-hist-h { display: flex; gap: 8px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 12.5px; color: var(--text-2); }
+  .chat-hist-h input[type=search] { flex: 1; font: inherit; font-size: 13px; color: var(--text); background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+  .chat-hist-l { flex: 1; overflow-y: auto; padding: 6px 8px; }
+  .hs { display: block; width: 100%; text-align: left; font: inherit; background: none; border: 0; border-radius: 8px; padding: 8px 10px; cursor: pointer; color: var(--text); }
+  .hs:hover, .hs.cur { background: var(--surface-2); }
+  .hs b { font-weight: 500; font-size: 13.5px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hs small { color: var(--muted); font-size: 11.5px; }
+  .badge { display: inline-block; font-size: 10.5px; border-radius: 99px; padding: 0 6px; margin-left: 6px; background: var(--accent-soft); color: var(--accent); vertical-align: 1px; }
+  .badge.work { background: var(--amber-soft); color: var(--amber); }
+  .chat-refs { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 14px 0; position: relative; }
+  .ref { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--accent); color: var(--accent); background: var(--accent-soft); border-radius: 99px; font-size: 12px; padding: 2px 4px 2px 10px; max-width: 100%; }
+  .ref span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 280px; }
+  .ref button { border: 0; background: none; color: inherit; cursor: pointer; font-size: 12px; padding: 0 4px; }
+  .ref-pick { position: absolute; z-index: 3; left: 14px; right: 14px; bottom: calc(100% + 4px); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-lg); display: flex; flex-direction: column; max-height: 50vh; }
+  .ref-pick input { font: inherit; font-size: 13px; color: var(--text); background: var(--surface-2); border: 0; border-bottom: 1px solid var(--line); border-radius: 10px 10px 0 0; padding: 8px 10px; }
+  .ref-pick ul { list-style: none; margin: 0; padding: 4px; overflow-y: auto; }
+  .ref-pick li { padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; display: flex; gap: 8px; }
+  .ref-pick li:hover, .ref-pick li.on { background: var(--surface-2); }
+  .ref-pick li code { color: var(--text-2); font-size: 12px; white-space: nowrap; }
+  .ref-pick li small { margin-left: auto; color: var(--muted); white-space: nowrap; }
+  .ref-pick .none { color: var(--muted); font-size: 12.5px; padding: 8px; }
+  .msg.me .refs-sent { display: block; font-size: 11.5px; color: var(--text-2); margin-bottom: 4px; }
   .chat-empty { color: var(--muted); font-size: 13px; margin: auto; text-align: center; max-width: 300px; }
   .chat-in { display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--line); align-items: flex-end; }
   .chat-in textarea { flex: 1; resize: none; font: inherit; font-size: 13.5px; color: var(--text); background: var(--surface-2); border: 1px solid var(--line);
@@ -285,6 +308,7 @@
     <b>Copilot</b>
     <span class="chat-sub" id="chat-sub"></span>
     <span class="spacer"></span>
+    <button class="icon-btn small" id="chat-hist-btn" title="Your Copilot sessions, from this app, the terminal or your editor">History</button>
     <button class="icon-btn small" id="chat-new" title="Start a new conversation">New chat</button>
     <button class="icon-btn small" id="chat-max" title="Maximize" aria-label="Maximize">⤢</button>
     <button class="icon-btn small" id="chat-close" aria-label="Close">✕</button>
@@ -302,6 +326,15 @@
   </div>
   <div class="chat-skills" id="cp-skills"></div>
   <div class="chat-log" id="chat-log"></div>
+  <div class="chat-hist" id="chat-hist" hidden>
+    <div class="chat-hist-h">
+      <input type="search" id="hist-q" placeholder="Search sessions…">
+      <label title="Only sessions started in Clearsky's Copilot folder"><input type="checkbox" id="hist-here"> This folder</label>
+      <button class="icon-btn small" id="hist-refresh" title="Reload the list">↻</button>
+    </div>
+    <div class="chat-hist-l" id="hist-list"></div>
+  </div>
+  <div class="chat-refs" id="cp-refs"><button class="chip" id="cp-ref-add" type="button" title="Give Copilot a PR or Jira ticket to work with">＋ PR or ticket</button></div>
   <form class="chat-in" id="chat-form">
     <textarea id="chat-text" rows="3" placeholder="Ask about your work… (Enter to send, Shift+Enter for a new line)"></textarea>
     <button class="icon-btn primary" id="chat-send" type="submit">Send</button>
@@ -764,7 +797,12 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideCard()
 
 // ---------------------------------------------------------------- Copilot chat
 
-const chat = { session: null, turns: 0, stop: null, info: null };
+const chat = { session: null, cwd: null, turns: 0, stop: null, info: null, refs: [] };
+const CUR_KEY = 'clearsky.chatSession';
+// Remember the open chat, so a reload picks it up again.
+function rememberChat() {
+  try { localStorage.setItem(CUR_KEY, chat.turns ? JSON.stringify({ id: chat.session, cwd: chat.cwd }) : ''); } catch {}
+}
 const CP_KEY = 'clearsky.copilot';
 let cpPrefs = {};
 try { cpPrefs = JSON.parse(localStorage.getItem(CP_KEY) || '{}'); } catch {}
@@ -807,7 +845,10 @@ function addMsg(cls, html) {
 function newChat() {
   chat.stop?.();
   chat.session = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  chat.cwd = null;
   chat.turns = 0;
+  rememberChat();
+  showHistory(false);
   $('#chat-log').innerHTML = `<div class="chat-empty">Ask about your PRs, tickets and meetings. Copilot sees what's on your dashboard
     when the chat starts, and runs on your machine with your own Copilot login.</div>`;
   chatSub();
@@ -845,9 +886,127 @@ function renderAnswer(segs) {
   }).join('');
 }
 
+// Reopen a Copilot session (from here, the terminal or an editor) with its conversation so far.
+async function openSession(id, cwd) {
+  chat.stop?.();
+  showHistory(false);
+  $('#chat-log').innerHTML = '<span class="typing">Opening session</span>';
+  try {
+    const q = cwd ? `?cwd=${encodeURIComponent(cwd)}` : '';
+    const h = await getJson(`/api/copilot/sessions/${encodeURIComponent(id)}${q}`);
+    chat.session = h.id; chat.cwd = h.cwd; chat.turns = h.messages.filter((m) => m.role === 'me').length || 1;
+    $('#chat-log').innerHTML = '';
+    for (const m of h.messages) {
+      if (m.role === 'me') addMsg('me', esc(m.text));
+      else { const el = addMsg('cp', renderAnswer(m.segs)); el.segs = m.segs; }
+    }
+    if (!h.messages.length) addMsg('cp', '<span class="perm-done">Nothing said in this session yet. Carry on below.</span>');
+    rememberChat();
+  } catch (e) {
+    newChat();
+    addMsg('cp', `<div class="err">Couldn't open that session: ${esc(e.message)}</div>`);
+  }
+  chatSub();
+}
+
+let sessions = null;
+async function loadSessions(force) {
+  $('#hist-list').innerHTML = '<div class="chat-empty"><span class="typing">Asking Copilot</span></div>';
+  try { sessions = await getJson(`/api/copilot/sessions${force ? '?refresh' : ''}`); drawSessions(); }
+  catch (e) { $('#hist-list').innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+}
+function drawSessions() {
+  if (!sessions) return;
+  const q = $('#hist-q').value.trim().toLowerCase(), here = $('#hist-here').checked;
+  const list = sessions.sessions.filter((x) => (!here || x.cwd === sessions.cwd) && (!q || `${x.title} ${x.cwd}`.toLowerCase().includes(q)));
+  const folder = (d) => (d || '').split('/').filter(Boolean).pop() || d || '';
+  $('#hist-list').innerHTML = list.map((x) => `<button class="hs${x.id === chat.session ? ' cur' : ''}" data-sid="${esc(x.id)}" data-cwd="${esc(x.cwd || '')}">
+      <b>${esc(x.title || 'Untitled session')}</b>
+      <small>${x.updatedAt ? esc(ago(x.updatedAt)) : ''}${x.cwd ? ` · ${esc(folder(x.cwd))}` : ''}</small>${x.working ? '<span class="badge work">working</span>' : x.open ? '<span class="badge" title="Open in a terminal or editor">open</span>' : ''}${x.here ? '<span class="badge">live here</span>' : ''}
+    </button>`).join('') || '<div class="chat-empty">No sessions match.</div>';
+}
+function showHistory(open = $('#chat-hist').hidden) {
+  $('#chat-hist').hidden = !open;
+  $('#chat-hist-btn').classList.toggle('on', open);
+  if (open) { loadSessions(); $('#hist-q').focus(); }
+}
+
+// ---- PRs and tickets attached to the next message
+
+function refLabel(r) { return r.kind === 'issue' ? r.key : `${r.repo.split('/').pop()}#${r.number}`; }
+function refCandidates() {
+  const out = new Map();
+  const add = (r, title, where) => { const k = refLabel(r) + (r.repo || ''); if (!out.has(k)) out.set(k, { ...r, title, where }); };
+  const g = state.github || {}, j = state.jira || {}, jm = state.jiraMentions || {};
+  const pr = (p, where) => /\/pull\/\d+/.test(p.url || '') && add({ kind: 'pr', repo: p.repo, number: p.number }, p.title, where);
+  (g.reviewRequested || []).forEach((p) => pr(p, 'review'));
+  (g.myPrs || []).forEach((p) => pr(p, 'my PR'));
+  (g.mentions || []).forEach((p) => pr(p, 'mention'));
+  (g.assigned || []).forEach((p) => pr(p, 'assigned'));
+  (jm.tickets || []).forEach((t) => add({ kind: 'issue', key: t.key }, t.summary, 'mention'));
+  (j.assigned || []).forEach((i) => add({ kind: 'issue', key: i.key }, i.summary, i.status || 'Jira'));
+  return [...out.values()];
+}
+// Also take a typed reference: SSP-1234, org/repo#12, or a PR or Jira link.
+function parseRef(q) {
+  q = q.trim();
+  let m = q.match(/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)/) || q.match(/^([\w.-]+\/[\w.-]+)#(\d+)$/);
+  if (m) return { kind: 'pr', repo: m[1], number: Number(m[2]) };
+  m = q.match(/\/browse\/([A-Z][A-Z0-9_]+-\d+)/i) || q.match(/^([A-Z][A-Z0-9_]+-\d+)$/i);
+  return m ? { kind: 'issue', key: m[1].toUpperCase() } : null;
+}
+function drawRefs() {
+  $('#cp-refs').querySelectorAll('.ref').forEach((el) => el.remove());
+  for (const [i, r] of chat.refs.entries()) {
+    const el = document.createElement('span');
+    el.className = 'ref';
+    el.innerHTML = `<span title="${esc(r.title || '')}">${esc(refLabel(r))}${r.title ? ` ${esc(r.title)}` : ''}</span><button type="button" data-unref="${i}" aria-label="Remove">✕</button>`;
+    $('#cp-ref-add').before(el);
+  }
+}
+function addRef(r) {
+  if (!r || chat.refs.some((x) => refLabel(x) === refLabel(r) && x.repo === r.repo) || chat.refs.length >= 8) return;
+  chat.refs.push(r);
+  drawRefs();
+}
+function closeRefPick() { $('#cp-refs .ref-pick')?.remove(); }
+function openRefPick() {
+  if ($('#cp-refs .ref-pick')) return closeRefPick();
+  const box = document.createElement('div');
+  box.className = 'ref-pick';
+  box.innerHTML = '<input placeholder="Find a PR or ticket, or paste SSP-1234 / a link" spellcheck="false"><ul></ul>';
+  $('#cp-refs').append(box);
+  const input = box.querySelector('input'), ul = box.querySelector('ul');
+  const all = refCandidates();
+  let shown = [], on = 0;
+  const draw = () => {
+    const q = input.value.trim().toLowerCase();
+    shown = all.filter((r) => !q || `${refLabel(r)} ${r.repo || ''} ${r.title || ''}`.toLowerCase().includes(q)).slice(0, 40);
+    const typed = parseRef(input.value);
+    if (typed && !shown.some((r) => refLabel(r) === refLabel(typed))) shown.unshift({ ...typed, title: '', where: 'add' });
+    on = Math.min(on, Math.max(shown.length - 1, 0));
+    ul.innerHTML = shown.map((r, i) => `<li data-i="${i}" class="${i === on ? 'on' : ''}"><code>${esc(refLabel(r))}</code>${esc(r.title || '')}<small>${esc(r.where || '')}</small></li>`).join('')
+      || '<li class="none">Nothing on your dashboard matches. Type a key like SSP-1234 or org/repo#12.</li>';
+  };
+  const pick = (i) => { const r = shown[i]; if (!r) return; addRef({ ...r }); closeRefPick(); $('#chat-text').focus(); };
+  input.addEventListener('input', () => { on = 0; draw(); });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { on = Math.min(on + 1, shown.length - 1); draw(); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { on = Math.max(on - 1, 0); draw(); e.preventDefault(); }
+    else if (e.key === 'Enter') { pick(on); e.preventDefault(); }
+    else if (e.key === 'Escape') { closeRefPick(); e.stopPropagation(); }
+  });
+  ul.addEventListener('mousedown', (e) => { const li = e.target.closest('[data-i]'); if (li) { e.preventDefault(); pick(+li.dataset.i); } });
+  draw();
+  input.focus();
+}
+
 async function send(text) {
   if (!text.trim() || chat.stop) return;
-  addMsg('me', esc(text));
+  const refs = chat.refs.map(({ kind, key, repo, number }) => ({ kind, key, repo, number }));
+  addMsg('me', `${refs.length ? `<span class="refs-sent">📎 ${chat.refs.map((r) => esc(refLabel(r))).join(', ')}</span>` : ''}${esc(text)}`);
+  chat.refs = [];
+  drawRefs();
   const out = addMsg('cp', '<span class="typing">Thinking</span>');
   const segs = [];
   out.segs = segs;
@@ -857,6 +1016,7 @@ async function send(text) {
     if (e.type === 'text') { if (last?.type === 'text') last.text += e.text; else segs.push({ type: 'text', text: e.text }); }
     else if (e.type === 'tool') { const t = segs.find((g) => g.type === 'tool' && g.id === e.id); if (t) Object.assign(t, Object.fromEntries(Object.entries(e).filter(([, v]) => v != null))); else segs.push(e); }
     else if (e.type === 'permission' || e.type === 'error') segs.push(e);
+    else if (e.type === 'session') { chat.session = e.id; rememberChat(); }
   };
   const ctrl = new AbortController();
   chat.stop = () => ctrl.abort();
@@ -864,7 +1024,7 @@ async function send(text) {
   try {
     const res = await fetch('/api/copilot', { method: 'POST', signal: ctrl.signal,
       headers: { 'Content-Type': 'application/json', 'X-Clearsky-Token': csrf },
-      body: JSON.stringify({ message: text, session: chat.session, resume: chat.turns > 0, ...cpPrefs, permission: $('#cp-perm').value }) });
+      body: JSON.stringify({ message: text, session: chat.session, resume: chat.turns > 0, cwd: chat.cwd, refs, ...cpPrefs, permission: $('#cp-perm').value }) });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
     const reader = res.body.getReader(), dec = new TextDecoder();
     let buf = '';
@@ -884,6 +1044,7 @@ async function send(text) {
     segs.push({ type: 'error', message: e.name === 'AbortError' ? 'Stopped.' : e.message });
     if (e.name === 'AbortError' && segs.length > 1) chat.turns++;
   } finally {
+    rememberChat();
     if (!segs.length) segs.push({ type: 'error', message: 'No answer.' });
     draw();
     chat.stop = null;
@@ -905,8 +1066,13 @@ $('#chat-log').addEventListener('click', async (e) => {
 
 function openChat(open = true) {
   $('#chat').hidden = !open;
+  try { localStorage.setItem('clearsky.chatOpen', open ? '1' : ''); } catch {}
   if (open) {
-    if (!chat.session) newChat();
+    if (!chat.session) {
+      let saved = null;
+      try { saved = JSON.parse(localStorage.getItem(CUR_KEY) || 'null'); } catch {}
+      if (saved?.id) openSession(saved.id, saved.cwd); else newChat();
+    }
     if (!chat.info) loadCopilotInfo();
     $('#chat-text').focus();
   }
@@ -934,6 +1100,15 @@ try { if (localStorage.getItem('clearsky.chatMax')) $('#chat-max').click(); } ca
 $('#chat-open').onclick = () => openChat($('#chat').hidden);
 $('#chat-close').onclick = () => openChat(false);
 $('#chat-new').onclick = newChat;
+$('#chat-hist-btn').onclick = () => showHistory();
+$('#hist-q').addEventListener('input', drawSessions);
+$('#hist-here').addEventListener('change', drawSessions);
+$('#hist-refresh').onclick = () => loadSessions(true);
+$('#hist-list').addEventListener('click', (e) => { const b = e.target.closest('[data-sid]'); if (b) openSession(b.dataset.sid, b.dataset.cwd); });
+$('#cp-ref-add').onclick = openRefPick;
+$('#cp-refs').addEventListener('click', (e) => { const i = e.target.closest('[data-unref]')?.dataset.unref; if (i != null) { chat.refs.splice(+i, 1); drawRefs(); } });
+document.addEventListener('mousedown', (e) => { if (!e.target.closest('.ref-pick, #cp-ref-add')) closeRefPick(); });
+try { if (localStorage.getItem('clearsky.chatOpen')) openChat(true); } catch {}
 for (const id of ['#cp-model', '#cp-effort', '#cp-perm', '#cp-allow', '#cp-deny']) $(id).addEventListener('change', saveCp);
 $('#chat-form').onsubmit = (e) => {
   e.preventDefault();

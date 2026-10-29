@@ -7,7 +7,7 @@
 //   clearsky serve        serve the dashboard on http://127.0.0.1:7777
 
 import { createServer } from 'node:http';
-import { readFileSync, existsSync, realpathSync } from 'node:fs';
+import { readFileSync, existsSync, realpathSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
@@ -1039,13 +1039,96 @@ function copilotEnv() {
   return env;
 }
 
-// Ask-mode chats keep a Copilot process running between turns, keyed by the panel's chat id.
+// Ask-mode chats keep a Copilot process running between turns, keyed by Copilot's session id.
 const acpChats = new Map();
-// Copilot's own session id for a chat, when it differs from the panel's (Ask mode picks its own).
-const chatSessions = new Map();
 setInterval(() => {
   for (const [id, c] of acpChats) if (Date.now() - c.lastUsed > 20 * 6e4) { c.agent.close(); acpChats.delete(id); }
 }, 60_000).unref();
+
+// A short-lived Copilot process, for listing or reading sessions.
+async function withAgent(bin, fn) {
+  const agent = new AcpAgent(bin, [], { env: copilotEnv() });
+  const timer = setTimeout(() => agent.close(), 30_000);
+  try { return await fn(agent); } finally { clearTimeout(timer); agent.close(); }
+}
+
+// Sessions Copilot has open in a terminal or IDE right now.
+function openCopilotSessions() {
+  try { return JSON.parse(readFileSync(join(homedir(), '.copilot', 'open-sessions-state.json'), 'utf8')) || {}; } catch { return {}; }
+}
+
+const CONTEXT_INTRO = 'You are helping me with my work. This is my work dashboard right now:';
+// What you typed, without the dashboard and references Clearsky added in front.
+const MSG_MARK = '\n\n---\nMy message:\n';
+export function typedPart(text) {
+  const at = text.lastIndexOf(MSG_MARK);
+  if (at >= 0 && (text.startsWith(CONTEXT_INTRO) || text.startsWith(REFS_INTRO))) return text.slice(at + MSG_MARK.length);
+  if (text.startsWith(CONTEXT_INTRO)) return text.slice(text.lastIndexOf('\n\n---\n\n') + 7); // chats from before the marker
+  return text;
+}
+
+let sessionsCache = null;
+async function copilotSessions(bin, force) {
+  if (!force && sessionsCache && Date.now() - sessionsCache.at < 30_000) return sessionsCache.data;
+  const list = await withAgent(bin, (a) => a.listSessions());
+  const open = openCopilotSessions();
+  const data = list.map((x) => ({
+    id: x.sessionId, title: x.title || null, cwd: x.cwd || null, updatedAt: x.updatedAt || null,
+    open: !!open[x.sessionId], working: !!open[x.sessionId]?.working, here: acpChats.has(x.sessionId),
+  })).sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0));
+  sessionsCache = { at: Date.now(), data };
+  return data;
+}
+
+async function copilotHistory(bin, id, cwd) {
+  const messages = await withAgent(bin, (a) => a.history(id, cwd));
+  for (const m of messages) if (m.role === 'me') m.text = typedPart(m.text);
+  return messages;
+}
+
+const isDir = (d) => { try { return typeof d === 'string' && d.startsWith('/') && statSync(d).isDirectory(); } catch { return false; } };
+
+// Fuller details of the PRs and tickets you attach to a Copilot message.
+const REFS_INTRO = 'I am asking about these items:';
+async function referenceText(ref) {
+  if (ref.kind === 'issue') {
+    await jiraSite();
+    const [out, comments] = await Promise.all([
+      acli(['workitem', 'view', ref.key, '--fields', 'summary,status,assignee,reporter,priority,issuetype,description,labels', '--json']),
+      jiraComments(ref.key).catch(() => []),
+    ]);
+    const f = out?.fields || out || {};
+    const desc = f.description ? excerpt(commentInfo(f.description).text, null, 4000) : '';
+    return [`## Jira ${ref.key}: ${f.summary || ''}`, browseUrl({ key: ref.key, self: out?.self }),
+      `Type: ${nameOf(f.issuetype) || '?'} · Status: ${nameOf(f.status) || '?'} · Priority: ${nameOf(f.priority) || '-'} · Assignee: ${f.assignee?.displayName || 'unassigned'} · Reporter: ${f.reporter?.displayName || '?'}`,
+      desc && `Description: ${desc}`,
+      comments.length && `Latest comments:\n${comments.slice(-5).map((c) => `- ${c.author?.displayName || '?'} (${String(c.created || '').slice(0, 10)}): ${excerpt(commentInfo(c.body).text, null, 600)}`).join('\n')}`,
+    ].filter(Boolean).join('\n');
+  }
+  config.github.token ||= await ghCliToken();
+  const [owner, name] = ref.repo.split('/');
+  const { repository } = await gql(`query($owner: String!, $name: String!, $number: Int!) {
+    repository(owner: $owner, name: $name) { pullRequest(number: $number) {
+      title url state isDraft reviewDecision bodyText headRefName baseRefName author { login }
+      files(first: 60) { nodes { path additions deletions } }
+      latestReviews(first: 10) { nodes { author { login } state bodyText } } } } }`,
+  { owner, name, number: Number(ref.number) });
+  const pr = repository?.pullRequest;
+  if (!pr) throw new Error(`${ref.repo}#${ref.number} not found`);
+  return [`## Pull request ${ref.repo}#${ref.number}: ${pr.title}`, pr.url,
+    `By ${pr.author?.login || '?'} · ${pr.isDraft ? 'draft' : pr.state.toLowerCase()} · review: ${(pr.reviewDecision || 'none').toLowerCase().replace(/_/g, ' ')} · ${pr.headRefName} → ${pr.baseRefName}`,
+    pr.bodyText && `Description: ${pr.bodyText.trim().slice(0, 4000)}`,
+    pr.files?.nodes?.length && `Files:\n${pr.files.nodes.map((x) => `- ${x.path} (+${x.additions} -${x.deletions})`).join('\n')}`,
+    pr.latestReviews?.nodes?.length && `Reviews:\n${pr.latestReviews.nodes.map((r) => `- ${r.author?.login}: ${r.state.toLowerCase()}${r.bodyText ? ` "${r.bodyText.replace(/\s+/g, ' ').slice(0, 300)}"` : ''}`).join('\n')}`,
+  ].filter(Boolean).join('\n');
+}
+
+export function validRefs(refs) {
+  return (Array.isArray(refs) ? refs : []).slice(0, 8).map((r) => (
+    r?.kind === 'issue' && /^[A-Z][A-Z0-9_]+-\d+$/.test(r.key) ? { kind: 'issue', key: r.key }
+      : r?.kind === 'pr' && /^[\w.-]+\/[\w.-]+$/.test(r.repo) && /^\d+$/.test(String(r.number)) ? { kind: 'pr', repo: r.repo, number: Number(r.number) }
+        : null)).filter(Boolean);
+}
 
 function toolDetail(call = {}) {
   const input = call.rawInput;
@@ -1054,15 +1137,17 @@ function toolDetail(call = {}) {
   return String(text).slice(0, 400);
 }
 
-async function acpTurn({ chat, options, prompt, resumeId, emit, res, bin }) {
+async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin }) {
   const sig = JSON.stringify(copilot.optionArgs(options));
   let c = acpChats.get(chat);
   if (c && (c.sig !== sig || c.agent.closed)) { resumeId = c.agent.sessionId; c.agent.close(); acpChats.delete(chat); c = null; }
   if (!c) {
     const agent = new AcpAgent(bin, copilot.optionArgs(options), { env: copilotEnv() });
     c = { agent, sig, waiting: new Map(), lastUsed: Date.now() };
-    acpChats.set(chat, c);
-    chatSessions.set(chat, await agent.start(copilotCwd(), resumeId));
+    const id = await agent.start(cwd, resumeId);
+    acpChats.set(id, c);
+    // A new chat gets Copilot's own session id; the panel keeps using that from now on.
+    if (id !== chat) emit({ type: 'session', id });
   }
   c.lastUsed = Date.now();
   const { agent } = c;
@@ -1147,25 +1232,32 @@ function serve() {
           if (!message.trim()) return json(res, 400, { error: 'empty message' });
           if (!copilot.validModel(body.model)) return json(res, 400, { error: 'bad model name' });
           if (!body.session || !/^[\w-]{8,64}$/.test(body.session)) return json(res, 400, { error: 'bad session' });
+          const cwd = body.cwd && isDir(body.cwd) ? body.cwd : copilotCwd();
+          const refs = validRefs(body.refs);
+          let refText = '';
+          if (refs.length) {
+            const parts = await Promise.all(refs.map((r) => referenceText(r).catch((e) => `## ${r.key || `${r.repo}#${r.number}`}\n(couldn't load: ${e.message})`)));
+            refText = `${REFS_INTRO}\n\n${parts.join('\n\n')}`;
+          }
           const list = (v) => (Array.isArray(v) ? v : String(v || '').split(',')).map((x) => String(x).trim()).filter(Boolean);
           const options = { model: body.model, effort: body.effort, permission: copilot.PERMISSIONS[body.permission] ? body.permission : 'ask',
             allow: list(body.allow), deny: list(body.deny) };
           // The first turn carries the dashboard so Copilot knows what you're looking at.
-          const prompt = body.resume ? message
-            : `You are helping me with my work. This is my work dashboard right now:\n\n${copilotContext()}\n\n---\n\n${message}`;
+          const prefix = [!body.resume && `${CONTEXT_INTRO}\n\n${copilotContext()}`, refText].filter(Boolean).join('\n\n---\n\n');
+          const prompt = prefix ? `${prefix}${MSG_MARK}${message}` : message;
           // Answers stream back as one JSON event per line: text, tool, permission, done, error.
           res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
           const emit = (e) => { if (!res.writableEnded) res.write(`${JSON.stringify(e)}\n`); };
-          // An Ask-mode chat has its own Copilot session id; later one-shot turns continue that one.
+          sessionsCache = null;
           const live = acpChats.get(body.session);
           if (copilot.PERMISSIONS[options.permission].acp) {
             try {
-              await acpTurn({ chat: body.session, options, prompt, resumeId: body.resume ? chatSessions.get(body.session) || body.session : null, emit, res, bin: info.bin });
+              await acpTurn({ chat: body.session, options, prompt, resumeId: body.resume ? body.session : null, cwd, emit, res, bin: info.bin });
             } catch (e) { emit({ type: 'error', message: e.message }); }
             return res.end();
           }
           if (live) { live.agent.close(); acpChats.delete(body.session); }
-          const args = copilot.copilotArgs({ prompt, session: chatSessions.get(body.session) || body.session, resume: !!body.resume, cwd: copilotCwd(), ...options });
+          const args = copilot.copilotArgs({ prompt, session: body.session, resume: !!body.resume, cwd, ...options });
           const stop = copilot.runCopilot(info.bin, args, {
             env: copilotEnv(),
             onData: (text) => emit({ type: 'text', text }),
@@ -1214,6 +1306,18 @@ function serve() {
         return json(res, 200, { ...data, fetchedAt: new Date(sourceCache.get(src)?.at || Date.now()).toISOString() });
       }
       if (url.pathname === '/api/copilot') return json(res, 200, await copilotInfo(url.searchParams.has('refresh')));
+      if (url.pathname === '/api/copilot/sessions') {
+        const info = await copilotInfo();
+        if (!info.available) return json(res, 400, { error: 'GitHub Copilot CLI not found' });
+        return json(res, 200, { cwd: copilotCwd(), sessions: await copilotSessions(info.bin, url.searchParams.has('refresh')) });
+      }
+      const histId = url.pathname.match(/^\/api\/copilot\/sessions\/([\w-]{8,64})$/)?.[1];
+      if (histId) {
+        const info = await copilotInfo();
+        if (!info.available) return json(res, 400, { error: 'GitHub Copilot CLI not found' });
+        const cwd = isDir(url.searchParams.get('cwd')) ? url.searchParams.get('cwd') : copilotCwd();
+        return json(res, 200, { id: histId, cwd, here: acpChats.has(histId), messages: await copilotHistory(info.bin, histId, cwd) });
+      }
       if (url.pathname === '/api/dismissed') return json(res, 200, { dismissed: localState.dismissed(stateFile) });
       if (url.pathname === '/api/plan') {
         // Waits for every source (from cache when fresh); the page asks for it alongside them.

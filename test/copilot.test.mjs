@@ -59,7 +59,9 @@ test('the chat panel talks to the local Copilot CLI with the chosen options', as
     if (!perm && (perm = seen.find((e) => e.type === 'permission'))) {
       assert.equal(perm.detail, 'git status');
       assert.deepEqual(perm.options.map((o) => o.id), ['yes', 'no']);
-      const ok = await ask0(`${base}/api/copilot/permission`, { chat: 'sess-ask-1', id: perm.id, option: 'yes' });
+      // A new Ask-mode chat takes Copilot's own session id, which the panel uses from then on.
+      assert.equal(seen.find((e) => e.type === 'session')?.id, 'acp-session-1');
+      const ok = await ask0(`${base}/api/copilot/permission`, { chat: 'acp-session-1', id: perm.id, option: 'yes' });
       assert.equal(ok.status, 200);
     }
   }
@@ -68,4 +70,20 @@ test('the chat panel talks to the local Copilot CLI with the chosen options', as
   assert.ok(!/--allow-all-tools/.test(textOf(seen)), 'Ask mode does not pre-approve tools');
   assert.deepEqual(seen.filter((e) => e.type === 'tool').map((e) => e.status), ['pending', 'completed']);
   assert.equal(seen.at(-1).type, 'done');
+
+  // Sessions come from Copilot itself, wherever they were started, newest first.
+  const list = await (await fetch(`${base}/api/copilot/sessions`)).json();
+  assert.deepEqual(list.sessions.map((x) => [x.id, x.here]), [['acp-session-1', true], ['cli-old-session', false]]);
+  const hist = await (await fetch(`${base}/api/copilot/sessions/cli-old-session?cwd=/tmp`)).json();
+  assert.deepEqual(hist.messages, [
+    { role: 'me', text: 'What broke?' },
+    { role: 'cp', segs: [{ type: 'tool', id: 'x', title: 'Read log', status: 'completed' }, { type: 'text', text: 'The build broke.' }] },
+  ]);
+  assert.equal(hist.cwd, '/tmp');
+
+  // Attached PRs and tickets go in front of the message.
+  const withRef = JSON.parse(textOf(await events(await ask({ message: 'Summarise', session: 'sess-ref-1', resume: true, permission: 'read',
+    refs: [{ kind: 'issue', key: 'SSP-1234' }, { kind: 'pr', repo: 'bad repo', number: 1 }] }))).slice(6));
+  assert.match(withRef.prompt, /^I am asking about these items:\n\n## SSP-1234[\s\S]*\n---\nMy message:\nSummarise$/);
+  assert.ok(!/bad repo/.test(withRef.prompt), 'invalid references are dropped');
 });
