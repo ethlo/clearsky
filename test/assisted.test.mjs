@@ -22,6 +22,7 @@ test('Assisted runs routine work in your folders', () => {
   runs('grep -n "x" <<< "$(git -C ~/dev/kezzler/ssp log -1 --format=%B)"');
   runs('rm -f /tmp/build.log /tmp/out.json');
   runs('./mvnw -q test');
+  runs('J=~/.m2/repository/a/b.jar; unzip -l "$J" | head; cat ~/.copilot/session-state/abc/files/pr-body.md');
   runs("cd ~/dev/kezzler/ssp && python3 - <<'EOF'\nimport json\nprint(1)\nEOF");
   runs('ls ~/.m2/repository/com/kezzler/gs1/ | tail -3; unzip -p ~/.m2/repository/x/y.jar META-INF/MANIFEST.MF | head');
   runs("sed -i 's/a/b/' src/A.java");
