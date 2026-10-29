@@ -1613,17 +1613,23 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin })
     const e = chatEvent(u); if (e && (e.type !== 'text' || e.text)) c.emit(e);
   };
   const autoAllow = copilot.PERMISSIONS[options.permission]?.autoAllow || [];
-  agent.onPermission = (p) => new Promise((resolve) => {
+  agent.onPermission = (p) => new Promise((done) => {
+    // One log line per question, without its content: the mode, the kind of step, the input's
+    // field names and how it was answered, to see why something did or didn't ask.
+    const resolve = (answer) => {
+      console.log(`clearsky: permission mode=${options.permission || 'ask'} kind=${p.toolCall?.kind || '?'} input=${Object.keys(p.toolCall?.rawInput || {}).join('+') || '-'} -> ${answer.rule || 'you'}`);
+      done(answer.rule ? { outcome: answer.outcome, optionId: answer.optionId } : answer);
+    };
     const once = (p.options || []).find((o) => o.kind === 'allow_once');
-    if (once && (autoAllow.includes('*') || autoAllow.includes(p.toolCall?.kind))) return resolve({ outcome: 'selected', optionId: once.optionId });
+    if (once && (autoAllow.includes('*') || autoAllow.includes(p.toolCall?.kind))) return resolve({ outcome: 'selected', optionId: once.optionId, rule: 'mode' });
     // Commands that only read (cat, grep, sed -n, git log…) inside your folders run without asking,
     // unless that's turned off in Settings → Copilot. Assisted also lets edits in your folders,
     // builds, tests and local git steps through (its list is in Settings → Copilot too).
     const where = { cwd: c.cwd, folders: copilotFolders(), home: homedir() };
     const assisted = options.permission === 'assisted';
     const allow = assisted ? assistedCommands() : [];
-    if (once && (process.env.COPILOT_READONLY !== 'off' || assisted) && isReadOnly(p.toolCall?.rawInput?.command, { ...where, allow })) return resolve({ outcome: 'selected', optionId: once.optionId });
-    if (once && assisted && p.toolCall?.kind === 'edit' && editInside(p.toolCall, where)) return resolve({ outcome: 'selected', optionId: once.optionId });
+    if (once && (process.env.COPILOT_READONLY !== 'off' || assisted) && isReadOnly(p.toolCall?.rawInput?.command, { ...where, allow })) return resolve({ outcome: 'selected', optionId: once.optionId, rule: assisted ? 'assisted-command' : 'read-only' });
+    if (once && assisted && p.toolCall?.kind === 'edit' && editInside(p.toolCall, where)) return resolve({ outcome: 'selected', optionId: once.optionId, rule: 'assisted-edit' });
     const id = randomBytes(6).toString('hex');
     const ev = { type: 'permission', id, title: p.toolCall?.title || 'Copilot wants to use a tool', kind: p.toolCall?.kind,
       detail: toolDetail(p.toolCall), options: (p.options || []).map((o) => ({ id: o.optionId, name: o.name, kind: o.kind })) };
