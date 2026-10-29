@@ -26,6 +26,17 @@
   button { font: inherit; color: var(--accent); background: none; border: 1px solid var(--line);
     border-radius: 6px; padding: 3px 10px; cursor: pointer; }
   button:hover { border-color: var(--accent); }
+  .plan { margin: 8px 24px 4px; background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--accent);
+    border-radius: 10px; padding: 12px 16px; }
+  .plan .head { font-size: 15px; }
+  .plan .head b { font-weight: 600; }
+  .plan ol { margin: 8px 0 0; padding-left: 20px; }
+  .plan ol li { display: list-item; border: 0; padding: 3px 0; }
+  .plan .mins { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .agenda { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .agenda span { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 1px 8px; }
+  .agenda span.on { color: var(--accent); border-color: var(--accent); }
+  @media (max-width: 520px) { .plan { margin: 8px 12px 4px; } }
   .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; padding: 8px 24px 16px; }
   .tile { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
   .tile b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; }
@@ -62,6 +73,7 @@
   <button id="refresh">Refresh</button>
   <button id="unhide" hidden>Show hidden</button>
 </header>
+<div class="plan" id="plan" hidden></div>
 <div class="tiles" id="tiles"></div>
 <main id="main"></main>
 
@@ -116,6 +128,21 @@ function render(d) {
     (g.login ? ` · GitHub @${g.login}${g.orgs?.length ? ` (${g.orgs.join(', ')})` : ''}` : '') +
     (j.user ? ` · Jira ${j.user}` : '') +
     (sl.team ? ` · Slack ${sl.team}` : '');
+
+  const p = d.plan, hm = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const link = (e) => e.url ? ` <a href="${esc(e.url)}" target="_blank" rel="noopener">join</a>` : '';
+  let head = '';
+  if (d.calendar?.error) head += `<div class="err">Calendar: ${esc(d.calendar.error)}</div>`;
+  if (p.now) head += `Now: <b>${esc(p.now.title)}</b> until ${hm(p.now.end)}${link(p.now)}. `;
+  if (p.afterHours) head += 'After hours. Here is what is waiting:';
+  else head += `Free for <b>${p.freeMinutes} min</b>${p.now ? ` from ${hm(p.freeFrom)}` : ''}` +
+    (p.next ? `, then <b>${esc(p.next.title)}</b> at ${hm(p.next.start)}${link(p.next)}` : p.calendar ? ', no more meetings today' : '') + '.';
+  const sugg = p.suggestions.map((sg) => `<li><a href="${esc(sg.url)}" target="_blank" rel="noopener">${esc(sg.title)}</a>
+    <span class="mins">~${sg.minutes} min · ${esc(sg.why)}</span><div class="sub">${esc(sg.detail)}</div></li>`).join('');
+  const agenda = p.agenda.length > 1 || (p.agenda.length && !p.now && !p.next) ? `<div class="agenda">${p.agenda.map((e) =>
+    `<span class="${e === p.now || (p.now && e.start === p.now.start) ? 'on' : ''}">${hm(e.start)} ${esc(e.title)}</span>`).join('')}</div>` : '';
+  $('#plan').innerHTML = `<div class="head">${head}</div>${sugg ? `<ol>${sugg}</ol>` : '<div class="empty">Nothing that fits right now.</div>'}${agenda}`;
+  $('#plan').hidden = false;
 
   const tile = (n, label) => `<div class="tile"><b>${n ?? '–'}</b><span>${label}</span></div>`;
   $('#tiles').innerHTML =

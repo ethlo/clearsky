@@ -111,7 +111,8 @@ test('collects GitHub, Jira and Slack into one view', async () => {
   assert.match(gql.json.variables.rr, /review-requested:me org:acme archived:false/);
   const acliCalls = readFileSync(acliLog, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
   assert.ok(acliCalls.every((a) => a[0] === 'jira' && a.includes('--json')));
-  assert.ok(acliCalls.some((a) => a[a.indexOf('--jql') + 1]?.startsWith('updated >= -14d AND (watcher')));
+  assert.ok(acliCalls.some((a) => a[a.indexOf('--jql') + 1]?.startsWith('comment ~ currentUser() AND updated >= -14d')));
+  assert.ok(!acliCalls.some((a) => a[2] === 'comment'), 'comments are read through workitem view');
   assert.equal(d.jira.assigned[0].url, 'https://acme.atlassian.net/browse/OPS-1');
   assert.equal(d.jira.assigned[0].project, 'OPS');
   assert.equal(d.jira.mentions[0].url, 'https://acme.atlassian.net/browse/OPS-2?focusedCommentId=10');
@@ -133,4 +134,28 @@ test('PR status: who has the ball', async () => {
   assert.equal(label({ reviewDecision: null, reviews: { nodes: [{ state: 'APPROVED', author: { login: 'x' } }, { state: 'COMMENTED', author: { login: 'x' } }] } }), 'Ready to merge');
   assert.equal(label({ reviews: { nodes: [{ state: 'COMMENTED', author: { login: 'x' } }] } }), 'Has feedback');
   assert.equal(label({}), 'Waiting for review');
+});
+
+test('Now / Next: free slot and tasks that fit it', async () => {
+  const { planNow } = await import('../bin/clearsky.mjs');
+  const at = (h, m = 0) => { const d = new Date(); d.setHours(h, m, 0, 0); return d.getTime(); };
+  const ev = (title, h1, m1, h2, m2) => ({ title, start: new Date(at(h1, m1)).toISOString(), end: new Date(at(h2, m2)).toISOString(), allDay: false });
+  const data = {
+    calendar: { events: [ev('Standup', 9, 0, 9, 15), ev('1:1', 9, 15, 9, 45), ev('Design review', 10, 30, 11, 30)] },
+    github: {
+      reviewRequested: [
+        { repo: 'a/b', number: 1, title: 'Big', url: 'u1', requestedAt: new Date(at(8)).toISOString(), size: { additions: 900, deletions: 10 } },
+        { repo: 'a/b', number: 2, title: 'Small', url: 'u2', requestedAt: new Date(at(8)).toISOString(), size: { additions: 20, deletions: 5 } },
+      ],
+      myPrs: [{ repo: 'a/b', number: 3, title: 'Mine', url: 'u3', draft: false, status: { label: 'Ready to merge', owner: 'me' } }],
+    },
+    jira: { assigned: [{ key: 'OPS-1', summary: 'Certs', url: 'u4', statusCategory: 'indeterminate' }], mentions: [] },
+    slack: { disabled: true },
+  };
+  // During standup: back-to-back 1:1 extends the busy block to 9:45, then 45 min free.
+  const p = planNow(data, at(9, 5));
+  assert.equal(p.now.title, 'Standup');
+  assert.equal(p.next.title, 'Design review');
+  assert.equal(p.freeMinutes, 45);
+  assert.deepEqual(p.suggestions.map((s) => s.title), ['Merge a/b#3', 'Review a/b#2', 'Continue OPS-1']);
 });

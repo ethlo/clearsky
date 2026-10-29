@@ -2,6 +2,7 @@
 
 One page that shows what needs your attention at work:
 
+- **Now / Next:** your current or next meeting, how much free time you have until it, and up to three tasks that fit that gap (optional, from Google Calendar).
 - **Needs my review:** open PRs where your review is requested, oldest request first, with re-reviews flagged.
 - **My PRs:** each open PR shows who has the ball (changes requested, CI failing, merge conflict, unresolved threads, ready to merge) or who you are waiting on.
 - **Mentions:** GitHub issues and PRs that mention you, Jira comments that @mention you, and (optionally) Slack messages that @mention you, from the last 14 days.
@@ -24,6 +25,7 @@ Tokens:
 
 - **GitHub:** nothing, if you're logged in with the GitHub CLI (`gh auth login`); Clearsky then uses `gh auth token`. Otherwise a fine-grained token with read access to Pull requests, Issues, Contents and Metadata on your work org. A classic token with `repo` scope also works. If your org uses SSO, authorize the token for it.
 - **Jira:** no token in Clearsky. All Jira calls go through `acli`, so it uses whatever account `acli jira auth` is logged in as.
+- **Google Calendar (optional):** in Google Calendar, open Settings, pick your calendar, then **Integrate calendar**, and copy **Secret address in iCal format** into `CALENDAR_ICS_URL`. Set `CALENDAR_EMAIL` too, so meetings you declined are skipped. If the secret address is missing, your Workspace admin has turned it off.
 - **Slack (optional):** a user token, see below. Without `SLACK_TOKEN` the Slack part is skipped.
 
 ### Slack token
@@ -79,7 +81,8 @@ Then ask Copilot "triage my work" or "review my queue".
 
 ## Notes
 
-- Jira data comes from `acli jira workitem search --json` and `acli jira workitem comment list --json`. Each candidate issue costs one `acli` call for its comments, run 4 at a time, and at most 40 issues are checked.
-- Jira mentions are found by searching recently updated issues where you are mentioned in a comment, or that you watch, are assigned or reported. The comments are then checked for an actual @mention of you. Mentions on issues outside that set are found only if your Jira supports `comment ~ currentUser()`. You can override the search with `JIRA_MENTIONS_JQL`.
+- **Now / Next** treats back-to-back meetings (under 5 minutes apart) as one busy block and counts free time until the next meeting or `CLEARSKY_WORKDAY_END`. It then picks tasks in this order: PRs ready to merge, fresh Slack and Jira mentions, reviews (re-reviews and small ones first), your blocked PRs, and in-progress Jira work. A task is picked only if its rough time estimate fits.
+- Jira data comes from `acli jira workitem search --json` and `acli jira workitem view <KEY> --fields comment --json`. `comment list` is not used, because it flattens comments to plain text and drops @mentions. Each candidate issue costs one `acli` call, run 4 at a time, and at most 40 issues are checked.
+- Jira mentions are found with `comment ~ currentUser()` over the last 14 days. Each match is then confirmed by finding your account id in a mention in the comment's rich text. Mentions stay listed for the whole window; Jira's "seen" state isn't available. You can override the search with `JIRA_MENTIONS_JQL`.
 - The server listens on 127.0.0.1 only and caches results for 2 minutes. Use the Refresh button to force a fetch.
 - `npm test` runs the tests against a mocked GitHub and Slack, plus a fake `acli`.

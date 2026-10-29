@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { eventsBetween } from '../lib/ics.mjs';
 
 // ---------------------------------------------------------------- config
 
@@ -53,6 +54,11 @@ const config = {
       'assignee = currentUser() AND statusCategory != Done ORDER BY priority DESC, updated DESC',
     mentionsJql: env.JIRA_MENTIONS_JQL,
   },
+  calendar: {
+    icsUrl: env.CALENDAR_ICS_URL || env.GOOGLE_CALENDAR_ICS, // optional; Google Calendar "secret address in iCal format"
+    email: env.CALENDAR_EMAIL, // optional; used to drop events you declined
+  },
+  workdayEnd: env.CLEARSKY_WORKDAY_END || '17:00',
   slack: {
     token: env.SLACK_TOKEN, // optional; user token (xoxp-) with search:read
     api: (env.SLACK_API_URL || 'https://slack.com/api').replace(/\/$/, ''),
@@ -283,9 +289,12 @@ async function jiraSearch(jql, fields, limit = 50) {
   }
 }
 
+// `workitem comment list` flattens bodies to plain text and drops @mentions, so read the
+// comments through `workitem view`, which keeps the rich-text (ADF) body and author objects.
 async function jiraComments(key) {
-  const out = await acli(['workitem', 'comment', 'list', '--key', key, '--order', '-created', '--limit', '50', '--json']);
-  return listOf(out, 'comments', 'values', 'results');
+  const out = await acli(['workitem', 'view', key, '--fields', 'comment', '--json']);
+  const f = out?.fields || out || {};
+  return listOf(f.comment, 'comments', 'values');
 }
 
 // Comment bodies are either wiki text or Atlassian Document Format (ADF).
@@ -373,7 +382,7 @@ async function fetchJira() {
   let candidates;
   try {
     candidates = await jiraSearch(config.jira.mentionsJql ||
-      `updated >= -${days}d AND (comment ~ currentUser() OR ${involved}) ORDER BY updated DESC`, fields, 40);
+      `comment ~ currentUser() AND updated >= -${days}d ORDER BY updated DESC`, fields, 40);
   } catch (e) {
     if (config.jira.mentionsJql) throw e;
     // Some Jira sites reject `comment ~ currentUser()`; fall back to issues I'm involved in.
@@ -410,8 +419,8 @@ async function fetchJira() {
 async function jiraDebug() {
   const [first] = await jiraSearch(config.jira.assignedJql, ['key', 'summary', 'status', 'assignee'], 1);
   console.log('workitem search --json (first item):\n', JSON.stringify(first, null, 2));
-  if (first) console.log(`\ncomment list --key ${first.key} --json:\n`, JSON.stringify(await acli(
-    ['workitem', 'comment', 'list', '--key', first.key, '--limit', '2', '--json']), null, 2));
+  if (first) console.log(`\nview ${first.key} --fields comment --json (first 2 comments):\n`,
+    JSON.stringify((await jiraComments(first.key)).slice(0, 2), null, 2));
 }
 
 // ---------------------------------------------------------------- Slack
@@ -459,15 +468,108 @@ async function fetchSlack() {
   return { user: auth.user, team: auth.team, mentions };
 }
 
+// ---------------------------------------------------------------- Calendar
+
+async function fetchCalendar() {
+  const { icsUrl, email } = config.calendar;
+  if (!icsUrl) return { disabled: true };
+  const res = await fetch(icsUrl);
+  if (!res.ok) throw new Error(`calendar feed returned ${res.status} ${res.statusText}`);
+  const text = await res.text();
+  if (!text.includes('BEGIN:VCALENDAR')) throw new Error('CALENDAR_ICS_URL did not return an iCal feed');
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const events = eventsBetween(text, today.getTime(), today.getTime() + 2 * 864e5, email)
+    .filter((e) => !e.declined)
+    .map(({ declined, ...e }) => e);
+  return { events };
+}
+
+// ---------------------------------------------------------------- Now / Next
+
+function atLocalTime(base, hhmm) {
+  const [h, m] = hhmm.split(':').map(Number);
+  const d = new Date(base); d.setHours(h, m || 0, 0, 0);
+  return d.getTime();
+}
+
+function reviewMinutes(p) {
+  if (p.rerequested) return 15;
+  const lines = (p.size?.additions || 0) + (p.size?.deletions || 0);
+  return lines < 100 ? 15 : lines < 500 ? 30 : 60;
+}
+
+// What to do in the next free slot: the current/next meeting, how long the gap is,
+// and up to three tasks that fit it, most urgent first.
+export function planNow(d, now = Date.now()) {
+  const g = d.github || {}, j = d.jira || {}, s = d.slack || {}, cal = d.calendar || {};
+  const timed = (cal.events || []).filter((e) => !e.allDay && !e.transparent)
+    .map((e) => ({ ...e, s: Date.parse(e.start), e: Date.parse(e.end) }));
+
+  const current = timed.find((e) => e.s <= now && now < e.e) || null;
+  // Back-to-back meetings (gaps under 5 minutes) count as one busy block.
+  let freeFrom = current ? current.e : now;
+  for (const e of timed) if (e.s <= freeFrom + 5 * 6e4 && e.e > freeFrom && e.s > now) freeFrom = e.e;
+  const next = timed.find((e) => e.s >= freeFrom) || null;
+  const workdayEnd = atLocalTime(now, config.workdayEnd);
+  const freeUntil = next && next.s < workdayEnd ? next.s : workdayEnd;
+  const freeMinutes = Math.max(0, Math.round((freeUntil - freeFrom) / 6e4));
+
+  const recent = (iso, hours) => Date.now() - Date.parse(iso) < hours * 36e5;
+  const candidates = [
+    ...(g.myPrs || []).filter((p) => p.status.label === 'Ready to merge')
+      .map((p) => ({ title: `Merge ${p.repo}#${p.number}`, detail: p.title, url: p.url, minutes: 5, why: 'approved and green' })),
+    ...(s.mentions || []).filter((m) => recent(m.at, 24))
+      .map((m) => ({ title: `Reply to ${m.by} in ${m.channel}`, detail: m.excerpt, url: m.url, minutes: 5, why: 'Slack mention' })),
+    ...(j.mentions || []).filter((m) => recent(m.at, 48))
+      .map((m) => ({ title: `Answer ${m.by} on ${m.key}`, detail: m.excerpt, url: m.url, minutes: 10, why: 'Jira mention' })),
+    ...[...(g.reviewRequested || [])].filter((p) => !p.draft)
+      .sort((a, b) => (b.rerequested - a.rerequested) || Date.parse(a.requestedAt) - Date.parse(b.requestedAt))
+      .map((p) => ({ title: `${p.rerequested ? 'Re-review' : 'Review'} ${p.repo}#${p.number}`, detail: p.title, url: p.url,
+        minutes: reviewMinutes(p), why: `someone is waiting, requested ${Math.max(1, Math.round((Date.now() - Date.parse(p.requestedAt)) / 36e5))}h ago` })),
+    ...(g.myPrs || []).filter((p) => p.status.owner === 'me' && !p.draft && p.status.label !== 'Ready to merge')
+      .map((p) => ({ title: `${p.status.label}: ${p.repo}#${p.number}`, detail: p.title, url: p.url, minutes: 30, why: 'your PR is blocked on you' })),
+    ...(j.assigned || []).filter((i) => i.statusCategory === 'indeterminate')
+      .map((i) => ({ title: `Continue ${i.key}`, detail: i.summary, url: i.url, minutes: 90, why: 'in progress' })),
+    ...(j.assigned || []).filter((i) => i.statusCategory !== 'indeterminate').slice(0, 3)
+      .map((i) => ({ title: `Start ${i.key}`, detail: i.summary, url: i.url, minutes: 90, why: i.priority ? `${i.priority} priority` : 'next in your queue' })),
+  ];
+
+  const suggestions = [];
+  let left = freeMinutes;
+  for (const c of candidates) {
+    if (suggestions.length === 3) break;
+    // Deep work still gets suggested for a long-enough gap even if it won't finish.
+    const fits = c.minutes <= left || (c.minutes >= 90 && freeMinutes >= 45 && left >= 20);
+    if (!fits) continue;
+    suggestions.push(c);
+    left -= Math.min(c.minutes, left);
+  }
+
+  const strip = ({ s: _s, e: _e, ...e }) => e;
+  return {
+    calendar: !cal.disabled && !cal.error,
+    now: current && strip(current),
+    next: next && strip(next),
+    freeFrom: new Date(freeFrom).toISOString(),
+    freeUntil: new Date(freeUntil).toISOString(),
+    freeMinutes,
+    afterHours: now >= workdayEnd,
+    agenda: timed.filter((e) => e.e > now && e.s < atLocalTime(now, '23:59')).map(strip),
+    suggestions,
+  };
+}
+
 // ---------------------------------------------------------------- collect
 
 const settle = (p) => p.catch((e) => ({ error: e.message }));
 
 export async function collect() {
-  const [github, jira, slack] = await Promise.all([settle(fetchGitHub()), settle(fetchJira()), settle(fetchSlack())]);
+  const [github, jira, slack, calendar] = await Promise.all(
+    [settle(fetchGitHub()), settle(fetchJira()), settle(fetchSlack()), settle(fetchCalendar())]);
   const needsMe = (github.myPrs || []).filter((p) => p.status.owner === 'me' && !p.draft);
   return {
     generatedAt: new Date().toISOString(),
+    plan: planNow({ github, jira, slack, calendar }),
     summary: {
       reviewsWaiting: github.reviewRequested?.length ?? null,
       myPrsNeedingAction: github.myPrs ? needsMe.length : null,
@@ -479,6 +581,7 @@ export async function collect() {
     github,
     jira,
     slack,
+    calendar,
   };
 }
 
@@ -501,7 +604,16 @@ export function toMarkdown(d) {
     else for (const i of items) out.push(`- ${line(i)}`);
     out.push('');
   };
-  const g = d.github, j = d.jira;
+  const g = d.github, j = d.jira, p = d.plan;
+  const hm = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  out.push('## Now / Next');
+  if (d.calendar?.error) out.push(`_Calendar unavailable: ${d.calendar.error}_`);
+  if (p.now) out.push(`Now: **${p.now.title}** until ${hm(p.now.end)}`);
+  if (p.afterHours) out.push('After hours.');
+  else out.push(`Free for **${p.freeMinutes} min** from ${hm(p.freeFrom)}` +
+    (p.next ? `, then **${p.next.title}** at ${hm(p.next.start)}` : ', until the end of the workday'));
+  for (const sg of p.suggestions) out.push(`- [${sg.title}](${sg.url}) ~${sg.minutes} min, ${sg.why}: ${sg.detail}`);
+  out.push('');
   section('Needs my review', g.reviewRequested, (p) =>
     `[${p.repo}#${p.number}](${p.url}) ${p.title} by @${p.author}, requested ${ago(p.requestedAt)}` +
     `${p.rerequested ? ', re-requested' : ''}${p.viaTeam ? ', via team' : ''}${p.draft ? ', draft' : ''}` +

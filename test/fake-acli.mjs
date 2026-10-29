@@ -23,14 +23,16 @@ if (args[1] === 'workitem' && args[2] === 'search') {
     print([{ key: 'OPS-1', self: self('OPS-1'), fields: { summary: 'Rotate certs',
       status: { name: 'In Progress', statusCategory: { key: 'indeterminate' } }, priority: { name: 'High' },
       duedate: null, updated: hoursAgo(1), issuetype: { name: 'Task' }, project: { key: 'OPS' } } }]);
-  } else if (jql.includes('comment ~ currentUser()')) {
-    process.stderr.write('Error: unsupported JQL\n');
-    process.exit(1);
-  } else {
+  } else if (jql.startsWith('comment ~ currentUser()')) {
     print({ issues: [{ key: 'OPS-2', self: self('OPS-2'), fields: { summary: 'Outage follow-up', status: { name: 'Open' } } }] });
+  } else {
+    print([]);
   }
 } else if (args[1] === 'workitem' && args[2] === 'comment' && args[3] === 'list') {
-  print({ comments: [
+  // Real acli flattens bodies to text, drops mentions and gives author as a string.
+  print({ comments: [{ id: '10', author: 'Anna', body: 'Hi , can you check this?' }], isLast: false });
+} else if (args[1] === 'workitem' && args[2] === 'view') {
+  print({ key: args[3], fields: { comment: { comments: [
     { id: '10', author: { accountId: 'zzz', displayName: 'Anna' }, created: hoursAgo(2), body: { type: 'doc', content: [
       { type: 'paragraph', content: [
         { type: 'text', text: 'Hi ' }, { type: 'mention', attrs: { id: 'abc123', text: '@Morten' } },
@@ -40,7 +42,7 @@ if (args[1] === 'workitem' && args[2] === 'search') {
     { id: '11', author: { accountId: 'zzz', displayName: 'Anna' }, created: hoursAgo(1), body: 'No mention here' },
     { id: '12', author: { accountId: 'abc123', displayName: 'Morten' }, created: hoursAgo(1), body: 'me: [~accountid:abc123]' },
     { id: '13', author: { accountId: 'yyy', displayName: 'Bob' }, created: hoursAgo(24 * 30), body: 'old [~accountid:abc123]' },
-  ] });
+  ] } } });
 } else {
   process.stderr.write(`unexpected: ${args.join(' ')}\n`);
   process.exit(2);
