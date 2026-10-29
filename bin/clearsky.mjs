@@ -1644,7 +1644,7 @@ function serve() {
       }
       if (url.pathname === '/favicon.ico') { res.writeHead(204); return res.end(); }
       if (url.pathname === '/api/sources') {
-        return json(res, 200, { sources: [...plugins.sources.values()].map((p) => ({ name: p.name, label: p.label, panel: p.panel || null })), errors: plugins.errors });
+        return json(res, 200, { sources: [...plugins.sources.values()].map((p) => ({ name: p.name, label: p.label, area: p.area, panel: p.panel || null })), errors: plugins.errors });
       }
       // What needs you, with when each first showed up, so the page can mark what's new.
       if (url.pathname === '/api/attention') {

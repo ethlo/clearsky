@@ -89,6 +89,8 @@ The server also answers JSON on 127.0.0.1: `/api/source/<github|jira|jiraMention
 
 Besides the built-in sources, Clearsky loads extra ones, one module each, from `lib/sources/*.mjs` in this repo and from `~/.config/clearsky/sources/*.mjs` (for private ones, like a school or family app). A source declares its settings (they show up under **Other sources** in Settings and are saved to `.env`), a `fetch(ctx)`, and any of these hooks: `items` (rows for its panel, under Needs you or Keeping track), `attention` (notifies when something new turns up), `events` (joins Now / Next; mark `fyi: true` to show without blocking your time) and `standup` (lines for Yesterday and Today). `ctx` gives the source its settings and helpers to fetch JSON or run a CLI. See the comment at the top of [lib/sources.mjs](lib/sources.mjs) for the contract and [test/sources/school.mjs](test/sources/school.mjs) for a complete example. Files that others can write to are skipped.
 
+Work and personal stay apart: a source sets `area: 'work'` to sit with GitHub, Jira and Slack on the **Work** tab, or leaves it out to land on the **Personal** tab (school, training and the like). Only the calendar mixes the two: personal events show in the day schedule on both tabs.
+
 ## School (Visma Flyt Skole)
 
 If your children's school uses Visma Flyt Skole (Min Skole / Flyt Foresatt), Clearsky shows what waits for you there: unread messages and notices, and forms and consents to answer. Form deadlines show up in Now / Next. It only reads. It never replies or marks anything as read, so the portal still shows everything as unread.

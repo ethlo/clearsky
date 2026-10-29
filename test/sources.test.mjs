@@ -44,7 +44,7 @@ test('an extra source shows up in the page, notifications, Now / Next, stand-up 
   const get = async (p) => (await fetch(base + p)).json();
 
   // Sources shipped in lib/sources load too; this test is about the one from CLEARSKY_SOURCES_DIR.
-  assert.deepEqual((await get('/api/sources')).sources.filter((s) => s.name === 'school'), [{ name: 'school', label: 'School', panel: { zone: 'track', title: 'School' } }]);
+  assert.deepEqual((await get('/api/sources')).sources.filter((s) => s.name === 'school'), [{ name: 'school', label: 'School', area: 'personal', panel: { zone: 'track', title: 'School' } }]);
   const school = await get('/api/source/school');
   assert.deepEqual(school.items.map((i) => i.title), ['Teacher: Trip on Friday']);
   const att = await get('/api/attention');
@@ -87,4 +87,12 @@ test('a source login runs from Settings, saves what it learns, and fixes a panel
   assert.deepEqual((await get('/api/source/school')).items.map((i) => i.meta), ['Bea']);
 
   assert.equal((await fetch(`${base}/api/source/github/login`, { method: 'POST', headers: { 'X-Clearsky-Token': csrf } })).status, 404);
+});
+
+test('a source says whether it is work or personal', async () => {
+  const { checkSource } = await import('../lib/sources.mjs');
+  const base = { name: 'gym', fetch() {} };
+  assert.equal(checkSource({ default: base }, 'gym.mjs').area, 'personal');
+  assert.equal(checkSource({ default: { ...base, area: 'work' } }, 'gym.mjs').area, 'work');
+  assert.throws(() => checkSource({ default: { ...base, area: 'home' } }, 'gym.mjs'), /area/);
 });
