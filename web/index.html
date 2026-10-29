@@ -1320,7 +1320,8 @@ function drawCtx() {
   for (const [k, list] of Object.entries(cpLinks.links || {})) if (list.some((x) => x.id === chat.session)) keys.add(k);
   const live = [...(cpLinks.live || []), ...Object.values(cpLinks.links || {}).flat()].find((x) => x.id === chat.session);
   const title = chat.title || live?.title;
-  const status = chat.stop ? 'working' : live?.status || (chat.turns ? 'waiting' : null);
+  const asking = !!$('#chat-log .perm-b button');
+  const status = asking ? 'needs-you' : chat.stop ? 'working' : live?.status || (chat.turns ? 'waiting' : null);
   if (!chat.turns && !keys.size && !chat.cwd) { el.hidden = true; return; }
   const idx = itemIndex();
   const items = [...keys].map((k) => {
@@ -1543,7 +1544,7 @@ async function send(text) {
   const out = addMsg('cp', '<span class="typing">Thinking</span>');
   const segs = [];
   out.segs = segs;
-  const draw = () => { out.innerHTML = renderAnswer(segs) || '<span class="typing">Thinking</span>'; $('#chat-log').scrollTop = $('#chat-log').scrollHeight; };
+  const draw = () => { out.innerHTML = renderAnswer(segs) || '<span class="typing">Thinking</span>'; $('#chat-log').scrollTop = $('#chat-log').scrollHeight; drawCtx(); };
   const apply = (e) => {
     const last = segs.at(-1);
     if (e.type === 'text') { if (last?.type === 'text') last.text += e.text; else segs.push({ type: 'text', text: e.text }); }
@@ -1599,6 +1600,7 @@ $('#chat-log').addEventListener('click', async (e) => {
   const msg = b.closest('.msg'), seg = msg?.segs?.find((g) => g.type === 'permission' && g.id === b.dataset.perm);
   if (seg) seg.answered = b.dataset.name;
   b.closest('.perm-b').innerHTML = `<span class="perm-done">${esc(b.dataset.name)}</span>`;
+  drawCtx();
   try { await post('/api/copilot/permission', { chat: chat.session, id: b.dataset.perm, option: b.dataset.option }); }
   catch (err) { if (seg) seg.answered = `Couldn't send: ${err.message}`; }
 });
