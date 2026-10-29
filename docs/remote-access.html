@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Design: Clearsky in a container, reachable from the phone</title>
+<!-- Generated from remote-access.md by scripts/render-docs.mjs. Edit the Markdown, then run npm run docs. -->
+<style>
+  :root { color-scheme: light dark; --bg: #f7f8fa; --surface: #fff; --text: #111827; --text-2: #4b5563; --muted: #6b7280; --line: #e5e7eb; --accent: #2563eb; --code: #f2f4f7; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0c0e12; --surface: #14171c; --text: #f2f4f7; --text-2: #c5cad3; --muted: #8a93a3; --line: #252a33; --accent: #6b9bff; --code: #1b1f26; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 32px 20px 64px; }
+  .crumb { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+  a { color: var(--accent); }
+  h1 { font-size: 28px; line-height: 1.25; margin: 0 0 12px; letter-spacing: -.01em; }
+  h2 { font-size: 20px; margin: 36px 0 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+  h3 { font-size: 16px; margin: 24px 0 8px; }
+  p, li { color: var(--text-2); }
+  strong { color: var(--text); }
+  code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--code); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.5; }
+  .table { overflow-x: auto; margin: 12px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; background: var(--surface); }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border: 1px solid var(--line); }
+  th { color: var(--text); font-weight: 600; }
+  td { color: var(--text-2); }
+  img { max-width: 100%; height: auto; display: block; margin: 16px auto; }
+  nav.toc { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 16px; margin: 20px 0; font-size: 14px; }
+  nav.toc ol { margin: 4px 0; padding-left: 20px; }
+  @media (max-width: 560px) { .wrap { padding: 20px 16px 48px; } h1 { font-size: 23px; } }
+</style>
+</head>
+<body><div class="wrap">
+<div class="crumb"><a href="index.html">Clearsky design docs</a></div>
+<h1>Design: Clearsky in a container, reachable from the phone</h1>
+<nav class="toc"><b>Contents</b><ol><li><a href="#goal">Goal</a></li><li><a href="#recommendation-in-short">Recommendation in short</a></li><li><a href="#what-the-container-needs">What the container needs</a></li><li><a href="#what-doesn-t-fit-a-container">What doesn't fit a container</a></li><li><a href="#phone-access-through-a-cloudflare-tunnel-later">Phone access through a Cloudflare Tunnel (later)</a></li><li><a href="#changes-to-clearsky-in-order">Changes to Clearsky, in order</a></li></ol></nav>
+<p>Status: <strong>on hold</strong> (design only, nothing built). Written 2026-10-29.</p>
+<h2 id="goal">Goal</h2>
+<p>Run Clearsky on the laptop as a non-privileged container instead of a bare <code>node</code> process. Later, and only if wanted, open it to the phone through a Cloudflare Tunnel on a dyndns'd domain.</p>
+<p>The service stays on the laptop because that is where the logins live: <code>gh</code>, <code>acli</code>, the Copilot CLI, GNOME Online Accounts and the keyring. A server would need all of them set up again, with work tokens kept on another machine.</p>
+<h2 id="recommendation-in-short">Recommendation in short</h2>
+<ol><li><strong>Container:</strong> rootless Podman (or Docker with <code>--user</code>), with a read-only root filesystem and no capabilities. It runs as Morten's own uid, so files it writes stay his.</li><li><strong>Mounts:</strong> only what each feature needs, and read-only wherever possible (table below). The biggest grants are the code folder and <code>~/.copilot</code>, because Copilot works in the repos.</li><li><strong>Host-only pieces:</strong> a few things don't belong in the container: the BankID login window, the GNOME calendar list (D-Bus) and desktop banners. Each gets a small host-side stand-in instead of the session bus.</li><li><strong>Phone access, later:</strong> a Cloudflare Tunnel with Cloudflare Access in front (your email only). Clearsky also checks the Access token itself, and from the phone Copilot is limited to Ask mode.</li><li><strong>Employer check first:</strong> the tunnel sends work data through Cloudflare. Ask Kezzler before turning it on.</li></ol>
+<h2 id="what-the-container-needs">What the container needs</h2>
+<div class="table"><table><thead><tr><th>Need</th><th>Mount or setting</th><th>Mode</th><th>Why</th></tr></thead><tbody><tr><td>Clearsky config and state</td><td><code>~/.config/clearsky</code></td><td>rw</td><td><code>.env</code>, <code>state.json</code>, csrf token, private sources, flyt session file</td></tr><tr><td>GitHub</td><td><code>~/.config/gh</code></td><td>ro</td><td><code>gh</code> auth, used for PR data and the PR previews; or pass <code>GH_TOKEN</code></td></tr><tr><td>Jira</td><td><code>acli</code>'s config dir</td><td>rw</td><td><code>acli</code> refreshes its own login</td></tr><tr><td>Copilot</td><td><code>~/.copilot</code></td><td>rw</td><td>sessions (<code>session-state/</code>, <code>inuse.*.hold</code>), skills, CLI login</td></tr><tr><td>Code for Copilot</td><td><code>~/dev</code> (<code>CLEARSKY_CODE_DIRS</code>)</td><td>rw</td><td>new chats about a PR run in its clone; Copilot edits there</td></tr><tr><td>git over ssh</td><td><code>$SSH_AUTH_SOCK</code>, <code>~/.ssh/known_hosts</code></td><td>socket, ro</td><td>so Copilot's <code>git fetch</code>/<code>push</code> works without copying keys</td></tr><tr><td>Calendar cache</td><td><code>~/.cache/evolution/calendar</code></td><td>ro</td><td>events come from Evolution's SQLite caches</td></tr><tr><td>Calendar sources</td><td><code>~/.config/evolution/sources</code></td><td>ro</td><td>the <code>.source</code> files</td></tr><tr><td>Calendar list from GOA</td><td><code>~/.cache/clearsky/eds-sources.json</code></td><td>ro</td><td>see below; replaces the D-Bus call</td></tr><tr><td>Port</td><td><code>-p 127.0.0.1:7777:7777</code></td><td></td><td>the server listens on 0.0.0.0 inside, but the host only binds loopback</td></tr></tbody></table></div>
+<p>The image contains Node 22, <code>gh</code>, <code>acli</code> and the Copilot CLI, pinned versions. Things it does not need: the D-Bus session bus, the X or Wayland socket, the keyring, <code>/run/user</code>, privileged mode, and <code>--network host</code>.</p>
+<p>Sketch (Podman):</p>
+<pre class="lang-sh"><code>podman run -d --name clearsky --userns=keep-id --read-only --cap-drop=all --security-opt no-new-privileges \
+  --tmpfs /tmp \
+  -p 127.0.0.1:7777:7777 -e CLEARSKY_HOST=0.0.0.0 \
+  -v ~/.config/clearsky:/home/me/.config/clearsky:Z \
+  -v ~/.config/gh:/home/me/.config/gh:ro,Z \
+  -v ~/.copilot:/home/me/.copilot:Z \
+  -v ~/dev:/home/me/dev:Z \
+  -v ~/.cache/evolution/calendar:/home/me/.cache/evolution/calendar:ro \
+  -v ~/.config/evolution/sources:/home/me/.config/evolution/sources:ro \
+  -v ~/.cache/clearsky:/home/me/.cache/clearsky:ro \
+  -v $SSH_AUTH_SOCK:/ssh-agent -e SSH_AUTH_SOCK=/ssh-agent \
+  clearsky</code></pre>
+<p>The container sees paths under <code>/home/me</code> while the host has <code>/home/morten</code>. Copilot keys sessions by <code>cwd</code>, so sessions started in the container wouldn't match the same repo opened in a host terminal. <strong>Mount everything at the same absolute paths as on the host</strong> (<code>-v ~/dev:$HOME/dev</code>, with <code>HOME=$HOME</code>) so session history stays shared.</p>
+<h2 id="what-doesn-t-fit-a-container">What doesn't fit a container</h2>
+<ul><li><strong>GNOME Online Accounts calendars.</strong> Clearsky lists them with <code>busctl --user</code> on the session bus. Mounting the bus socket would also give the container the keyring and every other desktop service. Instead, a systemd user timer on the host writes the same <code>busctl</code> JSON to <code>~/.cache/clearsky/eds-sources.json</code> every 10 minutes, and <code>registrySources()</code> reads that file when <code>busctl</code> isn't available.</li><li><strong>School login (BankID).</strong> This opens a real browser window. Run it on the host with <code>node bin/clearsky.mjs login flyt</code> (to add). It writes the session to <code>~/.config/clearsky/flyt-session.json</code>, which the container already sees. Inside the container there is no keyring, so <code>flyt.mjs</code> falls back to that file. Renewing the login is plain HTTP and works from the container.</li><li><strong>Desktop banners.</strong> <code>notify-send</code> needs the session bus. In the container <code>hasNotifySend()</code> reports <code>browser</code>, so the open page shows notifications instead. If banners are wanted while no tab is open, a host-side <code>notify-send</code> relay can read a small queue file, but browser notifications are fine to start with.</li><li><strong>Settings logins for gh and acli.</strong> These start CLI logins that open a browser. In a container, do the logins on the host, or run <code>podman exec -it clearsky gh auth login</code> with a device code. Settings should say so when it detects the container.</li></ul>
+<h2 id="phone-access-through-a-cloudflare-tunnel-later">Phone access through a Cloudflare Tunnel (later)</h2>
+<p>With a Cloudflare Tunnel, the laptop makes an outbound connection to Cloudflare and no inbound port is opened. The tunnel's hostname lives on Morten's own domain in Cloudflare DNS, so the tunnel itself doesn't need dyndns. dyndns is only needed if something else must reach the laptop directly.</p>
+<p><img src="remote-access.svg" alt="The phone goes through Cloudflare Access and the tunnel to Clearsky on the laptop, which checks the token again"></p>
+<p>Auth, in layers:</p>
+<ol><li><strong>Cloudflare Access</strong> on the hostname.<ul><li>Allow only Morten's email: a one-time PIN, or Google or GitHub as the identity provider, with a short session (say 12 hours).</li><li>Require a device posture check if the plan allows it.</li><li>This keeps everyone else out before anything reaches the laptop.</li></ul></li><li><strong>Clearsky checks the Access token itself.</strong><ul><li>Every request through the tunnel carries <code>Cf-Access-Jwt-Assertion</code>.</li><li>Clearsky verifies it against the team's public keys (<code>https://&lt;team&gt;.cloudflareaccess.com/cdn-cgi/access/certs</code>), the application's <code>aud</code> tag and the allowed email.</li><li>Requests without a valid token are refused, so a misconfigured tunnel or a missing Access policy fails closed.</li><li>Loopback requests from the laptop itself skip this check, as today.</li></ul></li><li><strong>Host check.</strong> <code>CLEARSKY_ALLOWED_HOSTS</code> adds the tunnel hostname to the current 127.0.0.1/localhost check, so DNS rebinding stays blocked.</li><li><strong>CSRF.</strong> The existing per-install token and same-origin rules stay as they are.</li><li><strong>Less power from the phone.</strong><ul><li>Requests that came through the tunnel can use Copilot only in <strong>Ask</strong> mode. Every step needs an OK, and Full is refused on the server.</li><li>Settings writes and source logins are refused remotely. Change those at the laptop.</li></ul></li></ol>
+<p>What this exposes, even with Access in place: Cloudflare terminates TLS, so it sees the pages (PRs, Jira tickets, calendar, school messages). That is the main reason to check with the employer first.</p>
+<p>When the laptop sleeps, the phone gets a Cloudflare error page. That's expected, since the service lives on the laptop.</p>
+<h2 id="changes-to-clearsky-in-order">Changes to Clearsky, in order</h2>
+<ol><li><code>CLEARSKY_HOST</code> (default <code>127.0.0.1</code>), so the server can listen on 0.0.0.0 inside a container.</li><li>Fallback in <code>registrySources()</code> to <code>~/.cache/clearsky/eds-sources.json</code>, plus the host-side timer unit in <code>contrib/</code>.</li><li>A <code>clearsky login flyt</code> command that runs the BankID login from the terminal.</li><li>A <code>Containerfile</code>, plus a <code>contrib/clearsky.container</code> Quadlet file for Podman with the mounts above (same paths as on the host).</li><li>Settings shows when it runs in a container, and points the gh/acli logins to the host.</li></ol>
+<p>Phone access, only after the employer says yes:</p>
+<ol><li><code>CLEARSKY_ALLOWED_HOSTS</code>.</li><li>Cloudflare Access JWT check (<code>CLEARSKY_CF_ACCESS_TEAM</code>, <code>CLEARSKY_CF_ACCESS_AUD</code>, <code>CLEARSKY_CF_ACCESS_EMAIL</code>), with a fail-closed test.</li><li>Restrictions for remote requests: Ask-only Copilot, no Settings writes, no logins.</li><li>A <code>cloudflared</code> config example in <code>contrib/</code>.</li></ol>
+</div></body>
+</html>

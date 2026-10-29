@@ -138,6 +138,10 @@ mkdir -p ~/.copilot/skills && cp -r .github/skills/* ~/.copilot/skills/
 
 Then ask Copilot "triage my work" or "review my queue".
 
+## Design docs
+
+[docs/](docs/index.md) has the design docs in Markdown, with rendered HTML next to them (`npm run docs`): [how Clearsky works](docs/architecture.md) and [running it in a container, reachable from the phone](docs/remote-access.md) (on hold).
+
 ## Notes
 
 - **Now / Next** treats back-to-back meetings (under 5 minutes apart) as one busy block and counts free time until the next meeting or `CLEARSKY_WORKDAY_END`. It then picks tasks in this order: PRs ready to merge, fresh Slack and Jira mentions, reviews (re-reviews and small ones first), your blocked PRs, and in-progress Jira work. A task is picked only if its rough time estimate fits.
