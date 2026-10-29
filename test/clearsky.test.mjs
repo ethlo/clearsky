@@ -274,6 +274,22 @@ test('links Copilot sessions to the PRs and tickets they work on', async () => {
   assert.deepEqual(links['issue:ABC-12'].map((x) => x.id), ['s1'], 'ticket from the branch name');
   assert.deepEqual(links['pr:acme/web#9'].map((x) => [x.id, x.status]), [['s2', 'closed'], ['s3', 'closed']], 'by number in the repo, or by URL');
   assert.deepEqual(links['issue:XYZ-1'].map((x) => x.id), ['s4'], 'refs attached in Clearsky');
+
+  // A ticket's sessions show on its PR and the other way round.
+  const cross = linkSessions([{ id: 't1', title: 'SSP-5 · Fix capture', updatedAt: '2026-10-29T08:00:00Z' }],
+    { prs: [{ repo: 'acme/ssp', number: 3, title: 'SSP-5: Fix capture', branch: 'x' }] });
+  assert.deepEqual(cross['pr:acme/ssp#3'].map((x) => x.id), ['t1']);
+});
+
+test('a chat started on an item is named after it', async () => {
+  const { itemSessionName } = await import('../bin/clearsky.mjs');
+  const data = { github: { myPrs: [{ repo: 'acme/ssp', number: 3, title: '[SSP-5] Fix capture', branch: 'feature/SSP-5-capture' }] },
+    jira: { assigned: [{ key: 'SSP-6', summary: 'Rotate certs' }] } };
+  const cache = (n) => data[n] || {};
+  assert.equal(itemSessionName({ kind: 'issue', key: 'SSP-6' }, cache), 'SSP-6 · Rotate certs');
+  assert.equal(itemSessionName({ kind: 'issue', key: 'SSP-9' }, cache), 'SSP-9');
+  assert.equal(itemSessionName({ kind: 'pr', repo: 'acme/ssp', number: 3 }, cache), 'SSP-5 · ssp#3 · Fix capture');
+  assert.equal(itemSessionName({ kind: 'pr', repo: 'acme/web', number: 4 }, cache), 'web#4');
 });
 
 test('names sessions started here after what you typed, not the dashboard in front of it', async () => {

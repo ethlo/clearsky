@@ -1386,8 +1386,30 @@ export function linkSessions(sessions, { prs = [], refs = {}, workspace = () => 
     for (const m of `${ws.branch || ''} ${x.title || ''}`.toUpperCase().matchAll(/\b([A-Z][A-Z0-9_]+-\d+)\b/g)) keys.add(`issue:${m[1]}`);
     for (const k of keys) (links[k] ||= []).push({ id: x.id, title: x.title || 'Untitled session', updatedAt: x.updatedAt, cwd: x.cwd, status: x.status || 'closed' });
   }
+  // A PR and its ticket (the key in the PR's title or branch) share their sessions.
+  for (const p of prs) {
+    const pr = `pr:${p.repo}#${p.number}`;
+    for (const m of `${p.title || ''} ${p.branch || ''}`.toUpperCase().matchAll(/\b([A-Z][A-Z0-9_]+-\d+)\b/g)) {
+      const issue = `issue:${m[1]}`, both = [...(links[pr] || []), ...(links[issue] || [])].filter((x, i, a) => a.findIndex((y) => y.id === x.id) === i);
+      if (both.length) links[pr] = links[issue] = both;
+    }
+  }
   for (const k of Object.keys(links)) links[k] = links[k].sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0)).slice(0, 3);
   return links;
+}
+
+// The name a chat started on an item gets: "SSP-6519 · Fix capture timeout", or for a PR
+// without a ticket key "ssp#1187 · Fix capture timeout". Continuing work then finds it again.
+export function itemSessionName(ref, cache = (n) => sourceCache.get(n)?.data || {}) {
+  const gh = cache('github'), jira = cache('jira'), jm = cache('jiraMentions');
+  if (ref.kind === 'pr') {
+    const p = [...(gh.myPrs || []), ...(gh.reviewRequested || [])].find((x) => x.repo === ref.repo && x.number === Number(ref.number));
+    const key = `${p?.title || ''} ${p?.branch || ''}`.toUpperCase().match(/\b([A-Z][A-Z0-9_]+-\d+)\b/)?.[1];
+    const title = (p?.title || '').replace(new RegExp(`\\[?${key}\\]?:?\\s*`, 'i'), '').trim();
+    return `${key ? `${key} · ` : ''}${ref.repo.split('/').pop()}#${ref.number}${title ? ` · ${title}` : ''}`.slice(0, 100);
+  }
+  const t = (jira.assigned || []).find((x) => x.key === ref.key) || (jm.tickets || []).find((x) => x.key === ref.key);
+  return `${ref.key}${t?.summary ? ` · ${t.summary}` : ''}`.slice(0, 100);
 }
 
 async function copilotLinks(bin) {
@@ -1483,7 +1505,7 @@ function toolDetail(call = {}) {
   return String(text).slice(0, 400);
 }
 
-async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin }) {
+async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, renameTo }) {
   const sig = JSON.stringify(copilot.optionArgs(options));
   let c = acpChats.get(chat);
   if (c && (c.sig !== sig || c.agent.closed)) { resumeId = c.agent.sessionId; c.agent.close(); acpChats.delete(chat); c = null; }
@@ -1519,6 +1541,13 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin })
   res.on('close', () => { if (c.emit === emit) c.emit = () => {}; });
   c.busy = true;
   const r = await agent.prompt(prompt).finally(() => { c.busy = false; });
+  // Copilot's own /rename, quietly, once the first answer is in.
+  if (renameTo && r?.stopReason !== 'cancelled' && agent.commands?.some((x) => x.name === 'rename')) {
+    const show = agent.onUpdate;
+    agent.onUpdate = () => {};
+    c.busy = true;
+    await agent.prompt(`/rename ${renameTo.replace(/\s+/g, ' ')}`).catch(() => {}).finally(() => { c.busy = false; agent.onUpdate = show; });
+  }
   c.emit({ type: 'done', stopReason: r?.stopReason });
   c.emit = () => {};
 }
@@ -1741,16 +1770,19 @@ function serve() {
             if (e.type === 'session') { sessionId = e.id; linkRefs(); }
             if (!res.writableEnded && !res.destroyed) res.write(`${JSON.stringify(e)}\n`);
           };
+          // A new chat about one item is named after it, here and in Copilot (so the terminal shows it too).
+          const itemName = !body.resume && refs.length === 1 ? itemSessionName(refs[0]) : null;
           // Remember which PRs and tickets this session is about, for the links on the page.
           const linkRefs = () => {
             if (refs.length) localState.addSessionRefs(stateFile, sessionId, refs.map(refKey));
             if (prefix && !body.resume) localState.setSessionTitle(stateFile, sessionId, message.trim().split('\n')[0]);
+            if (itemName) localState.setSessionName(stateFile, sessionId, itemName);
           };
           res.on('close', linkRefs);
           if (checkout) emit({ type: 'cwd', cwd: checkout });
           sessionsCache = null;
           try {
-            await acpTurn({ chat: body.session, options, prompt, resumeId: body.resume ? body.session : null, cwd, emit, res, bin: info.bin });
+            await acpTurn({ chat: body.session, options, prompt, resumeId: body.resume ? body.session : null, cwd, emit, res, bin: info.bin, renameTo: itemName });
           } catch (e) { emit({ type: 'error', message: e.message }); }
           return res.end();
         }
