@@ -26,6 +26,8 @@ test('loads source modules and refuses broken or unsafe ones', async () => {
   assert.equal(sources.get('school').panel.zone, 'track');
   assert.equal(errors.length, 3);
   assert.ok(errors.some((e) => /lowercase/.test(e)) && errors.some((e) => /built-in/.test(e)) && errors.some((e) => /writable by others/.test(e)));
+  // The repo's own folder is trusted like the rest of its code, whatever the umask made of it.
+  assert.ok((await loadSources([dir], { trusted: [dir] })).sources.has('open'));
 });
 
 test('an extra source shows up in the page, notifications, Now / Next, stand-up and Settings', async (t) => {

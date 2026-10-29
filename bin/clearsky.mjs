@@ -94,7 +94,8 @@ const buildConfig = (env = process.env) => ({
 const config = buildConfig();
 
 // Extra sources: lib/sources/*.mjs and your own in ~/.config/clearsky/sources/*.mjs.
-const plugins = await loadSources([join(here, '..', 'lib', 'sources'), process.env.CLEARSKY_SOURCES_DIR || join(homedir(), '.config', 'clearsky', 'sources')]);
+const builtinSources = join(here, '..', 'lib', 'sources');
+const plugins = await loadSources([builtinSources, process.env.CLEARSKY_SOURCES_DIR || join(homedir(), '.config', 'clearsky', 'sources')], { trusted: [builtinSources] });
 for (const e of plugins.errors) console.error(`clearsky: ${e}`);
 for (const p of plugins.sources.values()) settings.addFields(p.settings);
 
@@ -120,7 +121,7 @@ async function http(url, { headers = {}, body, method } = {}) {
 // ---------------------------------------------------------------- GitHub
 
 const PR_FIELDS = `
-  number title url isDraft createdAt updatedAt reviewDecision mergeable
+  number title url isDraft createdAt updatedAt reviewDecision mergeable headRefName
   additions deletions changedFiles
   repository { nameWithOwner }
   author { login }
@@ -246,6 +247,7 @@ async function fetchGitHub() {
       requestedAt,
       viaTeam: mine.length === 0,
       rerequested: reviewedBefore,
+      branch: pr.headRefName || null,
       ci: ciState(pr),
       size: { additions: pr.additions, deletions: pr.deletions, files: pr.changedFiles },
     };
@@ -257,6 +259,7 @@ async function fetchGitHub() {
       ...base(pr),
       draft: pr.isDraft,
       status: myPrStatus(pr, me),
+      branch: pr.headRefName || null,
       ci: ciState(pr),
       approvals: reviews.filter((r) => r.state === 'APPROVED').map((r) => r.author.login),
       changesRequested: reviews.filter((r) => r.state === 'CHANGES_REQUESTED').map((r) => r.author.login),
@@ -1201,16 +1204,63 @@ export function typedPart(text) {
 
 let sessionsCache = null;
 async function copilotSessions(bin, force) {
-  if (!force && sessionsCache && Date.now() - sessionsCache.at < 30_000) return sessionsCache.data;
+  if (!force && sessionsCache && Date.now() - sessionsCache.at < 30_000) return withStatus(sessionsCache.data);
   const list = await withAgent(bin, (a) => a.listSessions());
-  const open = openCopilotSessions();
-  const data = list.map((x) => ({
-    id: x.sessionId, title: x.title || null, cwd: x.cwd || null, updatedAt: x.updatedAt || null,
-    open: !!open[x.sessionId] && !acpChats.has(x.sessionId), working: !!open[x.sessionId]?.working, here: acpChats.has(x.sessionId),
-  })).sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0));
+  const data = list.map((x) => ({ id: x.sessionId, title: x.title || null, cwd: x.cwd || null, updatedAt: x.updatedAt || null }))
+    .sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0));
   sessionsCache = { at: Date.now(), data };
-  return data;
+  return withStatus(data);
 }
+
+// Chats in this panel that are running a one-shot turn right now.
+const oneShotRunning = new Set();
+
+// Where each session is at, worked out fresh each time:
+//   working: Copilot is busy on it (here, or in a terminal or editor);
+//   needs-you: it asked to use a tool and waits for your answer (Ask mode here);
+//   waiting: open in a terminal or here, done with its turn, waiting for your next message;
+//   closed: not open anywhere.
+function withStatus(list) {
+  const open = openCopilotSessions();
+  return list.map((x) => {
+    const c = acpChats.get(x.id);
+    const status = c?.waiting.size ? 'needs-you' : c?.busy || oneShotRunning.has(x.id) || open[x.id]?.working ? 'working'
+      : c || open[x.id] ? 'waiting' : 'closed';
+    return { ...x, open: !!open[x.id] && !c, working: status === 'working', here: !!c, status };
+  });
+}
+
+// Which Copilot sessions belong to which PR or ticket ("pr:org/repo#12", "issue:SSP-1"): the
+// items you attached in Clearsky, the branch a terminal session worked on (matched to its
+// PR, and the ticket key in its name), and ticket keys in the session's title.
+export function linkSessions(sessions, { prs = [], refs = {}, workspace = () => ({}) } = {}) {
+  const byBranch = new Map(prs.filter((p) => p.branch).map((p) => [`${p.repo.toLowerCase()}@${p.branch}`, `pr:${p.repo}#${p.number}`]));
+  const links = {};
+  for (const x of sessions) {
+    const keys = new Set(refs[x.id] || []);
+    const ws = workspace(x.id);
+    if (ws.repository && ws.branch) {
+      const pr = byBranch.get(`${ws.repository.toLowerCase()}@${ws.branch}`);
+      if (pr) keys.add(pr);
+    }
+    for (const m of `${ws.branch || ''} ${x.title || ''}`.toUpperCase().matchAll(/\b([A-Z][A-Z0-9_]+-\d+)\b/g)) keys.add(`issue:${m[1]}`);
+    for (const k of keys) (links[k] ||= []).push({ id: x.id, title: x.title || 'Untitled session', updatedAt: x.updatedAt, cwd: x.cwd, status: x.status || 'closed' });
+  }
+  for (const k of Object.keys(links)) links[k] = links[k].sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0)).slice(0, 3);
+  return links;
+}
+
+async function copilotLinks(bin) {
+  const sessions = await copilotSessions(bin);
+  const recent = sessions.filter((x) => x.status !== 'closed' || Date.now() - (Date.parse(x.updatedAt) || 0) < 60 * 864e5);
+  const gh = sourceCache.get('github')?.data || {};
+  const links = linkSessions(recent, { prs: [...(gh.myPrs || []), ...(gh.reviewRequested || [])], refs: localState.sessionRefs(stateFile), workspace: workspaceInfo });
+  // Every session that is busy or waiting on you, linked to an item or not.
+  const live = sessions.filter((x) => x.status !== 'closed').map(({ id, title, updatedAt, cwd, status }) => ({ id, title: title || 'Untitled session', updatedAt, cwd, status }));
+  return { links, live };
+}
+
+const refKey = (r) => (r.kind === 'pr' ? `pr:${r.repo}#${r.number}` : `issue:${r.key}`);
 
 async function copilotHistory(bin, id, cwd) {
   const messages = await withAgent(bin, (a) => a.history(id, cwd));
@@ -1318,7 +1368,8 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin })
     for (const r of c.waiting.values()) r({ outcome: 'cancelled' });
     c.waiting.clear();
   });
-  const r = await agent.prompt(prompt);
+  c.busy = true;
+  const r = await agent.prompt(prompt).finally(() => { c.busy = false; });
   emit({ type: 'done', stopReason: r?.stopReason });
 }
 
@@ -1462,7 +1513,14 @@ function serve() {
           const prompt = prefix ? `${prefix}${MSG_MARK}${message}` : message;
           // Answers stream back as one JSON event per line: text, tool, permission, done, error.
           res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
-          const emit = (e) => { if (!res.writableEnded) res.write(`${JSON.stringify(e)}\n`); };
+          let sessionId = body.session;
+          const emit = (e) => {
+            if (e.type === 'session') sessionId = e.id;
+            if (!res.writableEnded) res.write(`${JSON.stringify(e)}\n`);
+          };
+          // Remember which PRs and tickets this session is about, for the links on the page.
+          const linkRefs = () => { if (refs.length) localState.addSessionRefs(stateFile, sessionId, refs.map(refKey)); };
+          res.on('close', linkRefs);
           if (checkout) emit({ type: 'cwd', cwd: checkout });
           sessionsCache = null;
           const live = acpChats.get(body.session);
@@ -1474,6 +1532,8 @@ function serve() {
           }
           if (live) { live.agent.close(); acpChats.delete(body.session); }
           const args = copilot.copilotArgs({ prompt, session: body.session, resume: !!body.resume, cwd, ...options });
+          oneShotRunning.add(body.session);
+          res.on('close', () => oneShotRunning.delete(body.session));
           const stop = copilot.runCopilot(info.bin, args, {
             env: copilotEnv(),
             onData: (text) => emit({ type: 'text', text }),
@@ -1544,6 +1604,11 @@ function serve() {
         const info = await copilotInfo();
         if (!info.available) return json(res, 400, { error: 'GitHub Copilot CLI not found' });
         return json(res, 200, { cwd: copilotCwd(), sessions: await copilotSessions(info.bin, url.searchParams.has('refresh')) });
+      }
+      if (url.pathname === '/api/copilot/links') {
+        const info = await copilotInfo();
+        if (!info.available) return json(res, 200, { links: {}, live: [] });
+        return json(res, 200, await copilotLinks(info.bin));
       }
       const histId = url.pathname.match(/^\/api\/copilot\/sessions\/([\w-]{8,64})$/)?.[1];
       if (histId) {
