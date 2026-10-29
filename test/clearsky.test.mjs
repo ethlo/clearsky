@@ -238,3 +238,24 @@ test('finds your local clone of a PR repository', async () => {
   assert.equal(findCheckout('acme/web', [root]), null);
   assert.equal(findCheckout('someone/api', [root]), join(root, 'fork', 'api'));
 });
+
+test('links Copilot sessions to the PRs and tickets they work on', async () => {
+  const { linkSessions } = await import('../bin/clearsky.mjs');
+  const prs = [{ repo: 'Acme/api', number: 7, branch: 'feat/ABC-12-login' }, { repo: 'acme/web', number: 9, branch: 'fix' }];
+  const ws = {
+    s1: { repository: 'https://github.com/acme/api.git', branch: 'feat/ABC-12-login' },
+    s2: { repository: 'acme/web', branch: 'main' },
+    s3: {},
+  };
+  const sessions = [
+    { id: 's1', title: 'Login work', updatedAt: '2026-10-29T08:00:00Z', status: 'working' },
+    { id: 's2', title: 'Review PR #9', updatedAt: '2026-10-29T07:00:00Z' },
+    { id: 's3', title: 'Look at https://github.com/acme/web/pull/9', updatedAt: '2026-10-29T06:00:00Z' },
+    { id: 's4', title: 'Untouched', updatedAt: '2026-10-29T05:00:00Z' },
+  ];
+  const links = linkSessions(sessions, { prs, refs: { s4: ['issue:XYZ-1'] }, workspace: (id) => ws[id] || {} });
+  assert.deepEqual(links['pr:Acme/api#7'].map((x) => [x.id, x.status]), [['s1', 'working']], 'by checkout branch, repo given as a URL');
+  assert.deepEqual(links['issue:ABC-12'].map((x) => x.id), ['s1'], 'ticket from the branch name');
+  assert.deepEqual(links['pr:acme/web#9'].map((x) => [x.id, x.status]), [['s2', 'closed'], ['s3', 'closed']], 'by number in the repo, or by URL');
+  assert.deepEqual(links['issue:XYZ-1'].map((x) => x.id), ['s4'], 'refs attached in Clearsky');
+});

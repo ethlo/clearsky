@@ -165,6 +165,17 @@
   /* Labels that only say what something is stay quiet; colour is for what needs you. */
   .b-blue, .b-gray { background: none; color: var(--muted); font-weight: 500; padding: 2px 0; min-width: 0; }
   .empty { color: var(--muted); padding: 10px 0 6px; }
+  .cps { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 5px; }
+  .cp-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; border: 1px solid var(--line); background: var(--surface-2);
+    color: var(--text-2); border-radius: 99px; font-size: 11.5px; padding: 1px 8px 1px 6px; cursor: pointer; }
+  .cp-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; max-width: 260px; }
+  .cp-chip b { font-weight: inherit; white-space: nowrap; flex: none; }
+  .cp-chip:hover { border-color: var(--accent); color: var(--accent); }
+  .cp-chip i { width: 7px; height: 7px; border-radius: 50%; background: var(--line-strong); flex: none; }
+  .cp-chip.s-working i { background: var(--green); animation: pulse 1.2s ease-in-out infinite; }
+  .cp-chip.s-waiting i { background: var(--accent); }
+  .cp-chip.s-needs-you i { background: var(--amber); }
+  .cp-chip.s-needs-you { border-color: var(--amber); color: var(--amber); }
   .new-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin: 7px -4px 0 -12px; }
   #notify.on { color: var(--accent); }
   .err { color: var(--red); border-left: 2px solid var(--red); padding: 2px 0 2px 10px; font-size: 12.5px; margin: 4px 0 8px; overflow-wrap: anywhere; }
@@ -317,6 +328,7 @@
     <section class="card" id="c-review"></section>
     <section class="card" id="c-prs"></section>
     <section class="card" id="c-mentions"></section>
+    <section class="card" id="c-copilot" hidden></section>
   </div>
   <h2 class="zone">Keeping track</h2>
   <div class="grid quiet">
@@ -433,6 +445,46 @@ function loadAll(force) {
   for (const name of SOURCES) loadSource(name, force);
   setTimeout(loadPlan, 50);
 }
+
+// ---------------------------------------------------------------- Copilot sessions per item
+
+// Which Copilot sessions are about each PR or ticket, and which are busy or waiting on you,
+// whether they run here, in a terminal or in an editor.
+let cpLinks = { links: {}, live: [] };
+const STATUS_TEXT = { working: 'working', 'needs-you': 'needs your OK', waiting: 'waiting for you', closed: '' };
+function itemKey(url) {
+  const r = refFromUrl(url);
+  return r && (r.kind === 'pr' ? `pr:${r.repo}#${r.number}` : `issue:${r.key}`);
+}
+function chip(x) {
+  const st = STATUS_TEXT[x.status] || '';
+  return `<button class="cp-chip s-${esc(x.status || 'closed')}" data-sid="${esc(x.id)}" data-cwd="${esc(x.cwd || '')}"
+    title="Copilot session${st ? `, ${st}` : ''}, ${esc(ago(x.updatedAt))}. Click to open it."><i></i><span>${esc(x.title)}</span>${st ? `<b>· ${st}</b>` : ''}</button>`;
+}
+function sessionChips(url) {
+  const list = cpLinks.links[itemKey(url || '')];
+  return list?.length ? `<div class="cps">${list.slice(0, 2).map(chip).join('')}</div>` : '';
+}
+async function loadLinks() {
+  try { cpLinks = await getJson('/api/copilot/links'); } catch { return; }
+  renderToday();
+}
+function renderCopilotCard() {
+  const el = $('#c-copilot'), live = cpLinks.live || [];
+  el.hidden = !live.length;
+  if (!live.length) return;
+  const order = { 'needs-you': 0, waiting: 1, working: 2 };
+  const list = [...live].sort((a, b) => order[a.status] - order[b.status] || Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+  card(el, 'Copilot sessions', live.length, `<ul class="rows">${list.map((x) => `<li class="row"><div class="main">
+    ${chip(x)}<div class="meta">${esc((x.cwd || '').split('/').filter(Boolean).pop() || '')} · ${esc(ago(x.updatedAt))}</div></div></li>`).join('')}</ul>`);
+}
+document.addEventListener('click', (e) => {
+  const c = e.target.closest('.cp-chip');
+  if (!c) return;
+  e.preventDefault();
+  openChat(true);
+  openSession(c.dataset.sid, c.dataset.cwd);
+});
 
 // ---------------------------------------------------------------- what's new
 
@@ -577,6 +629,7 @@ function row({ url, stamp, dismissKey, title, meta, badge, tone, quote, issue, p
       <a class="title" href="${esc(url)}" target="_blank" rel="noopener"${refAttrs({ issue, pr })}>${esc(title)}</a>
       ${meta ? `<div class="meta">${esc(meta)}</div>` : ''}
       ${quote ? `<div class="quote">${esc(quote)}</div>` : ''}
+      ${sessionChips(url)}
     </div>
     ${askButton(url, title)}
     <button class="hide" title="Dismiss until something new happens" aria-label="Dismiss" data-key="${esc(dismissKey || url)}" data-stamp="${esc(stamp ?? '')}">✕</button>
@@ -599,6 +652,7 @@ const REFRESH_ICON = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidde
 
 function refreshButton(id) {
   const names = PANEL_SOURCES[id];
+  if (!names) return '';
   const spinning = names.some((n) => loading.has(n)) || (id === 'plan' && loading.has('plan'));
   const times = names.map((n) => state[n]?.fetchedAt).filter(Boolean);
   const oldest = times.length ? times.sort()[0] : null;
@@ -658,6 +712,8 @@ async function mute(key, span) {
 menu.addEventListener('click', (e) => {
   const v = e.target.closest('[data-for]')?.dataset.for;
   if (v) return mute(menu.dataset.key, v);
+  const rs = e.target.closest('[data-resume]');
+  if (rs) { menu.hidden = true; openChat(true); return openSession(rs.dataset.resume, rs.dataset.cwd); }
   const sk = e.target.closest('[data-run]');
   if (sk) { menu.hidden = true; startCopilotOn({ ...refFromUrl(menu.dataset.ask), title: menu.dataset.title }, sk.dataset.run); }
 });
@@ -670,8 +726,10 @@ async function openAskMenu(btn) {
   const draw = () => {
     const ref = refFromUrl(btn.dataset.ask);
     const skills = chat.info?.skills || [];
+    const linked = cpLinks.links[itemKey(btn.dataset.ask)] || [];
     menu.innerHTML = `<div class="menu-h">Copilot on ${esc(refLabel(ref))}</div>
-      <button role="menuitem" data-run="">Ask a question…</button>
+      ${linked.map((x) => `<button role="menuitem" data-resume="${esc(x.id)}" data-cwd="${esc(x.cwd || '')}">↩ Continue: ${esc(x.title.slice(0, 50))}${STATUS_TEXT[x.status] ? ` (${STATUS_TEXT[x.status]})` : ''}</button>`).join('')}
+      <button role="menuitem" data-run="">${linked.length ? 'New chat: ask a question…' : 'Ask a question…'}</button>
       ${skills.length ? `<div class="menu-h">Run a skill</div>${skills.map((sk) => `<button role="menuitem" data-run="${esc(sk.name)}" title="${esc(sk.description || '')}">/${esc(sk.name)}</button>`).join('')}`
         : chat.info ? '' : '<div class="menu-h">Loading skills…</div>'}`;
   };
@@ -761,7 +819,9 @@ function renderKpis() {
     item(g && jm ? g : null, mentionCount, 'mention', 'mentions', 'c-mentions', { hot: true }) +
     item(g, mine.filter((p) => p.status.owner === 'others').length, 'PR waiting on others', 'PRs waiting on others', 'c-waiting') +
     item(j, (j?.assigned || []).filter((i) => i.statusCategory === 'indeterminate').length, 'ticket in progress', 'tickets in progress', 'g-left-indeterminate') +
-    item(j, j?.assigned?.length || 0, 'open ticket', 'open tickets', 'c-left');
+    item(j, j?.assigned?.length || 0, 'open ticket', 'open tickets', 'c-left') +
+    item(cpLinks.live?.length ? cpLinks : null, cpLinks.live?.filter((x) => x.status !== 'working').length || 0, 'Copilot session waiting on you', 'Copilot sessions waiting on you', 'c-copilot', { hot: true }) +
+    item(cpLinks.live?.length ? cpLinks : null, cpLinks.live?.filter((x) => x.status === 'working').length || 0, 'Copilot session working', 'Copilot sessions working', 'c-copilot');
 }
 
 function renderReview() {
@@ -867,7 +927,7 @@ function renderExtra() {
 
 function renderToday() {
   view();
-  renderPlan(); renderKpis(); renderReview(); renderPrs(); renderMentions(); renderWaiting(); renderLeft(); renderExtra();
+  renderPlan(); renderKpis(); renderReview(); renderPrs(); renderMentions(); renderWaiting(); renderLeft(); renderExtra(); renderCopilotCard();
   $('#unhide').hidden = !hiddenCount;
   $('#unhide').textContent = `Show ${hiddenCount} hidden`;
 }
@@ -1245,6 +1305,7 @@ async function send(text) {
     if (e.name === 'AbortError' && segs.length > 1) chat.turns++;
   } finally {
     rememberChat();
+    setTimeout(loadLinks, 500);
     if (!segs.length) segs.push({ type: 'error', message: 'No answer.' });
     draw();
     chat.stop = null;
@@ -1429,6 +1490,8 @@ route();
 setInterval(() => loadAll(false), REFRESH_MS);
 pollAttention();
 setInterval(pollAttention, 60_000);
+loadLinks();
+setInterval(loadLinks, 30_000);
 </script>
 </body>
 </html>

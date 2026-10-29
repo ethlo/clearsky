@@ -1234,13 +1234,26 @@ function withStatus(list) {
 // items you attached in Clearsky, the branch a terminal session worked on (matched to its
 // PR, and the ticket key in its name), and ticket keys in the session's title.
 export function linkSessions(sessions, { prs = [], refs = {}, workspace = () => ({}) } = {}) {
-  const byBranch = new Map(prs.filter((p) => p.branch).map((p) => [`${p.repo.toLowerCase()}@${p.branch}`, `pr:${p.repo}#${p.number}`]));
+  // workspace.yaml may hold "org/repo" or a clone URL.
+  const repoOf = (r) => (r || '').replace(/\.git$/i, '').replace(/^.*[:/]([^/:]+\/[^/]+)$/, '$1').toLowerCase();
+  const byBranch = new Map(prs.filter((p) => p.branch).map((p) => [`${repoOf(p.repo)}@${p.branch}`, `pr:${p.repo}#${p.number}`]));
+  const byNumber = new Map(prs.map((p) => [`${repoOf(p.repo)}#${p.number}`, `pr:${p.repo}#${p.number}`]));
   const links = {};
   for (const x of sessions) {
     const keys = new Set(refs[x.id] || []);
     const ws = workspace(x.id);
-    if (ws.repository && ws.branch) {
-      const pr = byBranch.get(`${ws.repository.toLowerCase()}@${ws.branch}`);
+    const repo = repoOf(ws.repository);
+    if (repo && ws.branch) {
+      const pr = byBranch.get(`${repo}@${ws.branch}`);
+      if (pr) keys.add(pr);
+    }
+    // A PR named in the title: its URL anywhere, or "#123" / "PR 123" in a session in that repo.
+    for (const m of (x.title || '').matchAll(/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)/gi)) {
+      const pr = byNumber.get(`${m[1].toLowerCase()}#${m[2]}`);
+      if (pr) keys.add(pr);
+    }
+    if (repo) for (const m of (x.title || '').matchAll(/(?:#|\bPR\s*#?)(\d+)\b/gi)) {
+      const pr = byNumber.get(`${repo}#${m[1]}`);
       if (pr) keys.add(pr);
     }
     for (const m of `${ws.branch || ''} ${x.title || ''}`.toUpperCase().matchAll(/\b([A-Z][A-Z0-9_]+-\d+)\b/g)) keys.add(`issue:${m[1]}`);
