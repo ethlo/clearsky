@@ -259,3 +259,15 @@ test('links Copilot sessions to the PRs and tickets they work on', async () => {
   assert.deepEqual(links['pr:acme/web#9'].map((x) => [x.id, x.status]), [['s2', 'closed'], ['s3', 'closed']], 'by number in the repo, or by URL');
   assert.deepEqual(links['issue:XYZ-1'].map((x) => x.id), ['s4'], 'refs attached in Clearsky');
 });
+
+test('names sessions started here after what you typed, not the dashboard in front of it', async () => {
+  const { sessionTitle, linkSessions } = await import('../bin/clearsky.mjs');
+  const dash = 'You are helping me with my work. This is my work dashboard right now:\n\nReviews: acme/web#9 OPS-4';
+  assert.equal(sessionTitle(`${dash}\n\n---\nMy message:\nWhy is CI red?`), 'Why is CI red?');
+  assert.equal(sessionTitle(dash, 'Plan my afternoon'), 'Plan my afternoon', 'the title saved when the chat started');
+  assert.equal(sessionTitle(dash), 'Chat from Clearsky');
+  assert.equal(sessionTitle('Fix OPS-4 in the terminal'), 'Fix OPS-4 in the terminal');
+  const links = linkSessions([{ id: 's1', title: sessionTitle(dash), updatedAt: '2026-10-29T08:00:00Z' }],
+    { prs: [{ repo: 'acme/web', number: 9 }], workspace: () => ({ repository: 'acme/web', branch: 'main' }) });
+  assert.deepEqual(links, {}, 'the dashboard text links nothing');
+});

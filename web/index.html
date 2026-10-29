@@ -795,7 +795,7 @@ function renderPlan() {
   const calErr = cal.error ? `<div class="err" style="margin-top:12px">Calendar: ${esc(cal.error)}</div>`
     : cal.errors ? `<div style="margin-top:12px;font-size:12px;color:var(--muted)">Calendar (${esc(cal.source)}) loaded; skipped ${Object.entries(cal.errors).map(([n, m]) => `${esc(n)}: ${esc(m)}`).join('; ')}</div>` : '';
   const agenda = p.agenda.length ? `<div class="agenda">${p.agenda.map((e) =>
-    `<div class="${p.now && e.start === p.now.start ? 'on' : ''}${e.fyi ? ' fyi' : ''}"${e.fyi ? ' title="On a shared calendar, added by someone else: shown, but doesn\'t take your time"' : ''}><time>${hm(e.start)}</time><span>${esc(e.title)}${e.calendar ? ` <small>· ${esc(e.calendar)}</small>` : ''}</span></div>`).join('')}</div>` : '';
+    `<div class="${p.now && e.start === p.now.start ? 'on' : ''}${e.fyi ? ' fyi' : ''}"${e.fyi ? ' title="On a shared calendar, added by someone else: shown, but doesn\'t take your time"' : ''}><time>${hm(e.start)}</time><span>${esc(e.title)}${e.calendar && !e.work ? ` <small>· ${esc(e.calendar)}</small>` : ''}</span></div>`).join('')}</div>` : '';
   const todo = (p.suggestions.length ? `<ol class="todo">${p.suggestions.map((s) => `<li>
       <div><a class="t" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a><div class="d">${esc(s.detail)}</div></div>
       <span class="m">~${dur(s.minutes)}</span>
@@ -820,8 +820,8 @@ function renderKpis() {
     item(g, mine.filter((p) => p.status.owner === 'others').length, 'PR waiting on others', 'PRs waiting on others', 'c-waiting') +
     item(j, (j?.assigned || []).filter((i) => i.statusCategory === 'indeterminate').length, 'ticket in progress', 'tickets in progress', 'g-left-indeterminate') +
     item(j, j?.assigned?.length || 0, 'open ticket', 'open tickets', 'c-left') +
-    item(cpLinks.live?.length ? cpLinks : null, cpLinks.live?.filter((x) => x.status !== 'working').length || 0, 'Copilot session waiting on you', 'Copilot sessions waiting on you', 'c-copilot', { hot: true }) +
-    item(cpLinks.live?.length ? cpLinks : null, cpLinks.live?.filter((x) => x.status === 'working').length || 0, 'Copilot session working', 'Copilot sessions working', 'c-copilot');
+    item(cpLinks.live?.some((x) => x.status !== 'working') ? cpLinks : null, cpLinks.live?.filter((x) => x.status !== 'working').length || 0, 'Copilot session waiting on you', 'Copilot sessions waiting on you', 'c-copilot', { hot: true }) +
+    item(cpLinks.live?.some((x) => x.status === 'working') ? cpLinks : null, cpLinks.live?.filter((x) => x.status === 'working').length || 0, 'Copilot session working', 'Copilot sessions working', 'c-copilot');
 }
 
 function renderReview() {

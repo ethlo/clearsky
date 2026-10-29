@@ -607,7 +607,7 @@ async function evolutionTexts() {
   // for events you put there or were invited to; the rest just show.
   const own = new Set(ownCalendars(all, email).map((c) => c.uid));
   return Promise.all(synced.map(async (c) => ({
-    text: await edsCalendarText(c.cacheDb), name: c.name,
+    text: await edsCalendarText(c.cacheDb), name: c.name, work: own.has(c.uid),
     shared: !own.has(c.uid) && c.name.toLowerCase() !== c.account.toLowerCase(),
   })));
 }
@@ -618,7 +618,7 @@ async function fetchCalendar() {
   const { icsUrl, email } = config.calendar;
   const tries = [];
   const urls = (icsUrl || '').split(/\s+/).filter(Boolean);
-  urls.forEach((url, i) => tries.push([urls.length > 1 ? `iCal link ${i + 1}` : 'iCal link', icsText(url).then((text) => [{ text }])]));
+  urls.forEach((url, i) => tries.push([urls.length > 1 ? `iCal link ${i + 1}` : 'iCal link', icsText(url).then((text) => [{ text, name: 'Google Calendar', work: true }])]));
   tries.push(['GNOME Online Accounts', evolutionTexts()]);
   const results = await Promise.all(tries.map(([name, p]) => p.then((texts) => ({ name, texts }), (e) => ({ name, error: e.message }))));
   const used = results.filter((r) => r.texts);
@@ -636,19 +636,24 @@ async function fetchCalendar() {
   // Your name in a shared event's title also makes it yours (say "Dentist (Morten)").
   const names = (process.env.CALENDAR_MY_NAMES || '').split(',').map((n) => n.trim().toLowerCase()).filter(Boolean);
   const events = used.flatMap((r) => r.texts).flatMap((c) => eventsBetween(c.text, today.getTime(), today.getTime() + 2 * 864e5, me)
-    .map((e) => ({ ...e, calendar: c.shared ? c.name : undefined,
+    .map((e) => ({ ...e, calendar: c.name || 'Calendar', work: !!c.work, shared: !!c.shared,
       fyi: !!c.shared && !e.withMe && !names.some((n) => e.title.toLowerCase().includes(n)) })))
     // The same event on your own calendar and a shared one: keep your copy, which blocks time.
     .sort((a, b) => a.fyi - b.fyi)
     .filter((e) => !e.declined && !seen.has(`${e.uid}@${e.start}`) && !seen.has(`${e.title}@${e.start}`)
       && seen.add(`${e.uid}@${e.start}`) && seen.add(`${e.title}@${e.start}`))
-    .map(({ declined, withMe, organizer, ...e }) => e)
+    .map(({ declined, withMe, ...e }) => e)
     .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
   const sources = used.map((r) => r.name);
   return { source: sources.join(' + '), sources, ...(Object.keys(errors).length && { errors }), events };
 }
 
 // ---------------------------------------------------------------- Now / Next
+
+export const hiddenCalendars = () => new Set((process.env.CALENDAR_HIDDEN || '').split(',').map((n) => n.trim().toLowerCase()).filter(Boolean));
+
+// Clock times in 24-hour format unless CLEARSKY_TIME_FORMAT=12.
+export const clock = (d) => new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: process.env.CLEARSKY_TIME_FORMAT === '12' ? 'h12' : 'h23' });
 
 function atLocalTime(base, hhmm) {
   const [h, m] = hhmm.split(':').map(Number);
@@ -667,7 +672,11 @@ function reviewMinutes(p) {
 export function planNow(d, now = Date.now(), dismissedItems = localState.dismissed(stateFile), mutedItems = localState.muted(stateFile, now),
   doneAt = localState.doneAt(stateFile)) {
   const g = d.github || {}, j = d.jira || {}, s = d.slack || {}, cal = d.calendar || {};
-  const shown = (cal.events || []).filter((e) => !e.allDay && !e.transparent)
+  // Calendars you hid (from the agenda) neither show nor take your time.
+  const hidden = hiddenCalendars();
+  const calendars = [...new Set((cal.events || []).map((e) => e.calendar).filter(Boolean))]
+    .map((name) => ({ name, hidden: hidden.has(name.toLowerCase()) }));
+  const shown = (cal.events || []).filter((e) => !e.allDay && !e.transparent && !hidden.has((e.calendar || '').toLowerCase()))
     .map((e) => ({ ...e, s: Date.parse(e.start), e: Date.parse(e.end) }));
   // Someone else's events on a shared calendar show in the agenda but don't take your time.
   const timed = shown.filter((e) => !e.fyi);
@@ -730,6 +739,7 @@ export function planNow(d, now = Date.now(), dismissedItems = localState.dismiss
   const strip = ({ s: _s, e: _e, ...e }) => e;
   return {
     calendar: !cal.disabled && !cal.error,
+    calendars,
     now: current && strip(current),
     next: next && strip(next),
     freeFrom: new Date(freeFrom).toISOString(),
@@ -918,7 +928,7 @@ export function standupText(s) {
   if (t.reviews.length) line(`Review ${t.reviews.map((p) => `${p.repo}#${p.number}`).join(', ')}`);
   t.myPrs.forEach((p) => line(`${p.status.label}: ${p.repo}#${p.number} ${p.title}`));
   s.extra?.forEach((x) => x.today.forEach((t) => line(`${x.label}: ${t}`)));
-  if (t.meetings.length) line(`Meetings: ${t.meetings.map((e) => `${new Date(e.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ${e.title}`).join(', ')}`);
+  if (t.meetings.length) line(`Meetings: ${t.meetings.map((e) => `${clock(e.start)} ${e.title}`).join(', ')}`);
   if (out.length === before) line('Pick up the next item from the queue.');
   out.push('', '*Blockers*');
   if (s.blockers.length) s.blockers.forEach((b) => line(b.text));
@@ -975,7 +985,7 @@ export async function standup(work, since = previousStandup()) {
   const s = {
     generatedAt: new Date().toISOString(),
     since: since.toISOString(),
-    sinceLabel: `${since.toLocaleDateString([], { weekday: 'long' })} ${since.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+    sinceLabel: `${since.toLocaleDateString([], { weekday: 'long' })} ${clock(since)}`,
     nextStandup: next.toISOString(),
     jiraBase: config.jira.url || jiraBase,
     yesterday: { github, jira, copilot: copilotWork },
@@ -1003,7 +1013,7 @@ function ago(iso) {
 }
 
 export function toMarkdown(d) {
-  const out = [`# Clearsky (${new Date(d.generatedAt).toLocaleString()})`, ''];
+  const out = [`# Clearsky (${new Date(d.generatedAt).toLocaleDateString()} ${clock(d.generatedAt)})`, ''];
   const section = (title, items, line, error) => {
     out.push(`## ${title}${items ? ` (${items.length})` : ''}`);
     if (error) out.push(`_Unavailable: ${error}_`);
@@ -1012,7 +1022,7 @@ export function toMarkdown(d) {
     out.push('');
   };
   const g = d.github, j = d.jira, p = d.plan;
-  const hm = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const hm = clock;
   out.push('## Now / Next');
   if (d.calendar?.error) out.push(`_Calendar unavailable: ${d.calendar.error}_`);
   if (p.now) out.push(`Now: **${p.now.title}** until ${hm(p.now.end)}`);
@@ -1203,10 +1213,19 @@ export function typedPart(text) {
 }
 
 let sessionsCache = null;
+// A session started here is named after the dashboard and items Clearsky put in front of
+// your message; show what you typed instead (and never match PRs or tickets on the rest).
+export function sessionTitle(title, typed) {
+  if (!title || !(title.startsWith(CONTEXT_INTRO.slice(0, 30)) || title.startsWith(REFS_INTRO))) return title || null;
+  const own = typed || (title.includes(MSG_MARK) ? typedPart(title) : '');
+  return own.trim().split('\n')[0].slice(0, 120) || 'Chat from Clearsky';
+}
+
 async function copilotSessions(bin, force) {
   if (!force && sessionsCache && Date.now() - sessionsCache.at < 30_000) return withStatus(sessionsCache.data);
   const list = await withAgent(bin, (a) => a.listSessions());
-  const data = list.map((x) => ({ id: x.sessionId, title: x.title || null, cwd: x.cwd || null, updatedAt: x.updatedAt || null }))
+  const titles = localState.sessionTitles(stateFile);
+  const data = list.map((x) => ({ id: x.sessionId, title: sessionTitle(x.title, titles[x.sessionId]), cwd: x.cwd || null, updatedAt: x.updatedAt || null }))
     .sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0));
   sessionsCache = { at: Date.now(), data };
   return withStatus(data);
@@ -1532,7 +1551,10 @@ function serve() {
             if (!res.writableEnded) res.write(`${JSON.stringify(e)}\n`);
           };
           // Remember which PRs and tickets this session is about, for the links on the page.
-          const linkRefs = () => { if (refs.length) localState.addSessionRefs(stateFile, sessionId, refs.map(refKey)); };
+          const linkRefs = () => {
+            if (refs.length) localState.addSessionRefs(stateFile, sessionId, refs.map(refKey));
+            if (prefix && !body.resume) localState.setSessionTitle(stateFile, sessionId, message.trim().split('\n')[0]);
+          };
           res.on('close', linkRefs);
           if (checkout) emit({ type: 'cwd', cwd: checkout });
           sessionsCache = null;
@@ -1571,6 +1593,17 @@ function serve() {
           settings.writeEnvFile(userEnvFile, values);
           applySettings(values);
           return json(res, 200, await settingsStatus());
+        }
+        // Show or hide one calendar's events; saved like a setting, without refetching everything.
+        if (url.pathname === '/api/calendar/hidden') {
+          const { name, hidden } = await readJson(req);
+          if (typeof name !== 'string' || !name.trim() || /[,\r\n]/.test(name)) return json(res, 400, { error: 'bad calendar name' });
+          const now = hiddenCalendars();
+          if (hidden) now.add(name.trim().toLowerCase()); else now.delete(name.trim().toLowerCase());
+          const values = settings.validate({ CALENDAR_HIDDEN: [...now].join(',') });
+          settings.writeEnvFile(userEnvFile, values);
+          if (values.CALENDAR_HIDDEN) process.env.CALENDAR_HIDDEN = values.CALENDAR_HIDDEN; else delete process.env.CALENDAR_HIDDEN;
+          return json(res, 200, { hidden: [...now] });
         }
         if (url.pathname === '/api/login/github') return json(res, 200, await settings.githubLogin());
         if (url.pathname === '/api/login/jira') return json(res, 200, await settings.jiraLogin(config.jira.acli));
@@ -1634,7 +1667,7 @@ function serve() {
       if (url.pathname === '/api/plan') {
         // Waits for every source (from cache when fresh); the page asks for it alongside them.
         const { plan, nextStandup: next, summary, generatedAt } = await collect(false);
-        return json(res, 200, { plan, nextStandup: next, summary, generatedAt });
+        return json(res, 200, { plan, nextStandup: next, summary, generatedAt, prefs: { hour12: process.env.CLEARSKY_TIME_FORMAT === '12' } });
       }
       const issueKey = url.pathname.match(/^\/api\/issue\/([A-Z][A-Z0-9_]+-\d+)$/)?.[1];
       if (issueKey) return json(res, 200, await issuePreview(issueKey));
