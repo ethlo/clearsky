@@ -864,7 +864,8 @@ export function standupText(s) {
   y.jira.touched?.forEach((i) => line(`Worked on ${i.key}: ${i.summary} (${i.status})`));
   const commits = (y.github.commits || []).filter((c) => c.count);
   if (commits.length) line(`Commits: ${commits.map((c) => `${c.count} in ${c.repo.split('/')[1]}`).join(', ')}`);
-  if (out.length === 1) line('Nothing recorded on GitHub or Jira.');
+  y.copilot?.sessions?.forEach((x) => line(`With Copilot: ${x.title}${x.where ? ` (${x.where}${x.branch && !/^(main|master)$/.test(x.branch) ? `, ${x.branch}` : ''})` : ''}`));
+  if (out.length === 1) line('Nothing recorded on GitHub, Jira or Copilot.');
   out.push('', '*Today*');
   const before = out.length;
   t.inProgress.forEach((i) => line(`Continue ${i.key}: ${i.summary}`));
@@ -878,10 +879,35 @@ export function standupText(s) {
   return out.join('\n');
 }
 
+// Copilot sessions you worked in since the last stand-up: local work that may not be
+// on GitHub or Jira yet. Titles are Copilot's own summaries of each session.
+async function standupCopilot(since) {
+  const info = await copilotInfo();
+  if (!info.available) return { sessions: [] };
+  const sessions = (await copilotSessions(info.bin)).filter((x) => x.title && Date.parse(x.updatedAt) >= +since);
+  return {
+    sessions: sessions.slice(0, 12).map((x) => {
+      const ws = workspaceInfo(x.id);
+      return { id: x.id, title: x.title, where: ws.repository?.split('/').pop() || (x.cwd || '').split('/').filter(Boolean).pop() || '', branch: ws.branch || null };
+    }),
+  };
+}
+
+function workspaceInfo(id) {
+  const out = {};
+  try {
+    for (const line of readFileSync(join(homedir(), '.copilot', 'session-state', id, 'workspace.yaml'), 'utf8').split('\n')) {
+      const m = line.match(/^(repository|branch):\s*["']?([^"'\s]+)["']?\s*$/);
+      if (m) out[m[1]] = m[2];
+    }
+  } catch { /* no workspace file */ }
+  return out;
+}
+
 // `since` overrides the start of the window (used by tests).
 export async function standup(work, since = previousStandup()) {
   const next = nextStandup();
-  const [github, jira] = await Promise.all([settle(standupGitHub(since)), settle(standupJira(since))]);
+  const [github, jira, copilotWork] = await Promise.all([settle(standupGitHub(since)), settle(standupJira(since)), settle(standupCopilot(since))]);
   const w = work || await collect();
   const today = {
     inProgress: (w.jira.assigned || []).filter((i) => i.statusCategory === 'indeterminate').slice(0, 5),
@@ -900,7 +926,7 @@ export async function standup(work, since = previousStandup()) {
     sinceLabel: `${since.toLocaleDateString([], { weekday: 'long' })} ${since.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
     nextStandup: next.toISOString(),
     jiraBase: config.jira.url || jiraBase,
-    yesterday: { github, jira },
+    yesterday: { github, jira, copilot: copilotWork },
     today,
     blockers,
   };

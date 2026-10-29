@@ -85,6 +85,7 @@ before(async () => {
     ACLI_BIN: fileURLToPath(new URL('./fake-acli.mjs', import.meta.url)), FAKE_ACLI_LOG: acliLog,
     CLEARSKY_IGNORE_AUTHORS: 'dependabot[bot]',
     SLACK_TOKEN: 'xoxp-test', SLACK_API_URL: `${base}/slack`,
+    COPILOT_BIN: fileURLToPath(new URL('./fake-copilot.mjs', import.meta.url)),
   });
 });
 after(() => server.close());
@@ -166,6 +167,9 @@ test('stand-up: yesterday from GitHub and Jira, today from the queue', async () 
   assert.match(s.text, /Reviewed acme\/web#8 by anna \(approved\)/);
   assert.match(s.text, /Worked on OPS-9: Pager rotation \(In Review\)/);
   assert.match(s.text, /\*Today\*\n- Continue OPS-1: Rotate certs/);
+  // Recent Copilot sessions count as work too; older ones don't.
+  assert.match(s.text, /With Copilot: Check the repo \(\w+\)/);
+  assert.ok(!/From the terminal/.test(s.text));
 });
 
 test('PR status: who has the ball', async () => {
