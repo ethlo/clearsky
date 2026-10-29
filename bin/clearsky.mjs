@@ -1098,6 +1098,29 @@ async function readJson(req) {
   return body ? JSON.parse(body) : {};
 }
 
+// A file from a source, such as a school attachment. It comes from someone else, so it can
+// never run as part of this page: PDFs, images and plain text open in the browser, anything
+// else is downloaded, and nothing is sniffed or scripted.
+const INLINE = new Set(['application/pdf', 'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'text/plain']);
+export function fileHeaders({ type, name, data }) {
+  const inline = INLINE.has(type);
+  return {
+    'Content-Type': inline ? (type === 'text/plain' ? 'text/plain; charset=utf-8' : type) : 'application/octet-stream',
+    'Content-Length': data.length,
+    'Content-Disposition': `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(name || 'file')}`,
+    'X-Content-Type-Options': 'nosniff',
+    // Chrome's PDF viewer doesn't run in a sandbox, and a PDF can't reach this page's scripts.
+    'Content-Security-Policy': type === 'application/pdf' ? "default-src 'none'; object-src 'self'" : "sandbox; default-src 'none'; img-src 'self'; style-src 'unsafe-inline'",
+    'Cache-Control': 'private, no-store',
+  };
+}
+
+function sendFile(res, file) {
+  if (!file?.data) throw new Error('no file');
+  res.writeHead(200, fileHeaders(file));
+  res.end(file.data);
+}
+
 // Logins that extra sources start from Settings, such as BankID in a browser window. They
 // can take minutes, so they run in the background and Settings polls for the outcome.
 const sourceLogins = new Map();
@@ -1511,8 +1534,13 @@ function serve() {
     res.end(JSON.stringify(body));
   };
 
+  // Only answer to this machine's own names, so a web page can't reach the API through a
+  // DNS name it controls that points here.
+  const hosts = new Set([`127.0.0.1:${config.port}`, `localhost:${config.port}`]);
+
   createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
+    if (!hosts.has(req.headers.host)) return json(res, 421, { error: 'wrong host' });
     try {
       if (req.method === 'POST') {
         if (req.headers['x-clearsky-token'] !== csrf || (req.headers.origin && !origins.has(req.headers.origin))) {
@@ -1635,6 +1663,20 @@ function serve() {
           standupCache = { at: Date.now(), data: await standup(await collect(force)) };
         }
         return json(res, 200, standupCache.data);
+      }
+      // A source's item read in full, and its files (see detail and attachment in lib/sources.mjs).
+      const part = url.pathname.match(/^\/api\/source\/([a-z][a-z0-9-]+)\/(detail|attachment)$/);
+      if (part) {
+        const p = plugins.sources.get(part[1]), key = url.searchParams.get('key');
+        if (!p || typeof p[part[2]] !== 'function') return json(res, 404, { error: 'not found' });
+        if (!key) return json(res, 400, { error: 'key is required' });
+        try {
+          const data = await source(p.name, false);
+          if (part[2] === 'detail') return json(res, 200, await p.detail(key, makeContext(p), data));
+          return sendFile(res, await p.attachment(key, url.searchParams.get('id') || '', makeContext(p), data));
+        } catch (e) {
+          return json(res, e.auth ? 401 : 502, { error: e.message, ...(e.auth && { needsLogin: true }) });
+        }
       }
       const src = url.pathname.match(/^\/api\/source\/(\w+)$/)?.[1];
       if (src) {

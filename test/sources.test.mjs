@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { request } from 'node:http';
 import { mkdtempSync, copyFileSync, writeFileSync, chmodSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -53,6 +54,16 @@ test('an extra source shows up in the page, notifications, Now / Next, stand-up 
   assert.ok(plan.plan.agenda.some((e) => e.title === 'Ada: Swimming' && e.fyi && e.calendar === 'School') || new Date().getHours() >= 13);
   const su = await get('/api/standup');
   assert.match(su.text, /School: Ada has Swimming/);
+  const detail = await get('/api/source/school/detail?key=m1');
+  assert.deepEqual([detail.child, detail.messages[0].text], ['Ada', 'Bring a packed lunch']);
+  const file = await fetch(`${base}/api/source/school/attachment?key=m1&id=f1`);
+  assert.equal(file.headers.get('content-type'), 'application/octet-stream', 'HTML from a source is never served as a page');
+  assert.match(file.headers.get('content-disposition'), /^attachment; filename\*=UTF-8''trip\.html$/);
+  assert.match(file.headers.get('content-security-policy'), /^sandbox/);
+  assert.equal(file.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal((await fetch(`${base}/api/source/github/detail?key=x`)).status, 404);
+  const rebound = await new Promise((resolve) => request({ host: '127.0.0.1', port, path: '/api/source/school', headers: { Host: `evil.example:${port}` } }, resolve).end());
+  assert.equal(rebound.statusCode, 421, 'only answers to its own host names');
   const st = await get('/api/settings');
   assert.deepEqual(st.extra.filter((f) => f.key.startsWith('SCHOOL_')).map((f) => [f.key, f.secret, f.value]), [['SCHOOL_CHILD', false, 'Ada'], ['SCHOOL_TOKEN', true, null]]);
 });
