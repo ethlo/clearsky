@@ -121,7 +121,7 @@ async function http(url, { headers = {}, body, method } = {}) {
 // ---------------------------------------------------------------- GitHub
 
 const PR_FIELDS = `
-  number title url isDraft createdAt updatedAt reviewDecision mergeable headRefName
+  number title url state isDraft createdAt updatedAt reviewDecision mergeable headRefName
   additions deletions changedFiles
   repository { nameWithOwner }
   author { login }
@@ -205,6 +205,45 @@ export function myPrStatus(pr, me) {
   return { label: 'Waiting for review', owner: 'others', tone: 'wait' };
 }
 
+// Who could review a PR: people with write access to the repo, GitHub's suggestions first,
+// marked with who is already asked and who has reviewed, so nobody is asked twice by accident.
+async function reviewerOptions(repo, number) {
+  config.github.token ||= await ghCliToken();
+  const [owner, name] = repo.split('/');
+  const d = await gql(`query($o: String!, $n: String!, $num: Int!) {
+    viewer { login }
+    repository(owner: $o, name: $n) {
+      assignableUsers(first: 100) { nodes { login name } }
+      pullRequest(number: $num) {
+        author { login }
+        suggestedReviewers { reviewer { login name } }
+        reviewRequests(first: 30) { nodes { requestedReviewer { __typename ... on User { login } ... on Bot { login } } } }
+        reviews(last: 50) { nodes { state submittedAt author { __typename login } } }
+      }
+    }
+  }`, { o: owner, n: name, num: number });
+  const pr = d.repository?.pullRequest;
+  if (!pr) throw new Error(`${repo}#${number} not found`);
+  const me = d.viewer.login, author = pr.author?.login;
+  const requested = new Set((pr.reviewRequests?.nodes || []).map((n) => n.requestedReviewer?.login).filter(Boolean));
+  const reviewed = new Map();
+  for (const r of pr.reviews?.nodes || []) if (r.author?.login && r.state !== 'PENDING') reviewed.set(r.author.login, r.state);
+  const suggested = new Set((pr.suggestedReviewers || []).map((s) => s.reviewer?.login));
+  const people = new Map();
+  for (const u of [...(pr.suggestedReviewers || []).map((s) => s.reviewer), ...(d.repository.assignableUsers?.nodes || [])]) {
+    if (!u?.login || u.login === me || u.login === author || isBot(u) || people.has(u.login)) continue;
+    people.set(u.login, { login: u.login, name: u.name || null, suggested: suggested.has(u.login), requested: requested.has(u.login), reviewed: reviewed.get(u.login) || null });
+  }
+  const rank = (p) => (p.requested ? 0 : p.reviewed ? 1 : p.suggested ? 2 : 3);
+  return { repo, number, people: [...people.values()].sort((a, b) => rank(a) - rank(b) || a.login.localeCompare(b.login)) };
+}
+
+async function requestReviews(repo, number, logins) {
+  config.github.token ||= await ghCliToken();
+  const { api, token } = config.github;
+  await http(`${api}/repos/${repo}/pulls/${number}/requested_reviewers`, { headers: { Authorization: `Bearer ${token}` }, body: { reviewers: logins } });
+}
+
 function reviewerName(r) {
   return r?.login || (r?.slug ? `team:${r.slug}` : null);
 }
@@ -243,7 +282,9 @@ async function fetchGitHub() {
     },
   );
 
-  const keep = (n) => n && n.number && !ignoreAuthors.includes(n.author?.login);
+  // GitHub's search index lags a few minutes behind a merge, so check each PR's own state too.
+  const open = (n) => n && n.number && (!n.state || n.state === 'OPEN');
+  const keep = (n) => open(n) && !ignoreAuthors.includes(n.author?.login);
   const base = (n) => ({
     repo: n.repository.nameWithOwner,
     number: n.number,
@@ -261,6 +302,7 @@ async function fetchGitHub() {
     const reviewedBefore = (pr.reviews?.nodes || []).some((r) => r.author?.login === me && r.state !== 'PENDING');
     return {
       ...base(pr),
+      stamp: requestedAt, // Done hides it until you're asked again
       draft: pr.isDraft,
       requestedAt,
       viaTeam: mine.length === 0,
@@ -271,12 +313,16 @@ async function fetchGitHub() {
     };
   });
 
-  const myPrs = data.myPrs.nodes.filter((n) => n && n.number).map((pr) => {
+  const myPrs = data.myPrs.nodes.filter(open).map((pr) => {
     const reviews = latestReviewsByUser(pr, me);
+    const status = myPrStatus(pr, me);
+    // Done hides it until its state changes or a person reviews again, not when a bot comments or you push.
+    const lastHuman = reviews.map((r) => r.submittedAt || '').sort().at(-1) || '';
     return {
       ...base(pr),
+      stamp: `${status.label}|${lastHuman}|${openThreads(pr, me).mine}`,
       draft: pr.isDraft,
-      status: myPrStatus(pr, me),
+      status,
       branch: pr.headRefName || null,
       ci: ciState(pr),
       approvals: reviews.filter((r) => r.state === 'APPROVED').map((r) => r.author.login),
@@ -1644,6 +1690,17 @@ function serve() {
           sessionsCache = null;
           return json(res, 200, { ok: true });
         }
+        // Ask people to review one of your PRs, as you (through your GitHub login).
+        if (url.pathname === '/api/pr/request-review') {
+          const { repo, number, logins } = await readJson(req);
+          if (!/^[\w.-]+\/[\w.-]+$/.test(repo || '') || !/^\d+$/.test(String(number)) || !Array.isArray(logins) || !logins.length || logins.length > 15
+            || !logins.every((l) => /^[A-Za-z\d](?:[A-Za-z\d-]{0,38})$/.test(l))) return json(res, 400, { error: 'bad request' });
+          if (!config.github.orgs.includes(repo.split('/')[0])) return json(res, 400, { error: 'not one of your work repos' });
+          await requestReviews(repo, Number(number), logins);
+          localState.logAction(stateFile, `https://github.com/${repo}/pull/${number}`, `Asked ${logins.join(', ')} to review`);
+          sourceCache.delete('github');
+          return json(res, 200, { ok: true });
+        }
         if (url.pathname === '/api/copilot/permission') {
           const { chat, id, option } = await readJson(req);
           const waiting = acpChats.get(chat)?.waiting;
@@ -1820,6 +1877,12 @@ function serve() {
         if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !/^\d+$/.test(number)) return json(res, 400, { error: 'bad PR reference' });
         return json(res, 200, await prPreview(repo, number));
       }
+      if (url.pathname === '/api/pr/reviewers') {
+        const repo = url.searchParams.get('repo') || '', number = url.searchParams.get('number') || '';
+        if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !/^\d+$/.test(number)) return json(res, 400, { error: 'bad PR reference' });
+        return json(res, 200, await reviewerOptions(repo, Number(number)));
+      }
+      if (url.pathname === '/api/actions') return json(res, 200, { actions: localState.actions(stateFile) });
       if (url.pathname === '/api/work') {
         const data = await collect(url.searchParams.has('refresh'));
         res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });

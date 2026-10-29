@@ -205,6 +205,19 @@
   .facts { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 9px 0; border-block: 1px solid var(--line); color: var(--text-2); font-size: 12.5px; }
   .facts .good { color: var(--green); } .facts .bad { color: var(--red); } .facts .warn { color: var(--amber); }
   .acts-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 18px; }
+  .rv-pick { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: -6px 0 18px; background: var(--bg); }
+  .rv-pick input[type=search] { width: 100%; font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--text); margin-bottom: 8px; }
+  .rv-pick ul { list-style: none; margin: 0; padding: 0; max-height: 280px; overflow: auto; }
+  .rv-pick li label { display: flex; align-items: center; gap: 8px; padding: 5px 4px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .rv-pick li label:hover { background: var(--surface); }
+  .rv-pick li small { color: var(--muted); margin-left: auto; white-space: nowrap; }
+  .rv-pick li.off label { color: var(--muted); cursor: default; }
+  .rv-pick .rv-foot { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+  .last-act { color: var(--text-2); font-size: 12.5px; margin-top: 4px; }
+  .fresh { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: var(--muted); font-size: 12px; padding: 4px 6px; border-radius: 6px; margin-left: 6px; white-space: nowrap; }
+  .fresh:hover { color: var(--text); background: var(--bg); }
+  .fresh.spin svg { animation: spin 1s linear infinite; }
+  @media (max-width: 560px) { .fresh span { display: none; } }
   .acts-row .icon-btn { height: 30px; }
   .item h3 { font-size: 12px; color: var(--muted); font-weight: 600; margin: 18px 0 6px; }
   .item .desc { white-space: pre-wrap; color: var(--text-2); line-height: 1.6; overflow-wrap: anywhere; }
@@ -548,7 +561,7 @@
 
   <!-- The inbox, and the Reviews / Your PRs / Mentions / Tickets views of it. -->
   <section class="view" id="v-list">
-    <header class="vh"><h1 id="list-title">Inbox</h1><span class="spacer"></span><span id="su-alert"></span><button class="nowline" id="nowline" title="Open the calendar"></button></header>
+    <header class="vh"><h1 id="list-title">Inbox</h1><button class="fresh" data-fresh title="Refresh everything"></button><span class="spacer"></span><span id="su-alert"></span><button class="nowline" id="nowline" title="Open the calendar"></button></header>
     <div class="view-b" id="list" tabindex="-1"></div>
     <div class="kb"><span><kbd>J</kbd><kbd>K</kbd> move</span><span><kbd>↵</kbd> open</span><span><kbd>Esc</kbd> back</span>
       <span><kbd>E</kbd> done</span><span><kbd>H</kbd> snooze</span><span><kbd>A</kbd> Copilot</span></div>
@@ -572,7 +585,7 @@
 
   <!-- A source on its own page, such as School. -->
   <section class="view" id="v-src" hidden>
-    <header class="vh"><h1 id="src-title"></h1><span class="spacer"></span><button class="nowline" data-nowline></button></header>
+    <header class="vh"><h1 id="src-title"></h1><button class="fresh" data-fresh title="Refresh everything"></button><span class="spacer"></span><button class="nowline" data-nowline></button></header>
     <div class="view-b"><div class="page src-page" id="src-body"></div></div>
   </section>
 
@@ -673,8 +686,20 @@ function loadSource(name, force) {
   return getJson(`/api/source/${name}${force ? '?refresh=1' : ''}`)
     .then((d) => { state[name] = d; })
     .catch((e) => { state[name] = { error: e.message, fetchedAt: new Date().toISOString() }; })
-    .finally(() => { loading.delete(name); busy(-1); renderToday(); });
+    .finally(() => { loading.delete(name); busy(-1); renderToday(); drawFresh(); });
 }
+
+// "↻ updated 3m ago" next to the page title; click to refresh everything.
+function drawFresh() {
+  const times = SOURCES.map((n) => state[n]?.fetchedAt).filter(Boolean).sort();
+  const spinning = SOURCES.some((n) => loading.has(n));
+  for (const b of document.querySelectorAll('[data-fresh]')) {
+    b.classList.toggle('spin', spinning);
+    b.innerHTML = `${REFRESH_ICON}<span>${spinning ? 'Refreshing…' : times.length ? `updated ${esc(ago(times[0]))}` : ''}</span>`;
+  }
+}
+setInterval(drawFresh, 30_000);
+document.addEventListener('click', (e) => { if (e.target.closest('[data-fresh]')) { previews.clear(); loadAll(true); drawFresh(); } });
 
 // The plan is built from every source; the server reuses what it already has cached.
 function loadPlan() {
@@ -1400,15 +1425,16 @@ async function renderItem() {
   const sessions = cpLinks.links[itemKey(it.url || '')] || [];
   $('#it-crumb').textContent = `${it.src || ''}${it.ref ? ` · ${it.ref}` : ''}`;
   const head = `<div class="src"><span class="st ${esc(it.glyph)}"></span>${esc(it.ref || '')}</div>
-    <h2>${esc(it.title)}</h2><div class="why">${whyLine(it)}</div>`;
+    <h2>${esc(it.title)}</h2><div class="why">${whyLine(it)}</div>${lastActs[it.url] ? `<div class="last-act">You: ${esc(lastActs[it.url].text)}, ${esc(ago(lastActs[it.url].at))}.</div>` : ''}`;
   const acts = `<div class="acts-row">${it.url ? `<a class="icon-btn primary" href="${esc(it.url)}" target="_blank" rel="noopener">${where} ↗</a>` : ''}
+    ${it.kind === 'pr' ? `<button class="icon-btn" data-rv-open>👥 Request review</button>` : ''}
     ${refFromUrl(it.url) ? `<button class="icon-btn" data-ask="${esc(it.url)}" data-title="${esc(it.title)}">✦ Copilot on this</button>` : ''}
     <button class="icon-btn" data-mute="${esc(it.k)}">${MUTE_ICON} Snooze</button>
     <button class="icon-btn" data-done="${esc(it.k)}" data-stamp="${esc(it.stamp ?? '')}" data-back-after>${DONE_ICON} Done</button></div>`;
   const cps = sessions.length ? `<h3>Copilot on this</h3><div class="cps">${sessions.map(chip).join('')}</div>` : '';
   const quote = it.quote ? `<h3>${it.src === 'Slack' ? 'Message' : 'Latest mention'}</h3><div class="quote">${esc(it.quote)}</div>` : '';
   const ref = it.pr ? { pr: it.pr } : it.issue ? { issue: it.issue } : null;
-  const draw = (facts, body) => { if (curItem === it) el.innerHTML = head + (facts ? `<div class="facts">${facts}</div>` : '') + acts + quote + cps + body; };
+  const draw = (facts, body) => { if (curItem === it) el.innerHTML = head + (facts ? `<div class="facts">${facts}</div>` : '') + acts + '<div id="rv-slot"></div>' + quote + cps + body; };
   draw('', ref ? `<h3>Details</h3>${skeleton(2)}` : '');
   if (!ref) return;
   const d = await preview({ dataset: ref });
@@ -1422,6 +1448,48 @@ async function renderItem() {
       d.description ? `<h3>Description</h3><div class="desc">${esc(d.description)}</div>` : '');
   }
 }
+// Ask people to review your PR: a list of everyone who can, GitHub's suggestions first, with
+// who is already asked or has reviewed marked, so nobody is asked twice by accident.
+let lastActs = {};
+const loadActs = () => fetch('/api/actions').then((r) => r.json()).then((d) => { lastActs = d.actions || {}; }).catch(() => {});
+loadActs();
+const RV_STATE = { APPROVED: 'approved', CHANGES_REQUESTED: 'asked for changes', COMMENTED: 'commented', DISMISSED: 'dismissed' };
+document.addEventListener('click', async (e) => {
+  if (!e.target.closest('[data-rv-open]')) return;
+  const it = curItem, slot = $('#rv-slot');
+  if (!it?.data || !slot) return;
+  if (slot.firstChild) { slot.replaceChildren(); return; }
+  slot.innerHTML = `<div class="rv-pick">${skeleton(3)}</div>`;
+  let d;
+  try { d = await (await fetch(`/api/pr/reviewers?repo=${encodeURIComponent(it.data.repo)}&number=${it.data.number}`)).json(); } catch (err) { d = { error: err.message }; }
+  if (curItem !== it) return;
+  if (d.error) { slot.innerHTML = `<div class="rv-pick"><div class="err" style="margin:0">${esc(d.error)}</div></div>`; return; }
+  const li = (p) => `<li class="${p.requested ? 'off' : ''}" data-q="${esc(`${p.login} ${p.name || ''}`.toLowerCase())}"><label>
+    <input type="checkbox" value="${esc(p.login)}" ${p.requested ? 'checked disabled' : ''}>${esc(p.name || p.login)}${p.name ? ` <span class="muted">${esc(p.login)}</span>` : ''}
+    <small>${p.requested ? 'asked' : p.reviewed ? esc(RV_STATE[p.reviewed] || 'reviewed') + ', ask again' : p.suggested ? 'suggested' : ''}</small></label></li>`;
+  slot.innerHTML = `<div class="rv-pick"><input type="search" placeholder="Find a person" aria-label="Find a person">
+    <ul>${d.people.map(li).join('') || '<li class="off"><label>Nobody else can review this repo.</label></li>'}</ul>
+    <div class="rv-foot"><button class="icon-btn primary" data-rv-send disabled>Request review</button><span class="muted" id="rv-msg"></span></div></div>`;
+  const box = slot.firstChild, sendBtn = box.querySelector('[data-rv-send]');
+  const picked = () => [...box.querySelectorAll('input[type=checkbox]:checked:not(:disabled)')].map((x) => x.value);
+  box.querySelector('input[type=search]').focus();
+  box.querySelector('input[type=search]').addEventListener('input', (ev) => {
+    const q = ev.target.value.trim().toLowerCase();
+    for (const x of box.querySelectorAll('li[data-q]')) x.hidden = !!q && !x.dataset.q.includes(q);
+  });
+  box.addEventListener('change', () => { const n = picked().length; sendBtn.disabled = !n; sendBtn.textContent = n > 1 ? `Request review from ${n}` : 'Request review'; });
+  sendBtn.addEventListener('click', async () => {
+    sendBtn.disabled = true;
+    try {
+      await post('/api/pr/request-review', { repo: it.data.repo, number: it.data.number, logins: picked() });
+      await loadActs();
+      slot.replaceChildren();
+      renderItem();
+      loadAll(true);
+    } catch (err) { $('#rv-msg').textContent = err.message; sendBtn.disabled = false; }
+  });
+});
+
 // Done or snoozed from the item page: back to the list.
 document.addEventListener('click', (e) => { if (e.target.closest('[data-back-after]')) setTimeout(back, 0); });
 
