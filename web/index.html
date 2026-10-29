@@ -421,6 +421,7 @@
   .chat-ctx { display: flex; flex-direction: column; gap: 6px; }
   .chat-ctx .ctx-line { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--text-2); flex-wrap: wrap; }
   .chat-ctx .ctx-title { font-weight: 600; color: var(--text); font-size: 13px; overflow-wrap: anywhere; }
+  .chat-ctx .ctx-work { gap: 6px; }
   .chat-ctx .ctx-st { flex: none; display: inline-flex; align-items: center; gap: 5px; color: var(--muted); }
   .chat-ctx .ctx-st i { width: 7px; height: 7px; border-radius: 50%; background: var(--line-strong); }
   .chat-ctx .s-working i { background: var(--green); animation: pulse 1.2s ease-in-out infinite; }
@@ -2144,6 +2145,20 @@ function itemIndex() {
   (jm.tickets || []).forEach((t) => !out.has(`issue:${t.key}`) && out.set(`issue:${t.key}`, { title: t.summary, url: t.url }));
   return out;
 }
+// Jira status of a ticket that isn't in your lists, fetched for the chat header and kept a
+// couple of minutes, so a refresh (or reopening the chat) shows where it is now.
+const ctxTickets = new Map();
+function ctxTicketStatus(key) {
+  const hit = ctxTickets.get(key);
+  if (hit && Date.now() - hit.at < 120_000) return hit.data;
+  ctxTickets.set(key, { at: Date.now(), data: hit?.data || null });
+  getJson(`/api/issue/${encodeURIComponent(key)}`).then((d) => {
+    if (d?.error) return;
+    ctxTickets.set(key, { at: Date.now(), data: { status: d.status, tone: statusTone(d.statusCategory) } });
+    drawCtx();
+  }).catch(() => {});
+  return hit?.data || null;
+}
 function drawCtx() {
   drawTabs();
   if ($('#chat-ctx .rv-pick')) return; // don't redraw under an open review picker
@@ -2173,8 +2188,17 @@ function drawCtx() {
       ${mine ? `<button class="chip" data-rv-open="${esc(label)}">👥 Request review</button><div class="rv-slot"></div>` : ''}</div>`;
   }).join('');
   el.hidden = false;
-  el.innerHTML = `<div class="ctx-line"><span class="ctx-title">${esc(title || (chat.turns ? 'Copilot session' : 'New chat'))}</span>
-      ${status ? `<span class="ctx-st s-${esc(status)}"><i></i>${esc(STATUS_TEXT[status] || status)}</span>` : ''}</div>
+  // Where the work stands comes first: the ticket's Jira status and the PR's, then the chat's own state.
+  const work = [...keys].map((k) => {
+    const info = idx.get(k) || {};
+    if (k.startsWith('issue:')) {
+      const st = info.status ? info : ctxTicketStatus(k.slice(6));
+      return st?.status ? `<span class="badge b-${st.tone || 'gray'}" title="${esc(k.slice(6))} in Jira">${esc(k.slice(6))} · ${esc(st.status)}</span>` : '';
+    }
+    return info.status ? `<span class="badge b-${info.tone || 'gray'}" title="${esc(k.slice(3))}">${esc(k.replace(/^(pr|gh):[\w.-]+\//, '').replace('#', ' #'))} · ${esc(info.status)}</span>` : '';
+  }).filter(Boolean).join('');
+  el.innerHTML = `<div class="ctx-line"><span class="ctx-title">${esc(title || (chat.turns ? 'Copilot session' : 'New chat'))}</span></div>
+    <div class="ctx-line ctx-work">${work}${status ? `<span class="ctx-st s-${esc(status)}" title="This chat"><i></i>chat ${esc(STATUS_TEXT[status] || status)}</span>` : ''}</div>
     ${items}
     ${chat.cwd ? `<div class="ctx-dir" title="${esc(chat.cwd)}">📁 ${esc(chat.cwd.replace(/^\/home\/[^/]+/, '~'))}</div>` : ''}`;
 }
@@ -2785,7 +2809,7 @@ $('#copy').onclick = async () => {
   catch { btn.textContent = 'Copy failed'; }
   setTimeout(() => { btn.textContent = 'Copy for Slack'; }, 1500);
 };
-$('#refresh').onclick = () => { previews.clear(); if (location.hash === '#standup') loadStandup(true); else loadAll(true); };
+$('#refresh').onclick = () => { previews.clear(); ctxTickets.clear(); if (location.hash === '#standup') loadStandup(true); else loadAll(true); };
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-refresh]');
   if (!btn) return;
