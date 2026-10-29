@@ -400,6 +400,7 @@
   .chat-ctx .ctx-item a { color: var(--text); font-weight: 500; flex: none; }
   .chat-ctx .ctx-item a:hover { color: var(--accent); }
   .chat-ctx .ctx-item span { color: var(--text-2); }
+  .chat-ctx .ctx-item .rv-slot { flex-basis: 100%; } .chat-ctx .ctx-item .rv-slot .rv-pick { margin: 6px 0 0; }
   .chat-opts { display: flex; flex-direction: column; gap: 8px; color: var(--text-2); }
   .chat-opts label { display: flex; align-items: center; gap: 6px; justify-content: space-between; }
   .chat-opts input, .chat-opts select { font: inherit; font-size: 12.5px; color: var(--text); background: var(--surface-2); border: 1px solid var(--line);
@@ -1442,14 +1443,14 @@ async function renderItem() {
   const head = `<div class="src"><span class="st ${esc(it.glyph)}"></span>${esc(it.ref || '')}</div>
     <h2>${esc(it.title)}</h2><div class="why">${whyLine(it)}</div>${lastActLine(it)}`;
   const acts = `<div class="acts-row">${it.url ? `<a class="icon-btn primary" href="${esc(it.url)}" target="_blank" rel="noopener">${where} ↗</a>` : ''}
-    ${it.kind === 'pr' ? `<button class="icon-btn" data-rv-open>👥 Request review</button>` : ''}
+    ${it.kind === 'pr' ? `<button class="icon-btn" data-rv-open="${esc(it.data.repo)}#${it.data.number}">👥 Request review</button>` : ''}
     ${refFromUrl(it.url) ? `<button class="icon-btn" data-ask="${esc(it.url)}" data-title="${esc(it.title)}">✦ Copilot on this</button>` : ''}
     <button class="icon-btn" data-mute="${esc(it.k)}">${MUTE_ICON} Snooze</button>
     <button class="icon-btn" data-done="${esc(it.k)}" data-stamp="${esc(it.stamp ?? '')}" data-back-after>${DONE_ICON} Done</button></div>`;
   const cps = sessions.length ? `<h3>Copilot on this</h3><div class="cps">${sessions.map(chip).join('')}</div>` : '';
   const quote = it.quote ? `<h3>${it.src === 'Slack' ? 'Message' : 'Latest mention'}</h3><div class="quote">${esc(it.quote)}</div>` : '';
   const ref = it.pr ? { pr: it.pr } : it.issue ? { issue: it.issue } : null;
-  const draw = (facts, body) => { if (curItem === it) el.innerHTML = head + (facts ? `<div class="facts">${facts}</div>` : '') + acts + '<div id="rv-slot"></div>' + quote + cps + body; };
+  const draw = (facts, body) => { if (curItem === it) el.innerHTML = head + (facts ? `<div class="facts">${facts}</div>` : '') + acts + '<div class="rv-slot"></div>' + quote + cps + body; };
   draw('', ref ? `<h3>Details</h3>${skeleton(2)}` : '');
   if (!ref) return;
   const d = await preview({ dataset: ref });
@@ -1475,22 +1476,25 @@ function lastActLine(it) {
 const loadActs = () => fetch('/api/actions').then((r) => r.json()).then((d) => { lastActs = d.actions || {}; }).catch(() => {});
 loadActs();
 const RV_STATE = { APPROVED: 'approved', CHANGES_REQUESTED: 'asked for changes', COMMENTED: 'commented', DISMISSED: 'dismissed' };
+// It opens under the button, on a PR's page or next to a PR in a Copilot chat's context.
 document.addEventListener('click', async (e) => {
-  if (!e.target.closest('[data-rv-open]')) return;
-  const it = curItem, slot = $('#rv-slot');
-  if (!it?.data || !slot) return;
+  const btn = e.target.closest('[data-rv-open]');
+  if (!btn) return;
+  const [repo, number] = btn.dataset.rvOpen.split('#');
+  const slot = btn.closest('#item, .ctx-item')?.querySelector('.rv-slot');
+  if (!slot) return;
   if (slot.firstChild) { slot.replaceChildren(); return; }
   slot.innerHTML = `<div class="rv-pick">${skeleton(3)}</div>`;
   let d;
-  try { d = await (await fetch(`/api/pr/reviewers?repo=${encodeURIComponent(it.data.repo)}&number=${it.data.number}`)).json(); } catch (err) { d = { error: err.message }; }
-  if (curItem !== it) return;
+  try { d = await (await fetch(`/api/pr/reviewers?repo=${encodeURIComponent(repo)}&number=${number}`)).json(); } catch (err) { d = { error: err.message }; }
+  if (!slot.isConnected) return;
   if (d.error) { slot.innerHTML = `<div class="rv-pick"><div class="err" style="margin:0">${esc(d.error)}</div></div>`; return; }
   const li = (p) => `<li class="${p.requested ? 'off' : ''}" data-q="${esc(`${p.login} ${p.name || ''}`.toLowerCase())}"><label>
     <input type="checkbox" value="${esc(p.login)}" ${p.requested ? 'checked disabled' : ''}>${esc(p.name || p.login)}${p.name ? ` <span class="muted">${esc(p.login)}</span>` : ''}
     <small>${p.requested ? 'asked' : p.reviewed ? esc(RV_STATE[p.reviewed] || 'reviewed') + ', ask again' : p.suggested ? 'suggested' : ''}</small></label></li>`;
   slot.innerHTML = `<div class="rv-pick"><input type="search" placeholder="Find a person" aria-label="Find a person">
     <ul>${d.people.map(li).join('') || '<li class="off"><label>Nobody else can review this repo.</label></li>'}</ul>
-    <div class="rv-foot"><button class="icon-btn primary" data-rv-send disabled>Request review</button><span class="muted" id="rv-msg"></span></div></div>`;
+    <div class="rv-foot"><button class="icon-btn primary" data-rv-send disabled>Request review</button><span class="muted rv-msg"></span></div></div>`;
   const box = slot.firstChild, sendBtn = box.querySelector('[data-rv-send]');
   const picked = () => [...box.querySelectorAll('input[type=checkbox]:checked:not(:disabled)')].map((x) => x.value);
   box.querySelector('input[type=search]').focus();
@@ -1502,12 +1506,12 @@ document.addEventListener('click', async (e) => {
   sendBtn.addEventListener('click', async () => {
     sendBtn.disabled = true;
     try {
-      await post('/api/pr/request-review', { repo: it.data.repo, number: it.data.number, logins: picked() });
+      await post('/api/pr/request-review', { repo, number: Number(number), logins: picked() });
       await loadActs();
       slot.replaceChildren();
-      renderItem();
+      if (location.hash === '#item') renderItem();
       loadAll(true);
-    } catch (err) { $('#rv-msg').textContent = err.message; sendBtn.disabled = false; }
+    } catch (err) { box.querySelector('.rv-msg').textContent = err.message; sendBtn.disabled = false; }
   });
 });
 
@@ -1889,6 +1893,7 @@ function itemIndex() {
 }
 function drawCtx() {
   drawTabs();
+  if ($('#chat-ctx .rv-pick')) return; // don't redraw under an open review picker
   if (chat.session && chat.turns && chat.title) {
     const r = recentChats.find((x) => x.id === chat.session);
     if (!r) remember(chat.session, chat.cwd, chat.title); else if (r.title !== chat.title) { r.title = chat.title; saveRecent(); }
@@ -1908,8 +1913,10 @@ function drawCtx() {
     const label = k.replace(/^(pr|gh|issue):/, '');
     const url = info.url || (k.startsWith('pr:') ? `https://github.com/${label.replace('#', '/pull/')}` : k.startsWith('gh:') ? `https://github.com/${label.replace('#', '/issues/')}`
       : jiraBaseGuess() ? `${jiraBaseGuess()}/browse/${label}` : '');
+    const mine = k.startsWith('pr:') && (state.github?.myPrs || []).some((p) => `pr:${p.repo}#${p.number}` === k);
     return `<div class="ctx-item">📎 ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(label)}</a>` : `<b>${esc(label)}</b>`}
-      ${info.status ? `<span class="badge b-${info.tone || 'gray'}">${esc(info.status)}</span>` : ''}<span>${esc(info.title || '')}</span></div>`;
+      ${info.status ? `<span class="badge b-${info.tone || 'gray'}">${esc(info.status)}</span>` : ''}<span>${esc(info.title || '')}</span>
+      ${mine ? `<button class="chip" data-rv-open="${esc(label)}">👥 Request review</button><div class="rv-slot"></div>` : ''}</div>`;
   }).join('');
   el.hidden = false;
   el.innerHTML = `<div class="ctx-line"><span class="ctx-title">${esc(title || (chat.turns ? 'Copilot session' : 'New chat'))}</span>

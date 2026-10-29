@@ -1404,6 +1404,12 @@ export function linkSessions(sessions, { prs = [], refs = {}, workspace = () => 
   return links;
 }
 
+function ticketPr(ref) {
+  if (!ref) return null;
+  const gh = sourceCache.get('github')?.data || {};
+  return [...(gh.myPrs || []), ...(gh.reviewRequested || [])].find((p) => new RegExp(`\\b${ref.key}\\b`, 'i').test(`${p.title} ${p.branch || ''}`)) || null;
+}
+
 // The name a chat started on an item gets: "SSP-6519 · Fix capture timeout", or for a PR
 // without a ticket key "ssp#1187 · Fix capture timeout". Continuing work then finds it again.
 export function itemSessionName(ref, cache = (n) => sourceCache.get(n)?.data || {}) {
@@ -1807,8 +1813,10 @@ function serve() {
           if (!body.session || !/^[\w-]{8,64}$/.test(body.session)) return json(res, 400, { error: 'bad session' });
           const refs = validRefs(body.refs);
           // A new chat about a PR runs in your clone of that repository, when there is one.
-          const prRef = !body.resume && !body.cwd && refs.find((r) => r.kind === 'pr' || r.kind === 'gh');
-          const checkout = prRef ? findCheckout(prRef.repo) : null;
+          // A chat about a PR or GitHub issue runs in your clone of its repo; one about a ticket, in
+          // the clone of the PR that carries its key (in the PR's title or branch), if there is one.
+          const repoRef = !body.resume && !body.cwd && (refs.find((r) => r.kind === 'pr' || r.kind === 'gh') || ticketPr(refs.find((r) => r.kind === 'issue')));
+          const checkout = repoRef ? findCheckout(repoRef.repo) : null;
           const cwd = checkout || (body.cwd && isDir(body.cwd) ? body.cwd : copilotCwd());
           let refText = '';
           if (refs.length) {
