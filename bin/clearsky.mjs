@@ -2009,7 +2009,8 @@ function serve() {
       }
       // Branches in your clones carrying the key of a ticket you have.
       if (url.pathname === '/api/branches') {
-        const j = sourceCache.get('jira')?.data || {}, jm = sourceCache.get('jiraMentions')?.data || {};
+        // Waits for the ticket lists, so a page loaded right after a start doesn't get a partial answer.
+        const [j, jm] = (await Promise.all([source('jira'), source('jiraMentions')])).map((d) => d || {});
         const keys = [...new Set([...(j.assigned || []), ...(jm.tickets || [])].map((t) => t.key).filter(Boolean))];
         return json(res, 200, { branches: await branchesFor(keys, codeDirs()) });
       }
