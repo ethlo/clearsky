@@ -41,7 +41,8 @@ test('an extra source shows up in the page, notifications, Now / Next, stand-up 
   for (let i = 0; i < 50; i++) { try { await fetch(base); break; } catch { await new Promise((r) => setTimeout(r, 100)); } }
   const get = async (p) => (await fetch(base + p)).json();
 
-  assert.deepEqual((await get('/api/sources')).sources, [{ name: 'school', label: 'School', panel: { zone: 'track', title: 'School' } }]);
+  // Sources shipped in lib/sources load too; this test is about the one from CLEARSKY_SOURCES_DIR.
+  assert.deepEqual((await get('/api/sources')).sources.filter((s) => s.name === 'school'), [{ name: 'school', label: 'School', panel: { zone: 'track', title: 'School' } }]);
   const school = await get('/api/source/school');
   assert.deepEqual(school.items.map((i) => i.title), ['Teacher: Trip on Friday']);
   const att = await get('/api/attention');
@@ -51,5 +52,5 @@ test('an extra source shows up in the page, notifications, Now / Next, stand-up 
   const su = await get('/api/standup');
   assert.match(su.text, /School: Ada has Swimming/);
   const st = await get('/api/settings');
-  assert.deepEqual(st.extra.map((f) => [f.key, f.secret, f.value]), [['SCHOOL_CHILD', false, 'Ada'], ['SCHOOL_TOKEN', true, null]]);
+  assert.deepEqual(st.extra.filter((f) => f.key.startsWith('SCHOOL_')).map((f) => [f.key, f.secret, f.value]), [['SCHOOL_CHILD', false, 'Ada'], ['SCHOOL_TOKEN', true, null]]);
 });
