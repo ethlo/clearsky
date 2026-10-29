@@ -1531,6 +1531,13 @@ function notifyNow(now = new Date()) {
 }
 
 export async function pollAttention(force = true) {
+  // One poll at a time: two overlapping ones would both see the same item as new.
+  if (poller.running) return poller.running;
+  poller.running = pollOnce(force).finally(() => { poller.running = null; });
+  return poller.running;
+}
+
+async function pollOnce(force) {
   const data = Object.fromEntries(await Promise.all(ATTENTION_SOURCES.map(async (n) => [n, await source(n, force)])));
   const items = [...attentionItems(data), ...await pluginAttention(force)];
   const before = localState.seen(stateFile);
@@ -1541,9 +1548,11 @@ export async function pollAttention(force = true) {
   poller.lastPoll = new Date().toISOString();
   if (fresh.length && poller.notifier === 'desktop' && notifyNow()) {
     const bin = process.env.NOTIFY_SEND_BIN || 'notify-send';
-    if (fresh.length > 4) desktopNotify({ title: `${fresh.length} new things need you`, body: fresh.slice(0, 4).map((x) => x.title).join('\n'), url: `http://127.0.0.1:${config.port}/` }, { bin });
+    // More than two at once (say after the laptop wakes up) become one banner.
+    if (fresh.length > 2) desktopNotify({ title: `${fresh.length} new things need you`, body: fresh.slice(0, 4).map((x) => x.title).join('\n'), url: `http://127.0.0.1:${config.port}/` }, { bin });
     else for (const it of fresh) desktopNotify(it, { bin });
   }
+  if (fresh.length) localState.logNotified(stateFile, fresh.map((x) => ({ key: x.key, kind: x.kind, stamp: String(x.stamp ?? ''), at: new Date().toISOString(), via: poller.notifier, quiet: !notifyNow() })));
   return { items, seen, fresh };
 }
 
@@ -1735,6 +1744,8 @@ function serve() {
         return json(res, 200, { sources: [...plugins.sources.values()].map((p) => ({ name: p.name, label: p.label, area: p.area, panel: p.panel || null })), errors: plugins.errors });
       }
       // What needs you, with when each first showed up, so the page can mark what's new.
+      // What was notified lately, to find out why something came twice.
+      if (url.pathname === '/api/notifications/log') return json(res, 200, { log: localState.notifiedLog(stateFile), pollMinutes: Math.max(1, Number(process.env.CLEARSKY_POLL_MINUTES) || 3), notifier: poller.notifier, pid: process.pid });
       if (url.pathname === '/api/attention') {
         const data = Object.fromEntries(await Promise.all(ATTENTION_SOURCES.map(async (n) => [n, await source(n, false)])));
         const seen = localState.seen(stateFile);

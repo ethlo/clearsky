@@ -104,7 +104,7 @@ There is no public API. This uses the one the portal itself uses, as documented 
 
 ## Notifications
 
-While `clearsky serve` runs, it checks GitHub, Jira mentions and Slack every 3 minutes (`CLEARSKY_POLL_MINUTES`). When something new needs you (a review request, a PR turning to your move, a mention), you get a desktop notification with an **Open** button, through `notify-send`, on workdays from 07:00 until two hours after your workday ends. Dismissed and muted items stay quiet. Without `notify-send`, the bell in the top bar turns on browser notifications instead. `CLEARSKY_NOTIFY=off` turns them off. New things also get a dot in the page and a count in the tab title until you've looked.
+While `clearsky serve` runs, it checks GitHub, Jira mentions and Slack every 3 minutes (`CLEARSKY_POLL_MINUTES`). When something new needs you (a review request, a PR turning to your move, a mention), you get a desktop notification with an **Open** button, through `notify-send`, on workdays from 07:00 until two hours after your workday ends. Dismissed and muted items stay quiet. Without `notify-send`, the bell in the top bar turns on browser notifications instead. `CLEARSKY_NOTIFY=off` turns them off. New things also get a dot in the page and a count in the tab title until you've looked. A review request notifies when it's (re-)requested, not on every push or comment; a GitHub thread you were mentioned in notifies once; a status that flips back and forth notifies once; more than two at a time become one banner. `GET /api/notifications/log` lists the last 100 sent, to see why something came.
 
 ## Copilot chat
 

@@ -706,7 +706,8 @@ let lastLook = Date.now();
 try { lastLook = Number(localStorage.getItem(LOOK_KEY)) || Date.now(); } catch {}
 function isNew(key, stamp) {
   const it = attention.byKey.get(key);
-  return !!(it?.at && Date.parse(it.at) > lastLook && (stamp == null || String(it.stamp ?? '') === String(stamp ?? '') || it.kind === 'pr'));
+  // `at` is when it last turned up with something new, which is all a dot needs.
+  return !!(it?.at && Date.parse(it.at) > lastLook);
 }
 function looked() {
   lastLook = Date.now();

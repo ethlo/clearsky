@@ -7,7 +7,7 @@ import { attentionItems, diffAttention, desktopNotify } from '../lib/notify.mjs'
 
 const data = {
   github: {
-    reviewRequested: [{ url: 'https://github.com/acme/api/pull/7', stamp: 's1', repo: 'acme/api', number: 7, title: 'Fix', author: 'anna' }],
+    reviewRequested: [{ url: 'https://github.com/acme/api/pull/7', stamp: 'u1', requestedAt: 's1', repo: 'acme/api', number: 7, title: 'Fix', author: 'anna' }],
     myPrs: [
       { url: 'https://github.com/acme/api/pull/1', repo: 'acme/api', number: 1, title: 'Mine', status: { owner: 'me', label: 'Changes requested' } },
       { url: 'https://github.com/acme/api/pull/2', repo: 'acme/api', number: 2, title: 'Waiting', status: { owner: 'others', label: 'Waiting for review' } },
@@ -29,12 +29,38 @@ test('only things that need you count, and only new ones notify', () => {
 
   // A new comment on the Jira ticket, a re-requested review that you dismissed, and a muted PR.
   const later = attentionItems({ ...data, jiraMentions: { tickets: [{ ...data.jiraMentions.tickets[0], stamp: 'c10' }] },
-    github: { ...data.github, reviewRequested: [{ ...data.github.reviewRequested[0], stamp: 's2' }],
+    github: { ...data.github, reviewRequested: [{ ...data.github.reviewRequested[0], requestedAt: 's2' }],
       myPrs: [{ ...data.github.myPrs[0], status: { owner: 'me', label: 'Merge conflict' } }] } });
   r = diffAttention(later, r.seen, { dismissed: { 'https://github.com/acme/api/pull/7': 's2' }, muted: { 'https://github.com/acme/api/pull/1': '2099-01-01' } });
   assert.deepEqual(r.fresh.map((i) => i.key), ['jira-mention:OPS-2']);
   // Nothing changed: nothing new.
   assert.equal(diffAttention(later, r.seen).fresh.length, 0);
+});
+
+test('a busy PR or a flapping status does not notify again and again', () => {
+  const pr = (o) => ({ github: { ...data.github, ...o } });
+  let r = diffAttention(attentionItems(data), {}, { first: true });
+  // Pushes and comments on a PR you were asked to review, or on a thread you were mentioned in.
+  const busy = attentionItems(pr({ reviewRequested: [{ ...data.github.reviewRequested[0], stamp: 'u2' }],
+    mentions: [{ url: 'https://github.com/acme/web/issues/3', stamp: 'u1', repo: 'acme/web', number: 3, title: 'Help' }] }));
+  r = diffAttention(busy, r.seen);
+  assert.deepEqual(r.fresh.map((i) => i.kind), ['mention'], 'the mention once, the busy review not at all');
+  const busier = attentionItems(pr({ mentions: [{ url: 'https://github.com/acme/web/issues/3', stamp: 'u9', repo: 'acme/web', number: 3, title: 'Help' }] }));
+  assert.equal(diffAttention(busier, r.seen).fresh.length, 0);
+  // CI failing, then fixed (waiting on others), then failing again: told once.
+  const mine = (label, owner = 'me') => attentionItems(pr({ myPrs: [{ ...data.github.myPrs[0], status: { owner, label } }] }));
+  r = diffAttention(mine('CI failing'), r.seen);
+  assert.equal(r.fresh.length, 1);
+  r = diffAttention(mine('Waiting for review', 'others'), r.seen);
+  r = diffAttention(mine('CI failing'), r.seen);
+  assert.equal(r.fresh.length, 0);
+});
+
+test('items seen before the stamps changed meaning are not sent again', () => {
+  const old = { 'https://github.com/acme/api/pull/7': { stamp: 'u1', at: '2026-10-29T08:00:00Z' } };
+  const r = diffAttention(attentionItems(data).filter((i) => i.kind === 'review'), old);
+  assert.equal(r.fresh.length, 0);
+  assert.equal(r.seen['https://github.com/acme/api/pull/7'].at, '2026-10-29T08:00:00Z');
 });
 
 test('a desktop notification opens the item when you click Open', async () => {
