@@ -314,6 +314,10 @@ async function fetchGitHub() {
       viaTeam: mine.length === 0,
       rerequested: reviewedBefore,
       branch: pr.headRefName || null,
+      // Who else reviews it, and where they stand.
+      approvals: latestReviewsByUser(pr, me).filter((r) => r.state === 'APPROVED').map((r) => r.author.login),
+      changesRequested: latestReviewsByUser(pr, me).filter((r) => r.state === 'CHANGES_REQUESTED').map((r) => r.author.login),
+      pendingReviewers: humanReviewers(pr).map((n) => reviewerName(n.requestedReviewer)).filter((n) => n && n !== me),
       ci: ciState(pr),
       size: { additions: pr.additions, deletions: pr.deletions, files: pr.changedFiles },
     };

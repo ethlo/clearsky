@@ -31,7 +31,8 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
       pullRequest: { author: { login: 'me' }, suggestedReviewers: [{ reviewer: { login: 'anna', name: 'Anna' } }], reviewRequests: { nodes: [] }, reviews: { nodes: [] } } } } });
     if (q.includes('viewer { login }') && !q.includes('search')) return send({ data: { viewer: { login: 'me' } } });
     if (q.includes('reviewRequested: search')) return send({ data: {
-      reviewRequested: { nodes: [pr({ number: 7, title: 'OPS-77: Their change', url: 'https://github.com/acme/api/pull/7', author: { login: 'anna' } })] },
+      reviewRequested: { nodes: [pr({ number: 7, title: 'OPS-77: Their change', url: 'https://github.com/acme/api/pull/7', author: { login: 'anna' },
+        reviews: { nodes: [{ author: { login: 'bob', __typename: 'User' }, state: 'APPROVED', submittedAt: ago(3) }] } })] },
       myPrs: { nodes: [pr({ headRefName: 'feature/ops-1-certs' })] }, mentions: { nodes: [] }, assigned: { nodes: [] } } });
     send({ data: {} });
   });
@@ -62,6 +63,13 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
   await ticketLink.click();
   await page.waitForSelector('#v-item:not([hidden]) h2:text("SSP-5: Fix capture")');
   assert.match(await page.locator('#item .xrefs').innerText(), /OPS-1/);
+  await page.goto(`${base}/#inbox`);
+  await page.waitForSelector('#list li.r');
+
+  // A PR page shows who reviews it and where each stands.
+  await page.locator('#list li.r', { hasText: 'Their change' }).first().locator('.t > a').first().click();
+  await page.waitForSelector('#v-item:not([hidden]) .rv-who');
+  assert.match(await page.locator('#item .rv-who').innerText(), /bob · approved/);
   await page.goto(`${base}/#inbox`);
   await page.waitForSelector('#list li.r');
 

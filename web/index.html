@@ -431,6 +431,7 @@
   .chat-ctx .ctx-item a { color: var(--text); font-weight: 500; flex: none; }
   .chat-ctx .ctx-item a:hover { color: var(--accent); }
   .chat-ctx .ctx-item span { color: var(--text-2); }
+  .rv-who { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; flex-basis: 100%; }
   .chat-ctx .ctx-item .rv-slot { flex-basis: 100%; } .chat-ctx .ctx-item .rv-slot .rv-pick { margin: 6px 0 0; }
   .chat-opts { display: flex; flex-direction: column; gap: 8px; color: var(--text-2); }
   .chat-opts label { display: flex; align-items: center; gap: 6px; justify-content: space-between; }
@@ -1280,6 +1281,17 @@ const prMeta = (p) => [p.approvals.length && `approved by ${p.approvals.join(', 
   p.changesRequested.length && `changes from ${p.changesRequested.join(', ')}`,
   p.pendingReviewers.length && `waiting on ${p.pendingReviewers.join(', ')}`,
   p.botSuggestions && `Copilot left ${p.botSuggestions} suggestion${p.botSuggestions > 1 ? 's' : ''}`].filter(Boolean).join(' · ');
+// Who reviews a PR and where each stands, as small chips: asked, approved, changes asked.
+function reviewerChips(p) {
+  if (!p) return '';
+  const people = new Map();
+  (p.pendingReviewers || []).forEach((n) => people.set(n, ['asked', 'gray']));
+  (p.changesRequested || []).forEach((n) => people.set(n, ['changes requested', 'red']));
+  (p.approvals || []).forEach((n) => people.set(n, ['approved', 'green']));
+  if (!people.size) return '';
+  return `<div class="rv-who">${[...people].map(([n, [st, tone]]) => `<span class="badge b-${tone}" title="${esc(n)}: ${esc(st)}">${esc(n.replace(/^team:/, '👥 '))} · ${esc(st)}</span>`).join('')}</div>`;
+}
+const prByKey = (k) => [...(state.github?.myPrs || []), ...(state.github?.reviewRequested || [])].find((p) => `pr:${p.repo}#${p.number}` === k);
 const TONE = { bad: 'red', warn: 'amber', good: 'green' };
 const GLYPH = { bad: 'chg', warn: 'rev', good: 'rdy', wait: 'wait', neutral: 'todo' };
 const snoozedUntil = (k) => { const u = mutedMap[k]; return u && Date.parse(u) > Date.now() ? u : null; };
@@ -1620,7 +1632,7 @@ async function renderItem() {
   const sessions = cpLinks.links[itemKey(it.url || '')] || [];
   $('#it-crumb').textContent = `${it.src || ''}${it.ref ? ` · ${it.ref}` : ''}`;
   const head = `<div class="src"><span class="st ${esc(it.glyph)}"></span>${esc(it.ref || '')}</div>
-    <h2>${esc(it.title)}</h2><div class="why">${whyLine(it)}</div>${lastActLine(it)}`;
+    <h2>${esc(it.title)}</h2><div class="why">${whyLine(it)}</div>${it.pr ? reviewerChips(it.data) : ''}${lastActLine(it)}`;
   const acts = `<div class="acts-row">${it.url ? `<a class="icon-btn primary" href="${esc(it.url)}" target="_blank" rel="noopener">${where} ↗</a>` : ''}
     ${it.kind === 'pr' ? `<button class="icon-btn" data-rv-open="${esc(it.data.repo)}#${it.data.number}">👥 Request review</button>` : ''}
     ${refFromUrl(it.url) ? `<button class="icon-btn" data-ask="${esc(it.url)}" data-title="${esc(it.title)}">✦ Copilot on this</button>` : ''}
@@ -2134,6 +2146,7 @@ function drawCtx() {
     const mine = k.startsWith('pr:') && (state.github?.myPrs || []).some((p) => `pr:${p.repo}#${p.number}` === k);
     return `<div class="ctx-item">📎 ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(label)}</a>` : `<b>${esc(label)}</b>`}
       ${info.status ? `<span class="badge b-${info.tone || 'gray'}">${esc(info.status)}</span>` : ''}<span>${esc(info.title || '')}</span>
+      ${k.startsWith('pr:') ? reviewerChips(prByKey(k)) : ''}
       ${mine ? `<button class="chip" data-rv-open="${esc(label)}">👥 Request review</button><div class="rv-slot"></div>` : ''}</div>`;
   }).join('');
   el.hidden = false;
