@@ -1,6 +1,6 @@
 # Design: Clearsky on the work phone, over the home network
 
-Status: **proposal**, nothing built. Written 2026-10-29. A smaller step than [Remote access](remote-access.md): the phone reaches the laptop directly on the same Wi-Fi, with nothing going through Cloudflare or any other outside service.
+Status: **on hold** (design only, nothing built). Written 2026-10-29. A smaller step than [Remote access](remote-access.md): the phone reaches the laptop directly on the same Wi-Fi, with nothing going through Cloudflare or any other outside service.
 
 ## Goal
 
