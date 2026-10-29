@@ -22,6 +22,7 @@ import * as copilot from '../lib/copilot.mjs';
 import { AcpAgent, chatEvent } from '../lib/acp.mjs';
 import { sessionEvents } from '../lib/copilot-events.mjs';
 import { branchesFor } from '../lib/branches.mjs';
+import { isReadOnly } from '../lib/readonly.mjs';
 import { attentionItems, diffAttention, desktopNotify, DbusNotifier } from '../lib/notify.mjs';
 import { loadSources, makeContext, hook, asList } from '../lib/sources.mjs';
 
@@ -1609,6 +1610,10 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin })
   agent.onPermission = (p) => new Promise((resolve) => {
     const once = (p.options || []).find((o) => o.kind === 'allow_once');
     if (once && autoAllow.includes(p.toolCall?.kind)) return resolve({ outcome: 'selected', optionId: once.optionId });
+    // Commands that only read (cat, grep, sed -n, git log…) inside your folders run without asking,
+    // unless that's turned off in Settings → Copilot.
+    if (once && process.env.COPILOT_READONLY !== 'off' &&
+      isReadOnly(p.toolCall?.rawInput?.command, { cwd: c.cwd, folders: copilotFolders(), home: homedir() })) return resolve({ outcome: 'selected', optionId: once.optionId });
     const id = randomBytes(6).toString('hex');
     const ev = { type: 'permission', id, title: p.toolCall?.title || 'Copilot wants to use a tool', kind: p.toolCall?.kind,
       detail: toolDetail(p.toolCall), options: (p.options || []).map((o) => ({ id: o.optionId, name: o.name, kind: o.kind })) };

@@ -70,6 +70,11 @@ test('the chat panel talks to the local Copilot CLI with the chosen options', as
   assert.match(textOf(readEvs), /answer=yes/);
   assert.ok(!info0(readEvs).flags.includes('--assisted-approval'), "Copilot's judge doesn't work over ACP");
 
+  // Commands that only read, in the chat's folder, run without asking even in Ask mode.
+  const lookEvs = await events(await ask({ message: 'just look around', session: 'sess-1234', resume: true, permission: 'ask' }));
+  assert.ok(!lookEvs.some((e) => e.type === 'permission' || e.type === 'error'));
+  assert.match(textOf(lookEvs), /answer=yes/);
+
   // Ask mode: Copilot's approval question shows up in the stream and the answer goes back.
   const res = await ask({ message: 'Check the repo', session: 'sess-ask-1', permission: 'ask' });
   const reader = res.body.getReader(), dec = new TextDecoder();
@@ -82,7 +87,7 @@ test('the chat panel talks to the local Copilot CLI with the chosen options', as
     for (const l of buf.split('\n').slice(0, -1)) seen.push(JSON.parse(l));
     buf = buf.split('\n').at(-1);
     if (!perm && (perm = seen.find((e) => e.type === 'permission'))) {
-      assert.equal(perm.detail, 'git status');
+      assert.equal(perm.detail, 'git push');
       assert.deepEqual(perm.options.map((o) => o.id), ['yes', 'no']);
       // A new Ask-mode chat takes Copilot's own session id, which the panel uses from then on.
       assert.equal(seen.find((e) => e.type === 'session')?.id, 'acp-session-1');
