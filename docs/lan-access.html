@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Design: Clearsky on the work phone, over the home network</title>
+<!-- Generated from lan-access.md by scripts/render-docs.mjs. Edit the Markdown, then run npm run docs. -->
+<style>
+  :root { color-scheme: light dark; --bg: #f7f8fa; --surface: #fff; --text: #111827; --text-2: #4b5563; --muted: #6b7280; --line: #e5e7eb; --accent: #2563eb; --code: #f2f4f7; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0c0e12; --surface: #14171c; --text: #f2f4f7; --text-2: #c5cad3; --muted: #8a93a3; --line: #252a33; --accent: #6b9bff; --code: #1b1f26; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 32px 20px 64px; }
+  .crumb { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+  a { color: var(--accent); }
+  h1 { font-size: 28px; line-height: 1.25; margin: 0 0 12px; letter-spacing: -.01em; }
+  h2 { font-size: 20px; margin: 36px 0 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+  h3 { font-size: 16px; margin: 24px 0 8px; }
+  p, li { color: var(--text-2); }
+  strong { color: var(--text); }
+  code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--code); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.5; }
+  .table { overflow-x: auto; margin: 12px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; background: var(--surface); }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border: 1px solid var(--line); }
+  th { color: var(--text); font-weight: 600; }
+  td { color: var(--text-2); }
+  img { max-width: 100%; height: auto; display: block; margin: 16px auto; }
+  nav.toc { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 16px; margin: 20px 0; font-size: 14px; }
+  nav.toc ol { margin: 4px 0; padding-left: 20px; }
+  @media (max-width: 560px) { .wrap { padding: 20px 16px 48px; } h1 { font-size: 23px; } }
+</style>
+</head>
+<body><div class="wrap">
+<div class="crumb"><a href="index.html">Clearsky design docs</a></div>
+<h1>Design: Clearsky on the work phone, over the home network</h1>
+<nav class="toc"><b>Contents</b><ol><li><a href="#goal">Goal</a></li><li><a href="#recommendation-in-short">Recommendation in short</a></li><li><a href="#how-it-works">How it works</a></li><li><a href="#what-this-exposes">What this exposes</a></li><li><a href="#changes-to-clearsky-in-order">Changes to Clearsky, in order</a></li></ol></nav>
+<p>Status: <strong>proposal</strong>, nothing built. Written 2026-10-29. A smaller step than <a href="remote-access.html">Remote access</a>: the phone reaches the laptop directly on the same Wi-Fi, with nothing going through Cloudflare or any other outside service.</p>
+<h2 id="goal">Goal</h2>
+<p>Open Clearsky on the work phone while it is on the same network as the laptop: check the inbox, the calendar and the school messages, answer a Copilot question, mark things done. Everything keeps running on the laptop, as today.</p>
+<p>Things that stay as they are:</p>
+<ul><li>The laptop's own browser keeps using <code>http://127.0.0.1:7777</code> with no login.</li><li>Nothing is reachable from the internet. When the laptop sleeps or leaves the network, the phone can't reach it, and that is expected.</li></ul>
+<h2 id="recommendation-in-short">Recommendation in short</h2>
+<ol><li><strong>Off by default.</strong> Settings gets a <strong>Phone access</strong> switch. Only when it's on does Clearsky also listen on the network, on a second port with HTTPS.</li><li><strong>HTTPS with Clearsky's own certificate.</strong> Clearsky makes a small certificate authority once, signs a certificate for the laptop's name and address, and shows the authority as a QR code to install on the phone. Without HTTPS the phone can't keep a secure login, use the microphone button or show notifications.</li><li><strong>Pair the phone instead of a password.</strong> Settings on the laptop shows a pairing QR code that works once, for 5 minutes. Scanning it on the phone logs that phone in for 30 days. Settings lists paired phones and can remove one. Nobody on the network can guess their way in, because there's no password to guess.</li><li><strong>Less power from the phone.</strong><ul><li>Copilot runs in <strong>Ask</strong> mode only, so every step needs your OK on the phone. Full and Assisted are refused.</li><li>Settings, logins and source configuration can't be changed from the phone.</li><li>Reading, Done, Snooze, Mark read, and answering Allow/Deny all work.</li></ul></li><li><strong>Check the work phone's rules first.</strong> A managed work phone may not allow installing a certificate authority, and Kezzler may have a view on work data on a personal network. The fallback for the first point is accepting the browser's certificate warning once per phone.</li></ol>
+<p><img src="lan-access.svg" alt="The phone pairs once with a QR code from the laptop, then talks HTTPS to Clearsky on the home network"></p>
+<h2 id="how-it-works">How it works</h2>
+<h3 id="listening-on-the-network">Listening on the network</h3>
+<ul><li>With Phone access on, a second server listens on <code>0.0.0.0:7778</code> with HTTPS only. The loopback server on 7777 stays plain HTTP and doesn't change.</li><li>The network server accepts only these <code>Host</code> headers: the laptop's hostname (<code>thinkaboutit.local</code>), its current LAN addresses, and nothing else. This keeps DNS rebinding blocked, as today.</li><li>It doesn't answer at all to addresses outside private ranges (<code>10/8</code>, <code>172.16/12</code>, <code>192.168/16</code>, <code>fe80::/10</code>). That's a second guard if the laptop ends up on a network with public addresses.</li><li>Turning Phone access off closes the port right away and ends every phone session.</li></ul>
+<h3 id="the-certificate">The certificate</h3>
+<ul><li>On first use, Clearsky creates a local certificate authority with <code>openssl</code>. Its key stays in <code>~/.config/clearsky/tls/</code>, mode 600.</li><li>It then signs a server certificate for <code>thinkaboutit.local</code> and the current LAN addresses, valid for a year, and renews it when the address changes.</li><li>Settings shows the authority as a QR code and a download link, to install on the phone once.</li><li>The authority can only be used for Clearsky's own names. It is never added to the laptop's trust store.</li></ul>
+<h3 id="pairing">Pairing</h3>
+<ol><li>On the laptop, Settings → Phone access → <strong>Pair a phone</strong> shows a QR code holding <code>https://thinkaboutit.local:7778/pair#&lt;code&gt;</code>. The code is 128 random bits, works once, and expires after 5 minutes.</li><li>The phone opens the link. Clearsky checks the code and sets a session cookie: <code>HttpOnly</code>, <code>Secure</code>, <code>SameSite=Strict</code>, 30 days.</li><li>The cookie holds a random token. The server stores only its hash, with the device name the phone reports and when it was last used.</li><li>Settings lists paired phones with their last use, and <strong>Remove</strong> ends that phone's session at once.</li></ol>
+<p>Every network request without a valid cookie gets the login page and nothing else. After 10 failed pairing attempts in a minute, pairing locks for 15 minutes.</p>
+<p>The existing CSRF token and same-origin checks apply to the phone exactly as they do on the laptop.</p>
+<p>A passkey would be nicer than pairing, but a passkey needs a domain name the phone trusts. Over a self-made certificate that makes it fragile, so pairing comes first and a passkey can follow later.</p>
+<h3 id="what-the-phone-may-do">What the phone may do</h3>
+<div class="table"><table><thead><tr><th></th><th>Laptop</th><th>Phone</th></tr></thead><tbody><tr><td>Inbox, item pages, calendar, stand-up, school</td><td>yes</td><td>yes</td></tr><tr><td>Done, Snooze, Mark read, Request review</td><td>yes</td><td>yes</td></tr><tr><td>Copilot chat</td><td>any mode</td><td>Ask only; Full and Assisted refused on the server</td></tr><tr><td>Allow/Deny on a Copilot step</td><td>yes</td><td>yes</td></tr><tr><td>Settings, logins, sources</td><td>yes</td><td>no, read-only</td></tr><tr><td>Attachments (school files)</td><td>yes</td><td>yes, same sandbox headers</td></tr></tbody></table></div>
+<p>The server enforces these rules by which listener a request came in on, not by what the page shows.</p>
+<h3 id="notifications-and-voice-on-the-phone">Notifications and voice on the phone</h3>
+<ul><li>With HTTPS, the phone's browser can show notifications while the Clearsky tab is open. Push while the browser is closed would need a push service, which is out of scope here.</li><li>The microphone button works on the phone. It uses the browser's speech recognition, which sends audio to Google, same as on the laptop.</li></ul>
+<h2 id="what-this-exposes">What this exposes</h2>
+<ul><li>Anyone on the same Wi-Fi can reach the login page, but nothing behind it without a paired phone.</li><li>The phone holds a 30-day session cookie. A lost phone should be removed in Settings. The phone's own lock screen and MDM are the other guard.</li><li>Work data travels over the home network, encrypted with TLS, and doesn't leave it.</li></ul>
+<h2 id="changes-to-clearsky-in-order">Changes to Clearsky, in order</h2>
+<ol><li><code>lib/tls.mjs</code>: create the authority and the server certificate with <code>openssl</code>, and renew on an address change.</li><li>A second listener (<code>CLEARSKY_LAN=on</code>, port <code>CLEARSKY_LAN_PORT</code>, default 7778) with the host and private-address checks.</li><li>Pairing and sessions: <code>/pair</code>, a login page, the cookie, <code>devices</code> in state.json with hashed tokens, and rate limits.</li><li>Per-listener rules: Ask-only Copilot, read-only Settings, no logins.</li><li>Settings → Phone access: the switch, the QR codes, the list of paired phones.</li><li>Tests: an unpaired request gets nothing, a used or expired code fails, Full Copilot is refused from the network listener, and wrong <code>Host</code> headers fail.</li></ol>
+</div></body>
+</html>
