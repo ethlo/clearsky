@@ -144,6 +144,12 @@
   .r .id { font: 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .r .t { min-width: 0; display: flex; align-items: baseline; gap: 8px; padding: 9px 0; }
   .r .t a { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; min-width: 0; }
+  .xref { flex: none; font: 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-2); border: 1px solid var(--line); border-radius: 999px;
+    padding: 0 7px; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; text-decoration: none; }
+  .xref:hover { color: var(--text); border-color: var(--muted); }
+  .xref i { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+  .xref i.red { background: var(--red); } .xref i.amber { background: var(--amber); } .xref i.green { background: var(--green); } .xref i.blue { background: var(--blue); }
+  .xrefs { display: flex; flex-wrap: wrap; gap: 6px; }
   .r .t .step { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1 1 0; min-width: 0; }
   .r.quiet .t a { color: var(--text-2); }
   .r .lb { display: flex; gap: 6px; align-items: center; justify-content: flex-end; min-width: 0; }
@@ -1296,6 +1302,55 @@ function inboxItems() {
     ? (order[a.kind] - order[b.kind]) || (a.kind === 'mention' ? Date.parse(b.at) - Date.parse(a.at) : 0) : 0));
 }
 
+// One piece of work across sources: a PR links to the Jira tickets in its title or branch and the
+// GitHub issues it closes; a ticket or issue links back to those PRs. Keys count only for Jira
+// projects you have tickets in, so "UTF-8" in a title isn't taken for a ticket.
+const JIRA_KEY = /\b([A-Za-z][A-Za-z0-9_]+-\d+)\b/g;
+function jiraKeysOf(p, projects) {
+  const keys = new Set();
+  for (const [text, anyCase] of [[p.title || '', false], [p.branch || '', true]]) {
+    for (const m of text.matchAll(JIRA_KEY)) {
+      const k = m[1].toUpperCase();
+      if ((anyCase || m[1] === k) && projects.has(k.split('-')[0])) keys.add(k);
+    }
+  }
+  return keys;
+}
+function relatedItems(it, all) {
+  const projects = new Set([...(state.jira?.assigned || []), ...(state.jiraMentions?.tickets || [])].map((t) => t.key.split('-')[0]));
+  const isPr = (x) => !!x.pr && x.data;
+  const ghKey = (x) => (x.kind === 'issue' ? `${x.data.repo}#${x.data.number}` : null);
+  const id = (x) => (x.issue ? `issue:${x.issue}` : x.url);
+  let match = () => false;
+  if (isPr(it)) {
+    const keys = jiraKeysOf(it.data, projects), closes = new Set(it.data.issues || []);
+    match = (x) => (x.issue && keys.has(x.issue)) || closes.has(ghKey(x));
+  } else if (it.issue || it.kind === 'issue') {
+    match = (x) => isPr(x) && ((it.issue && jiraKeysOf(x.data, projects).has(it.issue)) || (ghKey(it) && (x.data.issues || []).includes(ghKey(it))));
+  }
+  // The ticket or PR itself rather than a mention of it, when both are listed.
+  const seen = new Set([id(it)]), out = [];
+  for (const x of [...all].sort((a, b) => (a.kind === 'mention') - (b.kind === 'mention'))) {
+    if (!seen.has(id(x)) && match(x)) { seen.add(id(x)); out.push(x); }
+  }
+  return out;
+}
+// A link to a related item: opens it here, or on its own site when it isn't listed.
+function xrefChip(x, withState) {
+  const [lt, tone] = x.label || [];
+  const name = x.issue || x.ref;
+  return `<a class="xref" href="${esc(x.url)}" data-xref="${esc(x.k)}" title="Open ${esc(name)} here: ${esc(x.title)}${lt ? ` (${esc(lt)})` : ''}">${tone ? `<i class="${esc(tone)}"></i>` : ''}${esc(name)}${withState && lt ? ` · ${esc(lt)}` : ''}</a>`;
+}
+let xrefAll = [];
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('[data-xref]');
+  if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+  const x = (xrefAll.length ? xrefAll : inboxItems()).find((y) => y.k === a.dataset.xref);
+  if (!x) return;
+  e.preventDefault(); e.stopPropagation();
+  openItem(x);
+}, true);
+
 // Copilot sessions open anywhere (here, a terminal, an editor), most urgent first.
 function sessionItems() {
   const order = { 'needs-you': 0, waiting: 1, working: 2 };
@@ -1317,19 +1372,21 @@ function itemRow(it, i) {
   const [lt, tone] = it.label || [];
   const fresh = it.kind !== 'session' && isNew(it.k, it.stamp);
   const chips = it.url ? (cpLinks.links[itemKey(it.url)] || []).slice(0, 1).map(chip).join('') : '';
+  const xrefs = it.kind === 'session' ? '' : relatedItems(it, xrefAll).slice(0, 3).map((x) => xrefChip(x, !it.pr)).join('');
   const acts = it.kind === 'session' ? '' : `<span class="ra">${refFromUrl(it.url) ? `<button class="ask" data-ask="${esc(it.url)}" data-title="${esc(it.title)}" title="Copilot on this (A)" aria-label="Copilot on this">✦</button>` : ''}
     <button data-mute="${esc(it.k)}" title="Snooze (H)" aria-label="Snooze">${MUTE_ICON}</button>
     <button data-done="${esc(it.k)}" data-stamp="${esc(it.stamp ?? '')}" title="Done: hide until there's something new (E)" aria-label="Done">${DONE_ICON}</button></span>`;
   return `<li class="r${it.group === 'waiting' ? ' quiet' : ''}${it.k === selK ? ' sel' : ''}" data-i="${i}" tabindex="-1">
     ${fresh ? '<span class="new-dot" title="New since you last looked" aria-label="New"></span>' : ''}<span class="st ${esc(it.glyph)}"></span>
     <span class="id"${refAttrs(it)}>${esc(it.ref || '')}</span>
-    <span class="t"><a href="${esc(it.url || '#copilot')}"${it.url ? ' target="_blank" rel="noopener"' : ''}>${esc(it.title)}</a>${it.step ? `<span class="step">${esc(it.step)}</span>` : ''}</span>
+    <span class="t"><a href="${esc(it.url || '#copilot')}"${it.url ? ' target="_blank" rel="noopener"' : ''}>${esc(it.title)}</a>${xrefs}${it.step ? `<span class="step">${esc(it.step)}</span>` : ''}</span>
     <span class="lb">${chips}${lt ? `<span class="lbl${tone ? ` ${tone}` : ''}">${tone ? '<i></i>' : ''}${esc(lt)}</span>` : ''}</span>
     <span class="age">${esc(shortAgo(it.at))}</span>${acts}</li>`;
 }
 
 function renderList() {
   const el = $('#list'), all = inboxItems(), live = all.filter((x) => !x.done && !x.snoozed);
+  xrefAll = all;
   const by = (f) => live.filter(f);
   const sources = [['GitHub', state.github], ['Jira', state.jira], ['Jira mentions', state.jiraMentions], ['Slack', state.slack]];
   const errs = sources.filter(([, s]) => s?.error).map(([n, s]) => `<div class="err">${esc(n)}: ${esc(s.error)}</div>`).join('');
@@ -1447,10 +1504,12 @@ async function renderItem() {
     ${refFromUrl(it.url) ? `<button class="icon-btn" data-ask="${esc(it.url)}" data-title="${esc(it.title)}">✦ Copilot on this</button>` : ''}
     <button class="icon-btn" data-mute="${esc(it.k)}">${MUTE_ICON} Snooze</button>
     <button class="icon-btn" data-done="${esc(it.k)}" data-stamp="${esc(it.stamp ?? '')}" data-back-after>${DONE_ICON} Done</button></div>`;
+  const rel = it.kind === 'session' ? [] : relatedItems(it, inboxItems());
+  const related = rel.length ? `<h3>${it.pr ? 'Tickets' : 'Pull requests'}</h3><div class="xrefs">${rel.map((x) => xrefChip(x, true)).join('')}</div>` : '';
   const cps = sessions.length ? `<h3>Copilot on this</h3><div class="cps">${sessions.map(chip).join('')}</div>` : '';
   const quote = it.quote ? `<h3>${it.src === 'Slack' ? 'Message' : 'Latest mention'}</h3><div class="quote">${esc(it.quote)}</div>` : '';
   const ref = it.pr ? { pr: it.pr } : it.issue ? { issue: it.issue } : null;
-  const draw = (facts, body) => { if (curItem === it) el.innerHTML = head + (facts ? `<div class="facts">${facts}</div>` : '') + acts + '<div class="rv-slot"></div>' + quote + cps + body; };
+  const draw = (facts, body) => { if (curItem === it) el.innerHTML = head + (facts ? `<div class="facts">${facts}</div>` : '') + acts + '<div class="rv-slot"></div>' + related + quote + cps + body; };
   draw('', ref ? `<h3>Details</h3>${skeleton(2)}` : '');
   if (!ref) return;
   const d = await preview({ dataset: ref });

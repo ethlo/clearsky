@@ -32,7 +32,7 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
     if (q.includes('viewer { login }') && !q.includes('search')) return send({ data: { viewer: { login: 'me' } } });
     if (q.includes('reviewRequested: search')) return send({ data: {
       reviewRequested: { nodes: [pr({ number: 7, title: 'Their change', url: 'https://github.com/acme/api/pull/7', author: { login: 'anna' } })] },
-      myPrs: { nodes: [pr({})] }, mentions: { nodes: [] }, assigned: { nodes: [] } } });
+      myPrs: { nodes: [pr({ headRefName: 'feature/ops-1-certs' })] }, mentions: { nodes: [] }, assigned: { nodes: [] } } });
     send({ data: {} });
   });
   await new Promise((r) => gh.listen(0, '127.0.0.1', r));
@@ -54,6 +54,16 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
   await page.waitForSelector('#list li.r', { timeout: 10_000 });
   assert.ok(await page.locator('#list li.r').count() >= 2, 'the inbox lists the PRs');
   assert.match(await page.locator("#list").innerText(), /no reviewer yet/i);
+
+  // Your PR and the ticket in its branch link to each other, and the link opens the other here.
+  assert.match(await page.locator('#list li.r', { hasText: 'SSP-5' }).first().locator('.xref').innerText(), /OPS-1/);
+  const ticketLink = page.locator('#list li.r', { hasText: 'Rotate certs' }).locator('.xref');
+  assert.match(await ticketLink.innerText(), /api #1 · no reviewer yet/i);
+  await ticketLink.click();
+  await page.waitForSelector('#v-item:not([hidden]) h2:text("SSP-5: Fix capture")');
+  assert.match(await page.locator('#item .xrefs').innerText(), /OPS-1/);
+  await page.goto(`${base}/#inbox`);
+  await page.waitForSelector('#list li.r');
 
   // An item page, and the review picker on it.
   await page.locator('#list li.r', { hasText: 'SSP-5' }).first().click();
