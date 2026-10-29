@@ -160,10 +160,10 @@
     <label for="COPILOT_READONLY">Commands that only read</label>
     <select id="COPILOT_READONLY" data-key="COPILOT_READONLY"><option value="on">Run without asking</option><option value="off">Ask like any other</option></select>
     <p class="hint">In Ask and Assisted, commands like <code>cat</code>, <code>ls</code>, <code>grep</code>, <code>find</code>, <code>sed -n</code>, <code>head</code> and <code>git status/log/diff/show</code> run on their own when every part of the command only reads, and only inside the chat's folder and the folders above. Builds, tests, edits, <code>git push</code>, writing to files and anything Clearsky can't tell is safe still ask.</p>
-    <label for="COPILOT_ASSISTED_COMMANDS">Assisted also runs</label>
-    <textarea id="COPILOT_ASSISTED_COMMANDS" data-key="COPILOT_ASSISTED_COMMANDS" rows="3" spellcheck="false"></textarea>
-    <p class="hint">In Assisted, besides reads, Copilot can edit files and run commands that start with one of these (comma-separated) without asking, as long as everything stays in the chat's folder and the folders above. It still asks for <code>git push</code>, resets and forces, deletes, installs, deploys and publishes, writing to files with <code>&gt;</code>, Jira and GitHub changes, network access, and anything outside your folders. Empty means the default list.</p>
-    <div class="row"><button class="save" data-keys="COPILOT_MODEL,COPILOT_EFFORT,COPILOT_PERMISSION,COPILOT_CWD,COPILOT_FOLDERS,COPILOT_READONLY,COPILOT_ASSISTED_COMMANDS">Save</button><span class="msg"></span></div>
+    <label for="COPILOT_ASSISTED_ASK">Assisted also asks before</label>
+    <textarea id="COPILOT_ASSISTED_ASK" data-key="COPILOT_ASSISTED_ASK" rows="2" spellcheck="false" placeholder="e.g. mvn verify, python3 scripts/migrate.py"></textarea>
+    <p class="hint">Assisted runs everything in the chat's folder and the folders above (builds, tests, scripts like python3, git add/commit/fetch, gh and acli lookups, edits) and asks only before risky steps: <code>git push</code>, reset, rebase, merge and forced or deleting git commands, <code>rm</code> (except under /tmp), installs (npm install, pip, npx), deploys and publishes, Jira and GitHub changes (acli create/edit/transition/comment, gh pr create/merge/comment, gh api writes), sudo, ssh, curl uploads, docker run/exec, scripts run by path, and anything outside your folders and /tmp. Add command starts here (comma-separated) to always be asked about them too.</p>
+    <div class="row"><button class="save" data-keys="COPILOT_MODEL,COPILOT_EFFORT,COPILOT_PERMISSION,COPILOT_CWD,COPILOT_FOLDERS,COPILOT_READONLY,COPILOT_ASSISTED_ASK">Save</button><span class="msg"></span></div>
   </section>
 
   <section id="extra" hidden>
@@ -259,14 +259,13 @@ function render(s) {
   $('#COPILOT_CWD').value = cp.cwd || '';
   $('#COPILOT_MODEL').value = cp.model || '';
   $('#COPILOT_READONLY').value = cp.readonly || 'on';
-  $('#COPILOT_ASSISTED_COMMANDS').value = cp.assisted || '';
+  $('#COPILOT_ASSISTED_ASK').value = cp.assisted || '';
   // The choices come from Copilot itself (models you've used, its access modes).
   fetch('/api/copilot').then((r) => r.json()).then((i) => {
     $('#cp-models').innerHTML = (i.models || []).map((m) => `<option value="${esc(m)}">`).join('');
     $('#COPILOT_EFFORT').innerHTML = `<option value="">Copilot's default</option>${(i.efforts || []).map((e) => `<option>${esc(e)}</option>`).join('')}`;
     $('#COPILOT_PERMISSION').innerHTML = `<option value="">Ask (approve each step)</option>${Object.entries(i.permissions || {}).filter(([k]) => k !== 'ask').map(([k, l]) => `<option value="${esc(k)}">${esc(l)}</option>`).join('')}`;
     $('#COPILOT_EFFORT').value = cp.effort || '';
-    $('#COPILOT_ASSISTED_COMMANDS').placeholder = (i.assistedDefault || []).join(', ');
     $('#COPILOT_PERMISSION').value = cp.permission || '';
   }).catch(() => {});
 

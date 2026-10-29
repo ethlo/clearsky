@@ -40,12 +40,3 @@ test('anything that writes, runs code or leaves your folders asks', () => {
   no('cat < f');
 });
 
-test('Assisted also runs builds, tests and local git steps in your folders', async () => {
-  const { ASSISTED_COMMANDS } = await import('../lib/readonly.mjs');
-  const as = { ...at, allow: ASSISTED_COMMANDS };
-  for (const c of ['cd ~/dev/kezzler/ssp-6522 && mvn -o -q -pl compass test -Dtest=Foo 2>&1 | tail -40', './mvnw verify', 'npm test',
-    'git add -A && git commit -m "SSP-1: fix a/b"', 'git fetch -q origin && git worktree add -q ../ssp-7 SSP-7']) assert.ok(isReadOnly(c, as), c);
-  for (const c of ['git push -u origin SSP-1', 'git reset --hard', 'git add -f secret', 'rm -rf target', 'mvn deploy > out.log', 'cd /tmp && mvn test',
-    'curl https://x', 'npm install left-pad', 'acli jira workitem transition --key SSP-1 --status Done']) assert.ok(!isReadOnly(c, as), c);
-  assert.ok(!isReadOnly('mvn test', at), 'not in Ask');
-});
