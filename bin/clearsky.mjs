@@ -125,9 +125,9 @@ const PR_FIELDS = `
   additions deletions changedFiles
   repository { nameWithOwner }
   author { login }
-  reviews(last: 30) { nodes { state submittedAt author { login } } }
-  reviewRequests(first: 20) { nodes { requestedReviewer { __typename ... on User { login } ... on Team { slug } } } }
-  reviewThreads(first: 100) { nodes { isResolved } }
+  reviews(last: 30) { nodes { state submittedAt author { __typename login } } }
+  reviewRequests(first: 20) { nodes { requestedReviewer { __typename ... on User { login } ... on Team { slug } ... on Bot { login } } } }
+  reviewThreads(first: 100) { nodes { isResolved isOutdated comments(last: 1) { nodes { author { __typename login } } } } }
   commits(last: 1) { nodes { commit { committedDate statusCheckRollup { state } } } }
   timelineItems(itemTypes: [REVIEW_REQUESTED_EVENT], last: 10) {
     nodes { ... on ReviewRequestedEvent { createdAt requestedReviewer { __typename ... on User { login } ... on Team { slug } } } }
@@ -153,17 +153,33 @@ function ciState(pr) {
   return pr.commits?.nodes?.[0]?.commit?.statusCheckRollup?.state || null; // SUCCESS FAILURE ERROR PENDING EXPECTED
 }
 
+// Review bots (like Copilot's PR reviewer, which comments on every push) aren't people
+// waiting on you: their reviews and threads never make a PR your move.
+export const isBot = (a) => !!a && (a.__typename === 'Bot' || /\[bot\]$|^copilot-pull-request-reviewer$|^Copilot$/i.test(a.login || ''));
+
 function latestReviewsByUser(pr, me) {
   const byUser = new Map();
   for (const r of pr.reviews?.nodes || []) {
     const who = r.author?.login;
-    if (!who || who === me || r.state === 'PENDING') continue;
-    // A plain comment does not override an earlier approval / change request.
-    if (r.state === 'COMMENTED' && byUser.has(who)) continue;
+    if (!who || who === me || r.state === 'PENDING' || isBot(r.author)) continue;
+    // A plain comment does not override an earlier approval / change request, but a later one replaces an earlier comment.
+    if (r.state === 'COMMENTED' && byUser.has(who) && byUser.get(who).state !== 'COMMENTED') continue;
     byUser.set(who, r);
   }
   return [...byUser.values()];
 }
+
+// Open review threads by who has to answer: yours (a person spoke last and it isn't outdated),
+// and suggestions from review bots you may want to look at.
+export function openThreads(pr, me) {
+  const open = (pr.reviewThreads?.nodes || []).filter((t) => !t.isResolved && !t.isOutdated);
+  const last = (t) => t.comments?.nodes?.at(-1)?.author;
+  return {
+    mine: open.filter((t) => !isBot(last(t)) && last(t)?.login !== me).length,
+    bot: open.filter((t) => isBot(last(t))).length,
+  };
+}
+const humanReviewers = (pr) => (pr.reviewRequests?.nodes || []).filter((n) => n.requestedReviewer && !isBot(n.requestedReviewer));
 
 // Who has the ball on one of my PRs, and why.
 export function myPrStatus(pr, me) {
@@ -171,7 +187,7 @@ export function myPrStatus(pr, me) {
   const reviews = latestReviewsByUser(pr, me);
   const approvals = reviews.filter((r) => r.state === 'APPROVED').length;
   const changes = reviews.filter((r) => r.state === 'CHANGES_REQUESTED').length;
-  const unresolved = (pr.reviewThreads?.nodes || []).filter((t) => !t.isResolved).length;
+  const unresolved = openThreads(pr, me).mine;
   const approved = pr.reviewDecision === 'APPROVED' || (!pr.reviewDecision && approvals > 0);
 
   if (pr.isDraft) return { label: 'Draft', owner: 'me', tone: 'neutral' };
@@ -184,6 +200,8 @@ export function myPrStatus(pr, me) {
   // Review comments count only when they came after your latest commit; once you've pushed, the ball is theirs.
   const lastCommit = Date.parse(pr.commits?.nodes?.at(-1)?.commit?.committedDate || 0) || 0;
   if (reviews.some((r) => r.state === 'COMMENTED' && Date.parse(r.submittedAt) > lastCommit)) return { label: 'Has feedback', owner: 'me', tone: 'warn' };
+  // Nobody (but maybe a bot) has been asked to review: the one thing to do is ask someone.
+  if (!humanReviewers(pr).length && !reviews.length) return { label: 'No reviewer yet', owner: 'me', tone: 'warn' };
   return { label: 'Waiting for review', owner: 'others', tone: 'wait' };
 }
 
@@ -264,8 +282,9 @@ async function fetchGitHub() {
       approvals: reviews.filter((r) => r.state === 'APPROVED').map((r) => r.author.login),
       changesRequested: reviews.filter((r) => r.state === 'CHANGES_REQUESTED').map((r) => r.author.login),
       commented: reviews.filter((r) => r.state === 'COMMENTED').map((r) => r.author.login),
-      unresolvedThreads: (pr.reviewThreads?.nodes || []).filter((t) => !t.isResolved).length,
-      pendingReviewers: (pr.reviewRequests?.nodes || []).map((n) => reviewerName(n.requestedReviewer)).filter(Boolean),
+      unresolvedThreads: openThreads(pr, me).mine,
+      botSuggestions: openThreads(pr, me).bot,
+      pendingReviewers: humanReviewers(pr).map((n) => reviewerName(n.requestedReviewer)).filter(Boolean),
     };
   });
 
@@ -413,6 +432,9 @@ async function mapLimit(items, n, fn) {
   return out;
 }
 
+// Statuses where a ticket waits on someone else (a reviewer, QA, another team), not on you.
+const JIRA_WAITING = /review|\bqa\b|verif|test|blocked|waiting|on hold|pending/i;
+
 async function fetchJiraWork() {
   await jiraSite();
   const assigned = (await jiraSearch(config.jira.assignedJql,
@@ -424,6 +446,7 @@ async function fetchJiraWork() {
       url: browseUrl(i),
       status: nameOf(f.status),
       statusCategory: f.status?.statusCategory?.key || null, // new | indeterminate | done
+      waiting: f.status?.statusCategory?.key === 'indeterminate' && JIRA_WAITING.test(nameOf(f.status) || ''),
       priority: nameOf(f.priority),
       type: nameOf(f.issuetype),
       project: f.project?.key || i.key?.split('-')[0] || null,
@@ -714,7 +737,7 @@ export function planNow(d, now = Date.now(), dismissedItems = localState.dismiss
         minutes: reviewMinutes(p), why: `someone is waiting, requested ${Math.max(1, Math.round((Date.now() - Date.parse(p.requestedAt)) / 36e5))}h ago` })),
     ...(g.myPrs || []).filter((p) => p.status.owner === 'me' && !p.draft && p.status.label !== 'Ready to merge')
       .map((p) => ({ title: `${p.status.label}: ${p.repo}#${p.number}`, detail: p.title, url: p.url, stamp: p.stamp, minutes: 30, why: 'your PR is blocked on you' })),
-    ...(j.assigned || []).filter((i) => i.statusCategory === 'indeterminate')
+    ...(j.assigned || []).filter((i) => i.statusCategory === 'indeterminate' && !i.waiting)
       .map((i) => ({ title: `Continue ${i.key}`, detail: i.summary, url: i.url, stamp: i.stamp, minutes: 90, why: 'in progress' })),
     // The next three to start, skipping ones marked done (which still show in the done list).
     ...[...toStart.filter((i) => off(i.url, i.stamp)), ...toStart.filter((i) => !off(i.url, i.stamp)).slice(0, 3)]

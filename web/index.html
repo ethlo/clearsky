@@ -1205,7 +1205,8 @@ const shortRepo = (repo) => (repo || '').split('/').pop();
 const shortAgo = (iso) => ago(iso).replace(' ago', '');
 const prMeta = (p) => [p.approvals.length && `approved by ${p.approvals.join(', ')}`,
   p.changesRequested.length && `changes from ${p.changesRequested.join(', ')}`,
-  p.pendingReviewers.length && `waiting on ${p.pendingReviewers.join(', ')}`].filter(Boolean).join(' · ');
+  p.pendingReviewers.length && `waiting on ${p.pendingReviewers.join(', ')}`,
+  p.botSuggestions && `Copilot left ${p.botSuggestions} suggestion${p.botSuggestions > 1 ? 's' : ''}`].filter(Boolean).join(' · ');
 const TONE = { bad: 'red', warn: 'amber', good: 'green' };
 const GLYPH = { bad: 'chg', warn: 'rev', good: 'rdy', wait: 'wait', neutral: 'todo' };
 const snoozedUntil = (k) => { const u = mutedMap[k]; return u && Date.parse(u) > Date.now() ? u : null; };
@@ -1235,9 +1236,9 @@ function inboxItems() {
     step: m.excerpt, quote: m.excerpt, glyph: 'ment', label: ['Slack'], at: m.at, src: 'Slack', data: m }));
   if (j && !j.error) {
     const cat = (i) => (i.statusCategory === 'indeterminate' ? 0 : 1);
-    [...(j.assigned || [])].sort((a, b) => cat(a) - cat(b)).forEach((i) => add('tickets', 'ticket', { url: i.url, stamp: i.stamp, issue: i.key, ref: i.key,
+    [...(j.assigned || [])].sort((a, b) => cat(a) - cat(b)).forEach((i) => add(i.waiting ? 'waiting' : 'tickets', 'ticket', { url: i.url, stamp: i.stamp, issue: i.key, ref: i.key,
       title: i.summary, step: [i.status, i.type, i.priority && `${i.priority} priority`].filter(Boolean).join(' · '),
-      glyph: cat(i) ? 'todo' : 'prog', label: i.due ? [`due ${i.due}`, 'amber'] : [cat(i) ? 'to do' : 'in progress'], at: i.updatedAt, src: 'Jira', data: i }));
+      glyph: i.waiting ? 'wait' : cat(i) ? 'todo' : 'prog', label: i.waiting ? [i.status.toLowerCase()] : i.due ? [`due ${i.due}`, 'amber'] : [cat(i) ? 'to do' : 'in progress'], at: i.updatedAt, src: 'Jira', data: i }));
   }
   // Work sources from plugins whose panel needs you show up here too; personal ones keep to their own page.
   for (const x of extraSources.filter((s) => s.area !== 'personal' && s.panel.zone === 'needs')) {

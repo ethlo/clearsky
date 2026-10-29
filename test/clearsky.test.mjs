@@ -190,7 +190,23 @@ test('PR status: who has the ball', async () => {
   const commented = { reviews: { nodes: [{ state: 'COMMENTED', submittedAt: hoursAgo(1), author: { login: 'x' } }] } };
   assert.equal(label({ ...commented, commits: { nodes: [{ commit: { committedDate: hoursAgo(2) } }] } }), 'Has feedback');
   assert.equal(label({ ...commented, commits: { nodes: [{ commit: { committedDate: hoursAgo(0.5) } }] } }), 'Waiting for review', 'pushed since the feedback');
-  assert.equal(label({}), 'Waiting for review');
+  const asked = { reviewRequests: { nodes: [{ requestedReviewer: { __typename: 'User', login: 'anna' } }] } };
+  assert.equal(label(asked), 'Waiting for review');
+  assert.equal(label({}), 'No reviewer yet');
+  // Copilot's reviewer bot comments after every push; that never makes it your move.
+  const bot = { __typename: 'Bot', login: 'copilot-pull-request-reviewer' };
+  assert.equal(label({ ...asked, reviews: { nodes: [{ state: 'COMMENTED', submittedAt: hoursAgo(0.1), author: bot }] },
+    reviewRequests: { nodes: [...asked.reviewRequests.nodes, { requestedReviewer: bot }] },
+    reviewThreads: { nodes: [{ isResolved: false, comments: { nodes: [{ author: bot }] } }] },
+    commits: { nodes: [{ commit: { committedDate: hoursAgo(0.2) } }] } }), 'Waiting for review');
+  assert.equal(label({ reviewRequests: { nodes: [{ requestedReviewer: bot }] } }), 'No reviewer yet', 'a bot is not a reviewer');
+  // Threads you answered last, or that are outdated, aren't yours.
+  const thread = (login, extra = {}) => ({ isResolved: false, ...extra, comments: { nodes: [{ author: { __typename: 'User', login } }] } });
+  assert.equal(label({ ...asked, reviewThreads: { nodes: [thread('me'), thread('anna', { isOutdated: true })] } }), 'Waiting for review');
+  assert.equal(label({ ...asked, reviewThreads: { nodes: [thread('anna')] } }), '1 unresolved thread');
+  // The latest plain comment per person counts, not their first.
+  const twice = { ...asked, reviews: { nodes: [{ state: 'COMMENTED', submittedAt: hoursAgo(48), author: { login: 'x' } }, { state: 'COMMENTED', submittedAt: hoursAgo(1), author: { login: 'x' } }] } };
+  assert.equal(label({ ...twice, commits: { nodes: [{ commit: { committedDate: hoursAgo(2) } }] } }), 'Has feedback');
 });
 
 test('Now / Next: free slot and tasks that fit it', async () => {
