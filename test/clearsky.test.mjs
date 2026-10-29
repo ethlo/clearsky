@@ -1,12 +1,18 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { readFileSync, mkdtempSync } from 'node:fs';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const acliLog = join(mkdtempSync(join(tmpdir(), 'clearsky-')), 'acli.log');
+// Copilot's session folders: one work session (acme), one personal (no work repository).
+const copilotHome = mkdtempSync(join(tmpdir(), 'clearsky-copilot-'));
+mkdirSync(join(copilotHome, 'session-state', 'acp-session-1'), { recursive: true });
+writeFileSync(join(copilotHome, 'session-state', 'acp-session-1', 'workspace.yaml'), 'id: acp-session-1\nrepository: acme/api\nbranch: feature/ops-9-pager\n');
+mkdirSync(join(copilotHome, 'session-state', 'personal-1'), { recursive: true });
+writeFileSync(join(copilotHome, 'session-state', 'personal-1', 'workspace.yaml'), 'repository: ethlo/hack\nbranch: main\n');
 
 const now = new Date().toISOString();
 const hoursAgo = (h) => new Date(Date.now() - h * 36e5).toISOString();
@@ -85,7 +91,7 @@ before(async () => {
     ACLI_BIN: fileURLToPath(new URL('./fake-acli.mjs', import.meta.url)), FAKE_ACLI_LOG: acliLog,
     CLEARSKY_IGNORE_AUTHORS: 'dependabot[bot]',
     SLACK_TOKEN: 'xoxp-test', SLACK_API_URL: `${base}/slack`,
-    COPILOT_BIN: fileURLToPath(new URL('./fake-copilot.mjs', import.meta.url)),
+    COPILOT_BIN: fileURLToPath(new URL('./fake-copilot.mjs', import.meta.url)), CLEARSKY_COPILOT_HOME: copilotHome,
   });
 });
 after(() => server.close());
@@ -168,8 +174,8 @@ test('stand-up: yesterday from GitHub and Jira, today from the queue', async () 
   assert.match(s.text, /Worked on OPS-9: Pager rotation \(In Review\)/);
   assert.match(s.text, /\*Today\*\n- Continue OPS-1: Rotate certs/);
   // Recent Copilot sessions count as work too; older ones don't.
-  assert.match(s.text, /With Copilot: Check the repo \(\w+\)/);
-  assert.ok(!/From the terminal/.test(s.text));
+  assert.match(s.text, /With Copilot: OPS-9 Check the repo \(api, feature\/ops-9-pager\)/);
+  assert.ok(!/From the terminal|Personal hack/.test(s.text), 'old and personal sessions are left out');
 });
 
 test('PR status: who has the ball', async () => {

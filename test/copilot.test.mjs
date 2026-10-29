@@ -84,7 +84,7 @@ test('the chat panel talks to the local Copilot CLI with the chosen options', as
   mkdirSync(join(home, '.copilot', 'session-state', 'cli-old-session'), { recursive: true });
   writeFileSync(join(home, '.copilot', 'session-state', 'cli-old-session', `inuse.${process.pid}.hold`), '');
   const list = await (await fetch(`${base}/api/copilot/sessions`)).json();
-  assert.deepEqual(list.sessions.map((x) => [x.id, x.here, x.open]), [['acp-session-1', true, false], ['cli-old-session', false, true]]);
+  assert.deepEqual(list.sessions.map((x) => [x.id, x.here, x.open]), [['personal-1', false, false], ['acp-session-1', true, false], ['cli-old-session', false, true]]);
   const hist = await (await fetch(`${base}/api/copilot/sessions/cli-old-session?cwd=/tmp`)).json();
   assert.deepEqual(hist.messages, [
     { role: 'me', text: 'What broke?' },

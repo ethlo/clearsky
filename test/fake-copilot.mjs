@@ -16,8 +16,8 @@ if (args[0] === 'skill' && args[1] === 'list') {
     if (m.method === 'initialize') out({ id: m.id, result: { protocolVersion: 1, agentCapabilities: { loadSession: true, sessionCapabilities: { list: {} } } } });
     else if (m.method === 'session/list') {
       out({ id: m.id, result: m.params.cursor
-        ? { sessions: [{ sessionId: 'cli-old-session', cwd: '/tmp', title: 'From the terminal', updatedAt: '2026-10-01T10:00:00Z' }] }
-        : { sessions: [{ sessionId: 'acp-session-1', cwd: process.cwd(), title: 'Check the repo', updatedAt: new Date(Date.now() - 36e5).toISOString() }], nextCursor: 'p2' } });
+        ? { sessions: [{ sessionId: 'personal-1', cwd: '/tmp/me', title: 'Personal hack', updatedAt: new Date().toISOString() }, { sessionId: 'cli-old-session', cwd: '/tmp', title: 'From the terminal', updatedAt: '2026-10-01T10:00:00Z' }] }
+        : { sessions: [{ sessionId: 'acp-session-1', cwd: '/tmp/work', title: 'Check the repo', updatedAt: new Date(Date.now() - 36e5).toISOString() }], nextCursor: 'p2' } });
     } else if (m.method === 'session/load') {
       if (m.params.sessionId !== 'cli-old-session') { out({ id: m.id, error: { code: -32002, message: 'no such session' } }); return; }
       upd(m.params.sessionId, { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: 'You are helping me with my work. This is my work dashboard right now:\n\nstuff\n\n---\nMy message:\nWhat broke?' } });

@@ -864,7 +864,7 @@ export function standupText(s) {
   y.jira.touched?.forEach((i) => line(`Worked on ${i.key}: ${i.summary} (${i.status})`));
   const commits = (y.github.commits || []).filter((c) => c.count);
   if (commits.length) line(`Commits: ${commits.map((c) => `${c.count} in ${c.repo.split('/')[1]}`).join(', ')}`);
-  y.copilot?.sessions?.forEach((x) => line(`With Copilot: ${x.title}${x.where ? ` (${x.where}${x.branch && !/^(main|master)$/.test(x.branch) ? `, ${x.branch}` : ''})` : ''}`));
+  y.copilot?.sessions?.forEach((x) => line(`With Copilot: ${x.ticket ? `${x.ticket} ` : ''}${x.title} (${x.repo.split('/')[1]}${x.branch && !/^(main|master)$/.test(x.branch) ? `, ${x.branch}` : ''})`));
   if (out.length === 1) line('Nothing recorded on GitHub, Jira or Copilot.');
   out.push('', '*Today*');
   const before = out.length;
@@ -884,20 +884,25 @@ export function standupText(s) {
 async function standupCopilot(since) {
   const info = await copilotInfo();
   if (!info.available) return { sessions: [] };
-  const sessions = (await copilotSessions(info.bin)).filter((x) => x.title && Date.parse(x.updatedAt) >= +since);
+  const orgs = new Set(config.github.orgs.map((o) => o.toLowerCase()));
+  // Only work repositories, and not chats from this panel (they're about the dashboard).
+  const sessions = (await copilotSessions(info.bin))
+    .filter((x) => x.title && Date.parse(x.updatedAt) >= +since && x.cwd !== copilotCwd())
+    .map((x) => ({ ...x, ws: workspaceInfo(x.id) }))
+    .filter((x) => orgs.has(x.ws.repository?.split('/')[0]?.toLowerCase()) && !/review/i.test(x.ws.client_name || ''));
   return {
-    sessions: sessions.slice(0, 12).map((x) => {
-      const ws = workspaceInfo(x.id);
-      return { id: x.id, title: x.title, where: ws.repository?.split('/').pop() || (x.cwd || '').split('/').filter(Boolean).pop() || '', branch: ws.branch || null };
-    }),
+    sessions: sessions.slice(0, 12).map(({ id, title, ws }) => ({
+      id, title, repo: ws.repository, branch: ws.branch || null,
+      ticket: (ws.branch || '').toUpperCase().match(/\b([A-Z][A-Z0-9_]+-\d+)\b/)?.[1] || null,
+    })),
   };
 }
 
 function workspaceInfo(id) {
   const out = {};
   try {
-    for (const line of readFileSync(join(homedir(), '.copilot', 'session-state', id, 'workspace.yaml'), 'utf8').split('\n')) {
-      const m = line.match(/^(repository|branch):\s*["']?([^"'\s]+)["']?\s*$/);
+    for (const line of readFileSync(join(copilotHome(), 'session-state', id, 'workspace.yaml'), 'utf8').split('\n')) {
+      const m = line.match(/^(repository|branch|client_name):\s*["']?([^"'\s]+)["']?\s*$/);
       if (m) out[m[1]] = m[2];
     }
   } catch { /* no workspace file */ }
@@ -1065,6 +1070,8 @@ function copilotEnv() {
   return env;
 }
 
+const copilotHome = () => process.env.CLEARSKY_COPILOT_HOME || join(homedir(), '.copilot');
+
 // Slash commands Copilot last offered (its built-ins and your skills).
 let copilotCommands = null;
 
@@ -1085,9 +1092,9 @@ async function withAgent(bin, fn) {
 // inuse.<pid>.hold file in the session's folder while it has the session open.
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
 function openCopilotSessions() {
-  const dir = join(homedir(), '.copilot', 'session-state');
+  const dir = join(copilotHome(), 'session-state');
   let state = {};
-  try { state = JSON.parse(readFileSync(join(homedir(), '.copilot', 'open-sessions-state.json'), 'utf8')) || {}; } catch {}
+  try { state = JSON.parse(readFileSync(join(copilotHome(), 'open-sessions-state.json'), 'utf8')) || {}; } catch {}
   const open = {};
   let ids = [];
   try { ids = readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch {}
