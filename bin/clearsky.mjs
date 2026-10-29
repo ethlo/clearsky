@@ -601,7 +601,8 @@ async function evolutionTexts() {
 async function fetchCalendar() {
   const { icsUrl, email } = config.calendar;
   const tries = [];
-  if (icsUrl) tries.push(['iCal link', icsText(icsUrl).then((t) => [t])]);
+  const urls = (icsUrl || '').split(/\s+/).filter(Boolean);
+  urls.forEach((url, i) => tries.push([urls.length > 1 ? `iCal link ${i + 1}` : 'iCal link', icsText(url).then((t) => [t])]));
   tries.push(['GNOME Online Accounts', evolutionTexts()]);
   const results = await Promise.all(tries.map(([name, p]) => p.then((texts) => ({ name, texts }), (e) => ({ name, error: e.message }))));
   const used = results.filter((r) => r.texts);

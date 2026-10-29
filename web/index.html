@@ -165,12 +165,20 @@
   .ref:hover { border-bottom-style: solid; }
 
   /* hover card */
+  a.kpi { display: block; color: inherit; text-decoration: none; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+  a.kpi:hover { border-color: var(--line-strong); box-shadow: var(--shadow-lg); }
+  .card.flash { animation: flash 1.2s ease-out; }
+  @keyframes flash { 0% { box-shadow: 0 0 0 3px var(--accent); } 100% { box-shadow: var(--shadow); } }
+  .group { scroll-margin-top: 80px; }
+  .card { scroll-margin-top: 70px; }
   /* Copilot chat */
   .icon-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   .icon-btn.primary:hover { color: #fff; filter: brightness(1.08); }
   .icon-btn.small { height: 28px; font-size: 12.5px; padding: 0 10px; }
   .chat { position: fixed; z-index: 40; top: 0; right: 0; bottom: 0; width: min(460px, 100vw); background: var(--surface);
     border-left: 1px solid var(--line); box-shadow: var(--shadow-lg); display: flex; flex-direction: column; }
+  .chat.max { width: 100vw; }
+  .chat.max .chat-log, .chat.max .chat-in, .chat.max .chat-opts, .chat.max .chat-skills { padding-left: max(14px, calc((100vw - 900px) / 2)); padding-right: max(14px, calc((100vw - 900px) / 2)); }
   .chat-h { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
   .chat-h .spacer { flex: 1; }
   .chat-sub { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -278,6 +286,7 @@
     <span class="chat-sub" id="chat-sub"></span>
     <span class="spacer"></span>
     <button class="icon-btn small" id="chat-new" title="Start a new conversation">New chat</button>
+    <button class="icon-btn small" id="chat-max" title="Maximize" aria-label="Maximize">⤢</button>
     <button class="icon-btn small" id="chat-close" aria-label="Close">✕</button>
   </div>
   <div class="chat-opts">
@@ -304,6 +313,8 @@ const REFRESH_MS = 5 * 60 * 1000;
 const SOURCES = ['github', 'jira', 'jiraMentions', 'slack', 'calendar'];
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// 45 min, 1 h, 2 h 15 min
+const dur = (min) => (min < 60 ? `${min} min` : `${Math.floor(min / 60)} h${min % 60 ? ` ${min % 60} min` : ''}`);
 const hm = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 function ago(iso) {
@@ -517,13 +528,13 @@ function renderPlan() {
   let line, sub = '';
   if (p.now) {
     line = `In ${esc(p.now.title)} until ${hm(p.now.end)}`;
-    sub = `Then free for ${p.freeMinutes} min${p.next ? `, before ${esc(p.next.title)} at ${hm(p.next.start)}` : ''}${join(p.now)}`;
+    sub = `Then free for ${dur(p.freeMinutes)}${p.next ? `, before ${esc(p.next.title)} at ${hm(p.next.start)}` : ''}${join(p.now)}`;
   } else if (p.afterHours) {
     line = 'Outside working hours';
     sub = 'Here is what is waiting for tomorrow.';
   } else {
     const today = p.next && new Date(p.next.start).toDateString() === new Date().toDateString();
-    line = `${p.freeMinutes} min free${today ? ` until ${esc(p.next.title)}` : ' for the rest of the day'}`;
+    line = `${dur(p.freeMinutes)} free${today ? ` until ${esc(p.next.title)}` : ' for the rest of the day'}`;
     sub = today ? `Starts at ${hm(p.next.start)}${join(p.next)}`
       : p.next ? `No more meetings today. Next: ${esc(p.next.title)}, ${when(p.next.start)}.`
       : p.calendar ? 'No more meetings today.' : 'Connect your calendar in Settings to plan around meetings.';
@@ -538,7 +549,7 @@ function renderPlan() {
     `<div class="${p.now && e.start === p.now.start ? 'on' : ''}"><time>${hm(e.start)}</time><span>${esc(e.title)}</span></div>`).join('')}</div>` : '';
   const todo = (p.suggestions.length ? `<ol class="todo">${p.suggestions.map((s) => `<li>
       <div><a class="t" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a><div class="d">${esc(s.detail)}</div></div>
-      <span class="m">~${s.minutes} min</span>
+      <span class="m">~${dur(s.minutes)}</span>
       <span class="acts"><button class="done" data-done="${esc(s.key)}" data-stamp="${esc(s.stamp ?? '')}" title="Done: hide until there's something new" aria-label="Mark done">${DONE_ICON}</button><button class="mute" data-mute="${esc(s.key)}" title="Mute for a while" aria-label="Mute for a while">${MUTE_ICON}</button></span></li>`).join('')}</ol>`
     : '<div class="empty">Nothing urgent fits right now.</div>') + laterHtml(p.done || [], p.muted || []);
   el.innerHTML = `${refreshButton('plan')}<div><div class="eyebrow">Now</div><div class="now-line">${line}</div><div class="now-sub">${sub}</div>${alert}${calErr}${agenda}</div>
@@ -551,14 +562,15 @@ function renderKpis() {
   const mine = (g?.myPrs || []);
   const needs = mine.filter((p) => p.status.owner === 'me' && !p.draft).length;
   const mentionCount = (g?.mentions?.length || 0) + (jm?.tickets?.length || 0) + (sl?.mentions?.length || 0);
-  const kpi = (v, label, alert) => `<div class="kpi${alert ? ' alert' : ''}"><b>${v}</b><span>${label}</span></div>`;
+  // Each number jumps to the panel (and group) it counts.
+  const kpi = (v, label, to, alert) => `<a class="kpi${alert ? ' alert' : ''}" href="#${to}" data-jump="${to}"><b>${v}</b><span>${label}</span></a>`;
   $('#kpis').innerHTML =
-    kpi(val(g, (x) => x.reviewRequested.length), 'Reviews waiting on you') +
-    kpi(val(g, () => needs), 'Your PRs need action', needs > 0 && mine.some((p) => p.status.tone === 'bad')) +
-    kpi(val(g, () => mine.filter((p) => p.status.owner === 'others').length), 'Waiting on others') +
-    kpi(g && jm ? mentionCount : val(null), 'Recent mentions') +
-    kpi(val(j, (x) => x.assigned.filter((i) => i.statusCategory === 'indeterminate').length), 'Jira in progress') +
-    kpi(val(j, (x) => x.assigned.length), 'Jira open');
+    kpi(val(g, (x) => x.reviewRequested.length), 'Reviews waiting on you', 'c-review') +
+    kpi(val(g, () => needs), 'Your PRs need action', 'g-prs-me', needs > 0 && mine.some((p) => p.status.tone === 'bad')) +
+    kpi(val(g, () => mine.filter((p) => p.status.owner === 'others').length), 'Waiting on others', 'g-prs-others') +
+    kpi(g && jm ? mentionCount : val(null), 'Recent mentions', 'c-mentions') +
+    kpi(val(j, (x) => x.assigned.filter((i) => i.statusCategory === 'indeterminate').length), 'Jira in progress', 'g-left-indeterminate') +
+    kpi(val(j, (x) => x.assigned.length), 'Jira open', 'c-left');
 }
 
 function renderReview() {
@@ -585,7 +597,7 @@ function renderPrs() {
   });
   const body = [['me', 'Your move'], ['others', 'Waiting on others']].map(([owner, label]) => {
     const group = g.myPrs.filter((p) => p.status.owner === owner);
-    return group.length ? `<div class="group">${label}</div>${rows(`prs-${owner}`, group, item, 6)}` : '';
+    return group.length ? `<div class="group" id="g-prs-${owner}">${label}</div>${rows(`prs-${owner}`, group, item, 6)}` : '';
   }).join('') || '<div class="empty">No open pull requests.</div>';
   card(el, 'Your pull requests', g.myPrs.length, body);
 }
@@ -618,7 +630,7 @@ function renderLeft() {
     meta: [i.type, i.priority, i.due && `due ${i.due}`, i.updatedAt && `updated ${ago(i.updatedAt)}`].filter(Boolean).join(' · ') });
   const jira = j.error ? `<div class="err">Jira: ${esc(j.error)}</div>` : [['indeterminate', 'In progress'], ['new', 'To do']].map(([cat, label]) => {
     const group = j.assigned.filter((i) => (i.statusCategory || 'new') === cat);
-    return group.length ? `<div class="group">${label}</div>${rows(`left-${cat}`, group, item, 6)}` : '';
+    return group.length ? `<div class="group" id="g-left-${cat}">${label}</div>${rows(`left-${cat}`, group, item, 6)}` : '';
   }).join('') || '<div class="empty">Nothing assigned.</div>';
   const issues = g?.assigned || [];
   const gh = issues.length ? `<div class="group">GitHub issues</div>${rows('left-gh', issues, (i) => row({ url: i.url, stamp: i.stamp,
@@ -899,6 +911,25 @@ function openChat(open = true) {
     $('#chat-text').focus();
   }
 }
+
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('[data-jump]');
+  if (!a) return;
+  e.preventDefault();
+  const el = document.getElementById(a.dataset.jump) || document.getElementById(a.dataset.jump.replace(/^g-(prs|left)-.*/, 'c-$1'));
+  if (!el) return;
+  const card = el.closest('.card') || el;
+  el.scrollIntoView({ behavior: 'smooth', block: el === card ? 'start' : 'center' });
+  card.classList.remove('flash'); void card.offsetWidth; card.classList.add('flash');
+});
+
+$('#chat-max').onclick = () => {
+  const max = $('#chat').classList.toggle('max');
+  $('#chat-max').textContent = max ? '⤡' : '⤢';
+  $('#chat-max').title = max ? 'Restore' : 'Maximize';
+  try { localStorage.setItem('clearsky.chatMax', max ? '1' : ''); } catch {}
+};
+try { if (localStorage.getItem('clearsky.chatMax')) $('#chat-max').click(); } catch {}
 
 $('#chat-open').onclick = () => openChat($('#chat').hidden);
 $('#chat-close').onclick = () => openChat(false);

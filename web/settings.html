@@ -29,6 +29,12 @@
   p { margin: 6px 0; color: var(--muted); }
   ol { margin: 6px 0; padding-left: 20px; color: var(--muted); }
   label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 3px; }
+  .cal-list { display: flex; flex-direction: column; gap: 4px; }
+  .cal-list label.cal { display: flex; align-items: baseline; gap: 8px; margin: 0; font-size: 13.5px; color: var(--text, inherit); }
+  .cal-list input { width: auto; flex: none; margin: 0; }
+  .cal-list span { text-align: left; }
+  .cal-list small { color: var(--muted); font-size: 12px; }
+  .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
   input { width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line);
     border-radius: 6px; padding: 6px 8px; }
   input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
@@ -79,14 +85,20 @@
     <p><b>Option A, no new login:</b> add your work Google account in your desktop's <b>Settings → Online Accounts → Google</b>, with Calendar switched on. Enter your work email below and save. Clearsky reads the calendar GNOME syncs.</p>
     <label for="CALENDAR_EMAIL">Your work calendar email</label>
     <input id="CALENDAR_EMAIL" data-key="CALENDAR_EMAIL" type="email" placeholder="you@company.com">
-    <div class="row"><button class="save" data-keys="CALENDAR_EMAIL">Save</button><span class="msg"></span></div>
+    <div id="cal-pick" hidden>
+      <label>Calendars to include</label>
+      <div id="cal-list" class="cal-list"></div>
+      <p class="hint">Add a personal Google account in Online Accounts (Calendar only) to see family appointments here too.</p>
+    </div>
+    <input type="hidden" id="EVOLUTION_CALENDARS" data-key="EVOLUTION_CALENDARS">
+    <div class="row"><button class="save" data-keys="CALENDAR_EMAIL,EVOLUTION_CALENDARS">Save</button><span class="msg"></span></div>
     <p style="margin-top:14px"><b>Option B, iCal link</b> (only if your admin allows it). You can use both; meetings are merged:</p>
     <ol>
       <li>Open <a href="https://calendar.google.com/calendar/r/settings" target="_blank" rel="noopener">Google Calendar settings</a>.</li>
       <li>Under <b>Settings for my calendars</b>, click your calendar, then <b>Integrate calendar</b>.</li>
       <li>Copy <b>Secret address in iCal format</b> and paste it below.</li>
     </ol>
-    <label for="GOOGLE_CALENDAR_ICS">Secret address in iCal format</label>
+    <label for="GOOGLE_CALENDAR_ICS">Secret address in iCal format (several? separate them with spaces)</label>
     <input id="GOOGLE_CALENDAR_ICS" data-key="GOOGLE_CALENDAR_ICS" type="password" autocomplete="off" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics">
     <div class="row"><button class="save" data-keys="GOOGLE_CALENDAR_ICS">Save</button>
       <button class="secondary" id="cal-remove" hidden>Remove link</button><span class="msg"></span></div>
@@ -181,6 +193,12 @@ function render(s) {
   $('#cal-remove').hidden = !s.calendar.url;
   $('#GOOGLE_CALENDAR_ICS').placeholder = s.calendar.url ? `${s.calendar.url}; paste a new one to replace` : 'https://calendar.google.com/calendar/ical/…/basic.ics';
   $('#CALENDAR_EMAIL').value = s.calendar.email || '';
+  // Your work calendar is always in; tick any others (family, personal) to include them.
+  const cals = (s.calendar.all || []).filter((c) => c.synced || c.picked);
+  $('#cal-pick').hidden = !cals.length;
+  $('#cal-list').innerHTML = cals.map((c) => `<label class="cal"><input type="checkbox" value="${esc(c.uid)}"${c.picked ? ' checked' : ''}${c.own ? ' disabled' : ''}>
+    <span>${esc(c.name)}</span><small>${esc(c.own ? 'your work calendar' : c.account || '')}${c.synced ? '' : ' · not synced yet'}</small></label>`).join('');
+  syncCalPick();
 
   state($('#slack-state'), !!s.slack.token, s.slack.token ? 'connected' : 'not connected');
   $('#SLACK_TOKEN').placeholder = s.slack.token ? `${s.slack.token}; paste a new one to replace` : 'xoxp-…';
@@ -194,6 +212,13 @@ function render(s) {
 async function load() {
   render(await (await fetch('/api/settings')).json());
 }
+
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+function syncCalPick() {
+  $('#EVOLUTION_CALENDARS').value = [...document.querySelectorAll('#cal-list input:checked:not(:disabled)')].map((i) => i.value).join(',');
+}
+document.addEventListener('change', (e) => { if (e.target.closest('#cal-list')) syncCalPick(); });
 
 document.querySelectorAll('.save').forEach((btn) => btn.addEventListener('click', async () => {
   const msg = btn.nextElementSibling;
