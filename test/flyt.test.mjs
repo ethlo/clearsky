@@ -139,7 +139,7 @@ test('the source module fits the contract and turns data into rows, notification
     assert.equal(items.length, 4);
     assert.equal(items[0].url, 'https://foresatt.visma.no/eksempel');
     assert.equal(items[1].badge, 'Message (2)');
-    assert.equal(items[3].tone, 'warn');
+    assert.equal(items[3].tone, 'amber');
     const notes = hook(s, 'attention', data);
     assert.equal(notes[0].title, 'Ola: Fravær registrert');
     const events = hook(s, 'events', data);
