@@ -472,6 +472,8 @@
   .inbox .rz::after { content: ''; position: absolute; left: 3px; top: 2px; bottom: 2px; width: 2px; border-radius: 1px; background: var(--line-strong); opacity: 0; }
   .inbox li.head:hover .rz::after, .inbox .rz.on::after { opacity: 1; }
   .inbox.no-d .d, .inbox.no-f .f, .inbox.no-g .g, .inbox.no-p .s .p, .inbox.no-att .att { display: none; }
+  .pick .mark-all { margin-left: auto; }
+  .pick .mark-all + .cols { margin-left: 0; }
   .pick .cols { margin-left: auto; position: relative; font-size: 12.5px; }
   .pick .cols summary { list-style: none; cursor: pointer; padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--text-2); }
   .pick .cols summary::-webkit-details-marker { display: none; }
@@ -1503,7 +1505,8 @@ function tableView(x, list, limit = 12) {
     `<label><input type="checkbox" data-col="${c}"${colPrefs.hidden.includes(c) ? '' : ' checked'}> ${label}</label>`).join('')}
     <button class="reset" data-cols-reset>Reset widths</button></div></details>`;
   const head = (c, label) => `<span class="${c}">${label}${['d', 'f', 'g'].includes(c) ? `<i class="rz" data-rz="${c}" title="Drag to resize"></i>` : ''}</span>`;
-  return `<div class="pick">${groups.length > 1 ? chip('', 'All') + groups.map((g) => chip(g, g)).join('') : ''}${cols}</div>` +
+  const markAll = unread(pick) ? `<button class="mark-all" data-mark-all="${esc(x.name)}" data-group="${esc(pick)}">Mark ${pick ? `${esc(pick)} ` : 'all '}read</button>` : '';
+  return `<div class="pick">${groups.length > 1 ? chip('', 'All') + groups.map((g) => chip(g, g)).join('') : ''}${markAll}${cols}</div>` +
     `<ul class="inbox ${colClasses()}" style="--cols: ${colTemplate()}"><li class="head">${head('d', 'Date')}${head('f', 'From')}${head('g', 'Group')}<span class="s">Subject</span><span class="att"></span></li>${shown.map(line).join('')}</ul>` +
     (items.length > shown.length ? `<button class="more" data-more="${id}">Show ${items.length - shown.length} more</button>` : '');
 }
@@ -2422,6 +2425,32 @@ const bytes = (n) => (n == null ? '' : n < 1024 ? `${n} B` : n < 1048576 ? `${Ma
 // Plain text from the source, with its web addresses made clickable.
 const linkText = (t) => esc(t).replace(/https?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)]/g, (u) => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
 
+// Read marks for sources that can't be told (school): kept by Clearsky, per item, until
+// something new arrives on it. Opening an item marks it read.
+const sourceItem = (src, key) => (state[src]?.items || []).find((i) => i.key === key);
+async function markRead(src, items, read) {
+  try {
+    await post('/api/read', { marks: items.map((i) => ({ key: `${src}:${i.key}`, at: read ? i.at : null })) });
+    for (const i of items) if (i.unreadAtSource) Object.assign(i, { unread: !read, readHere: read });
+  } catch (e) { $('#status').textContent = `Could not save: ${e.message}`; }
+  renderToday();
+  if (curItem?.reader && items.length === 1) drawReadToggle(src, items[0].key);
+}
+function drawReadToggle(src, key) {
+  const el = $('#read-toggle'), i = sourceItem(src, key);
+  if (!el) return;
+  el.innerHTML = i?.unreadAtSource ? `<button class="icon-btn" data-mark="${esc(src)}" data-key="${esc(key)}" data-to="${i.unread ? 'read' : 'unread'}">${i.unread ? 'Mark read' : 'Mark unread'}</button>` : '';
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-mark]');
+  if (b) { const i = sourceItem(b.dataset.mark, b.dataset.key); if (i) markRead(b.dataset.mark, [i], b.dataset.to === 'read'); return; }
+  const all = e.target.closest('button[data-mark-all]');
+  if (all) {
+    const src = all.dataset.markAll, grp = all.dataset.group;
+    markRead(src, (state[src]?.items || []).filter((i) => i.unread && (!grp || i.group === grp)), true);
+  }
+});
+
 // A source's item read in full, such as a school message, in the work area.
 async function openReader(src, key, url) {
   curItem = { reader: true, k: `${src}:${key}`, title: 'Loading…' };
@@ -2429,11 +2458,12 @@ async function openReader(src, key, url) {
   const x = extraSources.find((s) => s.name === src);
   $('#it-crumb').textContent = x?.panel.title || '';
   location.hash = '#item';
-  const open = (u) => (u ? `<div class="acts-row"><a class="icon-btn primary" href="${esc(u)}" target="_blank" rel="noopener">Open in portal ↗</a></div>` : '');
+  const open = (u) => `<div class="acts-row">${u ? `<a class="icon-btn primary" href="${esc(u)}" target="_blank" rel="noopener">Open in portal ↗</a>` : ''}<span id="read-toggle"></span></div>`;
   el.innerHTML = `<h2>Loading…</h2>${skeleton(3)}`;
   try {
     const d = await getJson(`/api/source/${encodeURIComponent(src)}/detail?key=${encodeURIComponent(key)}`);
     if (curItem !== it) return;
+    setTimeout(() => { if (curItem === it) { const i = sourceItem(src, key); if (i?.unread) markRead(src, [i], true); else drawReadToggle(src, key); } });
     const file = (a) => `/api/source/${encodeURIComponent(src)}/attachment?key=${encodeURIComponent(key)}&id=${encodeURIComponent(a.id)}`;
     el.innerHTML = `<h2>${esc(d.title || 'Message')}</h2><div class="why">${esc([d.child, d.meta].filter(Boolean).join(' · '))}</div>${open(d.url || url)}
       ${(d.messages || []).map((m) => `<div class="msg-r${m.mine ? ' mine' : ''}">

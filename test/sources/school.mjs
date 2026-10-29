@@ -24,8 +24,8 @@ export default {
     return { child: ctx.env.SCHOOL_CHILD, messages: [{ id: 'm1', from: 'Teacher', text: 'Trip on Friday', at: at(8) }],
       lessons: [{ id: 'l1', title: 'Swimming', start: at(12), end: at(13) }] };
   },
-  items: (d) => d.messages.map((m) => ({ key: m.id, stamp: m.at, title: `${m.from}: ${m.text}`, meta: d.child, url: 'https://school.example/m1', detail: true })),
-  attention: (d) => d.messages.map((m) => ({ key: m.id, stamp: m.at, title: `Message from ${m.from}`, body: m.text, url: 'https://school.example/m1' })),
+  items: (d) => d.messages.map((m) => ({ key: m.id, stamp: m.at, at: m.at, unread: true, title: `${m.from}: ${m.text}`, meta: d.child, url: 'https://school.example/m1', detail: true })),
+  attention: (d) => d.messages.map((m) => ({ key: m.id, stamp: m.at, at: m.at, title: `Message from ${m.from}`, body: m.text, url: 'https://school.example/m1' })),
   events: (d) => d.lessons.map((l) => ({ uid: l.id, title: `${d.child}: ${l.title}`, start: l.start, end: l.end, allDay: false, fyi: true })),
   standup: (d) => ({ today: d.lessons.map((l) => `${d.child} has ${l.title}`) }),
 };

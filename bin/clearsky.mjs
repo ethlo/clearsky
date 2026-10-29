@@ -1556,8 +1556,23 @@ async function pollOnce(force) {
 
 async function pluginAttention(force) {
   const extra = await pluginData(force);
+  const reads = localState.readMarks(stateFile);
   return [...plugins.sources.values()].flatMap((p) => (extra[p.name]?.error || extra[p.name]?.disabled ? []
-    : asList(hook(p, 'attention', extra[p.name])).filter((x) => x?.key && x.title).map((x) => ({ kind: p.name, ...x, key: `${p.name}:${x.key}` }))));
+    : asList(hook(p, 'attention', extra[p.name])).filter((x) => x?.key && x.title).map((x) => ({ kind: p.name, ...x, key: `${p.name}:${x.key}` }))
+      // Something you've read here doesn't need you, until there's something new on it.
+      .filter((x) => !(x.at && reads[x.key] === String(x.at)))));
+}
+
+// A source's items with your read marks applied: `unread` is what's still unread to you,
+// `unreadAtSource` what the source itself says.
+function withReads(name, data) {
+  if (!plugins.sources.has(name) || !Array.isArray(data?.items)) return data;
+  const reads = localState.readMarks(stateFile);
+  return { ...data, items: data.items.map((i) => {
+    if (!i?.unread) return i;
+    const here = i.at != null && reads[`${name}:${i.key}`] === String(i.at);
+    return { ...i, unreadAtSource: true, unread: !here, readHere: here };
+  }) };
 }
 
 function startPolling() {
@@ -1663,6 +1678,12 @@ function serve() {
           const { key, for: span } = await readJson(req);
           return json(res, 200, { muted: localState.setMuted(stateFile, { key, until: muteUntil(span) }) });
         }
+        if (url.pathname === '/api/read') {
+          const { marks } = await readJson(req);
+          if (!Array.isArray(marks) || marks.length > 1000) return json(res, 400, { error: 'marks must be a list' });
+          localState.setRead(stateFile, marks);
+          return json(res, 200, { ok: true });
+        }
         if (url.pathname === '/api/dismiss') {
           return json(res, 200, { dismissed: localState.setDismissed(stateFile, await readJson(req)) });
         }
@@ -1724,7 +1745,7 @@ function serve() {
       if (src) {
         if (!SOURCES[src]) return json(res, 404, { error: 'unknown source' });
         const data = await source(src, url.searchParams.has('refresh'));
-        return json(res, 200, { ...data, fetchedAt: new Date(sourceCache.get(src)?.at || Date.now()).toISOString() });
+        return json(res, 200, { ...withReads(src, data), fetchedAt: new Date(sourceCache.get(src)?.at || Date.now()).toISOString() });
       }
       if (url.pathname === '/favicon.ico') { res.writeHead(204); return res.end(); }
       if (url.pathname === '/api/sources') {

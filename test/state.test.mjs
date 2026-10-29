@@ -31,3 +31,14 @@ test('dismissed and muted items are kept in a private state file', () => {
   assert.deepEqual(muted(file), {});
   assert.throws(() => setMuted(file, { key: 'u1', until: 'soon' }), /bad time/);
 });
+
+test('read marks are kept per item, and can be taken back', async () => {
+  const { readMarks, setRead } = await import('../lib/state.mjs');
+  const file = join(mkdtempSync(join(tmpdir(), 'clearsky-state-')), 'state.json');
+  assert.deepEqual(readMarks(file), {});
+  setRead(file, [{ key: 'flyt:flyt:notice:1:5', at: '2026-10-29T09:00:00.000Z' }, { key: 'flyt:flyt:direct:1:7', at: '2026-10-28T07:15:00.000Z' }]);
+  assert.equal(readMarks(file)['flyt:flyt:notice:1:5'], '2026-10-29T09:00:00.000Z');
+  setRead(file, [{ key: 'flyt:flyt:notice:1:5', at: null }]);
+  assert.deepEqual(Object.keys(readMarks(file)), ['flyt:flyt:direct:1:7']);
+  assert.throws(() => setRead(file, [{ key: '', at: 'x' }]), /bad key/);
+});

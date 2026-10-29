@@ -50,6 +50,20 @@ test('an extra source shows up in the page, notifications, Now / Next, stand-up 
   assert.deepEqual(school.items.map((i) => i.title), ['Teacher: Trip on Friday']);
   const att = await get('/api/attention');
   assert.ok(att.items.some((i) => i.key === 'school:m1' && i.kind === 'school'));
+
+  // Read here: the school isn't told, so Clearsky keeps the mark, until something new arrives.
+  const csrf = (await (await fetch(`${base}/settings`)).text()).match(/const CSRF = '([^']+)'/)[1];
+  const mark = (at) => fetch(`${base}/api/read`, { method: 'POST', headers: { 'X-Clearsky-Token': csrf, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ marks: [{ key: 'school:m1', at }] }) });
+  const m1 = (await get('/api/source/school')).items[0];
+  assert.deepEqual([m1.unread, m1.unreadAtSource, m1.readHere], [true, true, false]);
+  assert.equal((await mark(m1.at)).status, 200);
+  assert.deepEqual((({ unread, readHere }) => [unread, readHere])((await get('/api/source/school')).items[0]), [false, true]);
+  assert.ok(!(await get('/api/attention')).items.some((i) => i.key === 'school:m1'), 'read here: no longer needs you');
+  await mark('2000-01-01T00:00:00.000Z');
+  assert.equal((await get('/api/source/school')).items[0].unread, true, 'a mark for an older version does not count');
+  await mark(null);
+  assert.equal((await get('/api/source/school')).items[0].unread, true);
   const plan = await get('/api/plan');
   assert.ok(plan.plan.agenda.some((e) => e.title === 'Ada: Swimming' && e.fyi && e.calendar === 'School') || new Date().getHours() >= 13);
   const su = await get('/api/standup');
