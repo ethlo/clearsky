@@ -22,6 +22,8 @@ test('Assisted runs routine work in your folders', () => {
   runs('grep -n "x" <<< "$(git -C ~/dev/kezzler/ssp log -1 --format=%B)"');
   runs('rm -f /tmp/build.log /tmp/out.json');
   runs('./mvnw -q test');
+  runs("cd ~/dev/kezzler/ssp && python3 - <<'EOF'\nimport json\nprint(1)\nEOF");
+  runs('ls ~/.m2/repository/com/kezzler/gs1/ | tail -3; unzip -p ~/.m2/repository/x/y.jar META-INF/MANIFEST.MF | head');
   runs("sed -i 's/a/b/' src/A.java");
 });
 
@@ -32,12 +34,16 @@ test('Assisted still asks before risky steps or leaving your folders', () => {
     'gh api repos/a/b/issues/1/comments -f body=x', 'acli jira workitem transition --key SSP-1 --status Done', 'acli jira workitem comment create --key SSP-1 --body x',
     'sudo ls', 'ssh host', 'curl -X POST https://x', 'curl -o ~/.bashrc https://x', 'docker run alpine', 'bash -c "ls"', 'eval "$X"',
     'cat ~/.ssh/id_rsa', 'cd /etc && cat passwd', 'echo x > ~/.profile', 'cp a /home/m/other/', 'git -C ~/dev/kezzler/ssp push',
-    'echo $(rm -rf x)', './deploy.sh', 'sleep 100 &', 'cat <<EOF\nx\nEOF', 'find . -delete']) asks(c);
+    'echo $(rm -rf x)', './deploy.sh', 'sleep 100 &', 'cat <<EOF\nx', 'find . -delete', 'cp a ~/.m2/settings.xml']) asks(c);
   asks('mvn verify', { ...at, ask: ['mvn verify'] });
 });
 
 test('reads the shell well enough', () => {
   assert.deepEqual(parseShell('a "b c" | d 2>&1 > /tmp/x; e $(f g)').cmds.map((c) => [c.words, c.redirs]), [[['a', 'b c'], []], [['d'], ['/tmp/x']], [['e', '$SUB'], []]]);
   assert.deepEqual(parseShell('e $(f g)').subs, ['f g']);
-  assert.equal(parseShell('echo "unclosed'), null);
+  assert.equal(parseShell('echo "unclosed').error, 'unclosed quote');
+  // Here-documents: the body is text for the command.
+  const h = parseShell("cd ~/dev/kezzler/ssp && python3 - <<'EOF'\nimport os\nprint(os.listdir('/etc'))\nEOF\necho done");
+  assert.deepEqual(h.cmds.map((c) => c.words[0]), ['cd', 'python3', 'echo']);
+  assert.equal(parseShell('cat <<EOF\nx').error, 'unfinished here-document');
 });
