@@ -180,9 +180,27 @@
   .kb { display: flex; gap: 14px; align-items: center; padding: 6px 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; flex: none; flex-wrap: wrap; }
   .kb span { display: inline-flex; gap: 5px; align-items: center; }
   kbd { font: 500 10.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace; border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 4px; padding: 2px 5px; color: var(--text-2); }
+  /* Your PRs and Tickets as tables: same rows, more columns, with a header to resize and hide them */
+  .r.tbl { grid-template-columns: var(--wcols); gap: 10px; }
+  .r.tbl > .c { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .r.tbl .c-x { display: flex; gap: 4px; overflow: hidden; }
+  .r.tbl .c-b { font: 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-2); }
+  .r.tbl .c-s { display: flex; align-items: center; }
+  .r.tbl:hover .age, .r.tbl.sel .age, .r.tbl:focus-within .age { visibility: hidden; }
+  .wt-head { display: grid; grid-template-columns: var(--wcols); gap: 10px; padding: 6px 20px 4px; color: var(--muted); font-size: 11px;
+    text-transform: uppercase; letter-spacing: .04em; position: sticky; top: 0; background: var(--bg); z-index: 2; border-bottom: 1px solid var(--line); }
+  .wt-head > span { position: relative; white-space: nowrap; overflow: visible; }
+  .wt-head .rz { position: absolute; top: -4px; bottom: -4px; right: -8px; width: 8px; cursor: col-resize; touch-action: none; }
+  .wt-head .rz::after { content: ''; position: absolute; left: 3px; top: 2px; bottom: 2px; width: 2px; border-radius: 1px; background: var(--line-strong); opacity: 0; }
+  .wt-head:hover .rz::after, .wt-head .rz.on::after { opacity: 1; }
+  .wt-bar { display: flex; justify-content: flex-end; padding: 6px 20px 0; }
+  .wt-bar.pick .cols { margin-left: auto; }
+  #list.no-id .c-id, #list.no-x .c-x, #list.no-b .c-b, #list.no-s .c-s, #list.no-u .c-u { display: none; }
   @media (max-width: 860px) {
     .r { grid-template-columns: 16px minmax(0, 1fr) auto; padding: 0 14px; }
     .r .id, .r .lb { display: none; }
+    .r.tbl { grid-template-columns: 16px minmax(0, 1fr) auto; }
+    .r.tbl .c-id, .r.tbl .c-x, .r.tbl .c-b, .r.tbl .c-s, .wt-head, .wt-bar { display: none; }
     .kb { display: none; }
   }
 
@@ -702,7 +720,7 @@ const loading = new Set();
 function loadSource(name, force) {
   loading.add(name); busy(1); renderToday();
   return getJson(`/api/source/${name}${force ? '?refresh=1' : ''}`)
-    .then((d) => { state[name] = d; })
+    .then((d) => { state[name] = d; if (name === 'jira') loadBranches(); })
     .catch((e) => { state[name] = { error: e.message, fetchedAt: new Date().toISOString() }; })
     .finally(() => { loading.delete(name); busy(-1); renderToday(); drawFresh(); });
 }
@@ -1333,19 +1351,28 @@ function relatedItems(it, all) {
   for (const x of [...all].sort((a, b) => (a.kind === 'mention') - (b.kind === 'mention'))) {
     if (!seen.has(id(x)) && match(x)) { seen.add(id(x)); out.push(x); }
   }
+  // A PR's tickets that aren't in your lists (someone else's, or closed) still get a link.
+  if (isPr(it)) for (const key of jiraKeysOf(it.data, projects)) if (!seen.has(`issue:${key}`)) out.push(unlistedTicket(key));
   return out;
+}
+// A ticket you don't have in a list, opened here with what Jira says about it.
+function unlistedTicket(key) {
+  const site = [...(state.jira?.assigned || []), ...(state.jiraMentions?.tickets || [])].map((t) => t.url).find(Boolean);
+  const url = site ? `${new URL(site).origin}/browse/${key}` : '';
+  return { group: 'linked', kind: 'linked', k: `linked:${key}`, issue: key, ref: key, url, title: key, src: 'Jira', glyph: 'todo', label: ['not in your lists'], step: 'Not in your lists: assigned to someone else, or closed.', data: {} };
 }
 // A link to a related item: opens it here, or on its own site when it isn't listed.
 function xrefChip(x, withState) {
   const [lt, tone] = x.label || [];
   const name = x.issue || x.ref;
-  return `<a class="xref" href="${esc(x.url)}" data-xref="${esc(x.k)}" title="Open ${esc(name)} here: ${esc(x.title)}${lt ? ` (${esc(lt)})` : ''}">${tone ? `<i class="${esc(tone)}"></i>` : ''}${esc(name)}${withState && lt ? ` · ${esc(lt)}` : ''}</a>`;
+  return `<a class="xref" href="${esc(x.url)}" target="_blank" rel="noopener" data-xref="${esc(x.k)}" title="Open ${esc(name)} here: ${esc(x.title)}${lt ? ` (${esc(lt)})` : ''}">${tone ? `<i class="${esc(tone)}"></i>` : ''}${esc(name)}${withState && lt ? ` · ${esc(lt)}` : ''}</a>`;
 }
 let xrefAll = [];
 document.addEventListener('click', (e) => {
   const a = e.target.closest('[data-xref]');
   if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
-  const x = (xrefAll.length ? xrefAll : inboxItems()).find((y) => y.k === a.dataset.xref);
+  const k = a.dataset.xref;
+  const x = (xrefAll.length ? xrefAll : inboxItems()).find((y) => y.k === k) || (k.startsWith('linked:') ? unlistedTicket(k.slice(7)) : null);
   if (!x) return;
   e.preventDefault(); e.stopPropagation();
   openItem(x);
@@ -1368,14 +1395,100 @@ function sessionItems() {
 const LIST_VIEWS = { inbox: 'Inbox', reviews: 'Reviews', prs: 'Your PRs', mentions: 'Mentions', tickets: 'Tickets' };
 let listView = 'inbox', listItems = [], selK = null, showWaiting = false;
 
+// Your PRs and Tickets show as tables: what links to what, and which branch the work is on.
+// Columns can be resized (drag a header edge) and hidden (Columns); that's kept in this browser.
+const WORK_COLS = {
+  prs: [['id', 'PR', 110], ['t', 'Title'], ['x', 'Ticket', 110], ['b', 'Branch', 180], ['s', 'State', 150], ['u', 'Updated', 64]],
+  tickets: [['id', 'Ticket', 96], ['t', 'Title'], ['x', 'Pull requests', 200], ['b', 'Branch', 180], ['s', 'State', 120], ['u', 'Updated', 64]],
+};
+const WCOLS_KEY = 'clearsky.work.cols';
+let wcolPrefs = {};
+try { wcolPrefs = JSON.parse(localStorage.getItem(WCOLS_KEY) || '{}') || {}; } catch {}
+const wprefs = (v) => (wcolPrefs[v] ||= { widths: {}, hidden: [] });
+const saveWcols = () => { try { localStorage.setItem(WCOLS_KEY, JSON.stringify(wcolPrefs)); } catch {} };
+const wcolWidth = (v, c) => Math.min(480, Math.max(40, wprefs(v).widths[c] || WORK_COLS[v].find((x) => x[0] === c)[2]));
+function applyWcols() {
+  const el = $('#list'), v = listView, cols = WORK_COLS[v];
+  el.classList.remove(...[...el.classList].filter((c) => c.startsWith('no-')));
+  if (!cols) return el.style.removeProperty('--wcols');
+  const off = new Set(wprefs(v).hidden);
+  el.style.setProperty('--wcols', ['16px', ...cols.filter(([c]) => !off.has(c)).map(([c]) => (c === 't' ? 'minmax(0, 1fr)' : `${wcolWidth(v, c)}px`))].join(' '));
+  off.forEach((c) => el.classList.add(`no-${c}`));
+}
+function workHead(v) {
+  const cols = WORK_COLS[v], off = new Set(wprefs(v).hidden);
+  const menu = `<div class="wt-bar pick"><details class="cols"><summary>Columns</summary><div class="menu">${cols.filter(([c]) => c !== 't').map(([c, label]) =>
+    `<label><input type="checkbox" data-wcol="${c}"${off.has(c) ? '' : ' checked'}> ${label}</label>`).join('')}
+    <button class="reset" data-wcols-reset>Reset widths</button></div></details></div>`;
+  return `${menu}<div class="wt-head"><span></span>${cols.map(([c, label]) => `<span class="c-${c}">${label}${c !== 't' ? `<i class="rz" data-wrz="${c}" title="Drag to resize"></i>` : ''}</span>`).join('')}</div>`;
+}
+document.addEventListener('change', (e) => {
+  const c = e.target.closest('[data-wcol]')?.dataset.wcol;
+  if (!c || !WORK_COLS[listView]) return;
+  const p = wprefs(listView);
+  p.hidden = e.target.checked ? p.hidden.filter((x) => x !== c) : [...new Set([...p.hidden, c])];
+  saveWcols(); applyWcols();
+});
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('[data-wcols-reset]') || !WORK_COLS[listView]) return;
+  wprefs(listView).widths = {}; saveWcols(); applyWcols();
+});
+document.addEventListener('pointerdown', (e) => {
+  const h = e.target.closest('[data-wrz]');
+  if (!h) return;
+  e.preventDefault();
+  const v = listView, c = h.dataset.wrz, x0 = e.clientX, w0 = wcolWidth(v, c);
+  h.classList.add('on'); h.setPointerCapture(e.pointerId);
+  const move = (ev) => { wprefs(v).widths[c] = Math.round(w0 + ev.clientX - x0); applyWcols(); };
+  const up = () => { h.classList.remove('on'); h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); wprefs(v).widths[c] = wcolWidth(v, c); saveWcols(); };
+  h.addEventListener('pointermove', move); h.addEventListener('pointerup', up);
+});
+
+// Branches in your clones that carry a ticket's key, local or pushed.
+let ticketBranches = {};
+const loadBranches = () => fetch('/api/branches').then((r) => r.json()).then((d) => {
+  ticketBranches = d.branches || {};
+  if (!$('#v-list').hidden && listView === 'tickets') renderList();
+}).catch(() => {});
+setInterval(() => { if (!document.hidden) loadBranches(); }, 60_000);
+// The branches an item is on: a PR's head branch; for a ticket, its PRs' branches and any in your clones.
+function branchesOf(it, rel) {
+  if (it.pr) return it.data?.branch ? [{ branch: it.data.branch, repo: it.data.repo }] : [];
+  const out = new Map();
+  rel.filter((x) => x.data?.branch).forEach((x) => out.set(x.data.branch, { branch: x.data.branch, repo: x.data.repo, pr: true }));
+  (ticketBranches[it.issue] || []).forEach((b) => out.set(b.branch, { ...out.get(b.branch), ...b }));
+  return [...out.values()];
+}
+function branchCell(list) {
+  if (!list.length) return '';
+  const tip = list.map((b) => `${b.repo ? `${shortRepo(b.repo)}: ` : ''}${b.branch}${b.pr ? ' (PR)' : b.local && !b.remote ? ' (local only)' : b.remote && !b.local ? ' (remote only)' : ''}`).join('\n');
+  return `<span title="${esc(tip)}">${esc(list[0].branch)}${list.length > 1 ? ` +${list.length - 1}` : ''}</span>`;
+}
+function tableRow(it, i, rel, chips, acts, fresh) {
+  const [lt, tone] = it.label || [];
+  const cell = {
+    id: `<span class="c c-id id"${refAttrs(it)}>${esc(it.issue || it.ref || '')}</span>`,
+    t: `<span class="c c-t t"><a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.title)}</a>${it.pr && it.step ? `<span class="step">${esc(it.step)}</span>` : ''}${chips}</span>`,
+    x: `<span class="c c-x">${rel.slice(0, 3).map((x) => xrefChip(x, !it.pr)).join('')}</span>`,
+    b: `<span class="c c-b">${branchCell(branchesOf(it, rel))}</span>`,
+    s: `<span class="c c-s">${lt ? `<span class="lbl${tone ? ` ${tone}` : ''}">${tone ? '<i></i>' : ''}${esc(lt)}</span>` : ''}</span>`,
+    u: `<span class="c c-u age">${esc(shortAgo(it.at))}</span>`,
+  };
+  return `<li class="r tbl${it.group === 'waiting' ? ' quiet' : ''}${it.k === selK ? ' sel' : ''}" data-i="${i}" tabindex="-1">
+    ${fresh ? '<span class="new-dot" title="New since you last looked" aria-label="New"></span>' : ''}<span class="st ${esc(it.glyph)}"></span>
+    ${WORK_COLS[listView].map(([c]) => cell[c]).join('')}${acts}</li>`;
+}
+
 function itemRow(it, i) {
   const [lt, tone] = it.label || [];
   const fresh = it.kind !== 'session' && isNew(it.k, it.stamp);
   const chips = it.url ? (cpLinks.links[itemKey(it.url)] || []).slice(0, 1).map(chip).join('') : '';
-  const xrefs = it.kind === 'session' ? '' : relatedItems(it, xrefAll).slice(0, 3).map((x) => xrefChip(x, !it.pr)).join('');
   const acts = it.kind === 'session' ? '' : `<span class="ra">${refFromUrl(it.url) ? `<button class="ask" data-ask="${esc(it.url)}" data-title="${esc(it.title)}" title="Copilot on this (A)" aria-label="Copilot on this">✦</button>` : ''}
     <button data-mute="${esc(it.k)}" title="Snooze (H)" aria-label="Snooze">${MUTE_ICON}</button>
     <button data-done="${esc(it.k)}" data-stamp="${esc(it.stamp ?? '')}" title="Done: hide until there's something new (E)" aria-label="Done">${DONE_ICON}</button></span>`;
+  const rel = it.kind === 'session' ? [] : relatedItems(it, xrefAll);
+  if (WORK_COLS[listView]) return tableRow(it, i, rel, chips, acts, fresh);
+  const xrefs = rel.slice(0, 3).map((x) => xrefChip(x, !it.pr)).join('');
   return `<li class="r${it.group === 'waiting' ? ' quiet' : ''}${it.k === selK ? ' sel' : ''}" data-i="${i}" tabindex="-1">
     ${fresh ? '<span class="new-dot" title="New since you last looked" aria-label="New"></span>' : ''}<span class="st ${esc(it.glyph)}"></span>
     <span class="id"${refAttrs(it)}>${esc(it.ref || '')}</span>
@@ -1409,7 +1522,8 @@ function renderList() {
     group('GitHub issues', 'todo', by((x) => x.kind === 'issue'), { hideEmpty: true });
   }
   listItems = [];
-  let html = errs;
+  let html = errs + (WORK_COLS[listView] ? workHead(listView) : '');
+  applyWcols();
   for (const g of groups) {
     if (!g.items.length && g.hideEmpty) continue;
     const head = `<div class="gh"><span class="st ${g.glyph}" style="width:12px;height:12px"></span>${esc(g.title)} <span class="n">${g.items.length}</span>`;
@@ -1502,8 +1616,8 @@ async function renderItem() {
   const acts = `<div class="acts-row">${it.url ? `<a class="icon-btn primary" href="${esc(it.url)}" target="_blank" rel="noopener">${where} ↗</a>` : ''}
     ${it.kind === 'pr' ? `<button class="icon-btn" data-rv-open="${esc(it.data.repo)}#${it.data.number}">👥 Request review</button>` : ''}
     ${refFromUrl(it.url) ? `<button class="icon-btn" data-ask="${esc(it.url)}" data-title="${esc(it.title)}">✦ Copilot on this</button>` : ''}
-    <button class="icon-btn" data-mute="${esc(it.k)}">${MUTE_ICON} Snooze</button>
-    <button class="icon-btn" data-done="${esc(it.k)}" data-stamp="${esc(it.stamp ?? '')}" data-back-after>${DONE_ICON} Done</button></div>`;
+    ${it.kind === 'linked' ? '' : `<button class="icon-btn" data-mute="${esc(it.k)}">${MUTE_ICON} Snooze</button>
+    <button class="icon-btn" data-done="${esc(it.k)}" data-stamp="${esc(it.stamp ?? '')}" data-back-after>${DONE_ICON} Done</button>`}</div>`;
   const rel = it.kind === 'session' ? [] : relatedItems(it, inboxItems());
   const related = rel.length ? `<h3>${it.pr ? 'Tickets' : 'Pull requests'}</h3><div class="xrefs">${rel.map((x) => xrefChip(x, true)).join('')}</div>` : '';
   const cps = sessions.length ? `<h3>Copilot on this</h3><div class="cps">${sessions.map(chip).join('')}</div>` : '';

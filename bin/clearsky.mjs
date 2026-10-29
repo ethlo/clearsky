@@ -21,6 +21,7 @@ import * as localState from '../lib/state.mjs';
 import * as copilot from '../lib/copilot.mjs';
 import { AcpAgent, chatEvent } from '../lib/acp.mjs';
 import { sessionEvents } from '../lib/copilot-events.mjs';
+import { branchesFor } from '../lib/branches.mjs';
 import { attentionItems, diffAttention, desktopNotify, DbusNotifier } from '../lib/notify.mjs';
 import { loadSources, makeContext, hook, asList } from '../lib/sources.mjs';
 
@@ -1466,7 +1467,8 @@ async function copilotHistory(bin, id, cwd) {
 
 // The local clone of a GitHub repository, so Copilot can work in it: a folder under
 // CLEARSKY_CODE_DIRS (default ~/dev), up to three levels down, whose origin is that repo.
-export function findCheckout(repo, roots = (process.env.CLEARSKY_CODE_DIRS || join(homedir(), 'dev')).split(':').filter(Boolean)) {
+const codeDirs = () => (process.env.CLEARSKY_CODE_DIRS || join(homedir(), 'dev')).split(':').filter(Boolean);
+export function findCheckout(repo, roots = codeDirs()) {
   const name = repo.split('/')[1]?.toLowerCase();
   const matches = (dir) => {
     try { return new RegExp(`[:/]${repo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\.git)?\\s*$`, 'im').test(readFileSync(join(dir, '.git', 'config'), 'utf8')); } catch { return false; }
@@ -2004,6 +2006,12 @@ function serve() {
         const repo = url.searchParams.get('repo') || '', number = url.searchParams.get('number') || '';
         if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !/^\d+$/.test(number)) return json(res, 400, { error: 'bad PR reference' });
         return json(res, 200, await reviewerOptions(repo, Number(number)));
+      }
+      // Branches in your clones carrying the key of a ticket you have.
+      if (url.pathname === '/api/branches') {
+        const j = sourceCache.get('jira')?.data || {}, jm = sourceCache.get('jiraMentions')?.data || {};
+        const keys = [...new Set([...(j.assigned || []), ...(jm.tickets || [])].map((t) => t.key).filter(Boolean))];
+        return json(res, 200, { branches: await branchesFor(keys, codeDirs()) });
       }
       if (url.pathname === '/api/actions') return json(res, 200, { actions: localState.actions(stateFile) });
       if (url.pathname === '/api/work') {

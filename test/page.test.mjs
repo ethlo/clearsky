@@ -31,7 +31,7 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
       pullRequest: { author: { login: 'me' }, suggestedReviewers: [{ reviewer: { login: 'anna', name: 'Anna' } }], reviewRequests: { nodes: [] }, reviews: { nodes: [] } } } } });
     if (q.includes('viewer { login }') && !q.includes('search')) return send({ data: { viewer: { login: 'me' } } });
     if (q.includes('reviewRequested: search')) return send({ data: {
-      reviewRequested: { nodes: [pr({ number: 7, title: 'Their change', url: 'https://github.com/acme/api/pull/7', author: { login: 'anna' } })] },
+      reviewRequested: { nodes: [pr({ number: 7, title: 'OPS-77: Their change', url: 'https://github.com/acme/api/pull/7', author: { login: 'anna' } })] },
       myPrs: { nodes: [pr({ headRefName: 'feature/ops-1-certs' })] }, mentions: { nodes: [] }, assigned: { nodes: [] } } });
     send({ data: {} });
   });
@@ -62,6 +62,32 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
   await ticketLink.click();
   await page.waitForSelector('#v-item:not([hidden]) h2:text("SSP-5: Fix capture")');
   assert.match(await page.locator('#item .xrefs').innerText(), /OPS-1/);
+  await page.goto(`${base}/#inbox`);
+  await page.waitForSelector('#list li.r');
+
+  // A ticket that isn't in your lists still gets a link, which opens it here.
+  const other = page.locator('#list li.r', { hasText: 'Their change' }).first().locator('.xref');
+  assert.equal(await other.innerText(), 'OPS-77');
+  await other.click();
+  await page.waitForSelector('#v-item:not([hidden]) h2:text("OPS-77")');
+  await page.goto(`${base}/#inbox`);
+  await page.waitForSelector('#list li.r');
+
+  // Your PRs and Tickets as tables, with the branch.
+  await page.goto(`${base}/#prs`);
+  await page.waitForSelector('#list .wt-head');
+  assert.match(await page.locator('#list li.r.tbl', { hasText: 'SSP-5' }).innerText(), /feature\/ops-1-certs[\s\S]*no reviewer yet/i);
+  if (process.env.SHOT) await page.screenshot({ path: `${process.env.SHOT}/prs.png` });
+  await page.goto(`${base}/#tickets`);
+  await page.waitForSelector('#list li.r.tbl');
+  assert.match(await page.locator('#list li.r.tbl', { hasText: 'Rotate certs' }).innerText(), /api #1[\s\S]*feature\/ops-1-certs/);
+  if (process.env.SHOT) await page.screenshot({ path: `${process.env.SHOT}/tickets.png` });
+  await page.locator('.wt-bar summary').click();
+  await page.uncheck('[data-wcol="b"]');
+  assert.ok(await page.locator('#list li.r.tbl .c-b').first().isHidden(), 'Branch column hides');
+  await page.reload();
+  await page.waitForSelector('#list li.r.tbl');
+  assert.ok(await page.locator('#list li.r.tbl .c-b').first().isHidden(), 'and stays hidden');
   await page.goto(`${base}/#inbox`);
   await page.waitForSelector('#list li.r');
 
