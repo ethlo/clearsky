@@ -73,13 +73,16 @@ clearsky standup      # stand-up summary (add --json for the data)
 clearsky jira-debug   # raw acli output, if Jira data looks wrong
 ```
 
-On the page:
-- ↻ on a panel reloads just that panel (Shift-click reloads everything).
-- ✕ dismisses an item until something new happens on it (a commit, review, comment or status change). Jira mentions are grouped per ticket, so dismissing one hides the ticket until someone mentions you there again.
-- ✓ on a "Do next" task marks it done: it stays hidden until something new happens on it, and "Show N done" lists when you did it (with Undo).
-- The clock on a "Do next" task mutes it for an hour, until tomorrow's stand-up, a week, or a date you pick, even if there's new activity.
+The page has a menu on the left and one work area beside it:
+- **Inbox** is one list, grouped by what it needs from you: **Copilot now** (every open Copilot session, from here, a terminal or VS Code), **Needs you** (reviews, your PRs on your move, mentions), **Your tickets**, and **Waiting on others** (folded into one line). **Reviews**, **Your PRs**, **Mentions** and **Tickets** in the menu show just that part.
+- Click a row (or press ↵) to open it in full in the work area: the PR, ticket or message with its details, a link to open it on GitHub, Jira or Slack, and the Copilot sessions about it. A Copilot session opens as its chat. Esc goes back. Ctrl-click a title to go straight to the source.
+- J/K move through the list, E marks the selected item done, H snoozes it, A opens the Copilot menu for it, O opens it on its site.
+- **Done** (✓) hides an item until something new happens on it (a commit, review, comment or status change). Jira mentions are grouped per ticket, so marking one done hides the ticket until someone mentions you there again.
+- **Snooze** (the clock) hides it for an hour, until tomorrow's stand-up, a week, or a date you pick, even if there's new activity. "Show N done, N snoozed" at the bottom of the list brings them back.
+- **Calendar** in the menu has today as a schedule, and today and tomorrow as agendas; click a meeting for its details. The header of each list says when you're free until.
+- Personal sources, such as School, each get a page under **Personal** in the menu.
 
-Dismissed and muted items are saved in `~/.config/clearsky/state.json`, so the plan respects them too.
+Done and snoozed items are saved in `~/.config/clearsky/state.json`, so the plan respects them too.
 
 "Has feedback" on your PR means someone commented after your latest commit; once you push, the PR shows as waiting for review.
 
@@ -87,7 +90,7 @@ The server also answers JSON on 127.0.0.1: `/api/source/<github|jira|jiraMention
 
 ## Adding a source
 
-Besides the built-in sources, Clearsky loads extra ones, one module each, from `lib/sources/*.mjs` in this repo and from `~/.config/clearsky/sources/*.mjs` (for private ones, like a school or family app). A source declares its settings (they show up under **Other sources** in Settings and are saved to `.env`), a `fetch(ctx)`, and any of these hooks: `items` (rows for its panel, under Needs you or Keeping track), `attention` (notifies when something new turns up), `events` (joins Now / Next; mark `fyi: true` to show without blocking your time) and `standup` (lines for Yesterday and Today). `ctx` gives the source its settings and helpers to fetch JSON or run a CLI. See the comment at the top of [lib/sources.mjs](lib/sources.mjs) for the contract and [test/sources/school.mjs](test/sources/school.mjs) for a complete example. Files that others can write to are skipped.
+Besides the built-in sources, Clearsky loads extra ones, one module each, from `lib/sources/*.mjs` in this repo and from `~/.config/clearsky/sources/*.mjs` (for private ones, like a school or family app). A source declares its settings (they show up under **Other sources** in Settings and are saved to `.env`), a `fetch(ctx)`, and any of these hooks: `items` (rows for its page in the menu; a work source's `needs` rows also show in the Inbox), `attention` (notifies when something new turns up), `events` (joins Now / Next; mark `fyi: true` to show without blocking your time) and `standup` (lines for Yesterday and Today). `ctx` gives the source its settings and helpers to fetch JSON or run a CLI. See the comment at the top of [lib/sources.mjs](lib/sources.mjs) for the contract and [test/sources/school.mjs](test/sources/school.mjs) for a complete example. Files that others can write to are skipped.
 
 Work and personal stay apart: a source sets `area: 'work'` to sit with GitHub, Jira and Slack on the **Work** tab, or leaves it out to land on the **Personal** tab (school, training and the like). Only the calendar mixes the two: personal events show in the day schedule on both tabs.
 
@@ -104,7 +107,7 @@ There is no public API. This uses the one the portal itself uses, as documented 
 
 ## Notifications
 
-While `clearsky serve` runs, it checks GitHub, Jira mentions and Slack every 3 minutes (`CLEARSKY_POLL_MINUTES`). When something new needs you (a review request, a PR turning to your move, a mention), you get a desktop notification with an **Open** button on workdays from 07:00 until two hours after your workday ends. Dismissed and muted items stay quiet. Banners go straight to the desktop over D-Bus (`gdbus`), because Ubuntu's AppArmor profile for `notify-send` blocks the click on **Open**; a newer banner for the same item replaces the old one. Without D-Bus it falls back to `notify-send` (`CLEARSKY_NOTIFY=notify-send` forces it), and without either, the bell in the top bar turns on browser notifications instead. `CLEARSKY_NOTIFY=off` turns them off. New things also get a dot in the page and a count in the tab title until you've looked. A review request notifies when it's (re-)requested, not on every push or comment; a GitHub thread you were mentioned in notifies once; a status that flips back and forth notifies once; more than two at a time become one banner. `GET /api/notifications/log` lists the last 100 sent, to see why something came.
+While `clearsky serve` runs, it checks GitHub, Jira mentions and Slack every 3 minutes (`CLEARSKY_POLL_MINUTES`). When something new needs you (a review request, a PR turning to your move, a mention), you get a desktop notification with an **Open** button on workdays from 07:00 until two hours after your workday ends. Dismissed and muted items stay quiet. Banners go straight to the desktop over D-Bus (`gdbus`), because Ubuntu's AppArmor profile for `notify-send` blocks the click on **Open**; a newer banner for the same item replaces the old one. Without D-Bus it falls back to `notify-send` (`CLEARSKY_NOTIFY=notify-send` forces it), and without either, the bell at the bottom of the menu turns on browser notifications instead. `CLEARSKY_NOTIFY=off` turns them off. New things also get a dot in the page and a count in the tab title until you've looked. A review request notifies when it's (re-)requested, not on every push or comment; a GitHub thread you were mentioned in notifies once; a status that flips back and forth notifies once; more than two at a time become one banner. `GET /api/notifications/log` lists the last 100 sent, to see why something came.
 
 ## Copilot chat
 
@@ -112,17 +115,17 @@ While `clearsky serve` runs, it checks GitHub, Jira mentions and Slack every 3 m
 
 In the panel you can pick the model and reasoning effort, how much Copilot may do: **Ask** (Allow/Deny buttons for each step), **Assisted** (reads and searches run on their own, you OK edits and commands), **Full**, Read only, or Plan only, extra allowed or denied tool patterns, and click a skill to use it. Every mode runs Copilot in its Agent Client Protocol mode, so whenever Copilot wants your OK, even in Full, you get Allow/Deny buttons instead of a refusal, and long builds aren't cut off. Copilot runs in the Clearsky folder (or `COPILOT_CWD`), so the skills below are available. If `copilot` isn't on your PATH, Clearsky looks under nvm, or set `COPILOT_BIN`. Clearsky's own tokens are not passed to it.
 
-**＋ PR or ticket** attaches pull requests and Jira tickets to your next message: pick from what's on your dashboard, or paste a key (SSP-1234), `org/repo#12` or a link. Clearsky adds their details (description, status, files and reviews, latest comments) in front of your message, so you don't have to explain what you mean. The ✦ on any PR or ticket row (and in Do next) asks about it, or runs one of your skills on it, in a new chat with that item attached.
+**＋ PR or ticket** attaches pull requests and Jira tickets to your next message: pick from what's on your dashboard, or paste a key (SSP-1234), `org/repo#12` or a link. Clearsky adds their details (description, status, files and reviews, latest comments) in front of your message, so you don't have to explain what you mean. The ✦ on any PR or ticket row asks about it, or runs one of your skills on it, in a new chat with that item attached.
 
-Type **/** in the message box for skills and, in Ask mode, every slash command your Copilot offers (`/review`, `/plan`, `/compact`…), plus `/new`, `/history` and `/ref` for the panel.
+Type **/** in the message box for skills and, in Ask mode, every slash command your Copilot offers (`/review`, `/plan`, `/compact`…), plus `/new`, `/history` and `/ref` for the chat.
 
-The ☰ menu at the top left has the tabs, Copilot and Settings, and a Light / Dark / Auto theme switch (saved per device). On a wide screen Copilot sits beside the page; on a phone it fills the screen. In Chrome, 🎤 next to Send lets you talk instead of typing; the browser sends the audio to Google to turn it into text, and nothing is sent to Copilot until you press Send.
+A chat uses the whole work area, with what it's about (linked PRs and tickets, folder, status), your skills and its settings on the right. The menu has Settings and a Light / Dark / Auto theme switch (saved per device); on a phone it folds away behind ☰. In Chrome, 🎤 next to Send lets you talk instead of typing; the browser sends the audio to Google to turn it into text, and nothing is sent to Copilot until you press Send.
 
-Tabs along the top of the panel hold the chats that are working or waiting on you, plus the ones you used lately here, each with a status dot. Click one, or press Alt+1…9, to switch; Alt+N starts a new chat. Switching (or reloading the page) doesn't stop a chat: it carries on in the background, and when you come back you see any question it's waiting on and follow it to the end. **Stop** ends a turn on purpose.
+**Copilot** in the menu lists the chats that are working or waiting on you, plus the ones you used lately here, each with a status dot. Click one, or press Alt+1…9, to switch; Alt+N starts a new chat. Switching (or reloading the page) doesn't stop a chat: it carries on in the background, and when you come back you see any question it's waiting on and follow it to the end. **Stop** ends a turn on purpose.
 
 **History** lists your Copilot sessions as Copilot itself knows them, whether you started them here, in a terminal or in your editor, with ones open elsewhere marked. Click one to see the conversation and carry on with it. The chat you had open comes back after a page reload.
 
-Sessions show up next to the PR or ticket they are about: one you started from that row or attached it to, one running in a checkout of the PR's branch, or one with the PR or ticket key in its title or branch. A dot shows if it is working (green), waiting for you (blue) or needs your OK (amber), and a click reopens it; the ✦ menu also offers **↩ Continue**. Any session that is working or waiting, linked or not, is listed in the **Copilot sessions** card under Needs you, and counted in the summary line.
+Sessions show up next to the PR or ticket they are about: one you started from that row or attached it to, one running in a checkout of the PR's branch, or one with the PR or ticket key in its title or branch. A dot shows if it is working (green), waiting for you (blue) or needs your OK (amber), and a click reopens it; the ✦ menu also offers **↩ Continue**. Any session that is working or waiting, linked or not, is listed under **Copilot now** at the top of the Inbox, and one waiting for you counts in the Inbox number.
 
 ## Copilot skills
 

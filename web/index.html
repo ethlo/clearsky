@@ -43,69 +43,208 @@
   a:hover { color: var(--accent); }
   button { font: inherit; cursor: pointer; }
 
-  /* top bar */
-  .bar { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 85%, transparent);
-    backdrop-filter: saturate(1.4) blur(10px); border-bottom: 1px solid var(--line); }
-  .bar-in { max-width: 1280px; margin: 0 auto; padding: 10px 24px; display: flex; align-items: center; gap: 20px; }
-  .brand { display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 15px; letter-spacing: -.01em; }
-  .brand i { width: 22px; height: 22px; border-radius: 6px; display: inline-block;
+  /* Layout: a menu on the left, and one work area that takes the rest of the width.
+     Opening anything (an item, a Copilot chat, the calendar) uses the whole work area. */
+  html, body { height: 100%; }
+  .app { display: grid; grid-template-columns: 236px minmax(0, 1fr); height: 100%; }
+  .work { background: var(--surface); min-width: 0; height: 100%; overflow: hidden; display: flex; flex-direction: column; }
+  .view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .view-b { flex: 1; min-height: 0; overflow-y: auto; }
+  .page { max-width: 1100px; padding: 18px 24px 40px; }
+
+  /* the menu */
+  .side { background: var(--surface-2); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; overflow-y: auto;
+    padding: 12px 8px 10px; font-size: 13.5px; }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 15px; letter-spacing: -.01em; padding: 2px 8px 12px; }
+  .brand i { width: 20px; height: 20px; border-radius: 6px; display: inline-block; flex: none;
     background: linear-gradient(135deg, #60a5fa, #2563eb 60%, #1e40af); box-shadow: inset 0 -6px 8px rgba(255,255,255,.25); }
-  nav { display: flex; gap: 2px; }
-  nav a { color: var(--muted); padding: 6px 12px; border-radius: 8px; font-weight: 500; }
-  nav a:hover { color: var(--text); background: var(--surface-2); }
-  nav a.active { color: var(--text); background: var(--surface); box-shadow: 0 0 0 1px var(--line), var(--shadow); }
-  nav .tab-n { display: inline-block; min-width: 17px; margin-left: 5px; padding: 0 5px; border-radius: 9px; background: var(--accent-soft); color: var(--accent);
-    font-size: 11px; line-height: 17px; text-align: center; font-variant-numeric: tabular-nums; }
-  .plan.day-only { display: block; }
-  .plan.day-only .day { border-top: 0; padding-top: 0; margin-top: 0; }
-  .bar .spacer { flex: 1; }
-  /* menu, top left */
-  .menu-btn { width: 34px; height: 34px; padding: 0; justify-content: center; position: relative; }
-  .menu-btn .tab-n { position: absolute; top: -5px; right: -7px; margin: 0; }
-  .where { color: var(--muted); font-weight: 500; }
-  .drawer-scrim { position: fixed; inset: 0; z-index: 45; background: rgba(16, 24, 40, .3); }
-  .drawer { position: fixed; z-index: 46; top: 0; left: 0; bottom: 0; width: min(280px, 85vw); background: var(--surface); border-right: 1px solid var(--line);
-    box-shadow: var(--shadow-lg); display: flex; flex-direction: column; padding: 12px; gap: 4px; overflow-y: auto; }
-  .drawer .brand { padding: 6px 8px 12px; }
-  .drawer nav { flex-direction: column; gap: 2px; }
-  .drawer nav a { display: flex; align-items: center; gap: 10px; padding: 9px 10px; font-size: 14.5px; }
-  .drawer nav a .tab-n { margin-left: auto; }
-  .drawer nav a .ico { width: 18px; text-align: center; color: var(--muted); }
-  .drawer nav a.active .ico { color: var(--accent); }
-  .drawer hr { border: 0; border-top: 1px solid var(--line); margin: 8px 4px; }
-  .drawer .lbl { font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 6px 10px 4px; }
-  .seg { display: flex; gap: 2px; margin: 0 8px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
-  .seg button { flex: 1; border: 0; background: none; color: var(--text-2); border-radius: 6px; padding: 5px 0; font-size: 13px; }
-  .seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: 0 0 0 1px var(--line), var(--shadow); }
-  .drawer .foot { margin-top: auto; padding: 10px; font-size: 12px; color: var(--muted); }
-  .status { color: var(--muted); font-size: 12.5px; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
-  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
+  .side .sg { display: flex; align-items: center; gap: 6px; margin: 14px 8px 4px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .side .sg button { margin-left: auto; border: 0; background: none; color: var(--muted); padding: 0 4px; border-radius: 4px; font-size: 15px; line-height: 1; }
+  .side .sg button:hover { color: var(--accent); background: var(--surface); }
+  .ni { display: flex; align-items: center; gap: 9px; padding: 5px 8px; border-radius: 7px; color: var(--text-2); min-width: 0; border: 0; background: none;
+    font: inherit; width: 100%; text-align: left; }
+  .ni:hover { background: color-mix(in srgb, var(--surface) 70%, transparent); color: var(--text); }
+  .ni.on { background: var(--surface); color: var(--text); font-weight: 550; box-shadow: 0 0 0 1px var(--line), var(--shadow); }
+  .ni .ico { width: 16px; text-align: center; color: var(--muted); flex: none; }
+  .ni .lab { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ni b { font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12.5px; }
+  .ni b.hot { color: var(--accent); font-weight: 600; }
+  .ni.cp { align-items: flex-start; }
+  .ni.cp .lab small { display: block; color: var(--muted); font-size: 11.5px; font-weight: 400; overflow: hidden; text-overflow: ellipsis; }
+  .ni.cp .live { width: 7px; height: 7px; border-radius: 50%; background: var(--line-strong); flex: none; margin: 6px 4px 0 4px; }
+  .ni.cp .live.s-working { background: var(--green); animation: pulse 1.2s ease-in-out infinite; }
+  .ni.cp .live.s-waiting { background: var(--accent); }
+  .ni.cp .live.s-needs-you { background: var(--amber); }
+  #list:focus { outline: none; }
+  .ni.cp .x { visibility: hidden; color: var(--muted); padding: 0 3px; border-radius: 4px; }
+  .ni.cp:hover .x { visibility: visible; }
+  .ni.cp .x:hover { color: var(--text); background: var(--line); }
+  .side-foot { margin-top: auto; padding: 14px 8px 0; display: flex; flex-direction: column; gap: 8px; }
+  .side-foot .row1 { display: flex; align-items: center; gap: 6px; }
+  .status { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 7px; white-space: nowrap; flex: 1; min-width: 0; }
+  .status .txt { overflow: hidden; text-overflow: ellipsis; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex: none; }
   .dot.busy { background: var(--accent); animation: pulse 1s ease-in-out infinite; }
   @keyframes pulse { 50% { opacity: .3; } }
-  .icon-btn { border: 1px solid var(--line); background: var(--surface); color: var(--text-2); border-radius: 8px; height: 32px;
-    padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; box-shadow: var(--shadow); }
+  .seg { display: flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+  .seg button { flex: 1; border: 0; background: none; color: var(--text-2); border-radius: 6px; padding: 3px 0; font-size: 12px; }
+  .seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: 0 0 0 1px var(--line), var(--shadow); }
+  .icon-btn { border: 1px solid var(--line); background: var(--surface); color: var(--text-2); border-radius: 7px; height: 28px;
+    padding: 0 9px; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; white-space: nowrap; }
   .icon-btn:hover { border-color: var(--line-strong); color: var(--text); }
+  .icon-btn.small { height: 26px; padding: 0 8px; }
+  .icon-btn.primary, .primary { background: var(--text); border: 1px solid var(--text); color: var(--bg); border-radius: 7px; font-weight: 500; }
+  .icon-btn.primary:hover, .primary:hover { color: var(--bg); filter: brightness(1.15); }
+  .primary { height: 28px; padding: 0 12px; }
+  #notify.on { color: var(--accent); }
 
-  .page { max-width: 1280px; margin: 0 auto; padding: 20px 24px 48px; }
+  /* phone and narrow windows: the menu slides in from the left */
+  .topbar { display: none; }
+  .drawer-scrim { position: fixed; inset: 0; z-index: 45; background: rgba(16, 24, 40, .3); }
+  @media (max-width: 860px) {
+    .app { grid-template-columns: minmax(0, 1fr); }
+    .side { position: fixed; z-index: 46; top: 0; left: 0; bottom: 0; width: min(280px, 85vw); box-shadow: var(--shadow-lg); }
+    .side:not(.open) { display: none; }
+    .topbar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+    .topbar .brand { padding: 0; }
+    .page { padding: 14px 14px 32px; }
+  }
+  .menu-btn { width: 32px; height: 32px; padding: 0; justify-content: center; position: relative; }
+  .tab-n { display: inline-block; min-width: 17px; padding: 0 5px; border-radius: 9px; background: var(--accent-soft); color: var(--accent);
+    font-size: 11px; line-height: 17px; text-align: center; font-variant-numeric: tabular-nums; }
+  .menu-btn .tab-n { position: absolute; top: -5px; right: -7px; }
 
-  /* plan */
-  .plan { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow);
-    padding: 18px 20px; position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 24px; }
-  .eyebrow { font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
-  .now-line { font-size: 17px; font-weight: 600; letter-spacing: -.01em; line-height: 1.35; }
-  .now-sub { color: var(--text-2); margin-top: 4px; }
-  .now-sub a, .join { color: var(--accent); font-weight: 500; }
-  .standup-alert { margin-top: 12px; display: inline-flex; gap: 8px; align-items: center; background: var(--amber-soft); color: var(--amber);
-    border-radius: 8px; padding: 6px 10px; font-weight: 500; font-size: 13px; }
-  .standup-alert a { color: inherit; text-decoration: underline; }
-  .agenda { display: flex; flex-direction: column; gap: 2px; margin-top: 14px; }
-  .agenda div { display: flex; gap: 10px; font-size: 13px; color: var(--text-2); }
-  .agenda time { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 44px; flex: none; white-space: nowrap; }
-  .agenda .on { color: var(--accent); font-weight: 500; }
-  .agenda .fyi { color: var(--muted); }
-  .agenda small { color: var(--muted); font-size: 11.5px; }
+  /* the header of every view */
+  .vh { display: flex; align-items: center; gap: 10px; padding: 0 20px; height: 48px; flex: none; border-bottom: 1px solid var(--line); min-width: 0; }
+  .vh h1 { font-size: 14.5px; font-weight: 600; margin: 0; letter-spacing: -.005em; white-space: nowrap; }
+  .vh .sub { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .vh .spacer { flex: 1; }
+  .back { border: 1px solid var(--line); background: var(--surface); color: var(--text-2); border-radius: 7px; height: 26px; padding: 0 8px; font-size: 12.5px; white-space: nowrap; }
+  .back:hover { color: var(--text); border-color: var(--line-strong); }
+  .nowline { color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: 0; background: none; padding: 0; min-width: 0; }
+  .nowline b { color: var(--text-2); font-weight: 550; }
+  .nowline:hover, .nowline:hover b { color: var(--accent); }
+  .standup-alert { display: inline-flex; gap: 6px; align-items: center; background: var(--amber-soft); color: var(--amber);
+    border-radius: 7px; padding: 3px 9px; font-weight: 500; font-size: 12.5px; white-space: nowrap; }
+  .standup-alert:hover { color: var(--amber); text-decoration: underline; }
+
+  /* the inbox: one dense list, grouped by what it needs from you */
+  .gh { display: flex; align-items: center; gap: 8px; padding: 7px 20px; background: var(--surface-2); border-bottom: 1px solid var(--line);
+    font-size: 12.5px; font-weight: 550; color: var(--text-2); position: sticky; top: 0; z-index: 1; white-space: nowrap; }
+  .gh .n { color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; }
+  .gh .more-l { color: var(--muted); font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .gh button { border: 0; background: none; color: var(--muted); padding: 0; font: inherit; font-weight: 400; }
+  .gh button:hover { color: var(--accent); }
+  ul.list { list-style: none; margin: 0; padding: 0; }
+  .r { display: grid; grid-template-columns: 16px minmax(84px, 150px) minmax(0, 1fr) auto 44px; gap: 12px; align-items: center;
+    padding: 0 20px; min-height: 38px; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 13px; position: relative; }
+  .r:hover { background: color-mix(in srgb, var(--surface-2) 60%, transparent); }
+  .r.sel { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+  .r:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .r .id { font: 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .r .t { min-width: 0; display: flex; align-items: baseline; gap: 8px; padding: 9px 0; }
+  .r .t a { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; min-width: 0; }
+  .r .t .step { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1 1 0; min-width: 0; }
+  .r.quiet .t a { color: var(--text-2); }
+  .r .lb { display: flex; gap: 6px; align-items: center; justify-content: flex-end; min-width: 0; }
+  .r .age { color: var(--muted); text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .r .ra { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); display: none; gap: 2px; background: var(--surface); border: 1px solid var(--line);
+    border-radius: 7px; padding: 2px; box-shadow: var(--shadow); }
+  .r:hover .ra, .r.sel .ra, .r:focus-within .ra { display: flex; }
+  .r:hover .lb, .r.sel .lb, .r:focus-within .lb { margin-right: 48px; }
+  .r:hover .age, .r.sel .age, .r:focus-within .age { visibility: hidden; }
+  .ra button { border: 0; background: none; color: var(--muted); padding: 2px 6px; border-radius: 5px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
+  .ra button:hover { background: var(--surface-2); color: var(--text); }
+  .ra .ask { color: var(--accent); }
+  .new-dot { position: absolute; left: 6px; top: 50%; margin-top: -3px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .lbl { font-size: 11.5px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--text-2); display: inline-flex; align-items: center; gap: 5px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+  .lbl i { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+  .lbl.red i { background: var(--red); } .lbl.amber i { background: var(--amber); } .lbl.green i { background: var(--green); } .lbl.blue i { background: var(--accent); }
+  .empty { color: var(--muted); padding: 12px 20px; font-size: 13px; }
+  .err { color: var(--red); border-left: 2px solid var(--red); padding: 2px 0 2px 10px; font-size: 12.5px; margin: 8px 20px; overflow-wrap: anywhere; }
+  .inbox-foot { padding: 10px 20px 24px; font-size: 12.5px; color: var(--muted); }
+  .muted-toggle { border: 0; background: none; color: var(--muted); font: inherit; padding: 0; }
+  .muted-toggle:hover { color: var(--text); text-decoration: underline; }
+  .muted-list { list-style: none; margin: 6px 0 0; padding: 0; font-size: 13px; max-width: 760px; }
+  .muted-list li { display: flex; gap: 8px; align-items: baseline; padding: 4px 0; color: var(--text-2); }
+  .muted-list a { color: var(--text-2); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .muted-list span { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .muted-list button { border: 0; background: none; color: var(--accent); font: inherit; font-size: 12px; padding: 0; }
+  .kb { display: flex; gap: 14px; align-items: center; padding: 6px 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; flex: none; flex-wrap: wrap; }
+  .kb span { display: inline-flex; gap: 5px; align-items: center; }
+  kbd { font: 500 10.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace; border: 1px solid var(--line-strong); border-bottom-width: 2px; border-radius: 4px; padding: 2px 5px; color: var(--text-2); }
+  @media (max-width: 860px) {
+    .r { grid-template-columns: 16px minmax(0, 1fr) auto; padding: 0 14px; }
+    .r .id, .r .lb { display: none; }
+    .kb { display: none; }
+  }
+
+  /* status glyphs: the one place in the list with colour */
+  .st { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--muted); position: relative; flex: none; display: inline-block; }
+  .st.rev { border-color: var(--amber); }
+  .st.chg { border-color: var(--red); background: conic-gradient(var(--red) 0 50%, transparent 0); }
+  .st.rdy { border-color: var(--green); background: var(--green); }
+  .st.prog { border-color: var(--amber); background: conic-gradient(var(--amber) 0 25%, transparent 0); }
+  .st.wait { border-style: dotted; }
+  .st.todo { border-color: var(--line-strong); }
+  .st.ment { border-color: var(--accent); }
+  .st.ment::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--accent); }
+  .st.s-working { border-color: var(--green); border-top-color: transparent; animation: spin 1.1s linear infinite; }
+  .st.s-needs-you { border-color: var(--amber); background: var(--amber); }
+  .st.s-waiting { border-color: var(--accent); }
+  .st.s-closed { border-color: var(--line-strong); }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .st.s-working, .ni.cp .live.s-working, .dot.busy { animation: none; } }
+
+  /* an item opened in full */
+  .item { max-width: 860px; padding: 22px 28px 40px; }
+  .item .src { color: var(--muted); font-size: 12.5px; display: flex; gap: 8px; align-items: center; }
+  .item h2 { font-size: 20px; line-height: 1.3; letter-spacing: -.01em; margin: 6px 0 4px; overflow-wrap: anywhere; }
+  .item .why { color: var(--text-2); margin-bottom: 12px; }
+  .facts { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 9px 0; border-block: 1px solid var(--line); color: var(--text-2); font-size: 12.5px; }
+  .facts .good { color: var(--green); } .facts .bad { color: var(--red); } .facts .warn { color: var(--amber); }
+  .acts-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 18px; }
+  .acts-row .icon-btn { height: 30px; }
+  .item h3 { font-size: 12px; color: var(--muted); font-weight: 600; margin: 18px 0 6px; }
+  .item .desc { white-space: pre-wrap; color: var(--text-2); line-height: 1.6; overflow-wrap: anywhere; }
+  .item .quote { border-left: 2px solid var(--line-strong); padding: 2px 0 2px 12px; color: var(--text); font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .item .cps { display: flex; flex-wrap: wrap; gap: 6px; }
+  .msg-r { padding: 12px 0; border-top: 1px solid var(--line); }
+  .msg-r:first-child { border-top: 0; }
+  .msg-r .who { font-size: 12.5px; color: var(--muted); }
+  .msg-r .who b { color: var(--text); font-weight: 600; }
+  .msg-r.mine .who b { color: var(--accent); }
+  .msg-r .sub { font-weight: 600; margin-top: 4px; }
+  .msg-r .txt a { color: var(--accent); }
+  .msg-r .txt { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 6px; line-height: 1.5; }
+  .files { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .files a, .files span { font-size: 12.5px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); color: var(--text); }
+  .files a:hover { border-color: var(--accent); color: var(--accent); }
+  .files .size { color: var(--muted); }
+
+  /* calendar */
+  .cal { padding: 18px 24px 40px; max-width: 1200px; }
+  .cal .now-big { font-size: 22px; font-weight: 600; letter-spacing: -.015em; margin: 2px 0 2px; }
+  .cal .now-sub { color: var(--text-2); }
+  .cal .now-sub a, .join { color: var(--accent); font-weight: 500; }
+  .cal-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 28px; margin-top: 20px; }
+  .cal-cols h3 { margin: 0 0 8px; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .ag { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 0 10px; padding: 6px 8px; border-radius: 7px; cursor: pointer; }
+  .ag:hover { background: var(--surface-2); }
+  .ag time { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .ag .w { grid-column: 2; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+  .ag.past { opacity: .5; }
+  .ag.nowrow { color: var(--green); cursor: default; }
+  .ag.nowrow:hover { background: none; }
+  .ag.on, .ag.next { background: var(--surface-2); box-shadow: inset 2px 0 0 var(--accent); }
+  .ag.fyi .t { color: var(--violet); }
+  .ag .more { grid-column: 2; margin-top: 6px; font-size: 12.5px; color: var(--text-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .ag .more dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 0 0 6px; }
+  .ag .more dt { color: var(--muted); } .ag .more dd { margin: 0; }
+  .cal .day { margin-top: 18px; }
+
   /* today as a schedule */
-  .day { grid-column: 1 / -1; border-top: 1px solid var(--line); padding-top: 14px; margin-top: -6px; }
   .day-scroll { overflow-x: auto; overflow-y: hidden; }
   .day-axis { position: relative; min-width: 640px; }
   .day-hours { position: relative; height: 18px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -142,53 +281,8 @@
   .ev-pop .desc { margin-top: 8px; white-space: pre-wrap; max-height: 140px; overflow: auto; color: var(--text-2); font-size: 12.5px;
     border-top: 1px solid var(--line); padding-top: 8px; }
   .ev-pop .note { margin-top: 8px; font-size: 12px; color: var(--muted); }
-  .todo { list-style: none; margin: 0; padding: 0; counter-reset: n; }
-  .todo li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto auto; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); align-items: start; }
-  .todo li:first-child { border-top: 0; padding-top: 0; }
-  .todo li::before { counter-increment: n; content: counter(n); width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft);
-    color: var(--accent); font-size: 12px; font-weight: 600; display: grid; place-items: center; }
-  .todo .t { font-weight: 550; }
-  .todo .d { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; }
-  .todo .m { color: var(--muted); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
-  /* summary line and zones */
-  .summary { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 18px 2px 4px; font-size: 13.5px; color: var(--muted); }
-  .summary a { color: var(--muted); white-space: nowrap; }
-  .summary a b { font-weight: 600; font-variant-numeric: tabular-nums; margin-right: 3px; }
-  .summary a.hot { color: var(--text); }
-  .summary a.hot b { color: var(--accent); }
-  .summary a.bad b { color: var(--red); }
-  .summary a:hover { color: var(--accent); }
-  .zone { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 22px 2px 10px; }
-  .card.clear { background: transparent; box-shadow: none; }
-  .card.clear h2 { color: var(--muted); font-weight: 500; }
-  .card.clear .card-b { padding-bottom: 4px; }
-  .card.clear .empty { padding: 0 0 10px; font-size: 13px; }
-  .quiet .card { background: transparent; box-shadow: none; }
-  .quiet .card-h h2 { font-weight: 550; color: var(--text-2); }
-  .quiet .row { padding: 7px 0; }
-  .quiet .row .title { font-weight: 450; color: var(--text-2); }
-  .quiet .row .meta { font-size: 12px; }
-  /* kpis */
-  .kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
-  .kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px 14px; }
-  .kpi b { display: block; font-size: 24px; font-weight: 650; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.2; }
-  .kpi span { color: var(--muted); font-size: 12.5px; }
-  .kpi.alert b { color: var(--red); }
-
-  /* cards */
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 16px; align-items: start; }
-  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); min-width: 0; }
-  .card-h { display: flex; align-items: center; gap: 8px; padding: 14px 18px 10px; }
-  .card-h h2 { font-size: 14.5px; font-weight: 600; margin: 0; letter-spacing: -.005em; }
-  .todo li { position: relative; }
-  .mute { flex: none; border: 0; background: none; color: var(--muted); padding: 3px; border-radius: 6px; cursor: pointer; opacity: .45; display: grid; place-items: center; }
-  .acts { display: flex; gap: 2px; }
-  .done { flex: none; border: 0; background: none; color: var(--muted); padding: 3px; border-radius: 6px; cursor: pointer; opacity: .45; display: grid; place-items: center; }
-  .todo li:hover .mute, .mute:focus-visible, .todo li:hover .done, .done:focus-visible { opacity: 1; }
-  .mute:hover { background: var(--surface-2); color: var(--text); }
-  .done:hover { background: var(--green-soft); color: var(--green); }
-  @media (hover: none) { .mute, .done { opacity: .8; } }
+  /* small menus: snooze, Copilot on an item */
   .menu { position: absolute; z-index: 30; min-width: 190px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
     box-shadow: var(--shadow-lg); padding: 6px; display: flex; flex-direction: column; }
   .menu[hidden] { display: none; }
@@ -197,47 +291,16 @@
   .menu button:hover, .menu button:focus-visible { background: var(--surface-2); outline: none; }
   .menu-date { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--text-2); padding: 6px 8px; border-top: 1px solid var(--line); margin-top: 4px; }
   .menu-date input { font: inherit; font-size: 13px; color: var(--text); background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
-  .muted-toggle { margin-top: 10px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 12.5px; padding: 0; cursor: pointer; }
-  .muted-toggle:hover { color: var(--text); text-decoration: underline; }
-  .muted-list { list-style: none; margin: 6px 0 0; padding: 0; font-size: 13px; }
-  .muted-list li { display: flex; gap: 8px; align-items: baseline; padding: 4px 0; color: var(--text-2); }
-  .muted-list a { color: var(--text-2); text-decoration: none; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .muted-list span { color: var(--muted); font-size: 12px; white-space: nowrap; }
-  .muted-list button { border: 0; background: none; color: var(--accent); font: inherit; font-size: 12px; cursor: pointer; padding: 0; }
-  .rf { margin-left: auto; width: 26px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 6px;
-    background: transparent; color: var(--muted); cursor: pointer; padding: 0; }
-  .rf:hover { background: var(--surface-2); color: var(--text); }
+  .rf { width: 26px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; padding: 0; }
+  .rf:hover { background: var(--surface); color: var(--text); }
   .rf:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   .rf.spin svg { animation: spin .8s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .plan > .rf { position: absolute; top: 12px; right: 12px; }
-  .count { font-size: 12px; font-weight: 600; color: var(--text-2); background: var(--surface-2); border-radius: 99px; padding: 1px 8px; }
-  .card-b { padding: 0 18px 12px; }
-  .group { font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 10px 0 2px; }
-  ul.rows { list-style: none; margin: 0; padding: 0; }
-  .row { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--line); }
-  .group + ul .row:first-child, ul.rows .row:first-child { border-top: 0; }
-  .row .main { flex: 1; min-width: 0; }
-  .row .title { font-weight: 500; overflow-wrap: anywhere; }
-  .row .meta { color: var(--muted); font-size: 12.5px; margin-top: 1px; overflow-wrap: anywhere; }
-  .row .quote { color: var(--text-2); font-size: 12.5px; margin-top: 4px; padding-left: 10px; border-left: 2px solid var(--line-strong);
-    overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-  .hide { flex: none; border: 0; background: none; color: var(--muted); opacity: .35; cursor: pointer; padding: 2px 4px; border-radius: 6px; }
-  .row:hover .hide, .hide:focus { opacity: 1; }
-  @media (hover: none) { .hide { opacity: .7; } }
-  .hide:hover { background: var(--surface-2); color: var(--text); }
-  .ask { flex: none; border: 0; background: none; color: var(--accent); opacity: .35; cursor: pointer; padding: 2px 5px; border-radius: 6px; font-size: 13px; }
-  .row:hover .ask, .todo li:hover .ask, .ask:focus { opacity: 1; }
-  @media (hover: none) { .ask { opacity: .7; } }
-  .ask:hover { background: var(--accent-soft); }
-  .badge { flex: none; display: inline-block; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 6px; white-space: nowrap; margin-top: 1px; }
+  .badge { flex: none; display: inline-block; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 6px; white-space: nowrap; }
   .b-red { background: var(--red-soft); color: var(--red); } .b-amber { background: var(--amber-soft); color: var(--amber); }
   .b-green { background: var(--green-soft); color: var(--green); } .b-blue { background: var(--blue-soft); color: var(--blue); }
   .b-gray { background: var(--gray-soft); color: var(--text-2); }
   /* Labels that only say what something is stay quiet; colour is for what needs you. */
   .b-blue, .b-gray { background: none; color: var(--muted); font-weight: 500; padding: 2px 0; min-width: 0; }
-  .empty { color: var(--muted); padding: 10px 0 6px; }
-  .cps { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 5px; }
   .cp-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; border: 1px solid var(--line); background: var(--surface-2);
     color: var(--text-2); border-radius: 99px; font-size: 11.5px; padding: 1px 8px 1px 6px; cursor: pointer; }
   .cp-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; max-width: 260px; }
@@ -248,100 +311,91 @@
   .cp-chip.s-waiting i { background: var(--accent); }
   .cp-chip.s-needs-you i { background: var(--amber); }
   .cp-chip.s-needs-you { border-color: var(--amber); color: var(--amber); }
-  .new-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin: 7px -4px 0 -12px; }
-  #notify.on { color: var(--accent); }
-  .err { color: var(--red); border-left: 2px solid var(--red); padding: 2px 0 2px 10px; font-size: 12.5px; margin: 4px 0 8px; overflow-wrap: anywhere; }
-  .more { border: 0; background: none; color: var(--accent); padding: 8px 0 2px; font-weight: 500; }
+  .r .cp-chip span { max-width: 140px; }
+  .more { border: 0; background: none; color: var(--accent); padding: 8px 20px 2px; font-weight: 500; }
 
   /* skeleton */
   .sk { height: 12px; border-radius: 6px; background: linear-gradient(90deg, var(--surface-2), var(--line), var(--surface-2));
     background-size: 200% 100%; animation: sk 1.2s ease-in-out infinite; }
   @keyframes sk { to { background-position: -200% 0; } }
-  .sk-row { padding: 12px 0; border-top: 1px solid var(--line); }
-  .sk-row:first-child { border-top: 0; }
+  .sk-row { padding: 12px 20px; border-bottom: 1px solid var(--line); }
   .sk-row .sk + .sk { margin-top: 7px; width: 55%; height: 10px; }
+
+  /* a source shown on its own page, such as School */
+  .card-h { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .card-h h2 { font-size: 14.5px; font-weight: 600; margin: 0; }
+  .count { font-size: 12px; font-weight: 600; color: var(--text-2); background: var(--surface-2); border-radius: 99px; padding: 1px 8px; }
+  .card-h .rf { margin-left: auto; }
+  .src-page .err { margin-left: 0; margin-right: 0; }
+  .src-page .empty, .src-page .more { padding-left: 0; }
+  ul.rows { list-style: none; margin: 0; padding: 0; }
+  .row { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--line); position: relative; }
+  ul.rows .row:first-child { border-top: 0; }
+  .row .main { flex: 1; min-width: 0; }
+  .row .title { font-weight: 500; overflow-wrap: anywhere; }
+  .row .meta { color: var(--muted); font-size: 12.5px; margin-top: 1px; overflow-wrap: anywhere; }
+  .row .quote { color: var(--text-2); font-size: 12.5px; margin-top: 4px; padding-left: 10px; border-left: 2px solid var(--line-strong);
+    overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .hide { flex: none; border: 0; background: none; color: var(--muted); opacity: .35; cursor: pointer; padding: 2px 4px; border-radius: 6px; }
+  .row:hover .hide, .hide:focus { opacity: 1; }
+  .row .new-dot { left: -12px; top: 17px; }
 
   /* stand-up */
   .su { max-width: 860px; }
-  .su-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
-  .su-head h1 { font-size: 20px; letter-spacing: -.02em; margin: 0; }
-  .su-head .sub { color: var(--muted); font-size: 13px; }
-  .primary { border: 0; background: var(--accent); color: #fff; border-radius: 8px; height: 32px; padding: 0 12px; font-weight: 500; }
-  .primary:hover { filter: brightness(1.08); }
-  .su-card { padding: 6px 20px 14px; margin-bottom: 12px; }
-  .su-card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 12px 0 4px; }
+  .su-card { padding: 4px 0 14px; border-bottom: 1px solid var(--line); }
+  .su-card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 12px 0 4px; }
   .su-card ul { margin: 0; padding-left: 18px; }
   .su-card li { padding: 4px 0; }
-  .ref { color: var(--accent); font-weight: 550; border-bottom: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent); }
-  .ref:hover { border-bottom-style: solid; }
+  a.ref { color: var(--accent); font-weight: 550; border-bottom: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent); }
+  a.ref:hover { border-bottom-style: solid; }
 
   /* hover card */
-  a.kpi { display: block; color: inherit; text-decoration: none; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
-  a.kpi:hover { border-color: var(--line-strong); box-shadow: var(--shadow-lg); }
-  .card.flash { animation: flash 1.2s ease-out; }
-  @keyframes flash { 0% { box-shadow: 0 0 0 3px var(--accent); } 100% { box-shadow: var(--shadow); } }
-  .group { scroll-margin-top: 80px; }
-  .card { scroll-margin-top: 70px; }
-  /* Copilot chat */
-  .icon-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .icon-btn.primary:hover { color: #fff; filter: brightness(1.08); }
-  .icon-btn.small { height: 28px; font-size: 12.5px; padding: 0 10px; white-space: nowrap; }
-  .chat { position: fixed; z-index: 40; top: 0; right: 0; bottom: 0; width: min(460px, 100vw); background: var(--surface);
-    border-left: 1px solid var(--line); box-shadow: var(--shadow-lg); display: flex; flex-direction: column; }
-  .chat.max { width: 100vw; }
-  .chat.max .chat-log, .chat.max .chat-in, .chat.max .chat-opts, .chat.max .chat-skills { padding-left: max(14px, calc((100vw - 900px) / 2)); padding-right: max(14px, calc((100vw - 900px) / 2)); }
-  .chat-h { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
-  .chat-h .spacer { flex: 1; }
-  .chat-sub { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .cp-tabs { display: flex; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: thin; align-items: center; }
-  .cp-tab { display: inline-flex; align-items: center; gap: 6px; flex: none; max-width: 190px; border: 1px solid transparent; background: none; color: var(--text-2);
-    border-radius: 7px; padding: 4px 8px; font-size: 12.5px; }
-  .cp-tab:hover { background: var(--surface-2); color: var(--text); }
-  .cp-tab.on { background: var(--surface); border-color: var(--line); color: var(--text); box-shadow: var(--shadow); font-weight: 500; }
-  .cp-tab span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .cp-tab i { width: 7px; height: 7px; border-radius: 50%; background: var(--line-strong); flex: none; }
-  .cp-tab.s-working i { background: var(--green); animation: pulse 1.2s ease-in-out infinite; }
-  .cp-tab.s-waiting i { background: var(--accent); }
-  .cp-tab.s-needs-you i { background: var(--amber); }
-  .cp-tab kbd { font: 10.5px ui-monospace, monospace; color: var(--muted); }
-  .cp-tab .x { color: var(--muted); padding: 0 2px; border-radius: 4px; visibility: hidden; }
-  .cp-tab:hover .x { visibility: visible; }
-  .cp-tab .x:hover { color: var(--text); background: var(--line); }
-  .cp-tabs .add { flex: none; border: 0; background: none; color: var(--muted); font-size: 16px; padding: 0 8px; border-radius: 6px; }
-  .cp-tabs .add:hover { color: var(--accent); background: var(--surface-2); }
-  .chat.max .cp-tabs { padding-left: max(10px, calc((100vw - 900px) / 2)); padding-right: max(10px, calc((100vw - 900px) / 2)); }
-  .chat-ctx { display: flex; flex-direction: column; gap: 4px; padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--surface-2); font-size: 12.5px; }
-  .chat-ctx .ctx-line { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--text-2); }
-  .chat-ctx .ctx-title { font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hc { position: absolute; z-index: 50; width: 380px; max-width: calc(100vw - 24px); background: var(--surface); border: 1px solid var(--line);
+    border-radius: 12px; box-shadow: var(--shadow-lg); padding: 14px 16px; font-size: 13px; opacity: 0; transform: translateY(4px);
+    transition: opacity .12s, transform .12s; pointer-events: none; }
+  .hc.on { opacity: 1; transform: none; pointer-events: auto; }
+  .hc .top { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 12px; }
+  .hc h3 { font-size: 15px; line-height: 1.35; margin: 6px 0 6px; letter-spacing: -.01em; }
+  .hc .people { color: var(--text-2); font-size: 12.5px; }
+  .hc p { color: var(--text-2); margin: 8px 0 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; }
+  .hc .foot { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+  .hc .foot a { color: var(--accent); font-weight: 550; }
+
+  /* Copilot: the chat on the left, what it's about and its settings on the right */
+  .cpw { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 300px; position: relative; }
+  .cp-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+  .cp-side { border-left: 1px solid var(--line); overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; font-size: 12.5px; }
+  .cp-side h4 { margin: 0 0 6px; font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  @media (max-width: 1000px) { .cpw { grid-template-columns: minmax(0, 1fr); } .cp-side { display: none; } }
+  .chat-log, .cp-main .chat-refs, .cp-main .chat-in { width: 100%; max-width: 860px; margin: 0 auto; }
+  .chat-ctx { display: flex; flex-direction: column; gap: 6px; }
+  .chat-ctx .ctx-line { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--text-2); flex-wrap: wrap; }
+  .chat-ctx .ctx-title { font-weight: 600; color: var(--text); font-size: 13px; overflow-wrap: anywhere; }
   .chat-ctx .ctx-st { flex: none; display: inline-flex; align-items: center; gap: 5px; color: var(--muted); }
   .chat-ctx .ctx-st i { width: 7px; height: 7px; border-radius: 50%; background: var(--line-strong); }
   .chat-ctx .s-working i { background: var(--green); animation: pulse 1.2s ease-in-out infinite; }
   .chat-ctx .s-waiting i { background: var(--accent); }
   .chat-ctx .s-needs-you i { background: var(--amber); }
-  .chat-ctx .ctx-dir { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; }
-  .chat-ctx .ctx-item { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+  .chat-ctx .ctx-dir { color: var(--muted); overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; }
+  .chat-ctx .ctx-item { display: flex; align-items: baseline; gap: 6px; min-width: 0; flex-wrap: wrap; }
   .chat-ctx .ctx-item a { color: var(--text); font-weight: 500; flex: none; }
   .chat-ctx .ctx-item a:hover { color: var(--accent); }
-  .chat-ctx .ctx-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
-  .chat-ctx .ctx-item .badge { flex: none; }
-  .chat.max .chat-ctx { padding-left: max(14px, calc((100vw - 900px) / 2)); padding-right: max(14px, calc((100vw - 900px) / 2)); }
-  .chat-opts { display: flex; flex-wrap: wrap; gap: 8px 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 12.5px; color: var(--text-2); }
-  .chat-opts label { display: flex; align-items: center; gap: 6px; }
+  .chat-ctx .ctx-item span { color: var(--text-2); }
+  .chat-opts { display: flex; flex-direction: column; gap: 8px; color: var(--text-2); }
+  .chat-opts label { display: flex; align-items: center; gap: 6px; justify-content: space-between; }
   .chat-opts input, .chat-opts select { font: inherit; font-size: 12.5px; color: var(--text); background: var(--surface-2); border: 1px solid var(--line);
-    border-radius: 6px; padding: 3px 6px; }
-  #cp-model { width: 150px; }
-  .cp-tools { width: 100%; }
+    border-radius: 6px; padding: 3px 6px; min-width: 0; width: 170px; }
   .cp-tools summary { cursor: pointer; color: var(--muted); }
   .cp-tools label { margin-top: 6px; }
-  .cp-tools input { flex: 1; }
   .cp-tools .hint { color: var(--muted); font-size: 11.5px; margin-top: 4px; }
-  .chat-skills { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 14px 0; }
-  .chat-skills:empty { display: none; }
+  .chat-skills { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chat-skills:empty::after { content: 'No skills found'; color: var(--muted); }
   .chip { border: 1px solid var(--line); background: var(--surface-2); color: var(--text-2); border-radius: 99px; font: inherit; font-size: 12px;
     padding: 3px 10px; cursor: pointer; }
   .chip:hover { border-color: var(--accent); color: var(--accent); }
-  .chat-log { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
-  .msg { font-size: 13.5px; line-height: 1.55; overflow-wrap: anywhere; }
+  .chat-log { flex: 1; overflow-y: auto; padding: 18px 24px; display: flex; flex-direction: column; gap: 12px; }
+  .cp-main .chat-log { max-width: none; padding-left: max(24px, calc((100% - 812px) / 2)); padding-right: max(24px, calc((100% - 812px) / 2)); }
+  .msg { font-size: 13.5px; line-height: 1.6; overflow-wrap: anywhere; }
   .msg.me { align-self: flex-end; background: var(--accent-soft); color: var(--text); padding: 8px 12px; border-radius: 12px 12px 2px 12px; max-width: 85%; white-space: pre-wrap; }
   .msg.cp { color: var(--text); }
   .msg.cp pre { background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; overflow-x: auto; font-size: 12.5px; }
@@ -360,25 +414,26 @@
   .perm code { display: block; margin-top: 6px; white-space: pre-wrap; word-break: break-all; }
   .perm-b { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   .perm-b button { font: inherit; font-size: 12.5px; border-radius: 6px; padding: 4px 10px; cursor: pointer; border: 1px solid var(--line-strong); background: var(--surface); color: var(--text); }
-  .perm-b button.ok { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .perm-b button.ok { background: var(--text); border-color: var(--text); color: var(--bg); }
   .perm-done { font-size: 12.5px; color: var(--text-2); }
   .typing { color: var(--muted); font-size: 12.5px; }
   .typing::after { content: '…'; animation: pulse 1.2s infinite; }
-  .chat-hist { position: absolute; z-index: 2; left: 0; right: 0; top: 53px; bottom: 0; background: var(--surface); display: flex; flex-direction: column; }
-  .chat-hist-h { display: flex; gap: 8px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 12.5px; color: var(--text-2); }
-  .chat-hist-h input[type=search] { flex: 1; font: inherit; font-size: 13px; color: var(--text); background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
-  .chat-hist-l { flex: 1; overflow-y: auto; padding: 6px 8px; }
-  .hs { display: block; width: 100%; text-align: left; font: inherit; background: none; border: 0; border-radius: 8px; padding: 8px 10px; cursor: pointer; color: var(--text); }
+  .chat-hist { position: absolute; z-index: 2; inset: 0; background: var(--surface); display: flex; flex-direction: column; }
+  .chat-hist-h { display: flex; gap: 8px; align-items: center; padding: 10px 20px; border-bottom: 1px solid var(--line); font-size: 12.5px; color: var(--text-2); }
+  .chat-hist-h input[type=search] { flex: 1; max-width: 520px; font: inherit; font-size: 13px; color: var(--text); background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+  .chat-hist-l { flex: 1; overflow-y: auto; padding: 6px 12px; }
+  .hs { display: block; width: 100%; max-width: 860px; text-align: left; font: inherit; background: none; border: 0; border-radius: 8px; padding: 8px 10px; cursor: pointer; color: var(--text); }
   .hs:hover, .hs.cur { background: var(--surface-2); }
   .hs b { font-weight: 500; font-size: 13.5px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .hs small { color: var(--muted); font-size: 11.5px; }
   .hbadge { display: inline-block; font-size: 10.5px; border-radius: 99px; padding: 0 6px; margin-left: 6px; background: var(--accent-soft); color: var(--accent); vertical-align: 1px; }
   .hbadge.work { background: var(--amber-soft); color: var(--amber); }
-  .chat-refs { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 14px 0; position: relative; }
+  .icon-btn.on { border-color: var(--accent); color: var(--accent); }
+  .chat-refs { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 24px 0; position: relative; }
   .ref { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--accent); color: var(--accent); background: var(--accent-soft); border-radius: 99px; font-size: 12px; padding: 2px 4px 2px 10px; max-width: 100%; }
   .ref span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 280px; }
   .ref button { border: 0; background: none; color: inherit; cursor: pointer; font-size: 12px; padding: 0 4px; }
-  .ref-pick { position: absolute; z-index: 3; left: 14px; right: 14px; bottom: calc(100% + 4px); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-lg); display: flex; flex-direction: column; max-height: 50vh; }
+  .ref-pick { position: absolute; z-index: 3; left: 24px; right: 24px; bottom: calc(100% + 4px); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-lg); display: flex; flex-direction: column; max-height: 50vh; }
   .ref-pick input { font: inherit; font-size: 13px; color: var(--text); background: var(--surface-2); border: 0; border-bottom: 1px solid var(--line); border-radius: 10px 10px 0 0; padding: 8px 10px; }
   .ref-pick ul { list-style: none; margin: 0; padding: 4px; overflow-y: auto; }
   .ref-pick li { padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 13px; display: flex; gap: 8px; }
@@ -387,40 +442,15 @@
   .ref-pick li small { margin-left: auto; color: var(--muted); white-space: nowrap; }
   .ref-pick .none { color: var(--muted); font-size: 12.5px; padding: 8px; }
   .msg.me .refs-sent { display: block; font-size: 11.5px; color: var(--text-2); margin-bottom: 4px; }
-  .chat-empty { color: var(--muted); font-size: 13px; margin: auto; text-align: center; max-width: 300px; }
-  .chat-in { display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--line); align-items: flex-end; }
+  .chat-empty { color: var(--muted); font-size: 13px; margin: auto; text-align: center; max-width: 340px; }
+  .chat-in { display: flex; gap: 8px; padding: 12px 24px 16px; align-items: flex-end; }
   .chat-in textarea { flex: 1; resize: none; font: inherit; font-size: 13.5px; color: var(--text); background: var(--surface-2); border: 1px solid var(--line);
-    border-radius: 8px; padding: 8px 10px; max-height: 200px; }
+    border-radius: 9px; padding: 9px 11px; max-height: 200px; }
   .chat-in textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-  .hc { position: absolute; z-index: 50; width: 380px; max-width: calc(100vw - 24px); background: var(--surface); border: 1px solid var(--line);
-    border-radius: 12px; box-shadow: var(--shadow-lg); padding: 14px 16px; font-size: 13px; opacity: 0; transform: translateY(4px);
-    transition: opacity .12s, transform .12s; pointer-events: none; }
-  .hc.on { opacity: 1; transform: none; pointer-events: auto; }
-  .hc .top { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 12px; }
-  .hc h3 { font-size: 15px; line-height: 1.35; margin: 6px 0 6px; letter-spacing: -.01em; }
-  .hc .people { color: var(--text-2); font-size: 12.5px; }
-  .hc p { color: var(--text-2); margin: 8px 0 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; }
-  .hc .foot { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
-  .hc .foot a { color: var(--accent); font-weight: 550; }
-
-  @media (max-width: 1100px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-  @media (max-width: 900px) { .grid, .plan { grid-template-columns: minmax(0, 1fr); } }
-  /* On a wide screen Copilot sits beside the page instead of over it. */
-  @media (min-width: 1100px) {
-    body.chat-on { padding-right: min(460px, 38vw); }
-    body.chat-on .chat:not(.max) { width: min(460px, 38vw); box-shadow: none; }
-  }
-  .mic { width: 36px; padding: 0; justify-content: center; flex: none; }
+  .chat-in .icon-btn { height: 34px; }
+  .mic { width: 34px; padding: 0; justify-content: center; flex: none; }
   .mic.on { background: var(--red-soft); color: var(--red); border-color: var(--red); animation: pulse 1.2s ease-in-out infinite; }
-  @media (max-width: 560px) {
-    .bar-in, .page { padding-left: 16px; padding-right: 16px; }
-    .bar-in { gap: 8px; } .status .txt, .where, .bar .lbl, .bar .bname { display: none; }
-    /* Do next: the time estimate goes under the title so the buttons fit. */
-    .todo li { grid-template-columns: 22px minmax(0, 1fr) auto; gap: 8px; }
-    .todo .m { grid-column: 2; grid-row: 2; }
-    .todo .acts { grid-column: 3; grid-row: 1; }
-    .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  }
+
   /* Inbox: a source panel shown as a mail list (panel.view 'table'). */
   .pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
   .pick button { font: inherit; font-size: 12.5px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface);
@@ -469,149 +499,129 @@
   }
   @media (min-width: 641px) { .inbox .f .gm { display: none; } }
 
-  /* Reader: a source's item read in full, such as a school message. */
-  a.icon-btn { text-decoration: none; }
-  dialog.reader { width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 0; border: 1px solid var(--line);
-    border-radius: var(--radius); background: var(--surface); color: var(--text); box-shadow: var(--shadow-lg); }
-  dialog.reader::backdrop { background: rgba(16, 24, 40, .35); }
-  .reader-h { position: sticky; top: 0; display: flex; gap: 10px; align-items: flex-start; padding: 14px 16px; background: var(--surface);
-    border-bottom: 1px solid var(--line); }
-  .reader-h .main { flex: 1; min-width: 0; }
-  .reader-h h2 { margin: 0; font-size: 16px; overflow-wrap: anywhere; }
-  .reader-h .meta { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
-  .reader-b { padding: 4px 16px 16px; }
-  .msg-r { padding: 12px 0; border-top: 1px solid var(--line); }
-  .msg-r:first-child { border-top: 0; }
-  .msg-r .who { font-size: 12.5px; color: var(--muted); }
-  .msg-r .who b { color: var(--text); font-weight: 600; }
-  .msg-r.mine .who b { color: var(--accent); }
-  .msg-r .sub { font-weight: 600; margin-top: 4px; }
-  .msg-r .txt a { color: var(--accent); }
-  .msg-r .txt { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 6px; line-height: 1.5; }
-  .files { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-  .files a, .files span { font-size: 12.5px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2);
-    text-decoration: none; color: var(--text); }
-  .files a:hover { border-color: var(--accent); color: var(--accent); }
-  .files .size { color: var(--muted); }
 </style>
 </head>
 <body>
-<div class="bar"><div class="bar-in">
-  <button class="icon-btn menu-btn" id="menu-btn" aria-label="Menu" aria-expanded="false" aria-controls="drawer">☰<span class="tab-n" id="menu-n" hidden></span></button>
-  <div class="brand"><i></i><span class="bname">Clearsky</span> <span class="where" id="where">· Work</span></div>
-  <div class="spacer"></div>
-  <div class="status"><span class="dot" id="dot"></span><span class="txt" id="status">Loading…</span></div>
-  <button class="icon-btn" id="unhide" hidden title="Show hidden items">Show hidden</button>
-  <button class="icon-btn" id="notify" title="Notifications" aria-label="Notifications" hidden></button>
-  <button class="icon-btn" id="refresh" title="Refresh">↻<span class="lbl"> Refresh</span></button>
-  <button class="icon-btn primary" id="chat-open" title="Ask GitHub Copilot about your work">✦<span class="lbl"> Copilot</span></button>
-</div></div>
-
+<div class="app">
 <div class="drawer-scrim" id="scrim" hidden></div>
-<aside class="drawer" id="drawer" hidden aria-label="Menu">
+<aside class="side" id="side" aria-label="Menu">
   <div class="brand"><i></i>Clearsky</div>
-  <nav>
-    <a href="#" id="tab-today"><span class="ico">▦</span>Work</a>
-    <a href="#personal" id="tab-personal" hidden><span class="ico">⌂</span>Personal</a>
-    <a href="#standup" id="tab-standup"><span class="ico">☰</span>Stand-up</a>
-    <a href="#" id="nav-copilot"><span class="ico">✦</span>Copilot<span class="tab-n" id="nav-copilot-n" hidden></span></a>
-    <a href="/settings"><span class="ico">⚙</span>Settings</a>
+  <nav class="nav" id="nav">
+    <a class="ni" href="#" data-nav="inbox"><span class="ico">▤</span><span class="lab">Inbox</span><b id="n-inbox"></b></a>
+    <a class="ni" href="#calendar" data-nav="calendar"><span class="ico">◷</span><span class="lab">Calendar</span><b id="n-calendar"></b></a>
+    <a class="ni" href="#standup" data-nav="standup"><span class="ico">☰</span><span class="lab">Stand-up</span></a>
   </nav>
-  <hr>
-  <div class="lbl">Theme</div>
-  <div class="seg" id="theme" role="group" aria-label="Theme">
-    <button data-theme-pick="auto">Auto</button><button data-theme-pick="light">Light</button><button data-theme-pick="dark">Dark</button>
+  <div class="sg">Copilot <button type="button" id="cp-new-side" title="New chat (Alt+N)" aria-label="New chat">＋</button></div>
+  <div id="side-cp"></div>
+  <div class="sg">Work</div>
+  <nav id="side-work">
+    <a class="ni" href="#reviews" data-nav="reviews"><span class="ico">◎</span><span class="lab">Reviews</span><b id="n-reviews"></b></a>
+    <a class="ni" href="#prs" data-nav="prs"><span class="ico">⑂</span><span class="lab">Your PRs</span><b id="n-prs"></b></a>
+    <a class="ni" href="#mentions" data-nav="mentions"><span class="ico">@</span><span class="lab">Mentions</span><b id="n-mentions"></b></a>
+    <a class="ni" href="#tickets" data-nav="tickets"><span class="ico">▣</span><span class="lab">Tickets</span><b id="n-tickets"></b></a>
+  </nav>
+  <div class="sg" id="side-personal-h" hidden>Personal</div>
+  <nav id="side-personal"></nav>
+  <div class="side-foot">
+    <a class="ni" href="/settings"><span class="ico">⚙</span><span class="lab">Settings</span></a>
+    <div class="row1">
+      <div class="status"><span class="dot" id="dot"></span><span class="txt" id="status">Loading…</span></div>
+      <button class="rf" id="notify" title="Notifications" aria-label="Notifications" hidden></button>
+      <button class="rf" id="refresh" title="Refresh everything" aria-label="Refresh everything"></button>
+    </div>
+    <div class="seg" id="theme" role="group" aria-label="Theme">
+      <button data-theme-pick="auto">Auto</button><button data-theme-pick="light">Light</button><button data-theme-pick="dark">Dark</button>
+    </div>
   </div>
-  <div class="foot">Theme is saved on this device.</div>
 </aside>
 
-<div class="page" id="today">
-  <section class="plan" id="plan"></section>
-  <div class="summary" id="kpis"></div>
-  <h2 class="zone">Needs you</h2>
-  <div class="grid">
-    <section class="card" id="c-review"></section>
-    <section class="card" id="c-prs"></section>
-    <section class="card" id="c-mentions"></section>
-    <section class="card" id="c-copilot" hidden></section>
+<main class="work">
+  <div class="topbar">
+    <button class="icon-btn menu-btn" id="menu-btn" aria-label="Menu" aria-expanded="false" aria-controls="side">☰<span class="tab-n" id="menu-n" hidden></span></button>
+    <div class="brand"><i></i>Clearsky</div>
   </div>
-  <h2 class="zone">Keeping track</h2>
-  <div class="grid quiet">
-    <section class="card" id="c-waiting"></section>
-    <section class="card" id="c-left"></section>
-  </div>
-</div>
 
-<!-- Personal sources (school, training…) live here; only the calendar mixes work and personal. -->
-<div class="page" id="personal" hidden>
-  <section class="plan day-only" id="p-day"></section>
-  <h2 class="zone" id="p-needs-h">Needs you</h2>
-  <div class="grid" id="p-needs"></div>
-  <h2 class="zone" id="p-track-h">Keeping track</h2>
-  <div class="grid quiet" id="p-track"></div>
-</div>
+  <!-- The inbox, and the Reviews / Your PRs / Mentions / Tickets views of it. -->
+  <section class="view" id="v-list">
+    <header class="vh"><h1 id="list-title">Inbox</h1><span class="spacer"></span><span id="su-alert"></span><button class="nowline" id="nowline" title="Open the calendar"></button></header>
+    <div class="view-b" id="list" tabindex="-1"></div>
+    <div class="kb"><span><kbd>J</kbd><kbd>K</kbd> move</span><span><kbd>↵</kbd> open</span><span><kbd>Esc</kbd> back</span>
+      <span><kbd>E</kbd> done</span><span><kbd>H</kbd> snooze</span><span><kbd>A</kbd> Copilot</span></div>
+  </section>
 
-<div class="page su" id="standup" hidden>
-  <div class="su-head">
-    <h1>Stand-up</h1>
-    <span class="sub" id="su-sub"></span>
-    <div class="spacer" style="flex:1"></div>
-    <button class="primary" id="copy">Copy for Slack</button>
-  </div>
-  <div id="su-body"></div>
+  <!-- One item in full: a PR, a ticket, a mention, a school message. -->
+  <section class="view" id="v-item" hidden>
+    <header class="vh"><button class="back" data-back>← Back · Esc</button><span class="sub" id="it-crumb"></span><span class="spacer"></span><button class="nowline" data-nowline></button></header>
+    <div class="view-b"><div class="item" id="item"></div></div>
+  </section>
+
+  <section class="view" id="v-calendar" hidden>
+    <header class="vh"><h1>Calendar</h1><span class="sub" id="cal-sub"></span><span class="spacer"></span><button class="rf" data-refresh="plan" title="Refresh the calendar" aria-label="Refresh the calendar"></button></header>
+    <div class="view-b"><div class="cal" id="cal"></div></div>
+  </section>
+
+  <section class="view" id="v-standup" hidden>
+    <header class="vh"><h1>Stand-up</h1><span class="sub" id="su-sub"></span><span class="spacer"></span><button class="icon-btn primary" id="copy">Copy for Slack</button></header>
+    <div class="view-b"><div class="page su" id="su-body"></div></div>
+  </section>
+
+  <!-- A source on its own page, such as School. -->
+  <section class="view" id="v-src" hidden>
+    <header class="vh"><h1 id="src-title"></h1><span class="spacer"></span><button class="nowline" data-nowline></button></header>
+    <div class="view-b"><div class="page src-page" id="src-body"></div></div>
+  </section>
+
+  <!-- Copilot: a chat uses the whole work area, with what it's about on the right. -->
+  <section class="view" id="chat" hidden aria-label="Copilot">
+    <header class="vh">
+      <button class="back" data-back>← Back · Esc</button>
+      <h1 id="chat-title">Copilot</h1>
+      <span class="sub" id="chat-sub"></span>
+      <span class="spacer"></span>
+      <button class="icon-btn small" id="chat-hist-btn" title="Your Copilot sessions, from this app, the terminal or your editor">History</button>
+      <button class="icon-btn small" id="chat-new" title="Start a new conversation (Alt+N)">New chat</button>
+    </header>
+    <div class="cpw">
+      <div class="cp-main">
+        <div class="chat-log" id="chat-log"></div>
+        <div class="chat-refs" id="cp-refs"><button class="chip" id="cp-ref-add" type="button" title="Give Copilot a PR or Jira ticket to work with">＋ PR or ticket</button></div>
+        <form class="chat-in" id="chat-form">
+          <textarea id="chat-text" rows="3" placeholder="Ask about your work… / for skills · Enter to send, Shift+Enter for a new line"></textarea>
+          <button class="icon-btn mic" id="chat-mic" type="button" hidden title="Talk: click, speak, click again to stop" aria-label="Talk" aria-pressed="false">🎤</button>
+          <button class="icon-btn primary" id="chat-send" type="submit">Send</button>
+        </form>
+      </div>
+      <aside class="cp-side">
+        <div class="chat-ctx" id="chat-ctx" hidden></div>
+        <div><h4>Skills</h4><div class="chat-skills" id="cp-skills"></div></div>
+        <div><h4>Settings</h4>
+          <div class="chat-opts">
+            <label>Model <input id="cp-model" list="cp-models" placeholder="default" spellcheck="false"></label>
+            <datalist id="cp-models"></datalist>
+            <label>Effort <select id="cp-effort"><option value="">default</option></select></label>
+            <label>Access <select id="cp-perm"></select></label>
+            <details class="cp-tools"><summary>Tools</summary>
+              <label>Also allow <input id="cp-allow" placeholder="shell(git:*), shell(gh:*)" spellcheck="false"></label>
+              <label>Also deny <input id="cp-deny" placeholder="url(*), write(**/*.env)" spellcheck="false"></label>
+              <div class="hint">Comma-separated Copilot tool patterns. Deny always wins.</div>
+            </details>
+          </div>
+        </div>
+      </aside>
+      <div class="chat-hist" id="chat-hist" hidden>
+        <div class="chat-hist-h">
+          <input type="search" id="hist-q" placeholder="Search sessions…">
+          <label title="Only sessions started in Clearsky's Copilot folder"><input type="checkbox" id="hist-here"> This folder</label>
+          <button class="icon-btn small" id="hist-refresh" title="Reload the list">↻</button>
+        </div>
+        <div class="chat-hist-l" id="hist-list"></div>
+      </div>
+    </div>
+  </section>
+</main>
 </div>
 
 <div class="hc" id="hc" role="tooltip"></div>
-
-<aside class="chat" id="chat" hidden aria-label="Copilot">
-  <div class="chat-h">
-    <b>Copilot</b>
-    <span class="chat-sub" id="chat-sub"></span>
-    <span class="spacer"></span>
-    <button class="icon-btn small" id="chat-hist-btn" title="Your Copilot sessions, from this app, the terminal or your editor">History</button>
-    <button class="icon-btn small" id="chat-new" title="Start a new conversation">New chat</button>
-    <button class="icon-btn small" id="chat-max" title="Maximize" aria-label="Maximize">⤢</button>
-    <button class="icon-btn small" id="chat-close" aria-label="Close">✕</button>
-  </div>
-  <div class="cp-tabs" id="cp-tabs" role="tablist" aria-label="Your Copilot chats"></div>
-  <div class="chat-ctx" id="chat-ctx" hidden></div>
-  <div class="chat-opts">
-    <label>Model <input id="cp-model" list="cp-models" placeholder="default" spellcheck="false"></label>
-    <datalist id="cp-models"></datalist>
-    <label>Effort <select id="cp-effort"><option value="">default</option></select></label>
-    <label>Access <select id="cp-perm"></select></label>
-    <details class="cp-tools"><summary>Tools</summary>
-      <label>Also allow <input id="cp-allow" placeholder="shell(git:*), shell(gh:*)" spellcheck="false"></label>
-      <label>Also deny <input id="cp-deny" placeholder="url(*), write(**/*.env)" spellcheck="false"></label>
-      <div class="hint">Comma-separated Copilot tool patterns. Deny always wins.</div>
-    </details>
-  </div>
-  <div class="chat-skills" id="cp-skills"></div>
-  <div class="chat-log" id="chat-log"></div>
-  <div class="chat-hist" id="chat-hist" hidden>
-    <div class="chat-hist-h">
-      <input type="search" id="hist-q" placeholder="Search sessions…">
-      <label title="Only sessions started in Clearsky's Copilot folder"><input type="checkbox" id="hist-here"> This folder</label>
-      <button class="icon-btn small" id="hist-refresh" title="Reload the list">↻</button>
-    </div>
-    <div class="chat-hist-l" id="hist-list"></div>
-  </div>
-  <div class="chat-refs" id="cp-refs"><button class="chip" id="cp-ref-add" type="button" title="Give Copilot a PR or Jira ticket to work with">＋ PR or ticket</button></div>
-  <form class="chat-in" id="chat-form">
-    <textarea id="chat-text" rows="3" placeholder="Ask about your work… / for skills · Enter to send, Shift+Enter for a new line"></textarea>
-    <button class="icon-btn mic" id="chat-mic" type="button" hidden title="Talk: click, speak, click again to stop" aria-label="Talk" aria-pressed="false">🎤</button>
-    <button class="icon-btn primary" id="chat-send" type="submit">Send</button>
-  </form>
-</aside>
-
-<dialog class="reader" id="reader" aria-labelledby="reader-title">
-  <div class="reader-h">
-    <div class="main"><h2 id="reader-title"></h2><div class="meta" id="reader-meta"></div></div>
-    <a class="icon-btn small" id="reader-open" target="_blank" rel="noopener">Open in portal</a>
-    <button class="icon-btn small" id="reader-close" aria-label="Close">✕</button>
-  </div>
-  <div class="reader-b" id="reader-body"></div>
-</dialog>
 
 <script>
 const REFRESH_MS = 5 * 60 * 1000;
@@ -696,22 +706,13 @@ function sessionChips(url) {
 async function loadLinks() {
   try { cpLinks = await getJson('/api/copilot/links'); } catch { return; }
   renderToday();
-  if (!$('#chat').hidden) drawCtx();
-}
-function renderCopilotCard() {
-  const el = $('#c-copilot'), live = cpLinks.live || [];
-  el.hidden = !live.length;
-  if (!live.length) return;
-  const order = { 'needs-you': 0, waiting: 1, working: 2 };
-  const list = [...live].sort((a, b) => order[a.status] - order[b.status] || Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
-  card(el, 'Copilot sessions', live.length, `<ul class="rows">${list.map((x) => `<li class="row"><div class="main">
-    ${chip(x)}<div class="meta">${esc((x.cwd || '').split('/').filter(Boolean).pop() || '')} · ${esc(ago(x.updatedAt))}</div></div></li>`).join('')}</ul>`);
+  drawCtx();
 }
 document.addEventListener('click', (e) => {
   const c = e.target.closest('.cp-chip');
   if (!c) return;
   e.preventDefault();
-  openChat(true);
+  openChat(true, true);
   openSession(c.dataset.sid, c.dataset.cwd);
 });
 
@@ -801,7 +802,9 @@ async function fetchWithToken(url, opts) {
   return res;
 }
 const isHidden = (x) => Object.hasOwn(dismissed, x.dismissKey || x.url) && dismissed[x.dismissKey || x.url] === String(x.stamp ?? '');
-const vis = (list) => (list || []).filter((x) => !isHidden(x));
+// Snoozed until a set time, whatever happens on them (from the snooze menu): { key: until }.
+let mutedMap = {};
+const vis = (list) => (list || []).filter((x) => !isHidden(x) && !snoozedUntil(x.dismissKey || x.url));
 
 // The sources with dismissed items taken out; the panels render from this.
 let V = {}, hiddenCount = 0;
@@ -907,16 +910,6 @@ const when = (iso) => new Date(iso).toLocaleString([], { weekday: 'short', hour:
 const DONE_ICON = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 let showLater = false;
 
-// Tasks marked done (back when something new happens) and muted ones (back at a set time).
-function laterHtml(done, muted) {
-  if (!done.length && !muted.length) return '';
-  const label = [done.length && `${done.length} done`, muted.length && `${muted.length} muted`].filter(Boolean).join(', ');
-  const item = (m, note, btn) => `<li><a href="${esc(m.url)}" target="_blank" rel="noopener">${esc(m.title)}</a><span>${note}</span>${btn}</li>`;
-  return `<button class="muted-toggle" id="muted-toggle">${showLater ? 'Hide' : 'Show'} ${label}</button>${showLater ? `<ul class="muted-list">${
-    done.map((m) => item(m, m.doneAt ? `done ${when(m.doneAt)}` : 'done', `<button data-undone="${esc(m.key)}">Undo</button>`)).join('')}${
-    muted.map((m) => item(m, `until ${when(m.until)}`, `<button data-unmute="${esc(m.key)}">Unmute</button>`)).join('')}</ul>` : ''}`;
-}
-
 // The small menu a mute button opens.
 const menu = document.createElement('div');
 menu.className = 'menu'; menu.hidden = true; menu.setAttribute('role', 'menu');
@@ -924,7 +917,7 @@ document.body.append(menu);
 function openMuteMenu(btn) {
   const tomorrow = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
   menu.dataset.key = btn.dataset.mute;
-  menu.innerHTML = `<div class="menu-h">Mute until</div>
+  menu.innerHTML = `<div class="menu-h">Snooze until</div>
     ${[['1h', 'In 1 hour'], ['3h', 'In 3 hours'], ['tomorrow', 'Tomorrow’s stand-up'], ['week', 'In a week']]
       .map(([v, l]) => `<button role="menuitem" data-for="${v}">${l}</button>`).join('')}
     <label class="menu-date">On <input type="date" min="${tomorrow}"></label>`;
@@ -936,14 +929,16 @@ function openMuteMenu(btn) {
 }
 async function mute(key, span) {
   menu.hidden = true;
-  try { await post('/api/mute', { key, for: span }); } catch (e) { $('#status').textContent = `Could not save: ${e.message}`; }
+  try { ({ muted: mutedMap } = await post('/api/mute', { key, for: span })); } catch (e) { $('#status').textContent = `Could not save: ${e.message}`; }
+  if (span && location.hash === '#item' && curItem?.k === key) back();
+  renderToday();
   loadPlan();
 }
 menu.addEventListener('click', (e) => {
   const v = e.target.closest('[data-for]')?.dataset.for;
   if (v) return mute(menu.dataset.key, v);
   const rs = e.target.closest('[data-resume]');
-  if (rs) { menu.hidden = true; openChat(true); return openSession(rs.dataset.resume, rs.dataset.cwd); }
+  if (rs) { menu.hidden = true; openChat(true, true); return openSession(rs.dataset.resume, rs.dataset.cwd); }
   const sk = e.target.closest('[data-run]');
   if (sk) { menu.hidden = true; startCopilotOn({ ...refFromUrl(menu.dataset.ask), title: menu.dataset.title }, sk.dataset.run); }
 });
@@ -977,7 +972,7 @@ function startCopilotOn(ref, skill) {
   if (!chat.session || chat.turns || chat.stop) newChat();
   chat.refs = [];
   addRef(ref);
-  openChat(true);
+  openChat(true, true);
   if (skill) send(`/${skill}`);
 }
 menu.addEventListener('change', (e) => { if (e.target.type === 'date' && e.target.value) mute(menu.dataset.key, e.target.value); });
@@ -987,7 +982,6 @@ document.addEventListener('click', (e) => {
   if (!e.target.closest('.menu')) menu.hidden = true;
   const un = e.target.closest('[data-unmute]')?.dataset.unmute;
   if (un) mute(un, null);
-  if (e.target.closest('#muted-toggle')) { showLater = !showLater; renderPlan(); }
   const done = e.target.closest('[data-done]');
   if (done) { dismissed[done.dataset.done] = done.dataset.stamp; dismiss({ key: done.dataset.done, stamp: done.dataset.stamp, done: true }); }
   const undone = e.target.closest('[data-undone]')?.dataset.undone;
@@ -995,47 +989,95 @@ document.addEventListener('click', (e) => {
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') menu.hidden = true; });
 
-function renderPlan() {
-  const el = $('#plan'), d = state.plan;
-  if (!d) {
-    el.innerHTML = `${refreshButton('plan')}<div><div class="eyebrow">Now</div><div class="sk" style="width:70%;height:16px"></div><div class="sk" style="width:45%;margin-top:10px"></div></div>
-      <div><div class="eyebrow">Do next</div>${skeleton(3)}</div>`;
-    return;
-  }
-  if (d.error) { el.innerHTML = `${refreshButton('plan')}<div class="err">${esc(d.error)}</div>`; return; }
-  const p = d.plan, join = (e) => (e?.url ? ` · <a class="join" href="${esc(e.url)}" target="_blank" rel="noopener">Join</a>` : '');
+// What you're doing now, in a line: in the header of every list, and in full on the calendar.
+const sameDay = (iso, d = new Date()) => new Date(iso).toDateString() === d.toDateString();
+function nowLine() {
+  const d = state.plan;
+  if (!d?.plan) return '';
+  const p = d.plan;
+  if (p.now) return `<b>In ${esc(p.now.title)}</b> until ${hm(p.now.end)}`;
+  if (p.afterHours) return 'Outside working hours';
+  if (p.next && sameDay(p.next.start)) return `<b>Free until ${hm(p.next.start)}</b> · then ${esc(p.next.title)}`;
+  return p.calendar ? '<b>Free</b> for the rest of the day' : '';
+}
+function renderNow() {
+  const line = nowLine();
+  for (const b of document.querySelectorAll('#nowline, [data-nowline]')) { b.innerHTML = line; b.hidden = !line; }
+  const d = state.plan, su = d?.nextStandup && (Date.parse(d.nextStandup) - Date.now()) / 6e4;
+  $('#su-alert').innerHTML = su !== undefined && su <= 30 && su > -15
+    ? `<a class="standup-alert" href="#standup">Stand-up ${su > 0 ? `in ${Math.ceil(su)} min` : 'now'} · your summary is ready</a>` : '';
+}
+document.addEventListener('click', (e) => { if (e.target.closest('#nowline, [data-nowline]')) location.hash = '#calendar'; });
+
+// ---------------------------------------------------------------- calendar
+
+// Today and tomorrow as agendas, under the day schedule. A click on a meeting shows its details.
+const openEvents = new Set();
+function agendaRow(e, now) {
+  const s = Date.parse(e.start), en = Date.parse(e.end), id = `${e.start}|${e.title}`;
+  const cls = ['ag', e.fyi && 'fyi', en <= now && 'past', s <= now && now < en && 'on'].filter(Boolean).join(' ');
+  const w = [dur(Math.round((en - s) / 6e4)), e.location, e.calendar].filter(Boolean).map(esc).join(' · ')
+    + (e.url ? ` · <a class="join" href="${esc(e.url)}" target="_blank" rel="noopener">Join</a>` : '')
+    + (e.fyi ? " · doesn't take your time" : '');
+  const row = (k, v) => (v ? `<dt>${k}</dt><dd>${v}</dd>` : '');
+  const more = openEvents.has(id) ? `<div class="more"><dl>${row('Organizer', esc(e.organizer || ''))}${row('People', e.attendees ? String(e.attendees) : '')}</dl>${esc(e.description || '')}</div>` : '';
+  return `<div class="${cls}" data-agenda="${esc(id)}"><time>${hm(e.start)}</time><span class="t">${esc(e.title)}</span><span class="w">${w}</span>${more}</div>`;
+}
+function renderCalendar() {
+  const el = $('#cal'), d = state.plan;
+  if (!d) { el.innerHTML = `<div class="sk" style="width:40%;height:18px"></div>${skeleton(4)}`; return; }
+  if (d.error) { el.innerHTML = `<div class="err">${esc(d.error)}</div>`; return; }
+  const p = d.plan, now = Date.now(), join = (e) => (e?.url ? ` · <a class="join" href="${esc(e.url)}" target="_blank" rel="noopener">Join</a>` : '');
   let line, sub = '';
   if (p.now) {
     line = `In ${esc(p.now.title)} until ${hm(p.now.end)}`;
     sub = `Then free for ${dur(p.freeMinutes)}${p.next ? `, before ${esc(p.next.title)} at ${hm(p.next.start)}` : ''}${join(p.now)}`;
   } else if (p.afterHours) {
     line = 'Outside working hours';
-    sub = 'Here is what is waiting for tomorrow.';
   } else {
-    const today = p.next && new Date(p.next.start).toDateString() === new Date().toDateString();
-    line = `${dur(p.freeMinutes)} free${today ? ` until ${esc(p.next.title)}` : ' for the rest of the day'}`;
-    sub = today ? `Starts at ${hm(p.next.start)}${join(p.next)}`
+    const today = p.next && sameDay(p.next.start);
+    line = today ? `Free until ${hm(p.next.start)}` : 'Free for the rest of the day';
+    sub = today ? `${dur(p.freeMinutes)}, then ${esc(p.next.title)}${join(p.next)}`
       : p.next ? `No more meetings today. Next: ${esc(p.next.title)}, ${when(p.next.start)}.`
-      : p.calendar ? 'No more meetings today.' : 'Connect your calendar in Settings to plan around meetings.';
+      : p.calendar ? 'No more meetings today.' : '<a href="/settings">Connect your calendar in Settings</a> to plan around meetings.';
   }
-  const su = d.nextStandup && (Date.parse(d.nextStandup) - Date.now()) / 6e4;
-  const alert = su !== undefined && su <= 30 && su > -15
-    ? `<div class="standup-alert">Stand-up ${su > 0 ? `in ${Math.ceil(su)} min` : 'now'} · <a href="#standup">your summary is ready</a></div>` : '';
+  $('#cal-sub').textContent = new Date().toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' });
   const cal = state.calendar || {};
-  const calErr = cal.error ? `<div class="err" style="margin-top:12px">Calendar: ${esc(cal.error)}</div>`
+  const calErr = cal.error ? `<div class="err" style="margin:12px 0">Calendar: ${esc(cal.error)}</div>`
     : cal.errors ? `<div style="margin-top:12px;font-size:12px;color:var(--muted)">Calendar (${esc(cal.source)}) loaded; skipped ${Object.entries(cal.errors).map(([n, m]) => `${esc(n)}: ${esc(m)}`).join('; ')}</div>` : '';
-  const agenda = '';
-  const todo = (p.suggestions.length ? `<ol class="todo">${p.suggestions.map((s) => `<li>
-      <div><a class="t" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a><div class="d">${esc(s.detail)}</div></div>
-      <span class="m">~${dur(s.minutes)}</span>
-      <span class="acts">${askButton(s.url, s.title)}<button class="done" data-done="${esc(s.key)}" data-stamp="${esc(s.stamp ?? '')}" title="Done: hide until there's something new" aria-label="Mark done">${DONE_ICON}</button><button class="mute" data-mute="${esc(s.key)}" title="Mute for a while" aria-label="Mute for a while">${MUTE_ICON}</button></span></li>`).join('')}</ol>`
-    : '<div class="empty">Nothing urgent fits right now.</div>') + laterHtml(p.done || [], p.muted || []);
-  el.innerHTML = `${refreshButton('plan')}<div><div class="eyebrow">Now</div><div class="now-line">${line}</div><div class="now-sub">${sub}</div>${alert}${calErr}${agenda}</div>
-    <div><div class="eyebrow">Do next</div>${todo}</div>${dayHtml(p)}`;
-  // On a narrow screen the schedule scrolls; start it around now.
+  // Today, with a line for where you are now.
+  const evs = p.day?.events || [];
+  let nowShown = false;
+  const today = evs.map((e) => {
+    let pre = '';
+    if (!nowShown && Date.parse(e.start) > now && !p.now && !p.afterHours) {
+      nowShown = true;
+      pre = `<div class="ag nowrow"><time>${hm(new Date())}</time><span class="t">Now${p.freeMinutes ? ` · free for ${dur(p.freeMinutes)}` : ''}</span></div>`;
+    }
+    return pre + agendaRow(e, now);
+  }).join('') || '<div class="empty" style="padding-left:8px">No meetings today.</div>';
+  // Tomorrow, from the calendar itself (the plan only covers today), without hidden calendars.
+  const hidden = new Set((p.calendars || []).filter((c) => c.hidden).map((c) => c.name));
+  const t0 = new Date(); t0.setHours(24, 0, 0, 0);
+  const tomorrow = (cal.events || []).filter((e) => !e.allDay && !hidden.has(e.calendar) && sameDay(e.start, t0));
+  const allDay = (cal.events || []).filter((e) => e.allDay && !hidden.has(e.calendar) && sameDay(e.start, t0));
+  el.innerHTML = `<div class="now-big">${line}</div><div class="now-sub">${sub}</div>${calErr}${dayHtml(p)}
+    <div class="cal-cols">
+      <div><h3>Today</h3>${today}</div>
+      <div><h3>${esc(t0.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' }))}</h3>
+        ${allDay.length ? `<div class="ag"><time>All day</time><span class="t">${allDay.map((e) => esc(e.title)).join(' · ')}</span></div>` : ''}
+        ${tomorrow.map((e) => agendaRow(e, now)).join('') || '<div class="empty" style="padding-left:8px">No meetings.</div>'}</div>
+    </div>`;
   const sc = el.querySelector('.day-scroll'), nl = el.querySelector('.day-now');
   if (sc && nl && sc.scrollWidth > sc.clientWidth) sc.scrollLeft = nl.offsetLeft - sc.clientWidth / 3;
 }
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('[data-agenda]');
+  if (!a || e.target.closest('a')) return;
+  const id = a.dataset.agenda;
+  if (!openEvents.delete(id)) openEvents.add(id);
+  renderCalendar();
+});
 
 // ---------------------------------------------------------------- today as a schedule
 
@@ -1149,131 +1191,267 @@ document.addEventListener('click', async (e) => {
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && evPop?.isConnected) hideEvent(true); });
 
-function renderKpis() {
-  const g = V.g, j = V.j, jm = V.jm, sl = V.sl;
-  const mine = (g?.myPrs || []);
-  const needs = mine.filter((p) => p.status.owner === 'me' && !p.draft).length;
-  const mentionCount = (g?.mentions?.length || 0) + (jm?.tickets?.length || 0) + (sl?.mentions?.length || 0);
-  // One quiet line; counts that need you are highlighted, and each jumps to its list.
-  const item = (src, n, one, many, to, { hot, bad } = {}) => !src || src.error ? ''
-    : `<a class="${hot && n ? 'hot' : ''}${bad && n ? ' bad' : ''}" href="#${to}" data-jump="${to}"><b>${n}</b>${n === 1 ? one : many}</a>`;
-  $('#kpis').innerHTML =
-    item(g, g?.reviewRequested?.length || 0, 'review for you', 'reviews for you', 'c-review', { hot: true }) +
-    item(g, needs, 'PR on your move', 'PRs on your move', 'c-prs', { hot: true, bad: mine.some((p) => p.status.owner === 'me' && p.status.tone === 'bad') }) +
-    item(g && jm ? g : null, mentionCount, 'mention', 'mentions', 'c-mentions', { hot: true }) +
-    item(g, mine.filter((p) => p.status.owner === 'others').length, 'PR waiting on others', 'PRs waiting on others', 'c-waiting') +
-    item(j, (j?.assigned || []).filter((i) => i.statusCategory === 'indeterminate').length, 'ticket in progress', 'tickets in progress', 'g-left-indeterminate') +
-    item(j, j?.assigned?.length || 0, 'open ticket', 'open tickets', 'c-left') +
-    item(cpLinks.live?.some((x) => x.status !== 'working') ? cpLinks : null, cpLinks.live?.filter((x) => x.status !== 'working').length || 0, 'Copilot session waiting on you', 'Copilot sessions waiting on you', 'c-copilot', { hot: true }) +
-    item(cpLinks.live?.some((x) => x.status === 'working') ? cpLinks : null, cpLinks.live?.filter((x) => x.status === 'working').length || 0, 'Copilot session working', 'Copilot sessions working', 'c-copilot');
+// ---------------------------------------------------------------- the inbox
+
+// Everything that can need you becomes the same kind of row: what it is, what it's called, a
+// status glyph, one label, and how old it is. The group says why it's there; colour is kept for
+// the glyphs and for labels that need you.
+const shortRepo = (repo) => (repo || '').split('/').pop();
+const shortAgo = (iso) => ago(iso).replace(' ago', '');
+const prMeta = (p) => [p.approvals.length && `approved by ${p.approvals.join(', ')}`,
+  p.changesRequested.length && `changes from ${p.changesRequested.join(', ')}`,
+  p.pendingReviewers.length && `waiting on ${p.pendingReviewers.join(', ')}`].filter(Boolean).join(' · ');
+const TONE = { bad: 'red', warn: 'amber', good: 'green' };
+const GLYPH = { bad: 'chg', warn: 'rev', good: 'rdy', wait: 'wait', neutral: 'todo' };
+const snoozedUntil = (k) => { const u = mutedMap[k]; return u && Date.parse(u) > Date.now() ? u : null; };
+
+function inboxItems() {
+  const g = state.github, j = state.jira, jm = state.jiraMentions, sl = state.slack, out = [];
+  const add = (group, kind, x) => out.push({ group, kind, ...x, k: x.dismissKey || x.url });
+  if (g && !g.error) {
+    [...g.reviewRequested].sort((a, b) => (b.rerequested - a.rerequested) || Date.parse(a.requestedAt) - Date.parse(b.requestedAt))
+      .forEach((p) => add('needs', 'review', { url: p.url, stamp: p.stamp, pr: prRef(p), ref: `${shortRepo(p.repo)} #${p.number}`, title: p.title,
+        step: `${p.author} · +${p.size.additions} −${p.size.deletions}${p.viaTeam ? ' · via team' : ''}`, glyph: 'rev',
+        label: p.rerequested ? ['re-review', 'amber'] : [p.draft ? 'draft' : 'review'], at: p.requestedAt, src: 'GitHub', data: p }));
+    g.myPrs.forEach((p) => add(p.status.owner === 'me' ? 'needs' : 'waiting', 'pr', { url: p.url, stamp: p.stamp, pr: prRef(p),
+      ref: `${shortRepo(p.repo)} #${p.number}`, title: p.title, step: prMeta(p),
+      glyph: p.status.owner === 'me' ? GLYPH[p.status.tone] || 'todo' : 'wait',
+      label: [p.status.label.toLowerCase(), p.status.owner === 'me' ? TONE[p.status.tone] : null], at: p.updatedAt, src: 'GitHub', data: p }));
+    g.mentions.forEach((m) => add('needs', 'mention', { url: m.url, stamp: m.stamp, pr: m.kind === 'PR' ? prRef(m) : null,
+      ref: `${shortRepo(m.repo)} #${m.number}`, title: m.title, step: `mentioned you in this ${m.kind === 'PR' ? 'PR' : 'issue'}`, glyph: 'ment',
+      label: ['GitHub'], at: m.updatedAt, src: 'GitHub', data: m }));
+    (g.assigned || []).forEach((i) => add('tickets', 'issue', { url: i.url, stamp: i.stamp, ref: `${shortRepo(i.repo)} #${i.number}`, title: i.title,
+      glyph: 'todo', label: ['GitHub issue'], at: i.updatedAt, src: 'GitHub', data: i }));
+  }
+  if (jm && !jm.error) jm.tickets.forEach((t) => add('needs', 'mention', { url: t.url, stamp: t.stamp, dismissKey: t.dismissKey, issue: t.key,
+    ref: t.key, title: t.summary, step: `${t.people.join(', ')}${t.count > 1 ? ` · ${t.count} mentions` : ''}`, quote: t.excerpt, glyph: 'ment',
+    label: ['Jira'], at: t.at, src: 'Jira', data: t }));
+  if (sl && !sl.error) sl.mentions.forEach((m) => add('needs', 'mention', { url: m.url, stamp: m.stamp, ref: m.channel, title: `${m.by} in ${m.channel}`,
+    step: m.excerpt, quote: m.excerpt, glyph: 'ment', label: ['Slack'], at: m.at, src: 'Slack', data: m }));
+  if (j && !j.error) {
+    const cat = (i) => (i.statusCategory === 'indeterminate' ? 0 : 1);
+    [...j.assigned].sort((a, b) => cat(a) - cat(b)).forEach((i) => add('tickets', 'ticket', { url: i.url, stamp: i.stamp, issue: i.key, ref: i.key,
+      title: i.summary, step: [i.status, i.type, i.priority && `${i.priority} priority`].filter(Boolean).join(' · '),
+      glyph: cat(i) ? 'todo' : 'prog', label: i.due ? [`due ${i.due}`, 'amber'] : [cat(i) ? 'to do' : 'in progress'], at: i.updatedAt, src: 'Jira', data: i }));
+  }
+  // Work sources from plugins whose panel needs you show up here too; personal ones keep to their own page.
+  for (const x of extraSources.filter((s) => s.area !== 'personal' && s.panel.zone === 'needs')) {
+    const d = state[x.name];
+    if (!d || d.error || d.disabled) continue;
+    (d.items || []).forEach((i) => add('needs', 'extra', { url: i.url || '', stamp: i.stamp, dismissKey: i.key ? `${x.name}:${i.key}` : undefined,
+      ref: x.panel.title, title: i.title, step: i.meta || i.quote, quote: i.quote, glyph: 'ment', label: [i.badge || x.panel.title, i.badge ? TONE[i.tone] || i.tone : null],
+      at: i.at, src: x.panel.title, read: i.detail && i.key ? { src: x.name, key: i.key } : null, data: i }));
+  }
+  for (const it of out) { it.done = isHidden(it); it.snoozed = !it.done && snoozedUntil(it.k); }
+  // Mentions: newest first, after reviews and your own PRs.
+  const order = { review: 0, pr: 1, mention: 2, extra: 3 };
+  return out.sort((a, b) => (a.group === 'needs' && b.group === 'needs'
+    ? (order[a.kind] - order[b.kind]) || (a.kind === 'mention' ? Date.parse(b.at) - Date.parse(a.at) : 0) : 0));
 }
 
-function renderReview() {
-  const g = V.g, el = $('#c-review');
-  if (!g) return card(el, 'Reviews for you', null, skeleton());
-  if (g.error) return card(el, 'Reviews for you', null, `<div class="err">${esc(g.error)}</div>`);
-  const list = [...g.reviewRequested].sort((a, b) => (b.rerequested - a.rerequested) || Date.parse(a.requestedAt) - Date.parse(b.requestedAt));
-  if (!list.length) return card(el, 'Reviews for you', 0, '<div class="empty">✓ No reviews waiting</div>');
-  card(el, 'Reviews for you', list.length, rows('review', list, (p) => row({
-    url: p.url, stamp: p.stamp, title: p.title, pr: prRef(p),
-    badge: p.rerequested ? 'Re-review' : p.draft ? 'Draft' : null, tone: p.rerequested ? 'amber' : 'gray',
-    meta: `${prRef(p)} · ${p.author} · requested ${ago(p.requestedAt)}${p.viaTeam ? ' via team' : ''} · +${p.size.additions} −${p.size.deletions}`,
-  })));
+// Copilot sessions open anywhere (here, a terminal, an editor), most urgent first.
+function sessionItems() {
+  const order = { 'needs-you': 0, waiting: 1, working: 2 };
+  const linked = (id) => Object.entries(cpLinks.links || {}).find(([, l]) => l.some((x) => x.id === id))?.[0];
+  return [...(cpLinks.live || [])].sort((a, b) => order[a.status] - order[b.status] || Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+    .map((x) => {
+      const k = linked(x.id), folder = (x.cwd || '').split('/').filter(Boolean).pop() || '';
+      return { group: 'copilot', kind: 'session', sid: x.id, cwd: x.cwd, k: `cp:${x.id}`, title: x.title || 'Copilot chat',
+        ref: k ? k.replace(/^pr:[\w.-]+\//, '').replace('#', ' #').replace(/^issue:/, '') : folder, step: k ? folder : '',
+        glyph: `s-${x.status}`, label: [STATUS_TEXT[x.status] || x.status, x.status === 'needs-you' ? 'amber' : x.status === 'working' ? 'green' : 'blue'],
+        at: x.updatedAt, status: x.status };
+    });
 }
 
-function prItem(p) {
-  return row({
-    url: p.url, stamp: p.stamp, title: p.title, pr: prRef(p), badge: p.status.label, tone: toneOf[p.status.tone],
-    meta: [prRef(p), p.approvals.length && `approved by ${p.approvals.join(', ')}`,
-      p.changesRequested.length && `changes from ${p.changesRequested.join(', ')}`,
-      p.pendingReviewers.length && `waiting on ${p.pendingReviewers.join(', ')}`, `updated ${ago(p.updatedAt)}`].filter(Boolean).join(' · '),
-  });
+const LIST_VIEWS = { inbox: 'Inbox', reviews: 'Reviews', prs: 'Your PRs', mentions: 'Mentions', tickets: 'Tickets' };
+let listView = 'inbox', listItems = [], selK = null, showWaiting = false;
+
+function itemRow(it, i) {
+  const [lt, tone] = it.label || [];
+  const fresh = it.kind !== 'session' && isNew(it.k, it.stamp);
+  const chips = it.url ? (cpLinks.links[itemKey(it.url)] || []).slice(0, 1).map(chip).join('') : '';
+  const acts = it.kind === 'session' ? '' : `<span class="ra">${refFromUrl(it.url) ? `<button class="ask" data-ask="${esc(it.url)}" data-title="${esc(it.title)}" title="Copilot on this (A)" aria-label="Copilot on this">✦</button>` : ''}
+    <button data-mute="${esc(it.k)}" title="Snooze (H)" aria-label="Snooze">${MUTE_ICON}</button>
+    <button data-done="${esc(it.k)}" data-stamp="${esc(it.stamp ?? '')}" title="Done: hide until there's something new (E)" aria-label="Done">${DONE_ICON}</button></span>`;
+  return `<li class="r${it.group === 'waiting' ? ' quiet' : ''}${it.k === selK ? ' sel' : ''}" data-i="${i}" tabindex="-1">
+    ${fresh ? '<span class="new-dot" title="New since you last looked" aria-label="New"></span>' : ''}<span class="st ${esc(it.glyph)}"></span>
+    <span class="id"${refAttrs(it)}>${esc(it.ref || '')}</span>
+    <span class="t"><a href="${esc(it.url || '#copilot')}"${it.url ? ' target="_blank" rel="noopener"' : ''}>${esc(it.title)}</a>${it.step ? `<span class="step">${esc(it.step)}</span>` : ''}</span>
+    <span class="lb">${chips}${lt ? `<span class="lbl${tone ? ` ${tone}` : ''}">${tone ? '<i></i>' : ''}${esc(lt)}</span>` : ''}</span>
+    <span class="age">${esc(shortAgo(it.at))}</span>${acts}</li>`;
 }
 
-function renderPrs() {
-  const g = V.g, el = $('#c-prs');
-  if (!g) return card(el, 'Your PRs', null, skeleton());
-  if (g.error) return card(el, 'Your PRs', null, `<div class="err">${esc(g.error)}</div>`);
-  const mine = g.myPrs.filter((p) => p.status.owner === 'me');
-  card(el, 'Your PRs', mine.length, mine.length ? rows('prs-me', mine, prItem, 6) : '<div class="empty">✓ Nothing on your move</div>');
+function renderList() {
+  const el = $('#list'), all = inboxItems(), live = all.filter((x) => !x.done && !x.snoozed);
+  const by = (f) => live.filter(f);
+  const sources = [['GitHub', state.github], ['Jira', state.jira], ['Jira mentions', state.jiraMentions], ['Slack', state.slack]];
+  const errs = sources.filter(([, s]) => s?.error).map(([n, s]) => `<div class="err">${esc(n)}: ${esc(s.error)}</div>`).join('');
+  const loading = sources.some(([, s]) => !s);
+  const groups = [];
+  const group = (title, glyph, items, opts = {}) => groups.push({ title, glyph, items, ...opts });
+  if (listView === 'inbox') {
+    group('Copilot now', 's-working', sessionItems(), { hideEmpty: true });
+    group('Needs you', 'ment', by((x) => x.group === 'needs'), { empty: loading ? null : 'Nothing needs you right now.' });
+    group('Your tickets', 'prog', by((x) => x.group === 'tickets'), { hideEmpty: true });
+    group('Waiting on others', 'wait', by((x) => x.group === 'waiting'), { hideEmpty: true, fold: !showWaiting });
+  } else if (listView === 'reviews') group('Reviews for you', 'rev', by((x) => x.kind === 'review'), { empty: 'No reviews waiting.' });
+  else if (listView === 'prs') {
+    group('On your move', 'chg', by((x) => x.kind === 'pr' && x.group === 'needs'), { empty: 'Nothing on your move.' });
+    group('Waiting on others', 'wait', by((x) => x.kind === 'pr' && x.group === 'waiting'), { hideEmpty: true });
+  } else if (listView === 'mentions') group('Mentions', 'ment', by((x) => x.kind === 'mention'), { empty: 'No new mentions.' });
+  else if (listView === 'tickets') {
+    group('In progress', 'prog', by((x) => x.kind === 'ticket' && x.glyph === 'prog'), { hideEmpty: true });
+    group('To do', 'todo', by((x) => x.kind === 'ticket' && x.glyph === 'todo'), { empty: 'Nothing assigned.' });
+    group('GitHub issues', 'todo', by((x) => x.kind === 'issue'), { hideEmpty: true });
+  }
+  listItems = [];
+  let html = errs;
+  for (const g of groups) {
+    if (!g.items.length && g.hideEmpty) continue;
+    const head = `<div class="gh"><span class="st ${g.glyph}" style="width:12px;height:12px"></span>${esc(g.title)} <span class="n">${g.items.length}</span>`;
+    if (g.fold) {
+      const peek = g.items.slice(0, 3).map((x) => `${x.ref}${x.step ? ` ${x.step}` : ''}`).join(' · ');
+      html += `${head}<span class="more-l">· ${esc(peek)}</span><span class="spacer" style="flex:1"></span><button data-unfold>Show</button></div>`;
+      continue;
+    }
+    html += `${head}${g.title === 'Waiting on others' && listView === 'inbox' ? '<span class="spacer" style="flex:1"></span><button data-unfold>Hide</button>' : ''}</div>`;
+    html += g.items.length ? `<ul class="list">${g.items.map((it) => itemRow(it, listItems.push(it) - 1)).join('')}</ul>`
+      : g.empty === null ? skeleton(3) : `<div class="empty">✓ ${esc(g.empty)}</div>`;
+  }
+  // What you put away: done (back when something new happens) and snoozed (back at a set time).
+  const scope = (x) => listView === 'inbox' || x.kind === { reviews: 'review', prs: 'pr', mentions: 'mention', tickets: 'ticket' }[listView];
+  const done = all.filter((x) => x.done && scope(x)), later = all.filter((x) => x.snoozed && scope(x));
+  if (done.length || later.length) {
+    const label = [done.length && `${done.length} done`, later.length && `${later.length} snoozed`].filter(Boolean).join(', ');
+    const item = (m, note, btn) => `<li><a href="${esc(m.url)}" target="_blank" rel="noopener">${esc(m.ref)} · ${esc(m.title)}</a><span>${note}</span>${btn}</li>`;
+    html += `<div class="inbox-foot"><button class="muted-toggle" id="later-toggle">${showLater ? 'Hide' : 'Show'} ${label}</button>${showLater ? `<ul class="muted-list">${
+      done.map((m) => item(m, 'done', `<button data-undone="${esc(m.k)}">Undo</button>`)).join('')}${
+      later.map((m) => item(m, `until ${when(m.snoozed)}`, `<button data-unmute="${esc(m.k)}">Unsnooze</button>`)).join('')}</ul>` : ''}</div>`;
+  }
+  const top = el.scrollTop;
+  el.innerHTML = html || skeleton(5);
+  el.scrollTop = top;
+}
+document.addEventListener('click', (e) => {
+  if (e.target.closest('[data-unfold]')) { showWaiting = !showWaiting; renderList(); return; }
+  if (e.target.closest('#later-toggle')) { showLater = !showLater; renderList(); return; }
+  const r = e.target.closest('#list .r');
+  if (!r || e.target.closest('button, .cp-chip') || getSelection().toString()) return;
+  // Ctrl/Cmd-click on the title still opens the source's own page.
+  if (e.target.closest('a') && (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0)) return;
+  e.preventDefault();
+  select(r);
+  openItem(listItems[Number(r.dataset.i)]);
+});
+
+function select(r) {
+  if (!r) return;
+  document.querySelectorAll('#list .r.sel').forEach((x) => x.classList.remove('sel'));
+  r.classList.add('sel');
+  selK = listItems[Number(r.dataset.i)]?.k;
+  r.scrollIntoView({ block: 'nearest' });
 }
 
-function renderWaiting() {
-  const g = V.g, el = $('#c-waiting');
-  if (!g) return card(el, 'Waiting on others', null, skeleton(2));
-  if (g.error) return card(el, 'Waiting on others', null, '');
-  const list = g.myPrs.filter((p) => p.status.owner === 'others');
-  card(el, 'Waiting on others', list.length, list.length ? rows('prs-others', list, prItem, 4) : '<div class="empty">None of your PRs are waiting.</div>');
-}
+// J/K to move, Enter to open, E done, H snooze, A Copilot, O open the source's page.
+document.addEventListener('keydown', (e) => {
+  if ($('#v-list').hidden || e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.('input, textarea, select, [contenteditable]') || !menu.hidden) return;
+  const rows = [...document.querySelectorAll('#list .r')], cur = document.querySelector('#list .r.sel'), i = rows.indexOf(cur);
+  const k = e.key.toLowerCase();
+  if (k === 'j' || e.key === 'ArrowDown') { select(rows[Math.min(i + 1, rows.length - 1)] || rows[0]); e.preventDefault(); }
+  else if (k === 'k' || e.key === 'ArrowUp') { select(rows[Math.max(i - 1, 0)]); e.preventDefault(); }
+  else if (!cur) return;
+  else if (e.key === 'Enter') { openItem(listItems[Number(cur.dataset.i)]); e.preventDefault(); }
+  else if (k === 'o') { const u = listItems[Number(cur.dataset.i)]?.url; if (u) window.open(u, '_blank', 'noopener'); }
+  else if (k === 'e') { cur.querySelector('[data-done]')?.click(); select(rows[i + 1] || rows[i - 1]); }
+  else if (k === 'h') { const b = cur.querySelector('[data-mute]'); if (b) { e.preventDefault(); openMuteMenu(b); } }
+  else if (k === 'a') { const b = cur.querySelector('[data-ask]'); if (b) { e.preventDefault(); openAskMenu(b); } }
+});
 
-function renderMentions() {
-  const g = V.g, jm = V.jm, sl = V.sl, el = $('#c-mentions');
-  const all = [
-    ...(g?.mentions || []).map((m) => ({ at: m.updatedAt, html: () => row({ url: m.url, stamp: m.stamp, title: m.title,
-      pr: m.kind === 'PR' ? prRef(m) : null, badge: 'GitHub', tone: 'gray', meta: `${prRef(m)} · ${m.kind} · updated ${ago(m.updatedAt)}` }) })),
-    // One row per ticket; dismissing it hides the ticket until someone mentions you there again.
-    ...(jm?.tickets || []).map((t) => ({ at: t.at, html: () => row({ url: t.url, stamp: t.stamp, dismissKey: t.dismissKey,
-      title: `${t.key} · ${t.summary}`, issue: t.key, badge: 'Jira', tone: 'gray', quote: t.excerpt,
-      meta: [t.people.join(', '), t.count > 1 && `${t.count} mentions`, `latest ${ago(t.at)}`, t.status].filter(Boolean).join(' · ') }) })),
-    ...(sl?.mentions || []).map((m) => ({ at: m.at, html: () => row({ url: m.url, stamp: m.stamp, title: `${m.by} in ${m.channel}`,
-      badge: 'Slack', tone: 'gray', meta: ago(m.at), quote: m.excerpt }) })),
-  ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
-  const errs = [g?.error && `GitHub: ${g.error}`, jm?.error && `Jira: ${jm.error}`, sl?.error && `Slack: ${sl.error}`].filter(Boolean);
-  const loading = !g || !jm || !sl;
-  card(el, 'Mentions', loading && !all.length ? null : all.length,
-    (errs.length ? `<div class="err">${esc(errs.join(' · '))}</div>` : '') +
-    (all.length ? rows('mentions', all, (m) => m.html(), 6) : loading ? skeleton() : '<div class="empty">✓ No new mentions</div>') +
-    (loading && all.length ? skeleton(1) : ''));
-}
+// ---------------------------------------------------------------- one item in full
 
-function renderLeft() {
-  const j = V.j, g = V.g, el = $('#c-left');
-  if (!j) return card(el, 'Your tickets', null, skeleton(4));
-  const item = (i) => row({ url: i.url, stamp: i.stamp, title: `${i.key} · ${i.summary}`, issue: i.key,
-    badge: null,
-    meta: [i.status, i.type, i.priority, i.due && `due ${i.due}`, i.updatedAt && `updated ${ago(i.updatedAt)}`].filter(Boolean).join(' · ') });
-  const jira = j.error ? `<div class="err">Jira: ${esc(j.error)}</div>` : [['indeterminate', 'In progress'], ['new', 'To do']].map(([cat, label]) => {
-    const group = j.assigned.filter((i) => (i.statusCategory || 'new') === cat);
-    return group.length ? `<div class="group" id="g-left-${cat}">${label}</div>${rows(`left-${cat}`, group, item, cat === 'new' ? 3 : 5)}` : '';
-  }).join('') || '<div class="empty">Nothing assigned.</div>';
-  const issues = g?.assigned || [];
-  const gh = issues.length ? `<div class="group">GitHub issues</div>${rows('left-gh', issues, (i) => row({ url: i.url, stamp: i.stamp,
-    title: i.title, meta: `${prRef(i)} · updated ${ago(i.updatedAt)}` }), 3)}` : '';
-  card(el, 'Your tickets', (j.assigned?.length || 0) + issues.length, jira + gh);
+let curItem = null;
+function openItem(it) {
+  if (!it) return;
+  if (it.kind === 'session') { openChat(true, true); if (it.sid !== chat.session || !chat.turns) openSession(it.sid, it.cwd); return; }
+  if (it.read) return openReader(it.read.src, it.read.key, it.url);
+  curItem = it;
+  renderItem();
+  location.hash = '#item';
 }
+function whyLine(it) {
+  const d = it.data || {};
+  if (it.kind === 'review') return `${esc(d.author)} asked for your ${d.rerequested ? 're-review' : 'review'} ${esc(ago(d.requestedAt))}${d.viaTeam ? ' (via your team)' : ''}.`;
+  if (it.kind === 'pr') return `${esc(d.status.label)}.${prMeta(d) ? ` ${esc(prMeta(d))[0].toUpperCase()}${esc(prMeta(d)).slice(1)}.` : ''} Updated ${esc(ago(d.updatedAt))}.`;
+  if (it.kind === 'mention') return it.src === 'Jira' ? `${esc(d.people.join(', '))} mentioned you ${esc(ago(d.at))}${d.count > 1 ? `, ${d.count} times` : ''}.${d.status ? ` Ticket is ${esc(d.status)}.` : ''}`
+    : it.src === 'Slack' ? `${esc(d.by)} mentioned you in ${esc(d.channel)} ${esc(ago(d.at))}.` : `You were mentioned. Updated ${esc(ago(d.updatedAt))}.`;
+  if (it.kind === 'ticket') return `Assigned to you · ${esc([d.status, d.type, d.priority && `${d.priority} priority`, d.due && `due ${d.due}`].filter(Boolean).join(' · '))}.`;
+  return esc(it.step || '');
+}
+async function renderItem() {
+  const it = curItem, el = $('#item');
+  if (!it) return;
+  const where = { GitHub: 'Open on GitHub', Jira: 'Open in Jira', Slack: 'Open in Slack' }[it.src] || 'Open';
+  const sessions = cpLinks.links[itemKey(it.url || '')] || [];
+  $('#it-crumb').textContent = `${it.src || ''}${it.ref ? ` · ${it.ref}` : ''}`;
+  const head = `<div class="src"><span class="st ${esc(it.glyph)}"></span>${esc(it.ref || '')}</div>
+    <h2>${esc(it.title)}</h2><div class="why">${whyLine(it)}</div>`;
+  const acts = `<div class="acts-row">${it.url ? `<a class="icon-btn primary" href="${esc(it.url)}" target="_blank" rel="noopener">${where} ↗</a>` : ''}
+    ${refFromUrl(it.url) ? `<button class="icon-btn" data-ask="${esc(it.url)}" data-title="${esc(it.title)}">✦ Copilot on this</button>` : ''}
+    <button class="icon-btn" data-mute="${esc(it.k)}">${MUTE_ICON} Snooze</button>
+    <button class="icon-btn" data-done="${esc(it.k)}" data-stamp="${esc(it.stamp ?? '')}" data-back-after>${DONE_ICON} Done</button></div>`;
+  const cps = sessions.length ? `<h3>Copilot on this</h3><div class="cps">${sessions.map(chip).join('')}</div>` : '';
+  const quote = it.quote ? `<h3>${it.src === 'Slack' ? 'Message' : 'Latest mention'}</h3><div class="quote">${esc(it.quote)}</div>` : '';
+  const ref = it.pr ? { pr: it.pr } : it.issue ? { issue: it.issue } : null;
+  const draw = (facts, body) => { if (curItem === it) el.innerHTML = head + (facts ? `<div class="facts">${facts}</div>` : '') + acts + quote + cps + body; };
+  draw('', ref ? `<h3>Details</h3>${skeleton(2)}` : '');
+  if (!ref) return;
+  const d = await preview({ dataset: ref });
+  if (d.error) return draw('', `<div class="err" style="margin:0">${esc(d.error)}</div>`);
+  if (ref.pr) {
+    const [label, tone] = prState(d);
+    draw(`<span class="${{ green: 'good', red: 'bad' }[tone] || ''}">${label}</span><span>${esc(d.author)}</span><span>+${d.size.additions} −${d.size.deletions} in ${d.size.files} files</span><span>updated ${esc(ago(d.updatedAt))}</span>`,
+      d.description ? `<h3>Description</h3><div class="desc">${esc(d.description)}</div>` : '');
+  } else {
+    draw(`<span>${esc(d.status || '')}</span>${d.type ? `<span>${esc(d.type)}</span>` : ''}${d.priority ? `<span>${esc(d.priority)} priority</span>` : ''}<span>${d.assignee ? `Assignee: ${esc(d.assignee)}` : 'Unassigned'}</span>${d.reporter ? `<span>Reporter: ${esc(d.reporter)}</span>` : ''}`,
+      d.description ? `<h3>Description</h3><div class="desc">${esc(d.description)}</div>` : '');
+  }
+}
+// Done or snoozed from the item page: back to the list.
+document.addEventListener('click', (e) => { if (e.target.closest('[data-back-after]')) setTimeout(back, 0); });
 
-// Panels for extra sources (lib/sources, ~/.config/clearsky/sources): the server sends rows.
+// Sources from plugins (lib/sources, ~/.config/clearsky/sources) each get a page of their own,
+// listed in the menu: personal ones under Personal, the rest under Work.
 let extraSources = [];
 function addSourcePanels(list) {
   extraSources = list.filter((x) => x.panel);
   for (const x of extraSources) {
-    const id = `c-x-${x.name}`;
-    if (document.getElementById(id)) continue;
-    const el = document.createElement('section');
-    el.className = 'card'; el.id = id;
-    const personal = x.area === 'personal';
-    (personal ? $(x.panel.zone === 'needs' ? '#p-needs' : '#p-track') : $(x.panel.zone === 'needs' ? '#today .grid' : '#today .grid.quiet')).append(el);
-    PANEL_SOURCES[id] = [x.name];
+    if (document.querySelector(`[data-nav="src-${x.name}"]`)) continue;
+    const a = document.createElement('a');
+    a.className = 'ni'; a.href = `#src-${x.name}`; a.dataset.nav = `src-${x.name}`;
+    a.innerHTML = `<span class="ico">${x.area === 'personal' ? '⌂' : '◆'}</span><span class="lab">${esc(x.panel.title)}</span><b></b>`;
+    $(x.area === 'personal' ? '#side-personal' : '#side-work').append(a);
   }
+  $('#side-personal-h').hidden = !extraSources.some((x) => x.area === 'personal');
+  route();
 }
 function renderExtra() {
-  let personalNeeds = 0;
   for (const x of extraSources) {
-    const el = document.getElementById(`c-x-${x.name}`), d = state[x.name];
-    if (!el) continue;
-    if (!d) { card(el, x.panel.title, null, skeleton(2)); continue; }
-    if (d.disabled) { el.hidden = true; continue; }
-    el.hidden = false;
-    const list = vis((d.items || []).map((i) => ({ ...i, src: x.name, url: i.url || '', dismissKey: i.key ? `${x.name}:${i.key}` : undefined })));
+    const d = state[x.name], nav = document.querySelector(`[data-nav="src-${x.name}"]`);
+    if (nav) nav.hidden = !!d?.disabled;
+    const list = d && !d.error ? vis((d.items || []).map((i) => ({ ...i, src: x.name, url: i.url || '', dismissKey: i.key ? `${x.name}:${i.key}` : undefined }))) : [];
     const table = x.panel.view === 'table';
     // An inbox counts what's unread; other panels count what they show.
     const count = table ? list.filter((i) => i.unread).length : list.length;
-    if (x.area === 'personal' && x.panel.zone === 'needs' && !d.error) personalNeeds += count;
+    if (nav) { const b = nav.querySelector('b'); b.textContent = count || ''; b.classList.toggle('hot', !!count && x.panel.zone === 'needs'); }
+    if (location.hash !== `#src-${x.name}`) continue;
+    $('#src-title').textContent = x.panel.title;
+    const el = $('#src-body');
+    PANEL_SOURCES[el.id] = [x.name];
+    if (!d) { card(el, x.panel.title, null, skeleton(3)); continue; }
     card(el, x.panel.title, d.error ? null : count, (d.error ? `<div class="err">${esc(d.error)}${d.needsLogin ? ' <a href="/settings#extra">Log in again in Settings</a>' : ''}</div>` : '') +
-      (list.length ? (table ? tableView(x, list) : rows(`x-${x.name}`, list, (i) => row(i), 5))
+      (list.length ? (table ? tableView(x, list, 40) : rows(`x-${x.name}`, list, (i) => row(i), 30))
         : d.error ? '' : '<div class="empty">Nothing here.</div>'));
   }
-  renderPersonal(personalNeeds);
 }
 
 // A source panel as an inbox: newest first, date, sender and group as columns, filtered by
@@ -1369,27 +1547,27 @@ document.addEventListener('pointerdown', (e) => {
   h.addEventListener('pointermove', move); h.addEventListener('pointerup', up);
 });
 
-// The Personal tab: personal sources' panels, under the same day schedule as Work.
-function renderPersonal(needs = 0) {
-  const has = extraSources.some((x) => x.area === 'personal');
-  $('#tab-personal').hidden = !has;
-  $('#tab-personal').innerHTML = `<span class="ico">⌂</span>Personal${needs ? `<span class="tab-n" title="${needs} waiting for you">${needs}</span>` : ''}`;
-  if (!has) return;
+// The menu: counts beside each view, and the dot on ☰ when it's folded away on a small screen.
+function renderNav() {
+  const all = inboxItems().filter((x) => !x.done && !x.snoozed);
+  const cpWaiting = (cpLinks.live || []).filter((x) => x.status !== 'working').length;
+  const set = (id, n, hot) => { const b = $(`#n-${id}`); b.textContent = n || ''; b.classList.toggle('hot', !!hot && !!n); };
+  const needs = all.filter((x) => x.group === 'needs').length + cpWaiting;
+  set('inbox', needs, true);
+  set('reviews', all.filter((x) => x.kind === 'review').length, true);
+  set('prs', all.filter((x) => x.kind === 'pr' && x.group === 'needs').length, true);
+  set('mentions', all.filter((x) => x.kind === 'mention').length, true);
+  set('tickets', all.filter((x) => x.kind === 'ticket').length);
   const p = state.plan?.plan;
-  $('#p-day').innerHTML = p ? dayHtml(p) : '';
-  $('#p-day').hidden = !p?.day;
-  for (const z of ['needs', 'track']) {
-    const shown = [...$(`#p-${z}`).children].some((c) => !c.hidden);
-    $(`#p-${z}`).hidden = $(`#p-${z}-h`).hidden = !shown;
-  }
+  $('#n-calendar').textContent = p?.now ? 'now' : p?.next && sameDay(p.next.start) ? hm(p.next.start) : '';
+  $('#menu-n').hidden = !needs; $('#menu-n').textContent = needs;
 }
 
 function renderToday() {
   view();
-  renderPlan(); renderKpis(); renderReview(); renderPrs(); renderMentions(); renderWaiting(); renderLeft(); renderExtra(); renderCopilotCard();
-  menuBadges();
-  $('#unhide').hidden = !hiddenCount;
-  $('#unhide').textContent = `Show ${hiddenCount} hidden`;
+  renderNow(); renderNav(); renderExtra();
+  if (!$('#v-list').hidden) renderList();
+  if (!$('#v-calendar').hidden) renderCalendar();
 }
 
 // ---------------------------------------------------------------- Stand-up
@@ -1554,28 +1732,32 @@ function chatTabs() {
   }).sort((a, b) => (b.live - a.live)).slice(0, 8);
 }
 function drawTabs() {
-  const tabs = chatTabs();
+  const tabs = chatTabs(), onChat = !$('#chat').hidden;
   const isNew = !chat.turns && !chat.stop;
-  $('#cp-tabs').innerHTML = tabs.map((t, i) => `<button class="cp-tab s-${esc(t.status)}${t.id === chat.session && !isNew ? ' on' : ''}" role="tab" aria-selected="${t.id === chat.session}"
+  const folder = (d) => (d || '').split('/').filter(Boolean).pop() || '';
+  $('#side-cp').innerHTML = tabs.map((t, i) => `<a class="ni cp${onChat && t.id === chat.session && !isNew ? ' on' : ''}" href="#copilot"
       data-tab="${esc(t.id)}" data-cwd="${esc(t.cwd || '')}" title="${esc(t.title)}${STATUS_TEXT[t.status] ? ` · ${STATUS_TEXT[t.status]}` : ''}${i < 9 ? ` (Alt+${i + 1})` : ''}">
-      <i></i><span>${esc(t.title)}</span>${t.live ? '' : `<span class="x" data-forget="${esc(t.id)}" title="Remove from this list" aria-label="Remove">✕</span>`}</button>`).join('')
-    + `${isNew ? '<button class="cp-tab on" role="tab" aria-selected="true"><i></i><span>New chat</span></button>' : ''}<button class="add" id="cp-tab-new" title="New chat (Alt+N)" aria-label="New chat">＋</button>`;
-  $('#cp-tabs').hidden = !tabs.length && isNew;
+      <span class="live s-${esc(t.status)}"></span><span class="lab">${esc(t.title)}<small>${esc([STATUS_TEXT[t.status] || (t.live ? 'open' : ''), folder(t.cwd)].filter(Boolean).join(' · '))}</small></span>
+      ${t.live ? '' : `<span class="x" data-forget="${esc(t.id)}" title="Remove from this list" aria-label="Remove">✕</span>`}</a>`).join('')
+    + (onChat && isNew ? '<a class="ni cp on" href="#copilot"><span class="live"></span><span class="lab">New chat</span></a>' : '');
 }
-$('#cp-tabs').addEventListener('click', (e) => {
+$('#side-cp').addEventListener('click', (e) => {
   const f = e.target.closest('[data-forget]');
-  if (f) { e.stopPropagation(); recentChats = recentChats.filter((x) => x.id !== f.dataset.forget); saveRecent(); if (f.dataset.forget === chat.session) newChat(); else drawTabs(); return; }
-  if (e.target.closest('#cp-tab-new')) { newChat(); $('#chat-text').focus(); return; }
+  if (f) { e.preventDefault(); e.stopPropagation(); recentChats = recentChats.filter((x) => x.id !== f.dataset.forget); saveRecent(); if (f.dataset.forget === chat.session) newChat(); else drawTabs(); return; }
   const t = e.target.closest('[data-tab]');
-  if (t && t.dataset.tab !== chat.session) openSession(t.dataset.tab, t.dataset.cwd);
+  if (!t) return;
+  e.preventDefault();
+  openChat(true, true);
+  if (t.dataset.tab !== chat.session || !chat.turns) openSession(t.dataset.tab, t.dataset.cwd);
 });
+$('#cp-new-side').onclick = () => { newChat(); openChat(true, true); $('#chat-text').focus(); };
 document.addEventListener('keydown', (e) => {
-  if ($('#chat').hidden || !e.altKey || e.ctrlKey || e.metaKey) return;
-  if (e.key === 'n' || e.key === 'N') { e.preventDefault(); newChat(); $('#chat-text').focus(); return; }
+  if (!e.altKey || e.ctrlKey || e.metaKey) return;
+  if (e.key === 'n' || e.key === 'N') { e.preventDefault(); newChat(); openChat(true, true); $('#chat-text').focus(); return; }
   const n = Number(e.key);
   if (n >= 1 && n <= 9) {
     const t = chatTabs()[n - 1];
-    if (t) { e.preventDefault(); if (t.id !== chat.session) openSession(t.id, t.cwd); }
+    if (t) { e.preventDefault(); openChat(true, true); if (t.id !== chat.session || !chat.turns) openSession(t.id, t.cwd); }
   }
 });
 // While the panel is open, keep the dots fresh.
@@ -1624,6 +1806,7 @@ function drawCtx() {
 
 function chatSub() {
   drawCtx();
+  $('#chat-title').textContent = chat.title || (chat.turns ? 'Copilot session' : 'New chat');
   const i = chat.info;
   $('#chat-sub').textContent = !i ? '' : !i.available ? 'Copilot CLI not found' : `${i.permissions[$('#cp-perm').value] || ''}${chat.turns ? ` · ${chat.turns} turn${chat.turns > 1 ? 's' : ''}` : ''}`;
 }
@@ -1950,62 +2133,24 @@ $('#chat-log').addEventListener('click', async (e) => {
   catch (err) { if (seg) seg.answered = `Couldn't send: ${err.message}`; }
 });
 
-function openChat(open = true) {
-  $('#chat').hidden = !open;
-  document.body.classList.toggle('chat-on', open);
-  try { localStorage.setItem('clearsky.chatOpen', open ? '1' : ''); } catch {}
-  if (open) {
-    if (!chat.session) {
-      let saved = null;
-      try { saved = JSON.parse(localStorage.getItem(CUR_KEY) || 'null'); } catch {}
-      if (saved?.id) openSession(saved.id, saved.cwd); else newChat();
-    }
-    if (!chat.info) loadCopilotInfo();
-    $('#chat-text').focus();
+// The chat is a view of its own (#copilot). With `ready`, the caller has already picked the
+// session; otherwise the one you had open last comes back.
+function openChat(open = true, ready = false) {
+  if (!open) return back();
+  if (location.hash !== '#copilot') { openChatSkip = ready; location.hash = '#copilot'; } else showChat(ready);
+}
+function showChat(ready) {
+  if (!chat.session && !ready) {
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(CUR_KEY) || 'null'); } catch {}
+    if (saved?.id) openSession(saved.id, saved.cwd); else newChat();
   }
+  if (!chat.info) loadCopilotInfo();
+  drawCtx();
+  setTimeout(() => $('#chat-text').focus(), 0);
 }
 
-document.addEventListener('click', (e) => {
-  const a = e.target.closest('[data-jump]');
-  if (!a) return;
-  e.preventDefault();
-  const el = document.getElementById(a.dataset.jump) || document.getElementById(a.dataset.jump.replace(/^g-(prs|left)-.*/, 'c-$1'));
-  if (!el) return;
-  const card = el.closest('.card') || el;
-  el.scrollIntoView({ behavior: 'smooth', block: el === card ? 'start' : 'center' });
-  card.classList.remove('flash'); void card.offsetWidth; card.classList.add('flash');
-});
-
-$('#chat-max').onclick = () => {
-  const max = $('#chat').classList.toggle('max');
-  $('#chat-max').textContent = max ? '⤡' : '⤢';
-  $('#chat-max').title = max ? 'Restore' : 'Maximize';
-  try { localStorage.setItem('clearsky.chatMax', max ? '1' : ''); } catch {}
-};
-try { if (localStorage.getItem('clearsky.chatMax')) $('#chat-max').click(); } catch {}
-
-$('#chat-open').onclick = () => openChat($('#chat').hidden);
-$('#chat-close').onclick = () => openChat(false);
-
-// ---------------------------------------------------------------- menu and theme
-
-function menu_(open) {
-  $('#drawer').hidden = $('#scrim').hidden = !open;
-  $('#menu-btn').setAttribute('aria-expanded', String(open));
-  if (open) $('#drawer nav a.active, #drawer nav a')?.focus();
-}
-$('#menu-btn').onclick = () => menu_($('#drawer').hidden);
-$('#scrim').onclick = () => menu_(false);
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#drawer').hidden) menu_(false); });
-$('#nav-copilot').onclick = (e) => { e.preventDefault(); menu_(false); openChat(true); };
-// The menu button carries what waits for you on the tab you're not looking at, and Copilot.
-function menuBadges() {
-  const live = (cpLinks.live || []).filter((x) => x.status !== 'working').length;
-  $('#nav-copilot-n').hidden = !live; $('#nav-copilot-n').textContent = live;
-  const personal = Number($('#tab-personal .tab-n')?.textContent || 0);
-  const n = live + (location.hash === '#personal' ? 0 : personal);
-  $('#menu-n').hidden = !n; $('#menu-n').textContent = n;
-}
+// ---------------------------------------------------------------- theme
 
 function setTheme(t) {
   if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
@@ -2046,7 +2191,6 @@ $('#hist-list').addEventListener('click', (e) => { const b = e.target.closest('[
 $('#cp-ref-add').onclick = openRefPick;
 $('#cp-refs').addEventListener('click', (e) => { const i = e.target.closest('[data-unref]')?.dataset.unref; if (i != null) { chat.refs.splice(+i, 1); drawRefs(); } });
 document.addEventListener('mousedown', (e) => { if (!e.target.closest('.ref-pick, #cp-ref-add')) closeRefPick(); });
-try { if (localStorage.getItem('clearsky.chatOpen')) openChat(true); } catch {}
 for (const id of ['#cp-model', '#cp-effort', '#cp-perm', '#cp-allow', '#cp-deny']) $(id).addEventListener('change', saveCp);
 $('#chat-form').onsubmit = (e) => {
   e.preventDefault();
@@ -2129,20 +2273,67 @@ document.addEventListener('click', (e) => {
   if (more) { expanded.add(more); renderToday(); }
 });
 
+// ---------------------------------------------------------------- views
+
+// One view at a time fills the work area. Lists are #inbox, #reviews, #prs, #mentions and
+// #tickets; #item is one thing in full; #copilot is the chat; #calendar, #standup, #src-<name>.
+let current = 'inbox', returnTo = 'inbox', openChatSkip = false;
 function route() {
-  const su = location.hash === '#standup', pe = location.hash === '#personal';
-  $('#today').hidden = su || pe;
-  $('#personal').hidden = !pe;
-  $('#standup').hidden = !su;
-  $('#tab-today').classList.toggle('active', !su && !pe);
-  $('#tab-personal').classList.toggle('active', pe);
-  $('#tab-standup').classList.toggle('active', su);
-  $('#where').textContent = `· ${su ? 'Stand-up' : pe ? 'Personal' : 'Work'}`;
+  let h = location.hash.slice(1) || 'inbox';
+  // Old links: the Personal tab is now each personal source's own page.
+  if (h === 'personal') {
+    const p = extraSources.find((x) => x.area === 'personal');
+    h = p ? `src-${p.name}` : 'inbox';
+    history.replaceState(null, '', `#${h}`);
+  }
+  if (h === 'item' && !curItem) { h = 'inbox'; history.replaceState(null, '', '#inbox'); }
+  if (h.startsWith('src-') && !extraSources.some((x) => `src-${x.name}` === h)) h = extraSources.length ? 'inbox' : h;
+  if (h !== 'item' && h !== 'copilot') returnTo = h;
+  current = h;
+  const list = h in LIST_VIEWS;
+  $('#v-list').hidden = !list;
+  $('#v-item').hidden = h !== 'item';
+  $('#v-calendar').hidden = h !== 'calendar';
+  $('#v-standup').hidden = h !== 'standup';
+  $('#v-src').hidden = !h.startsWith('src-');
+  $('#chat').hidden = h !== 'copilot';
+  for (const a of document.querySelectorAll('[data-nav]')) a.classList.toggle('on', a.dataset.nav === (h === 'item' ? returnTo : h));
   menu_(false);
   hideCard();
-  if (su && !standupData) { renderStandup(); loadStandup(false); }
+  hideEvent(true);
+  if (list) { listView = h; $('#list-title').textContent = LIST_VIEWS[h]; renderList(); $('#list').focus({ preventScroll: true }); }
+  if (h === 'calendar') renderCalendar();
+  if (h === 'standup' && !standupData) { renderStandup(); loadStandup(false); }
+  if (h.startsWith('src-')) { $('#src-body').innerHTML = ''; renderExtra(); }
+  if (h === 'copilot') { showChat(openChatSkip); openChatSkip = false; }
+  drawTabs();
 }
 window.addEventListener('hashchange', route);
+function back() { location.hash = `#${returnTo || 'inbox'}`; }
+document.addEventListener('click', (e) => { if (e.target.closest('[data-back]')) back(); });
+
+// Esc goes back to the list (or from a filtered list to the inbox), unless something smaller
+// is open: a menu, a popover, a picker. Those close first.
+window.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (!menu.hidden || evPop?.isConnected || hc.classList.contains('on') || document.querySelector('#cp-refs .ref-pick')) return;
+  if ($('#side').classList.contains('open')) { menu_(false); return; }
+  if (!$('#chat-hist').hidden) { showHistory(false); e.preventDefault(); return; }
+  const t = e.target;
+  if (t.closest?.('input, select') || (t.id === 'chat-text' && t.value)) return;
+  if (current === 'inbox') { document.querySelectorAll('#list .r.sel').forEach((x) => x.classList.remove('sel')); selK = null; return; }
+  e.preventDefault();
+  location.hash = current in LIST_VIEWS ? '#inbox' : `#${returnTo || 'inbox'}`;
+}, true);
+
+// On a small screen the menu folds away behind ☰.
+function menu_(open) {
+  $('#side').classList.toggle('open', open);
+  $('#scrim').hidden = !open;
+  $('#menu-btn').setAttribute('aria-expanded', String(open));
+}
+$('#menu-btn').onclick = () => menu_(!$('#side').classList.contains('open'));
+$('#scrim').onclick = () => menu_(false);
 
 $('#copy').onclick = async () => {
   const btn = $('#copy');
@@ -2156,7 +2347,7 @@ document.addEventListener('click', (e) => {
   if (!btn) return;
   if (e.shiftKey) loadAll(true); else refreshPanel(PANEL_SOURCES[btn.dataset.refresh]);
 });
-$('#unhide').onclick = () => { dismissed = {}; dismiss({ clear: true }); };
+for (const b of document.querySelectorAll('#refresh, [data-refresh="plan"]')) b.innerHTML = REFRESH_ICON;
 
 try { localStorage.removeItem('clearsky.hidden'); } catch {} // from the browser-only version
 renderToday();
@@ -2164,7 +2355,7 @@ getJson('/api/sources').then((r) => {
   addSourcePanels(r.sources || []);
   for (const x of r.sources || []) { SOURCES.push(x.name); loadSource(x.name, false); }
 }).catch(() => {});
-getJson('/api/dismissed').then((d) => { dismissed = d.dismissed || {}; renderToday(); }).catch(() => {});
+getJson('/api/dismissed').then((d) => { dismissed = d.dismissed || {}; mutedMap = d.muted || {}; renderToday(); }).catch(() => {});
 loadAll(false);
 route();
 setInterval(() => loadAll(false), REFRESH_MS);
@@ -2179,31 +2370,31 @@ const bytes = (n) => (n == null ? '' : n < 1024 ? `${n} B` : n < 1048576 ? `${Ma
 // Plain text from the source, with its web addresses made clickable.
 const linkText = (t) => esc(t).replace(/https?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)]/g, (u) => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
 
+// A source's item read in full, such as a school message, in the work area.
 async function openReader(src, key, url) {
-  const dlg = $('#reader');
-  $('#reader-title').textContent = 'Loading…';
-  $('#reader-meta').textContent = '';
-  $('#reader-body').innerHTML = skeleton(3);
-  $('#reader-open').href = url || '#';
-  $('#reader-open').hidden = !url;
-  if (!dlg.open) dlg.showModal();
+  curItem = { reader: true, k: `${src}:${key}`, title: 'Loading…' };
+  const it = curItem, el = $('#item');
+  const x = extraSources.find((s) => s.name === src);
+  $('#it-crumb').textContent = x?.panel.title || '';
+  location.hash = '#item';
+  const open = (u) => (u ? `<div class="acts-row"><a class="icon-btn primary" href="${esc(u)}" target="_blank" rel="noopener">Open in portal ↗</a></div>` : '');
+  el.innerHTML = `<h2>Loading…</h2>${skeleton(3)}`;
   try {
     const d = await getJson(`/api/source/${encodeURIComponent(src)}/detail?key=${encodeURIComponent(key)}`);
-    $('#reader-title').textContent = d.title || 'Message';
-    $('#reader-meta').textContent = [d.child, d.meta].filter(Boolean).join(' · ');
-    if (d.url) { $('#reader-open').href = d.url; $('#reader-open').hidden = false; }
+    if (curItem !== it) return;
     const file = (a) => `/api/source/${encodeURIComponent(src)}/attachment?key=${encodeURIComponent(key)}&id=${encodeURIComponent(a.id)}`;
-    $('#reader-body').innerHTML = (d.messages || []).map((m) => `<div class="msg-r${m.mine ? ' mine' : ''}">
+    el.innerHTML = `<h2>${esc(d.title || 'Message')}</h2><div class="why">${esc([d.child, d.meta].filter(Boolean).join(' · '))}</div>${open(d.url || url)}
+      ${(d.messages || []).map((m) => `<div class="msg-r${m.mine ? ' mine' : ''}">
       <div class="who"><b>${esc(m.from || '')}</b>${m.at ? ` · ${esc(new Date(m.at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short', hourCycle: hourCycle() }))}` : ''}</div>
       ${m.title && m.title !== d.title ? `<div class="sub">${esc(m.title)}</div>` : ''}
       <div class="txt">${linkText(m.text || '')}</div>
       ${m.attachments?.length ? `<div class="files">${m.attachments.map((a) => a.id
         ? `<a href="${file(a)}" target="_blank" rel="noopener">📎 ${esc(a.name)} <span class="size">${bytes(a.bytes)}</span></a>`
         : `<span title="Open it in the portal">📎 ${esc(a.name)}</span>`).join('')}</div>` : ''}
-    </div>`).join('') || '<div class="empty">Nothing to show.</div>';
+    </div>`).join('') || '<div class="empty" style="padding-left:0">Nothing to show.</div>'}`;
   } catch (e) {
-    $('#reader-title').textContent = 'Couldn’t open this';
-    $('#reader-body').innerHTML = `<div class="err">${esc(e.message)}${/log in/i.test(e.message) ? ' <a href="/settings#extra">Log in again in Settings</a>' : ''}</div>`;
+    if (curItem !== it) return;
+    el.innerHTML = `<h2>Couldn’t open this</h2>${open(url)}<div class="err" style="margin:0">${esc(e.message)}${/log in/i.test(e.message) ? ' <a href="/settings#extra">Log in again in Settings</a>' : ''}</div>`;
   }
 }
 
@@ -2214,8 +2405,6 @@ document.addEventListener('click', (e) => {
   e.preventDefault();
   openReader(a.dataset.read, a.dataset.key, a.getAttribute('href'));
 });
-$('#reader-close').addEventListener('click', () => $('#reader').close());
-$('#reader').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 </script>
 </body>
 </html>

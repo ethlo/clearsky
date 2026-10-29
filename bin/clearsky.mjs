@@ -1755,7 +1755,7 @@ function serve() {
       }
       const attach = url.pathname.match(/^\/api\/copilot\/sessions\/([\w-]{8,64})\/live$/)?.[1];
       if (attach) return attachCopilot(attach, req, res);
-      if (url.pathname === '/api/dismissed') return json(res, 200, { dismissed: localState.dismissed(stateFile) });
+      if (url.pathname === '/api/dismissed') return json(res, 200, { dismissed: localState.dismissed(stateFile), muted: localState.muted(stateFile) });
       if (url.pathname === '/api/plan') {
         // Waits for every source (from cache when fresh); the page asks for it alongside them.
         const { plan, nextStandup: next, summary, generatedAt } = await collect(false);
