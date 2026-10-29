@@ -649,7 +649,7 @@ async function standupGitHub(since) {
     `query($mine: String!, $reviewed: String!, $me: String!) {
       mine: search(query: $mine, type: ISSUE, first: 50) { nodes { ... on PullRequest {
         number title url state isDraft createdAt mergedAt repository { nameWithOwner }
-        commits(last: 100) { nodes { commit { committedDate authors(first: 5) { nodes { user { login } } } } } } } } }
+        commits(last: 100) { nodes { commit { committedDate authors(first: 5) { nodes { email user { login } } } } } } } } }
       reviewed: search(query: $reviewed, type: ISSUE, first: 50) { nodes { ... on PullRequest {
         number title url repository { nameWithOwner } author { login }
         reviews(last: 20, author: $me) { nodes { state submittedAt } } } } }
@@ -667,8 +667,11 @@ async function standupGitHub(since) {
   // ("restricted contributions"), so contributionsCollection reports 0 there.
   const commitsByRepo = new Map();
   for (const p of mine) {
+    // On my own PRs, a commit is mine if GitHub links it to me, or if it isn't linked to any
+    // account (an email not added to GitHub) and isn't a GitHub noreply address of someone else.
+    const mineCommit = (a) => a.user?.login === me || (!a.user && !/@users\.noreply\.github\.com$/i.test(a.email || ''));
     const n = (p.commits?.nodes || []).filter((c) => after(c.commit.committedDate) &&
-      c.commit.authors.nodes.some((a) => a.user?.login === me)).length;
+      c.commit.authors.nodes.some(mineCommit)).length;
     if (n) commitsByRepo.set(p.repository.nameWithOwner, (commitsByRepo.get(p.repository.nameWithOwner) || 0) + n);
   }
   return {

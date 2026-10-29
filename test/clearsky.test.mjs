@@ -38,7 +38,7 @@ before(async () => {
           { number: 5, title: 'Shipped thing', url: 'u5', state: 'MERGED', isDraft: false, createdAt: hoursAgo(72), mergedAt: hoursAgo(5), repository: { nameWithOwner: 'acme/api' },
             commits: { nodes: [{ commit: { committedDate: hoursAgo(6), authors: { nodes: [{ user: { login: 'me' } }] } } }, { commit: { committedDate: hoursAgo(7), authors: { nodes: [{ user: { login: 'me' } }] } } }, { commit: { committedDate: hoursAgo(24 * 9), authors: { nodes: [{ user: { login: 'me' } }] } } }] } },
           { number: 6, title: 'New thing', url: 'u6', state: 'OPEN', isDraft: true, createdAt: hoursAgo(4), mergedAt: null, repository: { nameWithOwner: 'acme/api' },
-            commits: { nodes: [{ commit: { committedDate: hoursAgo(3), authors: { nodes: [{ user: { login: 'me' } }] } } }, { commit: { committedDate: hoursAgo(2), authors: { nodes: [{ user: { login: 'anna' } }] } } }] } },
+            commits: { nodes: [{ commit: { committedDate: hoursAgo(3), authors: { nodes: [{ email: 'me@work.test', user: null }] } } }, { commit: { committedDate: hoursAgo(2), authors: { nodes: [{ email: 'anna@x', user: { login: 'anna' } }] } } }, { commit: { committedDate: hoursAgo(2), authors: { nodes: [{ email: '1+bob@users.noreply.github.com', user: null }] } } }] } },
           { number: 7, title: 'Old open', url: 'u7', state: 'OPEN', isDraft: false, createdAt: hoursAgo(24 * 9), mergedAt: null, repository: { nameWithOwner: 'acme/api' } },
         ] },
         reviewed: { nodes: [
