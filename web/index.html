@@ -54,7 +54,7 @@
 
   /* plan */
   .plan { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow);
-    padding: 18px 20px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 24px; }
+    padding: 18px 20px; position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 24px; }
   .eyebrow { font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
   .now-line { font-size: 17px; font-weight: 600; letter-spacing: -.01em; line-height: 1.35; }
   .now-sub { color: var(--text-2); margin-top: 4px; }
@@ -87,6 +87,13 @@
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); min-width: 0; }
   .card-h { display: flex; align-items: center; gap: 8px; padding: 14px 18px 10px; }
   .card-h h2 { font-size: 14.5px; font-weight: 600; margin: 0; letter-spacing: -.005em; }
+  .rf { margin-left: auto; width: 26px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 6px;
+    background: transparent; color: var(--muted); cursor: pointer; padding: 0; }
+  .rf:hover { background: var(--surface-2); color: var(--text); }
+  .rf:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .rf.spin svg { animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .plan > .rf { position: absolute; top: 12px; right: 12px; }
   .count { font-size: 12px; font-weight: 600; color: var(--text-2); background: var(--surface-2); border-radius: 99px; padding: 1px 8px; }
   .card-b { padding: 0 18px 12px; }
   .group { font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 10px 0 2px; }
@@ -195,7 +202,8 @@ const hm = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minu
 function ago(iso) {
   if (!iso) return '';
   const s = (Date.now() - Date.parse(iso)) / 1000;
-  if (s < 3600) return `${Math.max(1, Math.round(s / 60))}m ago`;
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.round(s / 60)}m ago`;
   if (s < 86400) return `${Math.round(s / 3600)}h ago`;
   return `${Math.round(s / 86400)}d ago`;
 }
@@ -219,20 +227,31 @@ async function getJson(url) {
 }
 
 // Each source loads on its own and re-renders as soon as it arrives.
-function loadAll(force) {
-  const q = force ? '?refresh=1' : '';
-  for (const name of SOURCES) {
-    busy(1);
-    getJson(`/api/source/${name}${q}`)
-      .then((d) => { state[name] = d; })
-      .catch((e) => { state[name] = { error: e.message }; })
-      .finally(() => { busy(-1); renderToday(); });
-  }
-  busy(1);
-  // The plan needs every source; the server reuses what the calls above just fetched.
-  setTimeout(() => getJson('/api/plan').then((d) => { state.plan = d; })
+const loading = new Set();
+function loadSource(name, force) {
+  loading.add(name); busy(1); renderToday();
+  return getJson(`/api/source/${name}${force ? '?refresh=1' : ''}`)
+    .then((d) => { state[name] = d; })
+    .catch((e) => { state[name] = { error: e.message, fetchedAt: new Date().toISOString() }; })
+    .finally(() => { loading.delete(name); busy(-1); renderToday(); });
+}
+
+// The plan is built from every source; the server reuses what it already has cached.
+function loadPlan() {
+  loading.add('plan'); busy(1);
+  return getJson('/api/plan').then((d) => { state.plan = d; })
     .catch((e) => { state.plan = { error: e.message }; })
-    .finally(() => { busy(-1); renderToday(); }), 50);
+    .finally(() => { loading.delete('plan'); busy(-1); renderToday(); });
+}
+
+function loadAll(force) {
+  for (const name of SOURCES) loadSource(name, force);
+  setTimeout(loadPlan, 50);
+}
+
+// One panel's refresh button: reload just its sources, then the plan that depends on them.
+function refreshPanel(names) {
+  Promise.all(names.map((n) => loadSource(n, true))).then(loadPlan);
 }
 
 // ---------------------------------------------------------------- hidden items
@@ -275,8 +294,22 @@ function rows(id, items, render, limit = 8) {
   return `<ul class="rows">${shown.join('')}</ul>${rest > 0 ? `<button class="more" data-more="${id}">Show ${rest} more</button>` : ''}`;
 }
 
+// Which sources feed each panel, for its refresh button.
+const PANEL_SOURCES = { plan: ['calendar'], 'c-review': ['github'], 'c-prs': ['github'],
+  'c-mentions': ['github', 'jiraMentions', 'slack'], 'c-left': ['jira', 'github'] };
+const REFRESH_ICON = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.61-3.89" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M12.5 1.8v2.9H9.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+function refreshButton(id) {
+  const names = PANEL_SOURCES[id];
+  const spinning = names.some((n) => loading.has(n)) || (id === 'plan' && loading.has('plan'));
+  const times = names.map((n) => state[n]?.fetchedAt).filter(Boolean);
+  const oldest = times.length ? times.sort()[0] : null;
+  const tip = spinning ? 'Refreshing…' : `Refresh${oldest ? ` · updated ${ago(oldest)}` : ''} (Shift-click: everything)`;
+  return `<button class="rf${spinning ? ' spin' : ''}" data-refresh="${id}" title="${tip}" aria-label="${tip}">${REFRESH_ICON}</button>`;
+}
+
 function card(el, title, count, body) {
-  el.innerHTML = `<div class="card-h"><h2>${esc(title)}</h2>${count != null ? `<span class="count">${count}</span>` : ''}</div>
+  el.innerHTML = `<div class="card-h"><h2>${esc(title)}</h2>${count != null ? `<span class="count">${count}</span>` : ''}${refreshButton(el.id)}</div>
     <div class="card-b">${body}</div>`;
 }
 
@@ -288,11 +321,11 @@ const prRef = (p) => `${p.repo}#${p.number}`;
 function renderPlan() {
   const el = $('#plan'), d = state.plan;
   if (!d) {
-    el.innerHTML = `<div><div class="eyebrow">Now</div><div class="sk" style="width:70%;height:16px"></div><div class="sk" style="width:45%;margin-top:10px"></div></div>
+    el.innerHTML = `${refreshButton('plan')}<div><div class="eyebrow">Now</div><div class="sk" style="width:70%;height:16px"></div><div class="sk" style="width:45%;margin-top:10px"></div></div>
       <div><div class="eyebrow">Do next</div>${skeleton(3)}</div>`;
     return;
   }
-  if (d.error) { el.innerHTML = `<div class="err">${esc(d.error)}</div>`; return; }
+  if (d.error) { el.innerHTML = `${refreshButton('plan')}<div class="err">${esc(d.error)}</div>`; return; }
   const p = d.plan, join = (e) => (e?.url ? ` · <a class="join" href="${esc(e.url)}" target="_blank" rel="noopener">Join</a>` : '');
   let line, sub = '';
   if (p.now) {
@@ -316,7 +349,7 @@ function renderPlan() {
   const todo = p.suggestions.length ? `<ol class="todo">${p.suggestions.map((s) => `<li>
       <div><a class="t" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a><div class="d">${esc(s.detail)}</div></div>
       <span class="m">~${s.minutes} min</span></li>`).join('')}</ol>` : '<div class="empty">Nothing urgent fits right now.</div>';
-  el.innerHTML = `<div><div class="eyebrow">Now</div><div class="now-line">${line}</div><div class="now-sub">${sub}</div>${alert}${calErr}${agenda}</div>
+  el.innerHTML = `${refreshButton('plan')}<div><div class="eyebrow">Now</div><div class="now-line">${line}</div><div class="now-sub">${sub}</div>${alert}${calErr}${agenda}</div>
     <div><div class="eyebrow">Do next</div>${todo}</div>`;
 }
 
@@ -548,6 +581,11 @@ $('#copy').onclick = async () => {
   setTimeout(() => { btn.textContent = 'Copy for Slack'; }, 1500);
 };
 $('#refresh').onclick = () => { previews.clear(); if (location.hash === '#standup') loadStandup(true); else loadAll(true); };
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-refresh]');
+  if (!btn) return;
+  if (e.shiftKey) loadAll(true); else refreshPanel(PANEL_SOURCES[btn.dataset.refresh]);
+});
 $('#unhide').onclick = () => { hidden = {}; saveHidden(); renderToday(); };
 
 renderToday();

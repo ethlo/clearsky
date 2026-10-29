@@ -994,7 +994,8 @@ function serve() {
       const src = url.pathname.match(/^\/api\/source\/(\w+)$/)?.[1];
       if (src) {
         if (!SOURCES[src]) return json(res, 404, { error: 'unknown source' });
-        return json(res, 200, await source(src, url.searchParams.has('refresh')));
+        const data = await source(src, url.searchParams.has('refresh'));
+        return json(res, 200, { ...data, fetchedAt: new Date(sourceCache.get(src)?.at || Date.now()).toISOString() });
       }
       if (url.pathname === '/api/plan') {
         // Waits for every source (from cache when fresh); the page asks for it alongside them.

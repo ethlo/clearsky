@@ -71,7 +71,7 @@ clearsky standup      # stand-up summary (add --json for the data)
 clearsky jira-debug   # raw acli output, if Jira data looks wrong
 ```
 
-On the page, ✕ hides an item until it changes, for example when a new commit or comment arrives.
+On the page, the ↻ on each panel reloads just that panel (Shift-click reloads everything), and ✕ hides an item until it changes, for example when a new commit or comment arrives.
 
 The server also answers JSON on 127.0.0.1: `/api/source/<github|jira|jiraMentions|slack|calendar>`, `/api/plan`, `/api/work` (everything), `/api/standup`, `/api/issue/<KEY>` and `/api/pr?repo=<org/repo>&number=<n>`. Add `?refresh=1` to skip the cache.
 
