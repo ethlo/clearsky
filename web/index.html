@@ -377,7 +377,7 @@
 
 <script>
 const REFRESH_MS = 5 * 60 * 1000;
-const SOURCES = ['github', 'jira', 'jiraMentions', 'slack', 'calendar'];
+let SOURCES = ['github', 'jira', 'jiraMentions', 'slack', 'calendar'];
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 // 45 min, 1 h, 2 h 15 min
@@ -838,9 +838,36 @@ function renderLeft() {
   card(el, 'Your tickets', (j.assigned?.length || 0) + issues.length, jira + gh);
 }
 
+// Panels for extra sources (lib/sources, ~/.config/clearsky/sources): the server sends rows.
+let extraSources = [];
+function addSourcePanels(list) {
+  extraSources = list.filter((x) => x.panel);
+  for (const x of extraSources) {
+    const id = `c-x-${x.name}`;
+    if (document.getElementById(id)) continue;
+    const el = document.createElement('section');
+    el.className = 'card'; el.id = id;
+    (x.panel.zone === 'needs' ? $('.grid') : $('.grid.quiet')).append(el);
+    PANEL_SOURCES[id] = [x.name];
+  }
+}
+function renderExtra() {
+  for (const x of extraSources) {
+    const el = document.getElementById(`c-x-${x.name}`), d = state[x.name];
+    if (!el) continue;
+    if (!d) { card(el, x.panel.title, null, skeleton(2)); continue; }
+    if (d.disabled) { el.hidden = true; continue; }
+    el.hidden = false;
+    const list = vis((d.items || []).map((i) => ({ ...i, url: i.url || '', dismissKey: i.key ? `${x.name}:${i.key}` : undefined })));
+    card(el, x.panel.title, d.error ? null : list.length, (d.error ? `<div class="err">${esc(d.error)}</div>` : '') +
+      (list.length ? rows(`x-${x.name}`, list, (i) => row(i), 5)
+        : d.error ? '' : '<div class="empty">Nothing here.</div>'));
+  }
+}
+
 function renderToday() {
   view();
-  renderPlan(); renderKpis(); renderReview(); renderPrs(); renderMentions(); renderWaiting(); renderLeft();
+  renderPlan(); renderKpis(); renderReview(); renderPrs(); renderMentions(); renderWaiting(); renderLeft(); renderExtra();
   $('#unhide').hidden = !hiddenCount;
   $('#unhide').textContent = `Show ${hiddenCount} hidden`;
 }
@@ -1390,6 +1417,10 @@ $('#unhide').onclick = () => { dismissed = {}; dismiss({ clear: true }); };
 
 try { localStorage.removeItem('clearsky.hidden'); } catch {} // from the browser-only version
 renderToday();
+getJson('/api/sources').then((r) => {
+  addSourcePanels(r.sources || []);
+  for (const x of r.sources || []) { SOURCES.push(x.name); loadSource(x.name, false); }
+}).catch(() => {});
 getJson('/api/dismissed').then((d) => { dismissed = d.dismissed || {}; renderToday(); }).catch(() => {});
 loadAll(false);
 route();

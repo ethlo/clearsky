@@ -21,6 +21,7 @@ import * as localState from '../lib/state.mjs';
 import * as copilot from '../lib/copilot.mjs';
 import { AcpAgent, chatEvent } from '../lib/acp.mjs';
 import { attentionItems, diffAttention, desktopNotify } from '../lib/notify.mjs';
+import { loadSources, makeContext, hook, asList } from '../lib/sources.mjs';
 
 // ---------------------------------------------------------------- config
 
@@ -91,6 +92,11 @@ const buildConfig = (env = process.env) => ({
   },
 });
 const config = buildConfig();
+
+// Extra sources: lib/sources/*.mjs and your own in ~/.config/clearsky/sources/*.mjs.
+const plugins = await loadSources([join(here, '..', 'lib', 'sources'), process.env.CLEARSKY_SOURCES_DIR || join(homedir(), '.config', 'clearsky', 'sources')]);
+for (const e of plugins.errors) console.error(`clearsky: ${e}`);
+for (const p of plugins.sources.values()) settings.addFields(p.settings);
 
 // ---------------------------------------------------------------- helpers
 
@@ -741,6 +747,16 @@ const settle = (p) => p.catch((e) => ({ error: e.message }));
 
 // Each source is fetched and cached on its own, so the page can show whatever is ready.
 const SOURCES = { github: fetchGitHub, jira: fetchJiraWork, jiraMentions: fetchJiraMentions, slack: fetchSlack, calendar: fetchCalendar };
+for (const p of plugins.sources.values()) {
+  SOURCES[p.name] = async () => {
+    if (p.enabled && !p.enabled(process.env)) return { disabled: true };
+    const data = await p.fetch(makeContext(p));
+    // The rows for its panel, worked out here so the page needs no code from the source.
+    const items = hook(p, 'items', data);
+    return { ...data, ...(items && { items: items.hookError ? [] : asList(items), ...(items.hookError && { error: items.hookError }) }) };
+  };
+}
+const pluginData = async (force) => Object.fromEntries(await Promise.all([...plugins.sources.keys()].map(async (n) => [n, await source(n, force)])));
 const sourceCache = new Map();
 
 export function source(name, force) {
@@ -760,9 +776,14 @@ export async function collect(force) {
     ['github', 'jira', 'jiraMentions', 'slack', 'calendar'].map((n) => source(n, force)));
   const jira = mergeJira(jiraWork, jiraMentions);
   const needsMe = (github.myPrs || []).filter((p) => p.status.owner === 'me' && !p.draft);
+  const extra = await pluginData(force);
+  // Events from other sources (school, activities) join your calendar in Now / Next.
+  const more = [...plugins.sources.values()].flatMap((p) => (extra[p.name]?.error || extra[p.name]?.disabled ? []
+    : asList(hook(p, 'events', extra[p.name])).map((e) => ({ ...e, calendar: e.calendar || p.label }))));
+  const cal = more.length && !calendar.error ? { ...calendar, events: [...(calendar.events || []), ...more] } : calendar;
   return {
     generatedAt: new Date().toISOString(),
-    plan: planNow({ github, jira, slack, calendar }),
+    plan: planNow({ github, jira, slack, calendar: cal }),
     nextStandup: nextStandup().toISOString(),
     summary: {
       reviewsWaiting: github.reviewRequested?.length ?? null,
@@ -776,6 +797,7 @@ export async function collect(force) {
     jira,
     slack,
     calendar,
+    sources: extra,
   };
 }
 
@@ -884,6 +906,7 @@ export function standupText(s) {
   y.jira.touched?.forEach((i) => line(`Worked on ${i.key}: ${i.summary} (${i.status})`));
   const commits = (y.github.commits || []).filter((c) => c.count);
   if (commits.length) line(`Commits: ${commits.map((c) => `${c.count} in ${c.repo.split('/')[1]}`).join(', ')}`);
+  s.extra?.forEach((x) => x.yesterday.forEach((t) => line(`${x.label}: ${t}`)));
   y.copilot?.sessions?.forEach((x) => line(`With Copilot: ${x.ticket ? `${x.ticket} ` : ''}${x.title} (${x.repo.split('/')[1]}${x.branch && !/^(main|master)$/.test(x.branch) ? `, ${x.branch}` : ''})`));
   if (out.length === 1) line('Nothing recorded on GitHub, Jira or Copilot.');
   out.push('', '*Today*');
@@ -891,6 +914,7 @@ export function standupText(s) {
   t.inProgress.forEach((i) => line(`Continue ${i.key}: ${i.summary}`));
   if (t.reviews.length) line(`Review ${t.reviews.map((p) => `${p.repo}#${p.number}`).join(', ')}`);
   t.myPrs.forEach((p) => line(`${p.status.label}: ${p.repo}#${p.number} ${p.title}`));
+  s.extra?.forEach((x) => x.today.forEach((t) => line(`${x.label}: ${t}`)));
   if (t.meetings.length) line(`Meetings: ${t.meetings.map((e) => `${new Date(e.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ${e.title}`).join(', ')}`);
   if (out.length === before) line('Pick up the next item from the queue.');
   out.push('', '*Blockers*');
@@ -955,6 +979,12 @@ export async function standup(work, since = previousStandup()) {
     today,
     blockers,
   };
+  // Other sources add their own lines, such as what's on at school today.
+  const extra = w.sources || await pluginData(false);
+  s.extra = [...plugins.sources.values()].map((p) => {
+    const r = extra[p.name]?.error || extra[p.name]?.disabled ? null : hook(p, 'standup', extra[p.name], since);
+    return r && !r.hookError && { label: p.label, yesterday: asList(r.yesterday).map(String), today: asList(r.today).map(String) };
+  }).filter(Boolean);
   s.text = standupText(s);
   return s;
 }
@@ -1297,7 +1327,7 @@ function notifyNow(now = new Date()) {
 
 export async function pollAttention(force = true) {
   const data = Object.fromEntries(await Promise.all(ATTENTION_SOURCES.map(async (n) => [n, await source(n, force)])));
-  const items = attentionItems(data);
+  const items = [...attentionItems(data), ...await pluginAttention(force)];
   const before = localState.seen(stateFile);
   const { seen, fresh } = diffAttention(items, before, {
     dismissed: localState.dismissed(stateFile), muted: localState.muted(stateFile), first: !Object.keys(before).length,
@@ -1310,6 +1340,12 @@ export async function pollAttention(force = true) {
     else for (const it of fresh) desktopNotify(it, { bin });
   }
   return { items, seen, fresh };
+}
+
+async function pluginAttention(force) {
+  const extra = await pluginData(force);
+  return [...plugins.sources.values()].flatMap((p) => (extra[p.name]?.error || extra[p.name]?.disabled ? []
+    : asList(hook(p, 'attention', extra[p.name])).filter((x) => x?.key && x.title).map((x) => ({ kind: p.name, ...x, key: `${p.name}:${x.key}` }))));
 }
 
 function startPolling() {
@@ -1432,12 +1468,15 @@ function serve() {
         return json(res, 200, { ...data, fetchedAt: new Date(sourceCache.get(src)?.at || Date.now()).toISOString() });
       }
       if (url.pathname === '/favicon.ico') { res.writeHead(204); return res.end(); }
+      if (url.pathname === '/api/sources') {
+        return json(res, 200, { sources: [...plugins.sources.values()].map((p) => ({ name: p.name, label: p.label, panel: p.panel || null })), errors: plugins.errors });
+      }
       // What needs you, with when each first showed up, so the page can mark what's new.
       if (url.pathname === '/api/attention') {
         const data = Object.fromEntries(await Promise.all(ATTENTION_SOURCES.map(async (n) => [n, await source(n, false)])));
         const seen = localState.seen(stateFile);
         return json(res, 200, { lastPoll: poller.lastPoll, notifier: poller.notifier,
-          items: attentionItems(data).map((it) => ({ ...it, at: seen[it.key]?.stamp === String(it.stamp ?? '') ? seen[it.key].at : null })) });
+          items: [...attentionItems(data), ...await pluginAttention(false)].map((it) => ({ ...it, at: seen[it.key]?.stamp === String(it.stamp ?? '') ? seen[it.key].at : null })) });
       }
       if (url.pathname === '/api/copilot') return json(res, 200, { ...await copilotInfo(url.searchParams.has('refresh')), commands: copilotCommands });
       if (url.pathname === '/api/copilot/sessions') {

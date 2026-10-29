@@ -132,6 +132,13 @@
     <input id="CLEARSKY_MENTION_DAYS" data-key="CLEARSKY_MENTION_DAYS" inputmode="numeric" placeholder="14">
     <div class="row"><button class="save" data-keys="CLEARSKY_STANDUP_TIME,CLEARSKY_WORKDAYS,CLEARSKY_WORKDAY_END,CLEARSKY_MENTION_DAYS">Save</button><span class="msg"></span></div>
   </section>
+
+  <section id="extra" hidden>
+    <h2>Other sources</h2>
+    <p class="hint">Settings for sources added in <code>lib/sources/</code> or <code>~/.config/clearsky/sources/</code>.</p>
+    <div id="extra-fields"></div>
+    <div class="row"><button class="save" id="extra-save">Save</button><span class="msg"></span></div>
+  </section>
 </main>
 
 <script>
@@ -212,6 +219,19 @@ function render(s) {
   $('#CLEARSKY_STANDUP_TIME').value = s.standupTime || '';
   $('#CLEARSKY_WORKDAYS').value = s.workdays || '';
   $('#CLEARSKY_MENTION_DAYS').value = s.mentionDays || '';
+
+  const extra = s.extra || [];
+  $('#extra').hidden = !extra.length;
+  if (extra.length && !$('#extra-fields').children.length) {
+    $('#extra-fields').innerHTML = extra.map((f) => `<label for="${esc(f.key)}">${esc(f.label)}</label>
+      <input id="${esc(f.key)}" data-key="${esc(f.key)}"${f.secret ? ' type="password" autocomplete="off"' : ''}>
+      ${f.hint ? `<p class="hint">${esc(f.hint)}</p>` : ''}`).join('');
+    $('#extra-save').dataset.keys = extra.map((f) => f.key).join(',');
+  }
+  for (const f of extra) {
+    if (f.secret) { SECRET.add(f.key); $(`#${f.key}`).placeholder = f.value ? `${f.value}; paste a new one to replace` : ''; }
+    else $(`#${f.key}`).value = f.value || '';
+  }
 }
 
 async function load() {
@@ -225,7 +245,9 @@ function syncCalPick() {
 }
 document.addEventListener('change', (e) => { if (e.target.closest('#cal-list')) syncCalPick(); });
 
-document.querySelectorAll('.save').forEach((btn) => btn.addEventListener('click', async () => {
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.save');
+  if (!btn || !btn.dataset.keys) return;
   const msg = btn.nextElementSibling;
   const body = {};
   for (const key of btn.dataset.keys.split(',')) {
@@ -243,7 +265,7 @@ document.querySelectorAll('.save').forEach((btn) => btn.addEventListener('click'
   } finally {
     btn.disabled = false;
   }
-}));
+});
 
 $('#cal-remove').addEventListener('click', async () => {
   const msg = $('#cal-remove').nextElementSibling;

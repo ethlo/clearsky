@@ -83,6 +83,10 @@ Dismissed and muted items are saved in `~/.config/clearsky/state.json`, so the p
 
 The server also answers JSON on 127.0.0.1: `/api/source/<github|jira|jiraMentions|slack|calendar>`, `/api/plan`, `/api/work` (everything), `/api/standup`, `/api/issue/<KEY>`, `/api/pr?repo=<org/repo>&number=<n>` `/api/dismissed`, `/api/copilot/sessions` and `/api/copilot/sessions/<id>`. Add `?refresh=1` to skip the cache.
 
+## Adding a source
+
+Besides the built-in sources, Clearsky loads extra ones, one module each, from `lib/sources/*.mjs` in this repo and from `~/.config/clearsky/sources/*.mjs` (for private ones, like a school or family app). A source declares its settings (they show up under **Other sources** in Settings and are saved to `.env`), a `fetch(ctx)`, and any of these hooks: `items` (rows for its panel, under Needs you or Keeping track), `attention` (notifies when something new turns up), `events` (joins Now / Next; mark `fyi: true` to show without blocking your time) and `standup` (lines for Yesterday and Today). `ctx` gives the source its settings and helpers to fetch JSON or run a CLI. See the comment at the top of [lib/sources.mjs](lib/sources.mjs) for the contract and [test/sources/school.mjs](test/sources/school.mjs) for a complete example. Files that others can write to are skipped.
+
 ## Notifications
 
 While `clearsky serve` runs, it checks GitHub, Jira mentions and Slack every 3 minutes (`CLEARSKY_POLL_MINUTES`). When something new needs you (a review request, a PR turning to your move, a mention), you get a desktop notification with an **Open** button, through `notify-send`, on workdays from 07:00 until two hours after your workday ends. Dismissed and muted items stay quiet. Without `notify-send`, the bell in the top bar turns on browser notifications instead. `CLEARSKY_NOTIFY=off` turns them off. New things also get a dot in the page and a count in the tab title until you've looked.

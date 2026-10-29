@@ -69,7 +69,9 @@ test("a shared family calendar shows others' events without taking your time", a
   mkdirSync(dir, { recursive: true });
   const db = new DatabaseSync(join(dir, 'cache.db'));
   db.exec('CREATE TABLE ECacheObjects (ECacheUID TEXT, ECacheOBJ TEXT)');
-  db.prepare('INSERT INTO ECacheObjects VALUES (?, ?)').run('f1', ics('f1', 'Football practice', 9));
+  // Google puts you as ATTENDEE inside the reminder (VALARM); that doesn't make it yours.
+  db.prepare('INSERT INTO ECacheObjects VALUES (?, ?)').run('f1', ics('f1', 'Football practice', 9)
+    .replace('END:VEVENT', 'BEGIN:VALARM\r\nACTION:EMAIL\r\nATTENDEE:mailto:me@home.test\r\nEND:VALARM\r\nEND:VEVENT'));
   db.prepare('INSERT INTO ECacheObjects VALUES (?, ?)').run('f2', ics('f2', 'Dentist (Morten)', 10));
   db.prepare('INSERT INTO ECacheObjects VALUES (?, ?)').run('f3', ics('f3', 'Parents meeting', 17)
     .replace('END:VEVENT', 'ORGANIZER:mailto:me@home.test\r\nEND:VEVENT'));
