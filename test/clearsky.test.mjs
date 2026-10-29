@@ -255,6 +255,21 @@ test('finds your local clone of a PR repository', async () => {
   assert.equal(findCheckout('someone/api', [root]), join(root, 'fork', 'api'));
 });
 
+test('picks the worktree that has the PR branch checked out', async () => {
+  const { worktreeFor } = await import('../bin/clearsky.mjs');
+  const { execFileSync } = await import('node:child_process');
+  const root = mkdtempSync(join(tmpdir(), 'clearsky-wt-'));
+  const clone = join(root, 'ssp');
+  const git = (...a) => execFileSync('git', ['-C', clone, ...a], { stdio: 'ignore' });
+  mkdirSync(clone);
+  git('init', '-q', '-b', 'main');
+  git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'x');
+  git('worktree', 'add', '-q', '-b', 'SSP-1', join(root, 'ssp-1'));
+  assert.equal(worktreeFor(clone, 'SSP-1'), join(root, 'ssp-1'));
+  assert.equal(worktreeFor(clone, 'other'), null);
+  assert.equal(worktreeFor(clone, null), null);
+});
+
 test('links Copilot sessions to the PRs and tickets they work on', async () => {
   const { linkSessions } = await import('../bin/clearsky.mjs');
   const prs = [{ repo: 'Acme/api', number: 7, branch: 'feat/ABC-12-login' }, { repo: 'acme/web', number: 9, branch: 'fix' }];

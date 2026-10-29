@@ -8,7 +8,7 @@
 
 import { createServer } from 'node:http';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, realpathSync, statSync, readdirSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { execFile, spawn } from 'node:child_process';
@@ -1482,6 +1482,30 @@ export function findCheckout(repo, roots = (process.env.CLEARSKY_CODE_DIRS || jo
   return null;
 }
 
+// The worktree of a clone that has this branch checked out, if there is one
+// (read from .git/worktrees/*/HEAD and gitdir, so no git process is needed).
+export function worktreeFor(clone, branch) {
+  if (!branch) return null;
+  const base = join(clone, '.git', 'worktrees');
+  let names = [];
+  try { names = readdirSync(base); } catch { return null; }
+  for (const n of names) {
+    try {
+      if (readFileSync(join(base, n, 'HEAD'), 'utf8').trim() !== `ref: refs/heads/${branch}`) continue;
+      const dir = dirname(resolve(base, n, readFileSync(join(base, n, 'gitdir'), 'utf8').trim()));
+      if (statSync(dir).isDirectory()) return dir;
+    } catch { /* a stale worktree entry */ }
+  }
+  return null;
+}
+
+// The head branch of a PR, from what the GitHub source last fetched.
+function prBranch(ref) {
+  if (ref.branch) return ref.branch;
+  const gh = sourceCache.get('github')?.data || {};
+  return [...(gh.myPrs || []), ...(gh.reviewRequested || [])].find((p) => p.repo === ref.repo && p.number === ref.number)?.branch || null;
+}
+
 const isDir = (d) => { try { return typeof d === 'string' && d.startsWith('/') && statSync(d).isDirectory(); } catch { return false; } };
 
 // Fuller details of the PRs and tickets you attach to a Copilot message.
@@ -1816,7 +1840,8 @@ function serve() {
           // A chat about a PR or GitHub issue runs in your clone of its repo; one about a ticket, in
           // the clone of the PR that carries its key (in the PR's title or branch), if there is one.
           const repoRef = !body.resume && !body.cwd && (refs.find((r) => r.kind === 'pr' || r.kind === 'gh') || ticketPr(refs.find((r) => r.kind === 'issue')));
-          const checkout = repoRef ? findCheckout(repoRef.repo) : null;
+          const clone = repoRef ? findCheckout(repoRef.repo) : null;
+          const checkout = clone && (worktreeFor(clone, prBranch(repoRef)) || clone);
           const cwd = checkout || (body.cwd && isDir(body.cwd) ? body.cwd : copilotCwd());
           let refText = '';
           if (refs.length) {
