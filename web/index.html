@@ -1076,6 +1076,7 @@ function renderAnswer(segs) {
           : g.options.map((o) => `<button class="${/^allow/.test(o.kind) ? 'ok' : 'no'}" data-perm="${esc(g.id)}" data-option="${esc(o.id)}" data-name="${esc(o.name)}">${esc(o.name)}</button>`).join('')}</div></div>`;
     }
     if (g.type === 'error') return `<div class="err">${esc(g.message)}</div>`;
+    if (g.type === 'note') return `<div class="tool"><span>📁</span>${esc(g.text)}</div>`;
     return '';
   }).join('');
 }
@@ -1213,6 +1214,7 @@ async function send(text) {
     else if (e.type === 'permission' || e.type === 'error') segs.push(e);
     else if (e.type === 'session') { chat.session = e.id; rememberChat(); }
     else if (e.type === 'commands' && chat.info) chat.info.commands = e.commands;
+    else if (e.type === 'cwd') { chat.cwd = e.cwd; segs.push({ type: 'note', text: `Working in ${e.cwd}` }); }
     if (e.type === 'done' || e.type === 'error') ended = true;
   };
   let ended = false;

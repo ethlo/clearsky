@@ -105,10 +105,11 @@ Type **/** in the message box for skills and, in Ask mode, every slash command y
 
 ## Copilot skills
 
-`.github/skills/` contains two skills for GitHub Copilot (agent mode in VS Code and the Copilot CLI):
+`.github/skills/` contains these skills for GitHub Copilot (agent mode in VS Code and the Copilot CLI):
 
 - **triage-my-work:** runs `clearsky --json` and sorts everything into Do now / Today / Later / Waiting on others.
 - **review-my-queue:** goes through your review requests, smallest and re-reviews first, and drafts review notes. It never submits a review unless you tell it to.
+- **continue-work:** checks a PR or ticket (CI, conflicts, unresolved review comments, what the ticket still asks for), then carries on with what's left after asking once. It never merges, approves, force-pushes or posts comments without asking. From ✦ on a PR in Clearsky, the chat runs in your local clone of that repository (found under `~/dev`, or `CLEARSKY_CODE_DIRS`).
 
 Inside this repo Copilot picks them up automatically. To have them in every repo, copy them to your personal skills folder:
 

@@ -226,3 +226,15 @@ test('Now / Next: free slot and tasks that fit it', async () => {
   assert.deepEqual(q.done.map((c) => c.key), ['u3'], 'done tasks are listed with their time');
   assert.equal(planNow(data, at(9, 5), { u3: 'older' }, {}, {}).suggestions[0].title, 'Merge a/b#3');
 });
+
+test('finds your local clone of a PR repository', async () => {
+  const { findCheckout } = await import('../bin/clearsky.mjs');
+  const root = mkdtempSync(join(tmpdir(), 'clearsky-code-'));
+  mkdirSync(join(root, 'acme', 'api', '.git'), { recursive: true });
+  writeFileSync(join(root, 'acme', 'api', '.git', 'config'), '[remote "origin"]\n\turl = git@github.com:acme/api.git\n');
+  mkdirSync(join(root, 'fork', 'api', '.git'), { recursive: true });
+  writeFileSync(join(root, 'fork', 'api', '.git', 'config'), '[remote "origin"]\n\turl = https://github.com/someone/api\n');
+  assert.equal(findCheckout('acme/api', [root]), join(root, 'acme', 'api'));
+  assert.equal(findCheckout('acme/web', [root]), null);
+  assert.equal(findCheckout('someone/api', [root]), join(root, 'fork', 'api'));
+});

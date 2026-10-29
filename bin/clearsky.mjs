@@ -1186,6 +1186,24 @@ async function copilotHistory(bin, id, cwd) {
   return messages;
 }
 
+// The local clone of a GitHub repository, so Copilot can work in it: a folder under
+// CLEARSKY_CODE_DIRS (default ~/dev), up to three levels down, whose origin is that repo.
+export function findCheckout(repo, roots = (process.env.CLEARSKY_CODE_DIRS || join(homedir(), 'dev')).split(':').filter(Boolean)) {
+  const name = repo.split('/')[1]?.toLowerCase();
+  const matches = (dir) => {
+    try { return new RegExp(`[:/]${repo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\.git)?\\s*$`, 'im').test(readFileSync(join(dir, '.git', 'config'), 'utf8')); } catch { return false; }
+  };
+  const walk = (dir, depth) => {
+    let entries = [];
+    try { entries = readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'node_modules'); } catch { return null; }
+    for (const e of entries) if (e.name.toLowerCase() === name && matches(join(dir, e.name))) return join(dir, e.name);
+    if (depth > 0) for (const e of entries) { const hit = walk(join(dir, e.name), depth - 1); if (hit) return hit; }
+    return null;
+  };
+  for (const root of roots) { const hit = walk(root, 2); if (hit) return hit; }
+  return null;
+}
+
 const isDir = (d) => { try { return typeof d === 'string' && d.startsWith('/') && statSync(d).isDirectory(); } catch { return false; } };
 
 // Fuller details of the PRs and tickets you attach to a Copilot message.
@@ -1394,8 +1412,11 @@ function serve() {
           if (!message.trim()) return json(res, 400, { error: 'empty message' });
           if (!copilot.validModel(body.model)) return json(res, 400, { error: 'bad model name' });
           if (!body.session || !/^[\w-]{8,64}$/.test(body.session)) return json(res, 400, { error: 'bad session' });
-          const cwd = body.cwd && isDir(body.cwd) ? body.cwd : copilotCwd();
           const refs = validRefs(body.refs);
+          // A new chat about a PR runs in your clone of that repository, when there is one.
+          const prRef = !body.resume && !body.cwd && refs.find((r) => r.kind === 'pr');
+          const checkout = prRef ? findCheckout(prRef.repo) : null;
+          const cwd = checkout || (body.cwd && isDir(body.cwd) ? body.cwd : copilotCwd());
           let refText = '';
           if (refs.length) {
             const parts = await Promise.all(refs.map((r) => referenceText(r).catch((e) => `## ${r.key || `${r.repo}#${r.number}`}\n(couldn't load: ${e.message})`)));
@@ -1410,6 +1431,7 @@ function serve() {
           // Answers stream back as one JSON event per line: text, tool, permission, done, error.
           res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
           const emit = (e) => { if (!res.writableEnded) res.write(`${JSON.stringify(e)}\n`); };
+          if (checkout) emit({ type: 'cwd', cwd: checkout });
           sessionsCache = null;
           const live = acpChats.get(body.session);
           if (copilot.PERMISSIONS[options.permission].acp) {
