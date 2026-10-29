@@ -6,10 +6,13 @@ const args = process.argv.slice(2);
 if (process.env.FAKE_ACLI_LOG) appendFileSync(process.env.FAKE_ACLI_LOG, JSON.stringify(args) + '\n');
 const arg = (name) => args[args.indexOf(name) + 1];
 const hoursAgo = (h) => new Date(Date.now() - h * 36e5).toISOString();
-const self = (key) => `https://acme.atlassian.net/rest/api/3/issue/${key}`;
+// Like real acli, `self` points at an internal API host, not the site.
+const self = (key) => `https://jira-prod-eu-1.prod.atl-paas.net/rest/api/3/issue/${key}`;
 const print = (o) => process.stdout.write(JSON.stringify(o));
 
-if (args[1] === 'workitem' && args[2] === 'search') {
+if (args[1] === 'auth' && args[2] === 'status') {
+  process.stdout.write('✓ Authenticated\n  Site: acme.atlassian.net\n  Email: me@work.test\n');
+} else if (args[1] === 'workitem' && args[2] === 'search') {
   const jql = arg('--jql');
   // Real acli rejects some fields in search.
   const refused = arg('--fields').split(',').filter((f) => ['duedate', 'updated', 'project'].includes(f));

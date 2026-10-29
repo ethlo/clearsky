@@ -17,6 +17,7 @@ import { eventsBetween } from '../lib/ics.mjs';
 import { edsCalendars, pickCalendars, edsCalendarText } from '../lib/eds.mjs';
 import { randomBytes } from 'node:crypto';
 import * as settings from '../lib/settings.mjs';
+import * as localState from '../lib/state.mjs';
 
 // ---------------------------------------------------------------- config
 
@@ -33,6 +34,7 @@ function loadEnvFile(path) {
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const userEnvFile = join(homedir(), '.config', 'clearsky', '.env');
+const stateFile = process.env.CLEARSKY_STATE || join(homedir(), '.config', 'clearsky', 'state.json');
 loadEnvFile(join(process.cwd(), '.env'));
 loadEnvFile(join(here, '..', '.env'));
 loadEnvFile(userEnvFile);
@@ -116,7 +118,7 @@ const PR_FIELDS = `
   reviews(last: 30) { nodes { state submittedAt author { login } } }
   reviewRequests(first: 20) { nodes { requestedReviewer { __typename ... on User { login } ... on Team { slug } } } }
   reviewThreads(first: 100) { nodes { isResolved } }
-  commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }
+  commits(last: 1) { nodes { commit { committedDate statusCheckRollup { state } } } }
   timelineItems(itemTypes: [REVIEW_REQUESTED_EVENT], last: 10) {
     nodes { ... on ReviewRequestedEvent { createdAt requestedReviewer { __typename ... on User { login } ... on Team { slug } } } }
   }`;
@@ -169,7 +171,9 @@ export function myPrStatus(pr, me) {
   if (unresolved > 0) return { label: `${unresolved} unresolved thread${unresolved > 1 ? 's' : ''}`, owner: 'me', tone: 'warn' };
   if (approved && (ci === 'PENDING' || ci === 'EXPECTED')) return { label: 'Approved, CI running', owner: 'others', tone: 'wait' };
   if (approved) return { label: 'Ready to merge', owner: 'me', tone: 'good' };
-  if (reviews.some((r) => r.state === 'COMMENTED')) return { label: 'Has feedback', owner: 'me', tone: 'warn' };
+  // Review comments count only when they came after your latest commit; once you've pushed, the ball is theirs.
+  const lastCommit = Date.parse(pr.commits?.nodes?.at(-1)?.commit?.committedDate || 0) || 0;
+  if (reviews.some((r) => r.state === 'COMMENTED' && Date.parse(r.submittedAt) > lastCommit)) return { label: 'Has feedback', owner: 'me', tone: 'warn' };
   return { label: 'Waiting for review', owner: 'others', tone: 'wait' };
 }
 
@@ -219,6 +223,7 @@ async function fetchGitHub() {
     url: n.url,
     author: n.author?.login || 'ghost',
     updatedAt: n.updatedAt,
+    stamp: n.updatedAt, // a dismissed item comes back when this changes
   });
 
   const reviewRequested = data.reviewRequested.nodes.filter(keep).map((pr) => {
@@ -363,10 +368,26 @@ async function jiraMe() {
   throw new Error('could not work out your Jira account id; set JIRA_ACCOUNT_ID');
 }
 
-let jiraBase = null; // learnt from issue URLs acli returns
+// The site to link to. acli's `self` URLs point at an internal API host (*.atl-paas.net),
+// so ask `acli jira auth status`, which names the real site (xyz.atlassian.net).
+let jiraBase = null;
+let jiraSitePending = null;
+function jiraSite() {
+  if (config.jira.url) return Promise.resolve(config.jira.url);
+  jiraSitePending ||= execFileP(config.jira.acli, ['jira', 'auth', 'status'], { timeout: 15_000 })
+    .then(({ stdout, stderr }) => `${stdout}\n${stderr}`, (e) => `${e.stdout || ''}\n${e.stderr || ''}`)
+    .then((out) => {
+      const site = out.match(/[\w-]+\.atlassian\.net/)?.[0];
+      if (site) jiraBase = `https://${site}`;
+      else jiraSitePending = null; // try again next time
+      return jiraBase;
+    });
+  return jiraSitePending;
+}
+
 function browseUrl(issue) {
-  if (issue.self && !jiraBase) jiraBase = new URL(issue.self).origin;
-  const base = config.jira.url || (issue.self ? new URL(issue.self).origin : jiraBase || '');
+  const self = issue.self ? new URL(issue.self).origin : null;
+  const base = config.jira.url || jiraBase || (self && /\.atlassian\.net$/.test(self) ? self : '');
   return base ? `${base}/browse/${issue.key}` : null;
 }
 
@@ -381,6 +402,7 @@ async function mapLimit(items, n, fn) {
 }
 
 async function fetchJiraWork() {
+  await jiraSite();
   const assigned = (await jiraSearch(config.jira.assignedJql,
     ['key', 'summary', 'status', 'priority', 'duedate', 'updated', 'issuetype', 'project'], 100)).map((i) => {
     const f = fieldsOf(i);
@@ -395,6 +417,8 @@ async function fetchJiraWork() {
       project: f.project?.key || i.key?.split('-')[0] || null,
       due: f.duedate || null,
       updatedAt: f.updated || null,
+      // acli often refuses `updated`, so fall back to the status.
+      stamp: f.updated || nameOf(f.status) || '',
     };
   });
   return { assigned };
@@ -402,6 +426,7 @@ async function fetchJiraWork() {
 
 // The slow part: one acli call per candidate issue, so it's loaded separately.
 async function fetchJiraMentions() {
+  await jiraSite();
   // Find candidate issues, then confirm the mention by reading their comments.
   const me = await jiraMe();
   const days = config.days;
@@ -433,6 +458,7 @@ async function fetchJiraMentions() {
         url: url && c.id ? `${url}?focusedCommentId=${c.id}` : url,
         by: c.author?.displayName || 'someone',
         at: c.created,
+        stamp: c.id || c.created,
         excerpt: excerpt(text, me.id),
       });
     }
@@ -440,12 +466,24 @@ async function fetchJiraMentions() {
   });
   const mentions = perIssue.flat().sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
 
-  return { user: me.name, mentions };
+  return { user: me.name, mentions, tickets: jiraMentionsByTicket(mentions) };
 }
 
 async function fetchJira() {
   const [work, mentions] = await Promise.all([settle(fetchJiraWork()), settle(fetchJiraMentions())]);
   return mergeJira(work, mentions);
+}
+
+// One entry per ticket, from its newest mention. Its stamp is that comment's id, so a dismissed
+// ticket comes back only when someone mentions you there again.
+export function jiraMentionsByTicket(mentions = []) {
+  const byKey = new Map();
+  for (const m of [...mentions].sort((a, b) => Date.parse(b.at) - Date.parse(a.at))) {
+    const t = byKey.get(m.key);
+    if (t) { t.count++; if (!t.people.includes(m.by)) t.people.push(m.by); continue; }
+    byKey.set(m.key, { ...m, count: 1, people: [m.by], dismissKey: `jira-mention:${m.key}` });
+  }
+  return [...byKey.values()];
 }
 
 function mergeJira(work, mentions) {
@@ -458,6 +496,7 @@ const issueCache = new Map();
 export async function issuePreview(key) {
   const hit = issueCache.get(key);
   if (hit && Date.now() - hit.at < 10 * 6e4) return hit.data;
+  await jiraSite();
   const out = await acli(['workitem', 'view', key, '--fields', 'summary,status,assignee,reporter,priority,issuetype,description', '--json']);
   const f = out?.fields || out || {};
   const text = f.description ? commentInfo(f.description).text : '';
@@ -525,6 +564,7 @@ async function fetchSlack() {
       by: m.username || 'someone',
       at: new Date(Number(m.ts) * 1000).toISOString(),
       url: m.permalink,
+      stamp: m.ts,
       excerpt: slackText(m.text, me),
     }));
   return { user: auth.user, team: auth.team, mentions };
@@ -595,7 +635,7 @@ function reviewMinutes(p) {
 
 // What to do in the next free slot: the current/next meeting, how long the gap is,
 // and up to three tasks that fit it, most urgent first.
-export function planNow(d, now = Date.now()) {
+export function planNow(d, now = Date.now(), dismissedItems = localState.dismissed(stateFile), mutedItems = localState.muted(stateFile, now)) {
   const g = d.github || {}, j = d.jira || {}, s = d.slack || {}, cal = d.calendar || {};
   const timed = (cal.events || []).filter((e) => !e.allDay && !e.transparent)
     .map((e) => ({ ...e, s: Date.parse(e.start), e: Date.parse(e.end) }));
@@ -616,28 +656,34 @@ export function planNow(d, now = Date.now()) {
   const freeMinutes = Math.max(0, Math.round((freeUntil - freeFrom) / 6e4));
 
   const recent = (iso, hours) => Date.now() - Date.parse(iso) < hours * 36e5;
+  // Items you dismissed on the page stay out of the plan until something new happens on them.
+  const off = (key, stamp) => localState.isDismissed(dismissedItems, key, stamp);
+  const live = (list) => (list || []).filter((x) => !off(x.url, x.stamp));
   const candidates = [
-    ...(g.myPrs || []).filter((p) => p.status.label === 'Ready to merge')
+    ...live(g.myPrs).filter((p) => p.status.label === 'Ready to merge')
       .map((p) => ({ title: `Merge ${p.repo}#${p.number}`, detail: p.title, url: p.url, minutes: 5, why: 'approved and green' })),
-    ...(s.mentions || []).filter((m) => recent(m.at, 24))
+    ...live(s.mentions).filter((m) => recent(m.at, 24))
       .map((m) => ({ title: `Reply to ${m.by} in ${m.channel}`, detail: m.excerpt, url: m.url, minutes: 5, why: 'Slack mention' })),
-    ...(j.mentions || []).filter((m) => recent(m.at, 48))
-      .map((m) => ({ title: `Answer ${m.by} on ${m.key}`, detail: m.excerpt, url: m.url, minutes: 10, why: 'Jira mention' })),
-    ...[...(g.reviewRequested || [])].filter((p) => !p.draft)
+    ...(j.tickets || jiraMentionsByTicket(j.mentions)).filter((t) => recent(t.at, 48) && !off(t.dismissKey, t.stamp))
+      .map((t) => ({ key: t.dismissKey, title: `Answer ${t.by} on ${t.key}`, detail: t.excerpt, url: t.url, minutes: 10, why: 'Jira mention' })),
+    ...live(g.reviewRequested).filter((p) => !p.draft)
       .sort((a, b) => (b.rerequested - a.rerequested) || Date.parse(a.requestedAt) - Date.parse(b.requestedAt))
       .map((p) => ({ title: `${p.rerequested ? 'Re-review' : 'Review'} ${p.repo}#${p.number}`, detail: p.title, url: p.url,
         minutes: reviewMinutes(p), why: `someone is waiting, requested ${Math.max(1, Math.round((Date.now() - Date.parse(p.requestedAt)) / 36e5))}h ago` })),
-    ...(g.myPrs || []).filter((p) => p.status.owner === 'me' && !p.draft && p.status.label !== 'Ready to merge')
+    ...live(g.myPrs).filter((p) => p.status.owner === 'me' && !p.draft && p.status.label !== 'Ready to merge')
       .map((p) => ({ title: `${p.status.label}: ${p.repo}#${p.number}`, detail: p.title, url: p.url, minutes: 30, why: 'your PR is blocked on you' })),
-    ...(j.assigned || []).filter((i) => i.statusCategory === 'indeterminate')
+    ...live(j.assigned).filter((i) => i.statusCategory === 'indeterminate')
       .map((i) => ({ title: `Continue ${i.key}`, detail: i.summary, url: i.url, minutes: 90, why: 'in progress' })),
-    ...(j.assigned || []).filter((i) => i.statusCategory !== 'indeterminate').slice(0, 3)
+    ...live(j.assigned).filter((i) => i.statusCategory !== 'indeterminate').slice(0, 3)
       .map((i) => ({ title: `Start ${i.key}`, detail: i.summary, url: i.url, minutes: 90, why: i.priority ? `${i.priority} priority` : 'next in your queue' })),
   ];
 
+  for (const c of candidates) c.key ||= c.url;
+  // Muted from the "Do next" list: left out until the chosen time, whatever happens on them.
+  const mutedList = candidates.filter((c) => mutedItems[c.key]).map((c) => ({ ...c, until: mutedItems[c.key] }));
   const suggestions = [];
   let left = freeMinutes;
-  for (const c of candidates) {
+  for (const c of candidates.filter((x) => !mutedItems[x.key])) {
     if (suggestions.length === 3) break;
     // Deep work still gets suggested for a long-enough gap even if it won't finish.
     const fits = c.minutes <= left || (c.minutes >= 90 && freeMinutes >= 45 && left >= 20);
@@ -655,6 +701,7 @@ export function planNow(d, now = Date.now()) {
     freeUntil: new Date(freeUntil).toISOString(),
     freeMinutes,
     afterHours: now >= workdayEnd,
+    muted: mutedList,
     agenda: timed.filter((e) => e.e > now && e.s < atLocalTime(now, '23:59')).map(strip),
     suggestions,
   };
@@ -778,6 +825,7 @@ async function standupGitHub(since) {
 }
 
 async function standupJira(since) {
+  await jiraSite();
   const days = Math.max(1, Math.ceil((Date.now() - since.getTime()) / 864e5));
   const fields = ['key', 'summary', 'status'];
   let issues;
@@ -950,11 +998,23 @@ function applySettings(values) {
   standupCache = { at: 0, data: null };
 }
 
+// "1h", "3h", "tomorrow" (the next workday's stand-up), "week", a YYYY-MM-DD date (that
+// day's stand-up), or null to unmute.
+function muteUntil(span, now = new Date()) {
+  if (span == null) return null;
+  const hours = String(span).match(/^(\d{1,3})h$/)?.[1];
+  if (hours) return new Date(+now + hours * 36e5);
+  if (span === 'week') return new Date(+now + 7 * 864e5);
+  if (span === 'tomorrow') { const t = new Date(now); t.setDate(t.getDate() + 1); t.setHours(0, 0, 0, 0); return nextStandup(t); }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(span)) { const [y, m, d] = span.split('-').map(Number); return standupOn(new Date(y, m - 1, d)); }
+  throw new Error('unknown mute time');
+}
+
 function serve() {
-  const page = readFileSync(join(here, '..', 'web', 'index.html'));
   // Every state-changing request must carry this per-run token and come from this origin,
   // so other websites open in the browser can't change settings or start logins.
   const csrf = randomBytes(18).toString('hex');
+  const page = readFileSync(join(here, '..', 'web', 'index.html'), 'utf8').replace('__CSRF__', csrf);
   const settingsPage = readFileSync(join(here, '..', 'web', 'settings.html'), 'utf8').replace('__CSRF__', csrf);
   const origins = new Set([`http://127.0.0.1:${config.port}`, `http://localhost:${config.port}`]);
   const json = (res, code, body) => {
@@ -968,6 +1028,13 @@ function serve() {
       if (req.method === 'POST') {
         if (req.headers['x-clearsky-token'] !== csrf || (req.headers.origin && !origins.has(req.headers.origin))) {
           return json(res, 403, { error: 'forbidden' });
+        }
+        if (url.pathname === '/api/mute') {
+          const { key, for: span } = await readJson(req);
+          return json(res, 200, { muted: localState.setMuted(stateFile, { key, until: muteUntil(span) }) });
+        }
+        if (url.pathname === '/api/dismiss') {
+          return json(res, 200, { dismissed: localState.setDismissed(stateFile, await readJson(req)) });
         }
         if (url.pathname === '/api/settings') {
           const values = settings.validate(await readJson(req));
@@ -997,6 +1064,7 @@ function serve() {
         const data = await source(src, url.searchParams.has('refresh'));
         return json(res, 200, { ...data, fetchedAt: new Date(sourceCache.get(src)?.at || Date.now()).toISOString() });
       }
+      if (url.pathname === '/api/dismissed') return json(res, 200, { dismissed: localState.dismissed(stateFile) });
       if (url.pathname === '/api/plan') {
         // Waits for every source (from cache when fresh); the page asks for it alongside them.
         const { plan, nextStandup: next, summary, generatedAt } = await collect(false);

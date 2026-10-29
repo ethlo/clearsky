@@ -3,8 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="csrf" content="__CSRF__">
 <title>Clearsky</title>
 <style>
+  [hidden] { display: none !important; }
   :root {
     --bg: #f7f8fa; --surface: #ffffff; --surface-2: #f2f4f7; --text: #111827; --text-2: #4b5563; --muted: #6b7280;
     --line: #e5e7eb; --line-strong: #d1d5db; --accent: #2563eb; --accent-soft: #eff4ff;
@@ -67,7 +69,7 @@
   .agenda time { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 44px; flex: none; white-space: nowrap; }
   .agenda .on { color: var(--accent); font-weight: 500; }
   .todo { list-style: none; margin: 0; padding: 0; counter-reset: n; }
-  .todo li { display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); align-items: start; }
+  .todo li { display: grid; grid-template-columns: 22px 1fr auto auto; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); align-items: start; }
   .todo li:first-child { border-top: 0; padding-top: 0; }
   .todo li::before { counter-increment: n; content: counter(n); width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft);
     color: var(--accent); font-size: 12px; font-weight: 600; display: grid; place-items: center; }
@@ -87,6 +89,26 @@
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); min-width: 0; }
   .card-h { display: flex; align-items: center; gap: 8px; padding: 14px 18px 10px; }
   .card-h h2 { font-size: 14.5px; font-weight: 600; margin: 0; letter-spacing: -.005em; }
+  .todo li { position: relative; }
+  .mute { flex: none; border: 0; background: none; color: var(--muted); padding: 3px; border-radius: 6px; cursor: pointer; opacity: .45; display: grid; place-items: center; }
+  .todo li:hover .mute, .mute:focus-visible { opacity: 1; }
+  .mute:hover { background: var(--surface-2); color: var(--text); }
+  @media (hover: none) { .mute { opacity: .8; } }
+  .menu { position: absolute; z-index: 30; min-width: 190px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+    box-shadow: var(--shadow-lg); padding: 6px; display: flex; flex-direction: column; }
+  .menu[hidden] { display: none; }
+  .menu-h { font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 6px 8px 4px; }
+  .menu button { text-align: left; border: 0; background: none; color: var(--text); font: inherit; font-size: 13.5px; padding: 7px 8px; border-radius: 6px; cursor: pointer; }
+  .menu button:hover, .menu button:focus-visible { background: var(--surface-2); outline: none; }
+  .menu-date { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--text-2); padding: 6px 8px; border-top: 1px solid var(--line); margin-top: 4px; }
+  .menu-date input { font: inherit; font-size: 13px; color: var(--text); background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
+  .muted-toggle { margin-top: 10px; border: 0; background: none; color: var(--muted); font: inherit; font-size: 12.5px; padding: 0; cursor: pointer; }
+  .muted-toggle:hover { color: var(--text); text-decoration: underline; }
+  .muted-list { list-style: none; margin: 6px 0 0; padding: 0; font-size: 13px; }
+  .muted-list li { display: flex; gap: 8px; align-items: baseline; padding: 4px 0; color: var(--text-2); }
+  .muted-list a { color: var(--text-2); text-decoration: none; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .muted-list span { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .muted-list button { border: 0; background: none; color: var(--accent); font: inherit; font-size: 12px; cursor: pointer; padding: 0; }
   .rf { margin-left: auto; width: 26px; height: 26px; display: grid; place-items: center; border: 0; border-radius: 6px;
     background: transparent; color: var(--muted); cursor: pointer; padding: 0; }
   .rf:hover { background: var(--surface-2); color: var(--text); }
@@ -105,8 +127,9 @@
   .row .meta { color: var(--muted); font-size: 12.5px; margin-top: 1px; overflow-wrap: anywhere; }
   .row .quote { color: var(--text-2); font-size: 12.5px; margin-top: 4px; padding-left: 10px; border-left: 2px solid var(--line-strong);
     overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-  .hide { flex: none; border: 0; background: none; color: var(--muted); opacity: 0; padding: 2px 4px; border-radius: 6px; }
+  .hide { flex: none; border: 0; background: none; color: var(--muted); opacity: .35; cursor: pointer; padding: 2px 4px; border-radius: 6px; }
   .row:hover .hide, .hide:focus { opacity: 1; }
+  @media (hover: none) { .hide { opacity: .7; } }
   .hide:hover { background: var(--surface-2); color: var(--text); }
   .badge { flex: none; display: inline-block; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 6px; white-space: nowrap; margin-top: 1px; }
   .b-red { background: var(--red-soft); color: var(--red); } .b-amber { background: var(--amber-soft); color: var(--amber); }
@@ -256,10 +279,39 @@ function refreshPanel(names) {
 
 // ---------------------------------------------------------------- hidden items
 
-let hidden = {};
-try { hidden = JSON.parse(localStorage.getItem('clearsky.hidden') || '{}'); } catch {}
-const saveHidden = () => { try { localStorage.setItem('clearsky.hidden', JSON.stringify(hidden)); } catch {} };
-const hideKey = (url, stamp) => `${url}@${stamp || ''}`;
+// Dismissed items live in ~/.config/clearsky/state.json as { key: stamp }, so the plan and
+// every browser see them. An item comes back as soon as its stamp changes (new activity).
+let dismissed = {};
+const csrf = document.querySelector('meta[name=csrf]').content;
+const isHidden = (x) => Object.hasOwn(dismissed, x.dismissKey || x.url) && dismissed[x.dismissKey || x.url] === String(x.stamp ?? '');
+const vis = (list) => (list || []).filter((x) => !isHidden(x));
+
+// The sources with dismissed items taken out; the panels render from this.
+let V = {}, hiddenCount = 0;
+function view() {
+  const keep = (src, ...lists) => {
+    if (!src || src.error) return src;
+    const out = { ...src };
+    for (const l of lists) { out[l] = vis(src[l]); hiddenCount += (src[l] || []).length - out[l].length; }
+    return out;
+  };
+  hiddenCount = 0;
+  V = { g: keep(state.github, 'reviewRequested', 'myPrs', 'mentions', 'assigned'), j: keep(state.jira, 'assigned'),
+    jm: keep(state.jiraMentions, 'tickets'), sl: keep(state.slack, 'mentions') };
+}
+
+async function post(url, body) {
+  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Clearsky-Token': csrf }, body: JSON.stringify(body) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+async function dismiss(body) {
+  try { ({ dismissed } = await post('/api/dismiss', body)); } catch (e) { $('#status').textContent = `Could not save: ${e.message}`; }
+  renderToday();
+  loadPlan();
+}
 
 // ---------------------------------------------------------------- building blocks
 
@@ -271,9 +323,7 @@ function refAttrs({ issue, pr }) {
   return '';
 }
 
-function row({ url, stamp, title, meta, badge, tone, quote, issue, pr }) {
-  const key = hideKey(url, stamp);
-  if (hidden[key]) return '';
+function row({ url, stamp, dismissKey, title, meta, badge, tone, quote, issue, pr }) {
   return `<li class="row">
     ${badge ? `<span class="badge b-${tone || 'gray'}">${esc(badge)}</span>` : ''}
     <div class="main">
@@ -281,7 +331,7 @@ function row({ url, stamp, title, meta, badge, tone, quote, issue, pr }) {
       ${meta ? `<div class="meta">${esc(meta)}</div>` : ''}
       ${quote ? `<div class="quote">${esc(quote)}</div>` : ''}
     </div>
-    <button class="hide" title="Hide until it changes" aria-label="Hide" data-key="${esc(key)}">✕</button>
+    <button class="hide" title="Dismiss until something new happens" aria-label="Dismiss" data-key="${esc(dismissKey || url)}" data-stamp="${esc(stamp ?? '')}">✕</button>
   </li>`;
 }
 
@@ -318,6 +368,51 @@ const prRef = (p) => `${p.repo}#${p.number}`;
 
 // ---------------------------------------------------------------- Today
 
+const MUTE_ICON = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 5.5v3l2 1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 2.5 1.8 3.7M13 2.5l1.2 1.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+const when = (iso) => new Date(iso).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+let showMuted = false;
+
+function mutedHtml(list) {
+  if (!list.length) return '';
+  return `<button class="muted-toggle" id="muted-toggle">${showMuted ? 'Hide' : 'Show'} ${list.length} muted</button>${showMuted ? `<ul class="muted-list">${list.map((m) => `<li>
+    <a href="${esc(m.url)}" target="_blank" rel="noopener">${esc(m.title)}</a><span>until ${when(m.until)}</span>
+    <button data-unmute="${esc(m.key)}">Unmute</button></li>`).join('')}</ul>` : ''}`;
+}
+
+// The small menu a mute button opens.
+const menu = document.createElement('div');
+menu.className = 'menu'; menu.hidden = true; menu.setAttribute('role', 'menu');
+document.body.append(menu);
+function openMuteMenu(btn) {
+  const tomorrow = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
+  menu.dataset.key = btn.dataset.mute;
+  menu.innerHTML = `<div class="menu-h">Mute until</div>
+    ${[['1h', 'In 1 hour'], ['3h', 'In 3 hours'], ['tomorrow', 'Tomorrow’s stand-up'], ['week', 'In a week']]
+      .map(([v, l]) => `<button role="menuitem" data-for="${v}">${l}</button>`).join('')}
+    <label class="menu-date">On <input type="date" min="${tomorrow}"></label>`;
+  menu.hidden = false;
+  const r = btn.getBoundingClientRect();
+  menu.style.top = `${r.bottom + window.scrollY + 6}px`;
+  menu.style.left = `${Math.max(12, Math.min(r.right + window.scrollX - menu.offsetWidth, window.innerWidth - menu.offsetWidth - 12))}px`;
+  menu.querySelector('button').focus();
+}
+async function mute(key, span) {
+  menu.hidden = true;
+  try { await post('/api/mute', { key, for: span }); } catch (e) { $('#status').textContent = `Could not save: ${e.message}`; }
+  loadPlan();
+}
+menu.addEventListener('click', (e) => { const v = e.target.closest('[data-for]')?.dataset.for; if (v) mute(menu.dataset.key, v); });
+menu.addEventListener('change', (e) => { if (e.target.type === 'date' && e.target.value) mute(menu.dataset.key, e.target.value); });
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-mute]');
+  if (btn) { e.stopPropagation(); return menu.hidden || menu.dataset.key !== btn.dataset.mute ? openMuteMenu(btn) : (menu.hidden = true); }
+  if (!e.target.closest('.menu')) menu.hidden = true;
+  const un = e.target.closest('[data-unmute]')?.dataset.unmute;
+  if (un) mute(un, null);
+  if (e.target.closest('#muted-toggle')) { showMuted = !showMuted; renderPlan(); }
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') menu.hidden = true; });
+
 function renderPlan() {
   const el = $('#plan'), d = state.plan;
   if (!d) {
@@ -346,19 +441,21 @@ function renderPlan() {
     : cal.errors ? `<div style="margin-top:12px;font-size:12px;color:var(--muted)">Calendar (${esc(cal.source)}) loaded; skipped ${Object.entries(cal.errors).map(([n, m]) => `${esc(n)}: ${esc(m)}`).join('; ')}</div>` : '';
   const agenda = p.agenda.length ? `<div class="agenda">${p.agenda.map((e) =>
     `<div class="${p.now && e.start === p.now.start ? 'on' : ''}"><time>${hm(e.start)}</time><span>${esc(e.title)}</span></div>`).join('')}</div>` : '';
-  const todo = p.suggestions.length ? `<ol class="todo">${p.suggestions.map((s) => `<li>
+  const todo = (p.suggestions.length ? `<ol class="todo">${p.suggestions.map((s) => `<li>
       <div><a class="t" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a><div class="d">${esc(s.detail)}</div></div>
-      <span class="m">~${s.minutes} min</span></li>`).join('')}</ol>` : '<div class="empty">Nothing urgent fits right now.</div>';
+      <span class="m">~${s.minutes} min</span>
+      <button class="mute" data-mute="${esc(s.key)}" title="Mute for a while" aria-label="Mute for a while">${MUTE_ICON}</button></li>`).join('')}</ol>`
+    : '<div class="empty">Nothing urgent fits right now.</div>') + mutedHtml(p.muted || []);
   el.innerHTML = `${refreshButton('plan')}<div><div class="eyebrow">Now</div><div class="now-line">${line}</div><div class="now-sub">${sub}</div>${alert}${calErr}${agenda}</div>
     <div><div class="eyebrow">Do next</div>${todo}</div>`;
 }
 
 function renderKpis() {
-  const g = state.github, j = state.jira, jm = state.jiraMentions, sl = state.slack;
+  const g = V.g, j = V.j, jm = V.jm, sl = V.sl;
   const val = (src, fn) => (!src ? '<span class="sk" style="display:block;width:40px;height:22px;margin:3px 0"></span>' : src.error ? '–' : fn(src));
   const mine = (g?.myPrs || []);
   const needs = mine.filter((p) => p.status.owner === 'me' && !p.draft).length;
-  const mentionCount = (g?.mentions?.length || 0) + (jm?.mentions?.length || 0) + (sl?.mentions?.length || 0);
+  const mentionCount = (g?.mentions?.length || 0) + (jm?.tickets?.length || 0) + (sl?.mentions?.length || 0);
   const kpi = (v, label, alert) => `<div class="kpi${alert ? ' alert' : ''}"><b>${v}</b><span>${label}</span></div>`;
   $('#kpis').innerHTML =
     kpi(val(g, (x) => x.reviewRequested.length), 'Reviews waiting on you') +
@@ -370,23 +467,23 @@ function renderKpis() {
 }
 
 function renderReview() {
-  const g = state.github, el = $('#c-review');
+  const g = V.g, el = $('#c-review');
   if (!g) return card(el, 'Needs your review', null, skeleton());
   if (g.error) return card(el, 'Needs your review', null, `<div class="err">${esc(g.error)}</div>`);
   const list = [...g.reviewRequested].sort((a, b) => (b.rerequested - a.rerequested) || Date.parse(a.requestedAt) - Date.parse(b.requestedAt));
   card(el, 'Needs your review', list.length, rows('review', list, (p) => row({
-    url: p.url, stamp: p.updatedAt, title: p.title, pr: prRef(p),
+    url: p.url, stamp: p.stamp, title: p.title, pr: prRef(p),
     badge: p.rerequested ? 'Re-review' : p.draft ? 'Draft' : 'Review', tone: p.rerequested ? 'amber' : p.draft ? 'gray' : 'blue',
     meta: `${prRef(p)} · ${p.author} · requested ${ago(p.requestedAt)}${p.viaTeam ? ' via team' : ''} · +${p.size.additions} −${p.size.deletions}`,
   })));
 }
 
 function renderPrs() {
-  const g = state.github, el = $('#c-prs');
+  const g = V.g, el = $('#c-prs');
   if (!g) return card(el, 'Your pull requests', null, skeleton());
   if (g.error) return card(el, 'Your pull requests', null, `<div class="err">${esc(g.error)}</div>`);
   const item = (p) => row({
-    url: p.url, stamp: p.updatedAt, title: p.title, pr: prRef(p), badge: p.status.label, tone: toneOf[p.status.tone],
+    url: p.url, stamp: p.stamp, title: p.title, pr: prRef(p), badge: p.status.label, tone: toneOf[p.status.tone],
     meta: [prRef(p), p.approvals.length && `approved by ${p.approvals.join(', ')}`,
       p.changesRequested.length && `changes from ${p.changesRequested.join(', ')}`,
       p.pendingReviewers.length && `waiting on ${p.pendingReviewers.join(', ')}`, `updated ${ago(p.updatedAt)}`].filter(Boolean).join(' · '),
@@ -399,13 +496,15 @@ function renderPrs() {
 }
 
 function renderMentions() {
-  const g = state.github, jm = state.jiraMentions, sl = state.slack, el = $('#c-mentions');
+  const g = V.g, jm = V.jm, sl = V.sl, el = $('#c-mentions');
   const all = [
-    ...(g?.mentions || []).map((m) => ({ at: m.updatedAt, html: () => row({ url: m.url, stamp: m.updatedAt, title: m.title,
+    ...(g?.mentions || []).map((m) => ({ at: m.updatedAt, html: () => row({ url: m.url, stamp: m.stamp, title: m.title,
       pr: m.kind === 'PR' ? prRef(m) : null, badge: 'GitHub', tone: 'gray', meta: `${prRef(m)} · ${m.kind} · updated ${ago(m.updatedAt)}` }) })),
-    ...(jm?.mentions || []).map((m) => ({ at: m.at, html: () => row({ url: m.url, stamp: m.at, title: `${m.key} · ${m.summary}`, issue: m.key,
-      badge: 'Jira', tone: 'blue', meta: `${m.by} · ${ago(m.at)}${m.status ? ` · ${m.status}` : ''}`, quote: m.excerpt }) })),
-    ...(sl?.mentions || []).map((m) => ({ at: m.at, html: () => row({ url: m.url, stamp: m.at, title: `${m.by} in ${m.channel}`,
+    // One row per ticket; dismissing it hides the ticket until someone mentions you there again.
+    ...(jm?.tickets || []).map((t) => ({ at: t.at, html: () => row({ url: t.url, stamp: t.stamp, dismissKey: t.dismissKey,
+      title: `${t.key} · ${t.summary}`, issue: t.key, badge: 'Jira', tone: 'blue', quote: t.excerpt,
+      meta: [t.people.join(', '), t.count > 1 && `${t.count} mentions`, `latest ${ago(t.at)}`, t.status].filter(Boolean).join(' · ') }) })),
+    ...(sl?.mentions || []).map((m) => ({ at: m.at, html: () => row({ url: m.url, stamp: m.stamp, title: `${m.by} in ${m.channel}`,
       badge: 'Slack', tone: 'amber', meta: ago(m.at), quote: m.excerpt }) })),
   ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
   const errs = [g?.error && `GitHub: ${g.error}`, jm?.error && `Jira: ${jm.error}`, sl?.error && `Slack: ${sl.error}`].filter(Boolean);
@@ -417,9 +516,9 @@ function renderMentions() {
 }
 
 function renderLeft() {
-  const j = state.jira, g = state.github, el = $('#c-left');
+  const j = V.j, g = V.g, el = $('#c-left');
   if (!j) return card(el, 'What you have left', null, skeleton(4));
-  const item = (i) => row({ url: i.url, stamp: i.updatedAt, title: `${i.key} · ${i.summary}`, issue: i.key,
+  const item = (i) => row({ url: i.url, stamp: i.stamp, title: `${i.key} · ${i.summary}`, issue: i.key,
     badge: i.status, tone: i.statusCategory === 'indeterminate' ? 'blue' : 'gray',
     meta: [i.type, i.priority, i.due && `due ${i.due}`, i.updatedAt && `updated ${ago(i.updatedAt)}`].filter(Boolean).join(' · ') });
   const jira = j.error ? `<div class="err">Jira: ${esc(j.error)}</div>` : [['indeterminate', 'In progress'], ['new', 'To do']].map(([cat, label]) => {
@@ -427,14 +526,16 @@ function renderLeft() {
     return group.length ? `<div class="group">${label}</div>${rows(`left-${cat}`, group, item, 6)}` : '';
   }).join('') || '<div class="empty">Nothing assigned.</div>';
   const issues = g?.assigned || [];
-  const gh = issues.length ? `<div class="group">GitHub issues</div>${rows('left-gh', issues, (i) => row({ url: i.url, stamp: i.updatedAt,
+  const gh = issues.length ? `<div class="group">GitHub issues</div>${rows('left-gh', issues, (i) => row({ url: i.url, stamp: i.stamp,
     title: i.title, badge: 'Issue', tone: 'gray', meta: `${prRef(i)} · updated ${ago(i.updatedAt)}` }), 5)}` : '';
   card(el, 'What you have left', (j.assigned?.length || 0) + issues.length, jira + gh);
 }
 
 function renderToday() {
+  view();
   renderPlan(); renderKpis(); renderReview(); renderPrs(); renderMentions(); renderLeft();
-  $('#unhide').hidden = !Object.keys(hidden).length;
+  $('#unhide').hidden = !hiddenCount;
+  $('#unhide').textContent = `Show ${hiddenCount} hidden`;
 }
 
 // ---------------------------------------------------------------- Stand-up
@@ -558,7 +659,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideCard()
 
 document.addEventListener('click', (e) => {
   const key = e.target.closest('.hide')?.dataset.key;
-  if (key) { hidden[key] = Date.now(); saveHidden(); renderToday(); return; }
+  if (key) { const b = e.target.closest('.hide'); dismissed[key] = b.dataset.stamp; dismiss({ key, stamp: b.dataset.stamp }); return; }
   const more = e.target.closest('.more')?.dataset.more;
   if (more) { expanded.add(more); renderToday(); }
 });
@@ -586,9 +687,11 @@ document.addEventListener('click', (e) => {
   if (!btn) return;
   if (e.shiftKey) loadAll(true); else refreshPanel(PANEL_SOURCES[btn.dataset.refresh]);
 });
-$('#unhide').onclick = () => { hidden = {}; saveHidden(); renderToday(); };
+$('#unhide').onclick = () => { dismissed = {}; dismiss({ clear: true }); };
 
+try { localStorage.removeItem('clearsky.hidden'); } catch {} // from the browser-only version
 renderToday();
+getJson('/api/dismissed').then((d) => { dismissed = d.dismissed || {}; renderToday(); }).catch(() => {});
 loadAll(false);
 route();
 setInterval(() => loadAll(false), REFRESH_MS);

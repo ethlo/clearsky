@@ -123,7 +123,8 @@ test('collects GitHub, Jira and Slack into one view', async () => {
   const gql = seen.find((s) => s.json?.variables?.rr);
   assert.match(gql.json.variables.rr, /review-requested:me org:acme archived:false/);
   const acliCalls = readFileSync(acliLog, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
-  assert.ok(acliCalls.every((a) => a[0] === 'jira' && a.includes('--json')));
+  assert.ok(acliCalls.every((a) => a[0] === 'jira' && (a.includes('--json') || a[1] === 'auth')));
+  assert.equal(d.jira.mentions[0].url.startsWith('https://acme.atlassian.net/'), true, 'links use the site, not acli\'s API host');
   assert.ok(acliCalls.some((a) => a[a.indexOf('--jql') + 1]?.startsWith('comment ~ currentUser() AND updated >= -14d')));
   assert.ok(!acliCalls.some((a) => a[2] === 'comment'), 'comments are read through workitem view');
   assert.equal(d.jira.assigned[0].url, 'https://acme.atlassian.net/browse/OPS-1');
@@ -176,7 +177,9 @@ test('PR status: who has the ball', async () => {
   assert.equal(label({ reviewThreads: { nodes: [{ isResolved: false }, { isResolved: true }] } }), '1 unresolved thread');
   assert.equal(label({ reviewDecision: 'APPROVED', commits: { nodes: [{ commit: { statusCheckRollup: { state: 'PENDING' } } }] } }), 'Approved, CI running');
   assert.equal(label({ reviewDecision: null, reviews: { nodes: [{ state: 'APPROVED', author: { login: 'x' } }, { state: 'COMMENTED', author: { login: 'x' } }] } }), 'Ready to merge');
-  assert.equal(label({ reviews: { nodes: [{ state: 'COMMENTED', author: { login: 'x' } }] } }), 'Has feedback');
+  const commented = { reviews: { nodes: [{ state: 'COMMENTED', submittedAt: hoursAgo(1), author: { login: 'x' } }] } };
+  assert.equal(label({ ...commented, commits: { nodes: [{ commit: { committedDate: hoursAgo(2) } }] } }), 'Has feedback');
+  assert.equal(label({ ...commented, commits: { nodes: [{ commit: { committedDate: hoursAgo(0.5) } }] } }), 'Waiting for review', 'pushed since the feedback');
   assert.equal(label({}), 'Waiting for review');
 });
 
@@ -191,16 +194,24 @@ test('Now / Next: free slot and tasks that fit it', async () => {
         { repo: 'a/b', number: 1, title: 'Big', url: 'u1', requestedAt: new Date(at(8)).toISOString(), size: { additions: 900, deletions: 10 } },
         { repo: 'a/b', number: 2, title: 'Small', url: 'u2', requestedAt: new Date(at(8)).toISOString(), size: { additions: 20, deletions: 5 } },
       ],
-      myPrs: [{ repo: 'a/b', number: 3, title: 'Mine', url: 'u3', draft: false, status: { label: 'Ready to merge', owner: 'me' } }],
+      myPrs: [{ repo: 'a/b', number: 3, title: 'Mine', url: 'u3', stamp: 's3', draft: false, status: { label: 'Ready to merge', owner: 'me' } }],
     },
     jira: { assigned: [{ key: 'OPS-1', summary: 'Certs', url: 'u4', statusCategory: 'indeterminate' }], mentions: [] },
     slack: { disabled: true },
   };
   // During the sync: back-to-back 1:1 and stand-up extend the busy block to 10:00, then 60 min free.
-  const p = planNow(data, at(9, 5));
+  const p = planNow(data, at(9, 5), {}, {});
   assert.equal(p.now.title, 'Sync');
   assert.equal(p.next.title, 'Design review');
   assert.equal(p.freeMinutes, 60);
   assert.ok(!p.agenda.some((e) => e.title === 'Stand-up'), 'calendar already has the stand-up');
   assert.deepEqual(p.suggestions.map((s) => s.title), ['Merge a/b#3', 'Review a/b#2', 'Continue OPS-1']);
+
+  // Dismissed (same stamp) and muted items drop out; a dismissed item with new activity comes back.
+  const later = new Date(at(9, 5) + 36e5).toISOString();
+  const q = planNow(data, at(9, 5), { u3: 's3' }, { u2: later });
+  const titles = q.suggestions.map((s) => s.title);
+  assert.ok(!titles.includes('Merge a/b#3') && !titles.includes('Review a/b#2'), titles.join());
+  assert.deepEqual(q.muted.map((m) => [m.key, m.until]), [['u2', later]]);
+  assert.equal(planNow(data, at(9, 5), { u3: 'older' }, {}).suggestions[0].title, 'Merge a/b#3');
 });

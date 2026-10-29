@@ -71,9 +71,16 @@ clearsky standup      # stand-up summary (add --json for the data)
 clearsky jira-debug   # raw acli output, if Jira data looks wrong
 ```
 
-On the page, the ↻ on each panel reloads just that panel (Shift-click reloads everything), and ✕ hides an item until it changes, for example when a new commit or comment arrives.
+On the page:
+- ↻ on a panel reloads just that panel (Shift-click reloads everything).
+- ✕ dismisses an item until something new happens on it (a commit, review, comment or status change). Jira mentions are grouped per ticket, so dismissing one hides the ticket until someone mentions you there again.
+- The clock on a "Do next" task mutes it for an hour, until tomorrow's stand-up, a week, or a date you pick, even if there's new activity.
 
-The server also answers JSON on 127.0.0.1: `/api/source/<github|jira|jiraMentions|slack|calendar>`, `/api/plan`, `/api/work` (everything), `/api/standup`, `/api/issue/<KEY>` and `/api/pr?repo=<org/repo>&number=<n>`. Add `?refresh=1` to skip the cache.
+Dismissed and muted items are saved in `~/.config/clearsky/state.json`, so the plan respects them too.
+
+"Has feedback" on your PR means someone commented after your latest commit; once you push, the PR shows as waiting for review.
+
+The server also answers JSON on 127.0.0.1: `/api/source/<github|jira|jiraMentions|slack|calendar>`, `/api/plan`, `/api/work` (everything), `/api/standup`, `/api/issue/<KEY>`, `/api/pr?repo=<org/repo>&number=<n>` and `/api/dismissed`. Add `?refresh=1` to skip the cache.
 
 ## Copilot skills
 
