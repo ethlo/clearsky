@@ -2045,10 +2045,33 @@ function rememberChat() {
 const CP_KEY = 'clearsky.copilot';
 let cpPrefs = {};
 try { cpPrefs = JSON.parse(localStorage.getItem(CP_KEY) || '{}'); } catch {}
+// Each chat keeps the model, effort and access it was given, so switching back to it (or
+// reopening it later) keeps its mode rather than taking whatever the pickers last showed.
+const CHAT_MODES_KEY = 'clearsky.copilot.modes';
+let chatModes = {};
+try { chatModes = JSON.parse(localStorage.getItem(CHAT_MODES_KEY) || '{}') || {}; } catch {}
+const pickerMode = () => ({ model: $('#cp-model').value.trim(), effort: $('#cp-effort').value, permission: $('#cp-perm').value });
+function rememberMode(id = chat.session, mode = pickerMode()) {
+  if (!id) return;
+  delete chatModes[id];
+  chatModes[id] = mode;
+  const ids = Object.keys(chatModes);
+  if (ids.length > 200) ids.slice(0, ids.length - 200).forEach((k) => delete chatModes[k]);
+  try { localStorage.setItem(CHAT_MODES_KEY, JSON.stringify(chatModes)); } catch {}
+}
+function restoreMode(id) {
+  const m = chatModes[id];
+  if (!m || !chat.info?.permissions) return;
+  $('#cp-model').value = m.model || '';
+  $('#cp-effort').value = m.effort || '';
+  if (chat.info.permissions[m.permission]) $('#cp-perm').value = m.permission;
+  chatSub();
+}
 const saveCp = () => {
   cpPrefs = { model: $('#cp-model').value.trim(), effort: $('#cp-effort').value, permission: $('#cp-perm').value,
     allow: $('#cp-allow').value, deny: $('#cp-deny').value };
   try { localStorage.setItem(CP_KEY, JSON.stringify(cpPrefs)); } catch {}
+  if (chat.turns) rememberMode();
   chatSub();
 };
 // ---------------------------------------------------------------- switching chats
@@ -2260,6 +2283,7 @@ async function openSession(id, cwd) {
     const q = cwd ? `?cwd=${encodeURIComponent(cwd)}` : '';
     const h = await getJson(`/api/copilot/sessions/${encodeURIComponent(id)}${q}`);
     chat.session = h.id; chat.cwd = h.cwd; chat.turns = h.messages.filter((m) => m.role === 'me').length || 1;
+    restoreMode(h.id);
     chat.items = [];
     chat.title = h.title || h.messages.find((m) => m.role === 'me')?.text.trim().split('\n')[0].slice(0, 120) || null;
     $('#chat-log').innerHTML = '';
@@ -2393,7 +2417,7 @@ async function send(text) {
     if (e.type === 'text') { if (last?.type === 'text') last.text += e.text; else segs.push({ type: 'text', text: e.text }); }
     else if (e.type === 'tool') { const t = segs.find((g) => g.type === 'tool' && g.id === e.id); if (t) Object.assign(t, Object.fromEntries(Object.entries(e).filter(([, v]) => v != null))); else segs.push(e); }
     else if (e.type === 'permission' || e.type === 'error') segs.push(e);
-    else if (e.type === 'session') { if (here()) { chat.session = e.id; rememberChat(); } mine.id = e.id; remember(e.id, chat.cwd, mine.title); drawTabs(); }
+    else if (e.type === 'session') { if (here()) { chat.session = e.id; rememberChat(); } rememberMode(e.id, mine.mode); mine.id = e.id; remember(e.id, chat.cwd, mine.title); drawTabs(); }
     else if (e.type === 'commands' && chat.info) chat.info.commands = e.commands;
     // A new chat about a PR or ticket is named after it, not after the skill or first words.
     else if (e.type === 'title') { mine.title = e.title; if (here()) { chat.title = e.title; drawCtx(); } }
@@ -2403,7 +2427,8 @@ async function send(text) {
   let ended = false;
   const ctrl = new AbortController();
   // This turn's chat; a new one gets Copilot's own id once it starts.
-  const mine = { id: chat.session, title: chat.turns ? null : text.trim().split('\n')[0].slice(0, 120) };
+  const mine = { id: chat.session, title: chat.turns ? null : text.trim().split('\n')[0].slice(0, 120), mode: pickerMode() };
+  rememberMode(chat.session, mine.mode);
   const here = () => chat.session === mine.id;
   let halted = false;
   chat.stop = () => ctrl.abort(); // stop watching (switching chats); the turn goes on

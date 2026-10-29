@@ -22,7 +22,7 @@ import * as copilot from '../lib/copilot.mjs';
 import { AcpAgent, chatEvent } from '../lib/acp.mjs';
 import { sessionEvents } from '../lib/copilot-events.mjs';
 import { branchesFor } from '../lib/branches.mjs';
-import { isReadOnly } from '../lib/readonly.mjs';
+import { isReadOnly, editInside, ASSISTED_COMMANDS } from '../lib/readonly.mjs';
 import { attentionItems, diffAttention, desktopNotify, DbusNotifier } from '../lib/notify.mjs';
 import { loadSources, makeContext, hook, asList } from '../lib/sources.mjs';
 
@@ -1269,6 +1269,7 @@ async function copilotInfo(force) {
     efforts: copilot.EFFORTS,
     permissions: Object.fromEntries(Object.entries(copilot.PERMISSIONS).map(([k, v]) => [k, v.label])),
     // What a new chat starts with (Settings → Copilot); the chat's pickers override them.
+    assistedDefault: ASSISTED_COMMANDS,
     defaults: { model: process.env.COPILOT_MODEL || '', effort: process.env.COPILOT_EFFORT || '', permission: process.env.COPILOT_PERMISSION || '' },
   };
   copilotInfoCache = { at: Date.now(), data };
@@ -1585,6 +1586,7 @@ function toolDetail(call = {}) {
 }
 
 // Folders Copilot chats may use without asking: Settings, else your code folders (~/dev).
+const assistedCommands = () => (process.env.COPILOT_ASSISTED_COMMANDS ? list(process.env.COPILOT_ASSISTED_COMMANDS) : ASSISTED_COMMANDS);
 const copilotFolders = () => (process.env.COPILOT_FOLDERS ? list(process.env.COPILOT_FOLDERS) : codeDirs());
 
 async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin }) {
@@ -1613,11 +1615,15 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin })
   const autoAllow = copilot.PERMISSIONS[options.permission]?.autoAllow || [];
   agent.onPermission = (p) => new Promise((resolve) => {
     const once = (p.options || []).find((o) => o.kind === 'allow_once');
-    if (once && autoAllow.includes(p.toolCall?.kind)) return resolve({ outcome: 'selected', optionId: once.optionId });
+    if (once && (autoAllow.includes('*') || autoAllow.includes(p.toolCall?.kind))) return resolve({ outcome: 'selected', optionId: once.optionId });
     // Commands that only read (cat, grep, sed -n, git log…) inside your folders run without asking,
-    // unless that's turned off in Settings → Copilot.
-    if (once && process.env.COPILOT_READONLY !== 'off' &&
-      isReadOnly(p.toolCall?.rawInput?.command, { cwd: c.cwd, folders: copilotFolders(), home: homedir() })) return resolve({ outcome: 'selected', optionId: once.optionId });
+    // unless that's turned off in Settings → Copilot. Assisted also lets edits in your folders,
+    // builds, tests and local git steps through (its list is in Settings → Copilot too).
+    const where = { cwd: c.cwd, folders: copilotFolders(), home: homedir() };
+    const assisted = options.permission === 'assisted';
+    const allow = assisted ? assistedCommands() : [];
+    if (once && (process.env.COPILOT_READONLY !== 'off' || assisted) && isReadOnly(p.toolCall?.rawInput?.command, { ...where, allow })) return resolve({ outcome: 'selected', optionId: once.optionId });
+    if (once && assisted && p.toolCall?.kind === 'edit' && editInside(p.toolCall, where)) return resolve({ outcome: 'selected', optionId: once.optionId });
     const id = randomBytes(6).toString('hex');
     const ev = { type: 'permission', id, title: p.toolCall?.title || 'Copilot wants to use a tool', kind: p.toolCall?.kind,
       detail: toolDetail(p.toolCall), options: (p.options || []).map((o) => ({ id: o.optionId, name: o.name, kind: o.kind })) };
