@@ -35,7 +35,8 @@ function fakeVisma({ access = jwt(Date.now() + 5 * 60_000) } = {}) {
         { employeeId: 8, title: 'Gammel', sender: 'Rektor', messageText: 'Lest', sentDate: '2026-09-01T08:00:00', unreadCount: 0 },
       ],
       [`${p}/messages/group`]: [{ conversationId: 'c1', title: 'Klasse 3B', lastMessage: { sentBy: 'Kontaktlærer', message: 'Foreldremøte' }, lastMessageDate: '2026-10-27T19:00:00.12', unreadMessageCount: 1 }],
-      [`${p}/notifications/0`]: [{ idMessage: 5, title: 'Fravær registrert', sender: 'Skolen', messageText: 'Ola er registrert borte', sentDate: '2026-10-29T09:00:00', isUnread: true }],
+      [`${p}/notifications/0`]: [{ idMessage: 5, title: 'Fravær registrert', sender: 'Skolen', messageText: 'Ola er registrert borte', sentDate: '2026-10-29T09:00:00', isUnread: true,
+        attachments: [{ attachmentId: 'n1', fileName: 'Skjema.pdf', contentType: 'application/pdf', contentLength: 4 }] }],
       [`${p}/notifications/1`]: [{ idMessage: 6, title: 'Høstferie', sender: 'Skolen', messageText: '', sentDate: '2026-10-01T09:00:00', isUnread: false }],
       [`${p}/digital-forms`]: [
         { id: 11, title: 'Påmelding skidag', deadline: '2026-11-03T23:59:00', lastModifiedOn: '2026-10-26T10:00:00', isAnswered: false, isDeadlinePassed: false },
@@ -52,6 +53,7 @@ function fakeVisma({ access = jwt(Date.now() + 5 * 60_000) } = {}) {
         attachments: [{ messageId: 1, attachmentId: 'a1', fileName: 'Innkalling.pdf', contentType: 'application/pdf', contentLength: 4 }] },
       { sentOn: '2026-10-27T18:00:00', sentBy: 'Kontaktlærer', message: 'Hei alle', sentByMe: false, attachments: [] },
     ] });
+    if (req.url === `${p}/notifications/attachment/n1`) { res.writeHead(200, { 'content-type': 'application/pdf' }); return res.end('%PDF-n'); }
     if (req.url === `${p}/messages/group/c1/attachment/a1`) { res.writeHead(200, { 'content-type': 'application/pdf' }); return res.end('%PDF'); }
     if (req.url === `${p}/digital-forms/11`) return send(200, { title: 'Påmelding skidag', publishText: 'Bli med?', deadline: '2026-11-03T23:59:00',
       publishedOn: '2026-10-26T10:00:00', lastModifiedBy: 'Rektor', alternatives: [{ id: 2, order: 2, text: 'Nei' }, { id: 1, order: 1, text: 'Ja' }], attachments: [] });
@@ -136,7 +138,7 @@ test('collects what waits for each child; areas a school has turned off come bac
     assert.ok(v.state.requests.every((r) => !r.url.includes('mark-as-read') && !r.url.includes('reply')));
 
     const w = waiting(data);
-    assert.deepEqual(w.map((x) => x.key), ['flyt:notice:5', 'flyt:direct:1001:7', 'flyt:group:1001:c1', 'flyt:form:1001:11']);
+    assert.deepEqual(w.map((x) => x.key), ['flyt:notice:1001:5', 'flyt:direct:1001:7', 'flyt:group:1001:c1', 'flyt:form:1001:11']);
     assert.equal(w[1].at, '2026-10-28T07:15:00.000Z');
     assert.equal(w[1].count, 2);
     assert.equal(w[3].deadline, '2026-11-03T22:59:00.000Z');
@@ -200,15 +202,18 @@ test('reads a whole thread, notice or form, oldest first, without marking anythi
     assert.deepEqual(group.messages.map((m) => m.text), ['Hei alle', 'Foreldremøte tirsdag']);
     assert.deepEqual(group.messages[1].attachments, [{ id: 'a1', name: 'Innkalling.pdf', type: 'application/pdf', bytes: 4 }]);
 
-    const notice = await readFlyt('flyt:notice:5', data, { store, api: v.api });
+    const notice = await readFlyt('flyt:notice:1001:5', data, { store, api: v.api });
     assert.equal(notice.messages[0].text, 'Ola er registrert borte');
 
     const form = await readFlyt('flyt:form:1001:11', data, { store, api: v.api });
     assert.match(form.messages[0].text, /Bli med\?\n\nChoices:\n• Ja\n• Nei/);
 
-    const file = await flytFile('flyt:group:1001:c1', 'a1', { store, api: v.api });
+    const file = await flytFile('flyt:group:1001:c1', 'a1', data, { store, api: v.api });
     assert.deepEqual([file.name, file.type, file.data.toString()], ['Innkalling.pdf', 'application/pdf', '%PDF']);
-    await assert.rejects(flytFile('flyt:group:1001:c1', 'not-in-this-thread', { store, api: v.api }), /No such attachment/);
+    const noticeFile = await flytFile('flyt:notice:1001:5', 'n1', data, { store, api: v.api });
+    assert.deepEqual([noticeFile.name, noticeFile.data.toString()], ['Skjema.pdf', '%PDF-n']);
+    assert.deepEqual(notice.messages[0].attachments.map((a) => a.name), ['Skjema.pdf']);
+    await assert.rejects(flytFile('flyt:group:1001:c1', 'not-in-this-thread', data, { store, api: v.api }), /No such attachment/);
     assert.ok(v.state.requests.every((r) => !/mark-as-read|reply/.test(r.url)));
   } finally { v.close(); }
 });
