@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clearsky</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --text: #1d2330; --muted: #677085; --line: #e3e6ec;
+    --bad: #c2362b; --warn: #b26b00; --good: #1f7a3d; --wait: #4a5d8f; --neutral: #677085;
+    --accent: #2f5bd3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --card: #1a1e26; --text: #e6e9ef; --muted: #8d95a8; --line: #2a303b;
+      --bad: #ff7a6e; --warn: #f0b04a; --good: #5bd08a; --wait: #8fa7e6; --neutral: #8d95a8;
+      --accent: #8fa7ff;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: baseline; gap: 12px; padding: 20px 24px 8px; flex-wrap: wrap; }
+  h1 { font-size: 20px; margin: 0; }
+  .meta { color: var(--muted); font-size: 13px; }
+  button { font: inherit; color: var(--accent); background: none; border: 1px solid var(--line);
+    border-radius: 6px; padding: 3px 10px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; padding: 8px 24px 16px; }
+  .tile { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+  .tile b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; }
+  .tile span { color: var(--muted); font-size: 12px; }
+  main { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; padding: 0 24px 32px; }
+  @media (max-width: 520px) { main { grid-template-columns: 1fr; padding: 0 12px 24px; } .tiles, header { padding-left: 12px; padding-right: 12px; } }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
+  h2 { font-size: 15px; margin: 0 0 8px; display: flex; gap: 8px; align-items: center; }
+  h2 .n { color: var(--muted); font-weight: 400; }
+  h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 12px 0 4px; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { display: flex; gap: 8px; align-items: flex-start; padding: 7px 0; border-top: 1px solid var(--line); }
+  li:first-child { border-top: 0; }
+  .body { flex: 1; min-width: 0; }
+  a { color: var(--text); text-decoration: none; }
+  a:hover { color: var(--accent); text-decoration: underline; }
+  .title { font-weight: 500; overflow-wrap: anywhere; }
+  .sub { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+  .quote { color: var(--muted); font-size: 12px; font-style: italic; margin-top: 2px; }
+  .pill { flex: none; font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 99px;
+    border: 1px solid currentColor; white-space: nowrap; margin-top: 2px; }
+  .bad { color: var(--bad); } .warn { color: var(--warn); } .good { color: var(--good); }
+  .wait { color: var(--wait); } .neutral { color: var(--neutral); }
+  .hide { flex: none; border: 0; padding: 0 4px; color: var(--muted); visibility: hidden; }
+  li:hover .hide { visibility: visible; }
+  .empty, .err { color: var(--muted); font-style: italic; padding: 6px 0; }
+  .err { color: var(--bad); font-style: normal; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Clearsky</h1>
+  <span class="meta" id="meta">Loading...</span>
+  <button id="refresh">Refresh</button>
+  <button id="unhide" hidden>Show hidden</button>
+</header>
+<div class="tiles" id="tiles"></div>
+<main id="main"></main>
+
+<script>
+const REFRESH_MS = 5 * 60 * 1000;
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// Hidden items stay hidden until they change (keyed on url + last update).
+let hidden = {};
+try { hidden = JSON.parse(localStorage.getItem('clearsky.hidden') || '{}'); } catch {}
+const saveHidden = () => { try { localStorage.setItem('clearsky.hidden', JSON.stringify(hidden)); } catch {} };
+const hideKey = (url, stamp) => `${url}@${stamp || ''}`;
+
+function ago(iso) {
+  if (!iso) return '';
+  const s = (Date.now() - Date.parse(iso)) / 1000;
+  if (s < 3600) return `${Math.max(1, Math.round(s / 60))}m ago`;
+  if (s < 86400) return `${Math.round(s / 3600)}h ago`;
+  return `${Math.round(s / 86400)}d ago`;
+}
+
+function item({ url, stamp, title, sub, pill, tone, quote }) {
+  const key = hideKey(url, stamp);
+  if (hidden[key]) return '';
+  return `<li>
+    ${pill ? `<span class="pill ${tone || 'neutral'}">${esc(pill)}</span>` : ''}
+    <div class="body">
+      <a class="title" href="${esc(url)}" target="_blank" rel="noopener">${esc(title)}</a>
+      ${sub ? `<div class="sub">${esc(sub)}</div>` : ''}
+      ${quote ? `<div class="quote">"${esc(quote)}"</div>` : ''}
+    </div>
+    <button class="hide" title="Hide until it changes" data-key="${esc(key)}">✕</button>
+  </li>`;
+}
+
+function list(items, render) {
+  const html = items.map(render).join('');
+  return html ? `<ul>${html}</ul>` : '<div class="empty">Nothing here.</div>';
+}
+
+function section(title, count, inner, error) {
+  return `<section><h2>${esc(title)} <span class="n">${count ?? ''}</span></h2>
+    ${error ? `<div class="err">${esc(error)}</div>` : inner}</section>`;
+}
+
+const ciTone = { FAILURE: 'bad', ERROR: 'bad', PENDING: 'wait', EXPECTED: 'wait', SUCCESS: 'good' };
+
+function render(d) {
+  const g = d.github, j = d.jira, sl = d.slack || {}, s = d.summary;
+  $('#meta').textContent = `Updated ${new Date(d.generatedAt).toLocaleTimeString()}` +
+    (g.login ? ` · GitHub @${g.login}${g.orgs?.length ? ` (${g.orgs.join(', ')})` : ''}` : '') +
+    (j.user ? ` · Jira ${j.user}` : '') +
+    (sl.team ? ` · Slack ${sl.team}` : '');
+
+  const tile = (n, label) => `<div class="tile"><b>${n ?? '–'}</b><span>${label}</span></div>`;
+  $('#tiles').innerHTML =
+    tile(s.reviewsWaiting, 'reviews waiting on me') +
+    tile(s.myPrsNeedingAction, 'my PRs need action') +
+    tile(s.myPrsWaitingOnOthers, 'my PRs waiting on others') +
+    tile(s.mentions, 'recent mentions') +
+    tile(s.jiraInProgress, 'Jira in progress') +
+    tile(s.jiraOpen, 'Jira open in total');
+
+  const reviews = [...(g.reviewRequested || [])].sort((a, b) => Date.parse(a.requestedAt) - Date.parse(b.requestedAt));
+  const reviewHtml = list(reviews, (p) => item({
+    url: p.url, stamp: p.updatedAt, title: p.title,
+    pill: p.rerequested ? 'Re-review' : p.draft ? 'Draft' : 'Review',
+    tone: p.rerequested ? 'warn' : p.draft ? 'neutral' : 'wait',
+    sub: `${p.repo}#${p.number} · @${p.author} · requested ${ago(p.requestedAt)}${p.viaTeam ? ' via team' : ''}` +
+      ` · +${p.size.additions}/−${p.size.deletions} in ${p.size.files} files${p.ci ? ` · CI ${p.ci.toLowerCase()}` : ''}`,
+  }));
+
+  const prItem = (p) => item({
+    url: p.url, stamp: p.updatedAt, title: p.title, pill: p.status.label, tone: p.status.tone,
+    sub: [
+      `${p.repo}#${p.number}`,
+      p.approvals.length && `✓ ${p.approvals.join(', ')}`,
+      p.changesRequested.length && `changes: ${p.changesRequested.join(', ')}`,
+      p.pendingReviewers.length && `waiting on ${p.pendingReviewers.join(', ')}`,
+      `updated ${ago(p.updatedAt)}`,
+    ].filter(Boolean).join(' · '),
+  });
+  const mine = g.myPrs || [];
+  const prHtml = ['me', 'others'].map((owner) => {
+    const group = mine.filter((p) => p.status.owner === owner);
+    return group.length ? `<h3>${owner === 'me' ? 'Your move' : 'Waiting on others'}</h3>${list(group, prItem)}` : '';
+  }).join('') || '<div class="empty">No open PRs.</div>';
+
+  const mentions = [
+    ...(g.mentions || []).map((m) => ({ at: m.updatedAt, html: () => item({
+      url: m.url, stamp: m.updatedAt, title: m.title, pill: `GitHub ${m.kind}`, tone: 'neutral',
+      sub: `${m.repo}#${m.number} · updated ${ago(m.updatedAt)}` }) })),
+    ...(j.mentions || []).map((m) => ({ at: m.at, html: () => item({
+      url: m.url, stamp: m.at, title: `${m.key} ${m.summary}`, pill: 'Jira', tone: 'wait',
+      sub: `${m.by} · ${ago(m.at)}${m.status ? ` · ${m.status}` : ''}`, quote: m.excerpt }) })),
+    ...(sl.mentions || []).map((m) => ({ at: m.at, html: () => item({
+      url: m.url, stamp: m.at, title: `${m.by} in ${m.channel}`, pill: 'Slack', tone: 'warn',
+      sub: ago(m.at), quote: m.excerpt }) })),
+  ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
+  const mentionErrors = [g.error && `GitHub: ${g.error}`, j.error && `Jira: ${j.error}`, sl.error && `Slack: ${sl.error}`].filter(Boolean);
+  const mentionHtml = (mentionErrors.length ? `<div class="err">${esc(mentionErrors.join(' · '))}</div>` : '') +
+    list(mentions, (m) => m.html());
+
+  const jiraItem = (i) => item({
+    url: i.url, stamp: i.updatedAt, title: `${i.key} ${i.summary}`, pill: i.status,
+    tone: i.statusCategory === 'indeterminate' ? 'wait' : 'neutral',
+    sub: [i.type, i.priority, i.due && `due ${i.due}`, `updated ${ago(i.updatedAt)}`].filter(Boolean).join(' · '),
+  });
+  const jiraAll = j.assigned || [];
+  const jiraHtml = [['indeterminate', 'In progress'], ['new', 'To do']].map(([cat, label]) => {
+    const group = jiraAll.filter((i) => (i.statusCategory || 'new') === cat);
+    return group.length ? `<h3>${label}</h3>${list(group, jiraItem)}` : '';
+  }).join('') || '<div class="empty">Nothing assigned.</div>';
+  const ghIssues = g.assigned || [];
+  const ghIssueHtml = ghIssues.length ? `<h3>GitHub issues</h3>` + list(ghIssues, (i) => item({
+    url: i.url, stamp: i.updatedAt, title: i.title, pill: 'Issue', tone: 'neutral',
+    sub: `${i.repo}#${i.number}${i.labels.length ? ` · ${i.labels.join(', ')}` : ''} · updated ${ago(i.updatedAt)}` })) : '';
+
+  $('#main').innerHTML =
+    section('Needs my review', g.reviewRequested?.length, reviewHtml, g.error) +
+    section('My PRs', g.myPrs?.length, prHtml, g.error) +
+    section('Mentions', mentions.length, mentionHtml) +
+    section('What I have left', jiraAll.length + ghIssues.length, (j.error ? `<div class="err">Jira: ${esc(j.error)}</div>` : jiraHtml) + ghIssueHtml);
+
+  $('#unhide').hidden = !Object.keys(hidden).length;
+}
+
+let last = null;
+async function load(force) {
+  $('#meta').textContent = 'Loading...';
+  try {
+    const res = await fetch(`/api/work${force ? '?refresh=1' : ''}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    last = data;
+    render(data);
+  } catch (e) {
+    $('#meta').textContent = `Failed to load: ${e.message}`;
+  }
+}
+
+document.addEventListener('click', (e) => {
+  const key = e.target.closest('.hide')?.dataset.key;
+  if (key) { hidden[key] = Date.now(); saveHidden(); if (last) render(last); }
+});
+$('#refresh').onclick = () => load(true);
+$('#unhide').onclick = () => { hidden = {}; saveHidden(); if (last) render(last); };
+load(false);
+setInterval(() => load(false), REFRESH_MS);
+</script>
+</body>
+</html>

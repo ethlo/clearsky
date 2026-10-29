@@ -1,0 +1,13 @@
+{
+  "name": "clearsky",
+  "version": "0.1.0",
+  "description": "One view of what needs your attention on GitHub and Jira",
+  "type": "module",
+  "bin": { "clearsky": "bin/clearsky.mjs" },
+  "scripts": {
+    "start": "node bin/clearsky.mjs serve",
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": { "node": ">=22" },
+  "license": "MIT"
+}
