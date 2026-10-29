@@ -86,8 +86,9 @@ test('D-Bus banners: one per item, and clicking Open opens the link with the act
   const monitor = Object.assign(new EventEmitter(), { stdout: new EventEmitter(), kill() {} });
   const calls = [], opened = [];
   let next = 40;
+  const watched = [];
   const run = (bin, args, opts) => {
-    if (args[0] === 'monitor') return monitor;
+    if (args[0] === 'monitor') { watched.push(args[3]); return monitor; }
     opened.push({ url: args[0], token: opts.env.XDG_ACTIVATION_TOKEN });
     return Object.assign(new EventEmitter(), { unref() {} });
   };
@@ -101,7 +102,8 @@ test('D-Bus banners: one per item, and clicking Open opens the link with the act
 
   monitor.stdout.emit('data', "/org/freedesktop/Notifications: org.freedesktop.Notifications.ActivationToken (uint32 41, 'tok')\n/org/freedesktop/Notif");
   monitor.stdout.emit('data', "ications: org.freedesktop.Notifications.ActionInvoked (uint32 41, 'open')\n");
-  assert.deepEqual(opened, [{ url: 'https://github.com/acme/api/pull/7', token: 'tok' }]);
+  assert.deepEqual(opened, [{ url: 'https://github.com/acme/api/pull/7', token: 'tok' }], 'heard by both watchers, opened once');
+  assert.deepEqual(watched, ['org.freedesktop.Notifications', 'org.gnome.Shell'], 'GNOME 50 only passes clicks to the sender, but gnome-shell broadcasts them');
 
   await n.notify({ key: 'x', title: 'Bad link', url: 'file:///etc/passwd' });
   monitor.stdout.emit('data', "/org/freedesktop/Notifications: org.freedesktop.Notifications.ActionInvoked (uint32 42, 'open')\n");
