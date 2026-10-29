@@ -1052,9 +1052,13 @@ async function withAgent(bin, fn) {
   try { return await fn(agent); } finally { clearTimeout(timer); agent.close(); }
 }
 
-// Sessions Copilot has open in a terminal or IDE right now.
+// Sessions Copilot has open in a terminal or IDE right now. Copilot refreshes the entries
+// while a session is open; ones not touched for 15 minutes are left over from closed windows.
 function openCopilotSessions() {
-  try { return JSON.parse(readFileSync(join(homedir(), '.copilot', 'open-sessions-state.json'), 'utf8')) || {}; } catch { return {}; }
+  let all = {};
+  try { all = JSON.parse(readFileSync(join(homedir(), '.copilot', 'open-sessions-state.json'), 'utf8')) || {}; } catch {}
+  const fresh = (v) => Date.now() - (Date.parse(v?.refreshedAt || v?.openedAt) || 0) < 15 * 6e4;
+  return Object.fromEntries(Object.entries(all).filter(([, v]) => fresh(v)));
 }
 
 const CONTEXT_INTRO = 'You are helping me with my work. This is my work dashboard right now:';
