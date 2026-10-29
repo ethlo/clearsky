@@ -22,7 +22,7 @@ cp .env.example ~/.config/clearsky/.env   # then fill it in
 
 Tokens:
 
-- **GitHub:** a fine-grained token with read access to Pull requests, Issues, Contents and Metadata on your work org. A classic token with `repo` scope also works. If your org uses SSO, authorize the token for it.
+- **GitHub:** nothing, if you're logged in with the GitHub CLI (`gh auth login`); Clearsky then uses `gh auth token`. Otherwise a fine-grained token with read access to Pull requests, Issues, Contents and Metadata on your work org. A classic token with `repo` scope also works. If your org uses SSO, authorize the token for it.
 - **Jira:** no token in Clearsky. All Jira calls go through `acli`, so it uses whatever account `acli jira auth` is logged in as.
 - **Slack (optional):** a user token, see below. Without `SLACK_TOKEN` the Slack part is skipped.
 

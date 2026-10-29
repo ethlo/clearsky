@@ -149,9 +149,19 @@ function reviewerName(r) {
   return r?.login || (r?.slug ? `team:${r.slug}` : null);
 }
 
+// Without GITHUB_TOKEN, borrow the GitHub CLI's login if there is one.
+async function ghCliToken() {
+  try {
+    return (await execFileP('gh', ['auth', 'token'], { timeout: 10_000 })).stdout.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 async function fetchGitHub() {
+  config.github.token ||= await ghCliToken();
   const { token, orgs, ignoreAuthors } = config.github;
-  if (!token) return { error: 'GITHUB_TOKEN is not set' };
+  if (!token) return { error: 'GITHUB_TOKEN is not set and `gh auth token` gave nothing' };
 
   const { viewer } = await gql('query { viewer { login } }');
   const me = viewer.login;
