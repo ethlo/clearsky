@@ -1912,6 +1912,7 @@ function serve() {
           };
           res.on('close', linkRefs);
           if (checkout) emit({ type: 'cwd', cwd: checkout });
+          if (itemName) emit({ type: 'title', title: itemName });
           sessionsCache = null;
           try {
             await acpTurn({ chat: body.session, options, prompt, resumeId: body.resume ? body.session : null, cwd, emit, res, bin: info.bin });

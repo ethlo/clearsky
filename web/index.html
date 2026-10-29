@@ -2063,7 +2063,7 @@ function chatTabs() {
     const r = recentChats.find((x) => x.id === id), l = live.get(id) || known.get(id);
     const current = id === chat.session && (chat.turns || chat.stop);
     const status = current && chat.stop ? ($('#chat-log .perm-b button') ? 'needs-you' : 'working') : live.get(id)?.status || 'closed';
-    return { id, cwd: l?.cwd || r?.cwd, title: (current && chat.title) || r?.title || l?.title || 'Copilot chat', status, live: live.has(id) };
+    return { id, cwd: l?.cwd || r?.cwd, title: (current && chat.title) || (r?.title?.startsWith('/') && l?.title) || r?.title || l?.title || 'Copilot chat', status, live: live.has(id) };
   }).sort((a, b) => (b.live - a.live)).slice(0, 8);
 }
 function drawTabs() {
@@ -2382,6 +2382,8 @@ async function send(text) {
     else if (e.type === 'permission' || e.type === 'error') segs.push(e);
     else if (e.type === 'session') { if (here()) { chat.session = e.id; rememberChat(); } mine.id = e.id; remember(e.id, chat.cwd, mine.title); drawTabs(); }
     else if (e.type === 'commands' && chat.info) chat.info.commands = e.commands;
+    // A new chat about a PR or ticket is named after it, not after the skill or first words.
+    else if (e.type === 'title') { mine.title = e.title; if (here()) { chat.title = e.title; drawCtx(); } }
     else if (e.type === 'cwd') { if (here()) { chat.cwd = e.cwd; drawCtx(); } segs.push({ type: 'note', text: `Working in ${e.cwd}` }); }
     if (e.type === 'done' || e.type === 'error') ended = true;
   };
