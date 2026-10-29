@@ -348,6 +348,30 @@
     .bar-in { gap: 10px; flex-wrap: wrap; } .status .txt { display: none; }
     .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
+  /* Reader: a source's item read in full, such as a school message. */
+  a.icon-btn { text-decoration: none; }
+  dialog.reader { width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 0; border: 1px solid var(--line);
+    border-radius: var(--radius); background: var(--surface); color: var(--text); box-shadow: var(--shadow-lg); }
+  dialog.reader::backdrop { background: rgba(16, 24, 40, .35); }
+  .reader-h { position: sticky; top: 0; display: flex; gap: 10px; align-items: flex-start; padding: 14px 16px; background: var(--surface);
+    border-bottom: 1px solid var(--line); }
+  .reader-h .main { flex: 1; min-width: 0; }
+  .reader-h h2 { margin: 0; font-size: 16px; overflow-wrap: anywhere; }
+  .reader-h .meta { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+  .reader-b { padding: 4px 16px 16px; }
+  .msg-r { padding: 12px 0; border-top: 1px solid var(--line); }
+  .msg-r:first-child { border-top: 0; }
+  .msg-r .who { font-size: 12.5px; color: var(--muted); }
+  .msg-r .who b { color: var(--text); font-weight: 600; }
+  .msg-r.mine .who b { color: var(--accent); }
+  .msg-r .sub { font-weight: 600; margin-top: 4px; }
+  .msg-r .txt a { color: var(--accent); }
+  .msg-r .txt { white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 6px; line-height: 1.5; }
+  .files { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .files a, .files span { font-size: 12.5px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2);
+    text-decoration: none; color: var(--text); }
+  .files a:hover { border-color: var(--accent); color: var(--accent); }
+  .files .size { color: var(--muted); }
 </style>
 </head>
 <body>
@@ -437,6 +461,15 @@
     <button class="icon-btn primary" id="chat-send" type="submit">Send</button>
   </form>
 </aside>
+
+<dialog class="reader" id="reader" aria-labelledby="reader-title">
+  <div class="reader-h">
+    <div class="main"><h2 id="reader-title"></h2><div class="meta" id="reader-meta"></div></div>
+    <a class="icon-btn small" id="reader-open" target="_blank" rel="noopener">Open in portal</a>
+    <button class="icon-btn small" id="reader-close" aria-label="Close">✕</button>
+  </div>
+  <div class="reader-b" id="reader-body"></div>
+</dialog>
 
 <script>
 const REFRESH_MS = 5 * 60 * 1000;
@@ -674,12 +707,12 @@ function askButton(url, title) {
   return refFromUrl(url) ? `<button class="ask" data-ask="${esc(url)}" data-title="${esc(title)}" title="Copilot: ask about this or run a skill on it" aria-label="Copilot on this" aria-haspopup="menu">✦</button>` : '';
 }
 
-function row({ url, stamp, dismissKey, title, meta, badge, tone, quote, issue, pr }) {
+function row({ url, stamp, dismissKey, title, meta, badge, tone, quote, issue, pr, detail, src, key }) {
   return `<li class="row">
     ${isNew(dismissKey || url, stamp) ? '<span class="new-dot" title="New since you last looked" aria-label="New"></span>' : ''}
     ${badge ? `<span class="badge b-${tone || 'gray'}">${esc(badge)}</span>` : ''}
     <div class="main">
-      <a class="title" href="${esc(url)}" target="_blank" rel="noopener"${refAttrs({ issue, pr })}>${esc(title)}</a>
+      <a class="title" href="${esc(url)}" target="_blank" rel="noopener"${refAttrs({ issue, pr })}${detail && src && key ? ` data-read="${esc(src)}" data-key="${esc(key)}"` : ''}>${esc(title)}</a>
       ${meta ? `<div class="meta">${esc(meta)}</div>` : ''}
       ${quote ? `<div class="quote">${esc(quote)}</div>` : ''}
       ${sessionChips(url)}
@@ -1087,7 +1120,7 @@ function renderExtra() {
     if (!d) { card(el, x.panel.title, null, skeleton(2)); continue; }
     if (d.disabled) { el.hidden = true; continue; }
     el.hidden = false;
-    const list = vis((d.items || []).map((i) => ({ ...i, url: i.url || '', dismissKey: i.key ? `${x.name}:${i.key}` : undefined })));
+    const list = vis((d.items || []).map((i) => ({ ...i, src: x.name, url: i.url || '', dismissKey: i.key ? `${x.name}:${i.key}` : undefined })));
     if (x.area === 'personal' && x.panel.zone === 'needs' && !d.error) personalNeeds += list.length;
     card(el, x.panel.title, d.error ? null : list.length, (d.error ? `<div class="err">${esc(d.error)}${d.needsLogin ? ' <a href="/settings#extra">Log in again in Settings</a>' : ''}</div>` : '') +
       (list.length ? rows(`x-${x.name}`, list, (i) => row(i), 5)
@@ -1680,6 +1713,50 @@ pollAttention();
 setInterval(pollAttention, 60_000);
 loadLinks();
 setInterval(loadLinks, 30_000);
+
+// ---------------------------------------------------------------- reader
+
+const bytes = (n) => (n == null ? '' : n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} kB` : `${(n / 1048576).toFixed(1)} MB`);
+// Plain text from the source, with its web addresses made clickable.
+const linkText = (t) => esc(t).replace(/https?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)]/g, (u) => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
+
+async function openReader(src, key, url) {
+  const dlg = $('#reader');
+  $('#reader-title').textContent = 'Loading…';
+  $('#reader-meta').textContent = '';
+  $('#reader-body').innerHTML = skeleton(3);
+  $('#reader-open').href = url || '#';
+  $('#reader-open').hidden = !url;
+  if (!dlg.open) dlg.showModal();
+  try {
+    const d = await getJson(`/api/source/${encodeURIComponent(src)}/detail?key=${encodeURIComponent(key)}`);
+    $('#reader-title').textContent = d.title || 'Message';
+    $('#reader-meta').textContent = [d.child, d.meta].filter(Boolean).join(' · ');
+    if (d.url) { $('#reader-open').href = d.url; $('#reader-open').hidden = false; }
+    const file = (a) => `/api/source/${encodeURIComponent(src)}/attachment?key=${encodeURIComponent(key)}&id=${encodeURIComponent(a.id)}`;
+    $('#reader-body').innerHTML = (d.messages || []).map((m) => `<div class="msg-r${m.mine ? ' mine' : ''}">
+      <div class="who"><b>${esc(m.from || '')}</b>${m.at ? ` · ${esc(new Date(m.at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short', hourCycle: hourCycle() }))}` : ''}</div>
+      ${m.title && m.title !== d.title ? `<div class="sub">${esc(m.title)}</div>` : ''}
+      <div class="txt">${linkText(m.text || '')}</div>
+      ${m.attachments?.length ? `<div class="files">${m.attachments.map((a) => a.id
+        ? `<a href="${file(a)}" target="_blank" rel="noopener">📎 ${esc(a.name)} <span class="size">${bytes(a.bytes)}</span></a>`
+        : `<span title="Open it in the portal">📎 ${esc(a.name)}</span>`).join('')}</div>` : ''}
+    </div>`).join('') || '<div class="empty">Nothing to show.</div>';
+  } catch (e) {
+    $('#reader-title').textContent = 'Couldn’t open this';
+    $('#reader-body').innerHTML = `<div class="err">${esc(e.message)}${/log in/i.test(e.message) ? ' <a href="/settings#extra">Log in again in Settings</a>' : ''}</div>`;
+  }
+}
+
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('a[data-read]');
+  // Ctrl/Cmd-click still opens the source's own page.
+  if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+  e.preventDefault();
+  openReader(a.dataset.read, a.dataset.key, a.getAttribute('href'));
+});
+$('#reader-close').addEventListener('click', () => $('#reader').close());
+$('#reader').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 </script>
 </body>
 </html>

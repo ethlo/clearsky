@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { mkdtempSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { client, renew, collectFlyt, waiting, osloTime, sessionFromCookies, jwtExpiry, keyringStore, fileStore, FlytAuthError } from '../lib/flyt.mjs';
+import { client, renew, collectFlyt, waiting, readFlyt, flytFile, parseKey, osloTime, sessionFromCookies, jwtExpiry, keyringStore, fileStore, FlytAuthError } from '../lib/flyt.mjs';
 import { browserLogin, findBrowser } from '../lib/flyt-login.mjs';
 import { checkSource, hook } from '../lib/sources.mjs';
 import flytSource from '../lib/sources/flyt.mjs';
@@ -43,6 +43,18 @@ function fakeVisma({ access = jwt(Date.now() + 5 * 60_000) } = {}) {
       ],
     };
     if (req.url === `${p}/consents`) return send(403); // turned off at this school
+    if (req.url === '/vfs/v2/pupils/1001/messages/direct/7') return send(200, { canReply: true, messages: [
+      { idMessage: 'm2', title: 'Re: Tur fredag', messageText: 'Takk!', sentDate: '2026-10-28T09:00:00', participantType: 2, attachments: [] },
+      { idMessage: 'm1', title: 'Tur fredag', messageText: 'Husk matpakke og\nregntøy. Se https://skole.example/tur.', sentDate: '2026-10-28T08:15:00', participantType: 1, attachments: [] },
+    ] });
+    if (req.url === `${p}/messages/group/c1`) return send(200, { title: 'Klasse 3B', participants: ['Kontaktlærer', 'Kari'], messages: [
+      { sentOn: '2026-10-27T19:00:00', sentBy: 'Kontaktlærer', message: 'Foreldremøte tirsdag', sentByMe: false,
+        attachments: [{ messageId: 1, attachmentId: 'a1', fileName: 'Innkalling.pdf', contentType: 'application/pdf', contentLength: 4 }] },
+      { sentOn: '2026-10-27T18:00:00', sentBy: 'Kontaktlærer', message: 'Hei alle', sentByMe: false, attachments: [] },
+    ] });
+    if (req.url === `${p}/messages/group/c1/attachment/a1`) { res.writeHead(200, { 'content-type': 'application/pdf' }); return res.end('%PDF'); }
+    if (req.url === `${p}/digital-forms/11`) return send(200, { title: 'Påmelding skidag', publishText: 'Bli med?', deadline: '2026-11-03T23:59:00',
+      publishedOn: '2026-10-26T10:00:00', lastModifiedBy: 'Rektor', alternatives: [{ id: 2, order: 2, text: 'Nei' }, { id: 1, order: 1, text: 'Ja' }], attachments: [] });
     if (routes[req.url]) return send(200, routes[req.url]);
     send(404, { message: 'Not found' });
   });
@@ -124,7 +136,7 @@ test('collects what waits for each child; areas a school has turned off come bac
     assert.ok(v.state.requests.every((r) => !r.url.includes('mark-as-read') && !r.url.includes('reply')));
 
     const w = waiting(data);
-    assert.deepEqual(w.map((x) => x.key), ['flyt:notice:5', 'flyt:direct:1001:7', 'flyt:group:c1', 'flyt:form:11']);
+    assert.deepEqual(w.map((x) => x.key), ['flyt:notice:5', 'flyt:direct:1001:7', 'flyt:group:1001:c1', 'flyt:form:1001:11']);
     assert.equal(w[1].at, '2026-10-28T07:15:00.000Z');
     assert.equal(w[1].count, 2);
     assert.equal(w[3].deadline, '2026-11-03T22:59:00.000Z');
@@ -147,7 +159,7 @@ test('the source module fits the contract and turns data into rows, notification
     const notes = hook(s, 'attention', data);
     assert.equal(notes[0].title, 'Ola: Fravær registrert');
     const events = hook(s, 'events', data);
-    assert.deepEqual(events.map((e) => [e.uid, e.fyi]), [['flyt:form:11', true]]);
+    assert.deepEqual(events.map((e) => [e.uid, e.fyi]), [['flyt:form:1001:11', true]]);
     // A new message on a thread changes its stamp, so a dismissed row comes back.
     assert.notEqual(items[1].stamp, waiting({ children: [{ ...data.children[0], threads: data.children[0].threads.map((t) => ({ ...t, unread: t.unread + 1 })), notices: [], forms: [], consents: [] }] })[0].stamp);
   } finally { v.close(); }
@@ -172,6 +184,38 @@ test('the login is kept in the keyring through secret-tool, or in a private file
   assert.deepEqual(await fs.get(), { refresh: 'r' });
   await fs.clear();
   assert.equal(existsSync(file), false);
+});
+
+test('reads a whole thread, notice or form, oldest first, without marking anything read', async () => {
+  const v = await fakeVisma();
+  try {
+    const store = memStore({ session: 'sid', refresh: 'refresh-1' });
+    const data = await collectFlyt({ store, api: v.api });
+    const direct = await readFlyt('flyt:direct:1001:7', data, { store, api: v.api });
+    assert.equal(direct.child, 'Ola');
+    assert.deepEqual(direct.messages.map((m) => [m.from, m.mine, m.text.split('\n')[0]]), [['Lærer Hansen', false, 'Husk matpakke og'], ['You', true, 'Takk!']]);
+
+    const group = await readFlyt('flyt:group:1001:c1', data, { store, api: v.api });
+    assert.equal(group.meta, 'Kontaktlærer, Kari');
+    assert.deepEqual(group.messages.map((m) => m.text), ['Hei alle', 'Foreldremøte tirsdag']);
+    assert.deepEqual(group.messages[1].attachments, [{ id: 'a1', name: 'Innkalling.pdf', type: 'application/pdf', bytes: 4 }]);
+
+    const notice = await readFlyt('flyt:notice:5', data, { store, api: v.api });
+    assert.equal(notice.messages[0].text, 'Ola er registrert borte');
+
+    const form = await readFlyt('flyt:form:1001:11', data, { store, api: v.api });
+    assert.match(form.messages[0].text, /Bli med\?\n\nChoices:\n• Ja\n• Nei/);
+
+    const file = await flytFile('flyt:group:1001:c1', 'a1', { store, api: v.api });
+    assert.deepEqual([file.name, file.type, file.data.toString()], ['Innkalling.pdf', 'application/pdf', '%PDF']);
+    await assert.rejects(flytFile('flyt:group:1001:c1', 'not-in-this-thread', { store, api: v.api }), /No such attachment/);
+    assert.ok(v.state.requests.every((r) => !/mark-as-read|reply/.test(r.url)));
+  } finally { v.close(); }
+});
+
+test('only plain ids from a key go into an API path', () => {
+  assert.deepEqual(parseKey('flyt:group:1001:c1'), { kind: 'group', pupil: '1001', id: 'c1' });
+  for (const bad of ['flyt:group:1001:../../v1/session', 'flyt:direct:7', 'flyt:other:1:2', 'flyt:form:1001:1?x=1']) assert.throws(() => parseKey(bad), /Not a Visma/);
 });
 
 // Runs only where a Chromium is at hand: CLEARSKY_TEST_BROWSER, or one on the PATH.
