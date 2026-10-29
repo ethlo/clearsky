@@ -87,6 +87,17 @@ The server also answers JSON on 127.0.0.1: `/api/source/<github|jira|jiraMention
 
 Besides the built-in sources, Clearsky loads extra ones, one module each, from `lib/sources/*.mjs` in this repo and from `~/.config/clearsky/sources/*.mjs` (for private ones, like a school or family app). A source declares its settings (they show up under **Other sources** in Settings and are saved to `.env`), a `fetch(ctx)`, and any of these hooks: `items` (rows for its panel, under Needs you or Keeping track), `attention` (notifies when something new turns up), `events` (joins Now / Next; mark `fyi: true` to show without blocking your time) and `standup` (lines for Yesterday and Today). `ctx` gives the source its settings and helpers to fetch JSON or run a CLI. See the comment at the top of [lib/sources.mjs](lib/sources.mjs) for the contract and [test/sources/school.mjs](test/sources/school.mjs) for a complete example. Files that others can write to are skipped.
 
+## School (Visma Flyt Skole)
+
+If your children's school uses Visma Flyt Skole (Min Skole / Flyt Foresatt), Clearsky shows what waits for you there: unread messages and notices, and forms and consents to answer. Form deadlines show up in Now / Next. It only reads. It never replies or marks anything as read, so the portal still shows everything as unread.
+
+1. In Settings, set **School portal key**: the last part of `https://foresatt.visma.no/<key>`.
+2. Run `npm run flyt-login`. A Chrome or Chromium window opens. Log in with BankID or MinID, and the window closes by itself once you're in. Set `CLEARSKY_BROWSER` if your browser isn't found.
+
+The login is kept in the GNOME keyring (`secret-tool`), or in `~/.config/clearsky/flyt-session.json` (mode 600) if there's no keyring. Clearsky renews the login itself. When Visma ends the login, the School panel asks you to log in again.
+
+There is no public API. This uses the one the portal itself uses, as documented by [skolectl](https://github.com/langtind/skolectl), so it can break when Visma changes the portal.
+
 ## Notifications
 
 While `clearsky serve` runs, it checks GitHub, Jira mentions and Slack every 3 minutes (`CLEARSKY_POLL_MINUTES`). When something new needs you (a review request, a PR turning to your move, a mention), you get a desktop notification with an **Open** button, through `notify-send`, on workdays from 07:00 until two hours after your workday ends. Dismissed and muted items stay quiet. Without `notify-send`, the bell in the top bar turns on browser notifications instead. `CLEARSKY_NOTIFY=off` turns them off. New things also get a dot in the page and a count in the tab title until you've looked.
