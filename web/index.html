@@ -722,7 +722,7 @@ let cpLinks = { links: {}, live: [] };
 const STATUS_TEXT = { working: 'working', 'needs-you': 'needs your OK', waiting: 'waiting for you', closed: '' };
 function itemKey(url) {
   const r = refFromUrl(url);
-  return r && (r.kind === 'pr' ? `pr:${r.repo}#${r.number}` : `issue:${r.key}`);
+  return r && refKeyOf(r);
 }
 function chip(x) {
   const st = STATUS_TEXT[x.status] || '';
@@ -874,9 +874,13 @@ function refAttrs({ issue, pr }) {
 }
 
 // A PR or Jira ticket from its link, to hand to Copilot.
+// A PR, a GitHub issue ('gh') or a Jira ticket ('issue'), and the key sessions are linked by.
+const refKeyOf = (r) => (r.kind === 'issue' ? `issue:${r.key}` : `${r.kind}:${r.repo}#${r.number}`);
 function refFromUrl(url = '') {
   let m = url.match(/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)/);
   if (m) return { kind: 'pr', repo: m[1], number: Number(m[2]) };
+  m = url.match(/github\.com\/([\w.-]+\/[\w.-]+)\/issues\/(\d+)/);
+  if (m) return { kind: 'gh', repo: m[1], number: Number(m[2]) };
   m = url.match(/\/browse\/([A-Z][A-Z0-9_]+-\d+)/);
   return m ? { kind: 'issue', key: m[1] } : null;
 }
@@ -1288,7 +1292,7 @@ function sessionItems() {
     .map((x) => {
       const k = linked(x.id), folder = (x.cwd || '').split('/').filter(Boolean).pop() || '';
       return { group: 'copilot', kind: 'session', sid: x.id, cwd: x.cwd, k: `cp:${x.id}`, title: x.title || 'Copilot chat',
-        ref: k ? k.replace(/^pr:[\w.-]+\//, '').replace('#', ' #').replace(/^issue:/, '') : folder, step: k ? folder : '',
+        ref: k ? k.replace(/^(pr|gh):[\w.-]+\//, '').replace('#', ' #').replace(/^issue:/, '') : folder, step: k ? folder : '',
         glyph: `s-${x.status}`, label: [STATUS_TEXT[x.status] || x.status, x.status === 'needs-you' ? 'amber' : x.status === 'working' ? 'green' : 'blue'],
         at: x.updatedAt, status: x.status };
     });
@@ -1841,7 +1845,7 @@ setInterval(() => { if (!$('#chat').hidden && !document.hidden) loadLinks(); }, 
 // The header under the title: what this chat is about, where it runs and where it's at.
 function itemIndex() {
   const out = new Map(), g = state.github || {}, j = state.jira || {}, jm = state.jiraMentions || {};
-  const pr = (p, status, tone) => /\/pull\/\d+/.test(p.url || '') && !out.has(itemKey(p.url)) && out.set(itemKey(p.url), { title: p.title, url: p.url, status, tone });
+  const pr = (p, status, tone) => itemKey(p.url || '') && !out.has(itemKey(p.url)) && out.set(itemKey(p.url), { title: p.title, url: p.url, status, tone });
   (g.reviewRequested || []).forEach((p) => pr(p, p.rerequested ? 'Re-review' : 'Review requested', 'amber'));
   (g.myPrs || []).forEach((p) => pr(p, p.status?.label, toneOf[p.status?.tone] || 'gray'));
   [...(g.mentions || []), ...(g.assigned || [])].forEach((p) => pr(p));
@@ -1867,8 +1871,9 @@ function drawCtx() {
   const idx = itemIndex();
   const items = [...keys].map((k) => {
     const info = idx.get(k) || {};
-    const label = k.replace(/^pr:/, '').replace(/^issue:/, '');
-    const url = info.url || (k.startsWith('pr:') ? `https://github.com/${label.replace('#', '/pull/')}` : jiraBaseGuess() ? `${jiraBaseGuess()}/browse/${label}` : '');
+    const label = k.replace(/^(pr|gh|issue):/, '');
+    const url = info.url || (k.startsWith('pr:') ? `https://github.com/${label.replace('#', '/pull/')}` : k.startsWith('gh:') ? `https://github.com/${label.replace('#', '/issues/')}`
+      : jiraBaseGuess() ? `${jiraBaseGuess()}/browse/${label}` : '');
     return `<div class="ctx-item">📎 ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(label)}</a>` : `<b>${esc(label)}</b>`}
       ${info.status ? `<span class="badge b-${info.tone || 'gray'}">${esc(info.status)}</span>` : ''}<span>${esc(info.title || '')}</span></div>`;
   }).join('');
@@ -2026,6 +2031,9 @@ function refCandidates() {
   (g.myPrs || []).forEach((p) => pr(p, 'my PR'));
   (g.mentions || []).forEach((p) => pr(p, 'mention'));
   (g.assigned || []).forEach((p) => pr(p, 'assigned'));
+  const ghIssue = (i, where) => /\/issues\/\d+/.test(i.url || '') && add({ kind: 'gh', repo: i.repo, number: i.number }, i.title, where);
+  (g.assigned || []).forEach((i) => ghIssue(i, 'GitHub issue'));
+  (g.mentions || []).forEach((i) => ghIssue(i, 'mention'));
   (jm.tickets || []).forEach((t) => add({ kind: 'issue', key: t.key }, t.summary, 'mention'));
   (j.assigned || []).forEach((i) => add({ kind: 'issue', key: i.key }, i.summary, i.status || 'Jira'));
   return [...out.values()];
@@ -2033,7 +2041,9 @@ function refCandidates() {
 // Also take a typed reference: SSP-1234, org/repo#12, or a PR or Jira link.
 function parseRef(q) {
   q = q.trim();
-  let m = q.match(/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)/) || q.match(/^([\w.-]+\/[\w.-]+)#(\d+)$/);
+  let m = q.match(/github\.com\/([\w.-]+\/[\w.-]+)\/issues\/(\d+)/);
+  if (m) return { kind: 'gh', repo: m[1], number: Number(m[2]) };
+  m = q.match(/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)/) || q.match(/^([\w.-]+\/[\w.-]+)#(\d+)$/);
   if (m) return { kind: 'pr', repo: m[1], number: Number(m[2]) };
   m = q.match(/\/browse\/([A-Z][A-Z0-9_]+-\d+)/i) || q.match(/^([A-Z][A-Z0-9_]+-\d+)$/i);
   return m ? { kind: 'issue', key: m[1].toUpperCase() } : null;
@@ -2090,7 +2100,7 @@ async function send(text) {
   const refs = chat.refs.map(({ kind, key, repo, number }) => ({ kind, key, repo, number }));
   addMsg('me', `${refs.length ? `<span class="refs-sent">📎 ${chat.refs.map((r) => esc(refLabel(r))).join(', ')}</span>` : ''}${esc(text)}`);
   chat.refs = [];
-  chat.items = [...new Set([...chat.items, ...refs.map((r) => (r.kind === 'pr' ? `pr:${r.repo}#${r.number}` : `issue:${r.key}`))])];
+  chat.items = [...new Set([...chat.items, ...refs.map(refKeyOf)])];
   if (!chat.turns && !chat.title) chat.title = text.trim().split('\n')[0].slice(0, 120);
   drawRefs();
   const out = addMsg('cp', '<span class="typing">Thinking</span>');

@@ -129,6 +129,7 @@ const PR_FIELDS = `
   reviewRequests(first: 20) { nodes { requestedReviewer { __typename ... on User { login } ... on Team { slug } ... on Bot { login } } } }
   reviewThreads(first: 100) { nodes { isResolved isOutdated comments(last: 1) { nodes { author { __typename login } } } } }
   commits(last: 1) { nodes { commit { committedDate statusCheckRollup { state } } } }
+  closingIssuesReferences(first: 5) { nodes { number repository { nameWithOwner } } }
   timelineItems(itemTypes: [REVIEW_REQUESTED_EVENT], last: 10) {
     nodes { ... on ReviewRequestedEvent { createdAt requestedReviewer { __typename ... on User { login } ... on Team { slug } } } }
   }`;
@@ -293,6 +294,8 @@ async function fetchGitHub() {
     author: n.author?.login || 'ghost',
     updatedAt: n.updatedAt,
     stamp: n.updatedAt, // a dismissed item comes back when this changes
+    // GitHub issues a PR closes ("Fixes #12"): the same piece of work.
+    ...(n.closingIssuesReferences ? { issues: n.closingIssuesReferences.nodes.map((i) => `${i.repository.nameWithOwner}#${i.number}`) } : {}),
   });
 
   const reviewRequested = data.reviewRequested.nodes.filter(keep).map((pr) => {
@@ -1379,6 +1382,7 @@ export function linkSessions(sessions, { prs = [], refs = {}, workspace = () => 
       const pr = byNumber.get(`${m[1].toLowerCase()}#${m[2]}`);
       if (pr) keys.add(pr);
     }
+    for (const m of (x.title || '').matchAll(/github\.com\/([\w.-]+\/[\w.-]+)\/issues\/(\d+)/gi)) keys.add(`gh:${m[1]}#${m[2]}`);
     if (repo) for (const m of (x.title || '').matchAll(/(?:#|\bPR\s*#?)(\d+)\b/gi)) {
       const pr = byNumber.get(`${repo}#${m[1]}`);
       if (pr) keys.add(pr);
@@ -1386,13 +1390,14 @@ export function linkSessions(sessions, { prs = [], refs = {}, workspace = () => 
     for (const m of `${ws.branch || ''} ${x.title || ''}`.toUpperCase().matchAll(/\b([A-Z][A-Z0-9_]+-\d+)\b/g)) keys.add(`issue:${m[1]}`);
     for (const k of keys) (links[k] ||= []).push({ id: x.id, title: x.title || 'Untitled session', updatedAt: x.updatedAt, cwd: x.cwd, status: x.status || 'closed' });
   }
-  // A PR and its ticket (the key in the PR's title or branch) share their sessions.
+  // A PR, its Jira ticket (the key in its title or branch) and the GitHub issues it closes are
+  // one piece of work: a session linked to any of them shows on all of them.
   for (const p of prs) {
-    const pr = `pr:${p.repo}#${p.number}`;
-    for (const m of `${p.title || ''} ${p.branch || ''}`.toUpperCase().matchAll(/\b([A-Z][A-Z0-9_]+-\d+)\b/g)) {
-      const issue = `issue:${m[1]}`, both = [...(links[pr] || []), ...(links[issue] || [])].filter((x, i, a) => a.findIndex((y) => y.id === x.id) === i);
-      if (both.length) links[pr] = links[issue] = both;
-    }
+    const keys = [`pr:${p.repo}#${p.number}`,
+      ...[...`${p.title || ''} ${p.branch || ''}`.toUpperCase().matchAll(/\b([A-Z][A-Z0-9_]+-\d+)\b/g)].map((m) => `issue:${m[1]}`),
+      ...(p.issues || []).map((i) => `gh:${i}`)];
+    const all = keys.flatMap((k) => links[k] || []).filter((x, i, a) => a.findIndex((y) => y.id === x.id) === i);
+    if (all.length) for (const k of keys) links[k] = all;
   }
   for (const k of Object.keys(links)) links[k] = links[k].sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0)).slice(0, 3);
   return links;
@@ -1407,6 +1412,10 @@ export function itemSessionName(ref, cache = (n) => sourceCache.get(n)?.data || 
     const key = `${p?.title || ''} ${p?.branch || ''}`.toUpperCase().match(/\b([A-Z][A-Z0-9_]+-\d+)\b/)?.[1];
     const title = (p?.title || '').replace(new RegExp(`\\[?${key}\\]?:?\\s*`, 'i'), '').trim();
     return `${key ? `${key} · ` : ''}${ref.repo.split('/').pop()}#${ref.number}${title ? ` · ${title}` : ''}`.slice(0, 100);
+  }
+  if (ref.kind === 'gh') {
+    const i = [...(gh.assigned || []), ...(gh.mentions || [])].find((x) => x.repo === ref.repo && x.number === Number(ref.number));
+    return `${ref.repo.split('/').pop()}#${ref.number}${i?.title ? ` · ${i.title}` : ''}`.slice(0, 100);
   }
   const t = (jira.assigned || []).find((x) => x.key === ref.key) || (jm.tickets || []).find((x) => x.key === ref.key);
   return `${ref.key}${t?.summary ? ` · ${t.summary}` : ''}`.slice(0, 100);
@@ -1428,7 +1437,7 @@ async function copilotLinks(bin) {
   return { links, live };
 }
 
-const refKey = (r) => (r.kind === 'pr' ? `pr:${r.repo}#${r.number}` : `issue:${r.key}`);
+const refKey = (r) => (r.kind === 'issue' ? `issue:${r.key}` : `${r.kind}:${r.repo}#${r.number}`);
 
 async function copilotHistory(bin, id, cwd) {
   const messages = await withAgent(bin, (a) => a.history(id, cwd));
@@ -1475,6 +1484,19 @@ async function referenceText(ref) {
   }
   config.github.token ||= await ghCliToken();
   const [owner, name] = ref.repo.split('/');
+  if (ref.kind === 'gh') {
+    const { repository } = await gql(`query($owner: String!, $name: String!, $number: Int!) {
+      repository(owner: $owner, name: $name) { issue(number: $number) {
+        title url state bodyText author { login } assignees(first: 5) { nodes { login } } labels(first: 10) { nodes { name } }
+        comments(last: 5) { nodes { author { login } createdAt bodyText } } } } }`, { owner, name, number: Number(ref.number) });
+    const i = repository?.issue;
+    if (!i) throw new Error(`${ref.repo}#${ref.number} not found`);
+    return [`## GitHub issue ${ref.repo}#${ref.number}: ${i.title}`, i.url,
+      `By ${i.author?.login || '?'} · ${i.state.toLowerCase()} · assignees: ${i.assignees.nodes.map((a) => a.login).join(', ') || 'none'}${i.labels.nodes.length ? ` · labels: ${i.labels.nodes.map((l) => l.name).join(', ')}` : ''}`,
+      i.bodyText && `Description: ${i.bodyText.trim().slice(0, 4000)}`,
+      i.comments.nodes.length && `Latest comments:\n${i.comments.nodes.map((c) => `- ${c.author?.login || '?'} (${String(c.createdAt).slice(0, 10)}): ${c.bodyText.replace(/\s+/g, ' ').slice(0, 600)}`).join('\n')}`,
+    ].filter(Boolean).join('\n');
+  }
   const { repository } = await gql(`query($owner: String!, $name: String!, $number: Int!) {
     repository(owner: $owner, name: $name) { pullRequest(number: $number) {
       title url state isDraft reviewDecision bodyText headRefName baseRefName author { login }
@@ -1494,7 +1516,7 @@ async function referenceText(ref) {
 export function validRefs(refs) {
   return (Array.isArray(refs) ? refs : []).slice(0, 8).map((r) => (
     r?.kind === 'issue' && /^[A-Z][A-Z0-9_]+-\d+$/.test(r.key) ? { kind: 'issue', key: r.key }
-      : r?.kind === 'pr' && /^[\w.-]+\/[\w.-]+$/.test(r.repo) && /^\d+$/.test(String(r.number)) ? { kind: 'pr', repo: r.repo, number: Number(r.number) }
+      : (r?.kind === 'pr' || r?.kind === 'gh') && /^[\w.-]+\/[\w.-]+$/.test(r.repo) && /^\d+$/.test(String(r.number)) ? { kind: r.kind, repo: r.repo, number: Number(r.number) }
         : null)).filter(Boolean);
 }
 
@@ -1742,7 +1764,7 @@ function serve() {
           if (!body.session || !/^[\w-]{8,64}$/.test(body.session)) return json(res, 400, { error: 'bad session' });
           const refs = validRefs(body.refs);
           // A new chat about a PR runs in your clone of that repository, when there is one.
-          const prRef = !body.resume && !body.cwd && refs.find((r) => r.kind === 'pr');
+          const prRef = !body.resume && !body.cwd && refs.find((r) => r.kind === 'pr' || r.kind === 'gh');
           const checkout = prRef ? findCheckout(prRef.repo) : null;
           const cwd = checkout || (body.cwd && isDir(body.cwd) ? body.cwd : copilotCwd());
           let refText = '';

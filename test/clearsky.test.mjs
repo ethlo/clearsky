@@ -279,6 +279,11 @@ test('links Copilot sessions to the PRs and tickets they work on', async () => {
   const cross = linkSessions([{ id: 't1', title: 'SSP-5 · Fix capture', updatedAt: '2026-10-29T08:00:00Z' }],
     { prs: [{ repo: 'acme/ssp', number: 3, title: 'SSP-5: Fix capture', branch: 'x' }] });
   assert.deepEqual(cross['pr:acme/ssp#3'].map((x) => x.id), ['t1']);
+  // …and with the GitHub issues it closes.
+  const closes = linkSessions([{ id: 'g1', title: 'Look at https://github.com/acme/ssp/issues/12', updatedAt: '2026-10-29T08:00:00Z' }],
+    { prs: [{ repo: 'acme/ssp', number: 3, title: 'Fix', issues: ['acme/ssp#12'] }] });
+  assert.deepEqual(closes['pr:acme/ssp#3'].map((x) => x.id), ['g1']);
+  assert.deepEqual(closes['gh:acme/ssp#12'].map((x) => x.id), ['g1']);
 });
 
 test('a chat started on an item is named after it', async () => {
