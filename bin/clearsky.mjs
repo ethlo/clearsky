@@ -7,7 +7,7 @@
 //   clearsky serve        serve the dashboard on http://127.0.0.1:7777
 
 import { createServer } from 'node:http';
-import { readFileSync, existsSync, realpathSync, statSync } from 'node:fs';
+import { readFileSync, existsSync, realpathSync, statSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
@@ -1052,13 +1052,23 @@ async function withAgent(bin, fn) {
   try { return await fn(agent); } finally { clearTimeout(timer); agent.close(); }
 }
 
-// Sessions Copilot has open in a terminal or IDE right now. Copilot refreshes the entries
-// while a session is open; ones not touched for 15 minutes are left over from closed windows.
+// Sessions open in a running Copilot (terminal, editor): the process keeps an
+// inuse.<pid>.hold file in the session's folder while it has the session open.
+const alive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
 function openCopilotSessions() {
-  let all = {};
-  try { all = JSON.parse(readFileSync(join(homedir(), '.copilot', 'open-sessions-state.json'), 'utf8')) || {}; } catch {}
-  const fresh = (v) => Date.now() - (Date.parse(v?.refreshedAt || v?.openedAt) || 0) < 15 * 6e4;
-  return Object.fromEntries(Object.entries(all).filter(([, v]) => fresh(v)));
+  const dir = join(homedir(), '.copilot', 'session-state');
+  let state = {};
+  try { state = JSON.parse(readFileSync(join(homedir(), '.copilot', 'open-sessions-state.json'), 'utf8')) || {}; } catch {}
+  const open = {};
+  let ids = [];
+  try { ids = readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch {}
+  for (const id of ids) {
+    let files = [];
+    try { files = readdirSync(join(dir, id)); } catch {}
+    const pids = files.map((f) => Number(f.match(/^inuse\.(\d+)\.hold$/)?.[1])).filter((n) => n && alive(n));
+    if (pids.length) open[id] = { working: !!state[id]?.working && Date.now() - (Date.parse(state[id]?.refreshedAt) || 0) < 15 * 6e4 };
+  }
+  return open;
 }
 
 const CONTEXT_INTRO = 'You are helping me with my work. This is my work dashboard right now:';
@@ -1078,7 +1088,7 @@ async function copilotSessions(bin, force) {
   const open = openCopilotSessions();
   const data = list.map((x) => ({
     id: x.sessionId, title: x.title || null, cwd: x.cwd || null, updatedAt: x.updatedAt || null,
-    open: !!open[x.sessionId], working: !!open[x.sessionId]?.working, here: acpChats.has(x.sessionId),
+    open: !!open[x.sessionId] && !acpChats.has(x.sessionId), working: !!open[x.sessionId]?.working, here: acpChats.has(x.sessionId),
   })).sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0));
   sessionsCache = { at: Date.now(), data };
   return data;
@@ -1309,6 +1319,7 @@ function serve() {
         const data = await source(src, url.searchParams.has('refresh'));
         return json(res, 200, { ...data, fetchedAt: new Date(sourceCache.get(src)?.at || Date.now()).toISOString() });
       }
+      if (url.pathname === '/favicon.ico') { res.writeHead(204); return res.end(); }
       if (url.pathname === '/api/copilot') return json(res, 200, await copilotInfo(url.searchParams.has('refresh')));
       if (url.pathname === '/api/copilot/sessions') {
         const info = await copilotInfo();

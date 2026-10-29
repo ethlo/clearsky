@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -72,8 +72,11 @@ test('the chat panel talks to the local Copilot CLI with the chosen options', as
   assert.equal(seen.at(-1).type, 'done');
 
   // Sessions come from Copilot itself, wherever they were started, newest first.
+  // A session a running Copilot holds (inuse.<pid>.hold) shows as open.
+  mkdirSync(join(home, '.copilot', 'session-state', 'cli-old-session'), { recursive: true });
+  writeFileSync(join(home, '.copilot', 'session-state', 'cli-old-session', `inuse.${process.pid}.hold`), '');
   const list = await (await fetch(`${base}/api/copilot/sessions`)).json();
-  assert.deepEqual(list.sessions.map((x) => [x.id, x.here]), [['acp-session-1', true], ['cli-old-session', false]]);
+  assert.deepEqual(list.sessions.map((x) => [x.id, x.here, x.open]), [['acp-session-1', true, false], ['cli-old-session', false, true]]);
   const hist = await (await fetch(`${base}/api/copilot/sessions/cli-old-session?cwd=/tmp`)).json();
   assert.deepEqual(hist.messages, [
     { role: 'me', text: 'What broke?' },
