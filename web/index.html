@@ -441,8 +441,11 @@ function renderPlan() {
     line = 'Outside working hours';
     sub = 'Here is what is waiting for tomorrow.';
   } else {
-    line = `${p.freeMinutes} min free${p.next ? ` until ${esc(p.next.title)}` : ''}`;
-    sub = p.next ? `Starts at ${hm(p.next.start)}${join(p.next)}` : p.calendar ? 'No more meetings today.' : 'Connect your calendar in Settings to plan around meetings.';
+    const today = p.next && new Date(p.next.start).toDateString() === new Date().toDateString();
+    line = `${p.freeMinutes} min free${today ? ` until ${esc(p.next.title)}` : ' for the rest of the day'}`;
+    sub = today ? `Starts at ${hm(p.next.start)}${join(p.next)}`
+      : p.next ? `No more meetings today. Next: ${esc(p.next.title)}, ${when(p.next.start)}.`
+      : p.calendar ? 'No more meetings today.' : 'Connect your calendar in Settings to plan around meetings.';
   }
   const su = d.nextStandup && (Date.parse(d.nextStandup) - Date.now()) / 6e4;
   const alert = su !== undefined && su <= 30 && su > -15
