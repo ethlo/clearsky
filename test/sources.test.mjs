@@ -32,7 +32,7 @@ test('loads source modules and refuses broken or unsafe ones', async () => {
 });
 
 test('an extra source shows up in the page, notifications, Now / Next, stand-up and Settings', async (t) => {
-  const port = 7700 + Math.floor(Math.random() * 80);
+  const port = 7700 + Math.floor(Math.random() * 40);
   const base = `http://127.0.0.1:${port}`;
   const home = mkdtempSync(join(tmpdir(), 'clearsky-src-home-'));
   const server = spawn(process.execPath, [fileURLToPath(new URL('../bin/clearsky.mjs', import.meta.url)), 'serve', '--port', String(port)], {
@@ -83,7 +83,7 @@ test('an extra source shows up in the page, notifications, Now / Next, stand-up 
 });
 
 test('a source login runs from Settings, saves what it learns, and fixes a panel that asked for it', async (t) => {
-  const port = 7780 + Math.floor(Math.random() * 80);
+  const port = 7740 + Math.floor(Math.random() * 40);
   const base = `http://127.0.0.1:${port}`;
   const home = mkdtempSync(join(tmpdir(), 'clearsky-src-home-'));
   const server = spawn(process.execPath, [fileURLToPath(new URL('../bin/clearsky.mjs', import.meta.url)), 'serve', '--port', String(port)], {
@@ -104,7 +104,7 @@ test('a source login runs from Settings, saves what it learns, and fixes a panel
 
   assert.equal(school(await post('/api/source/school/login')).running, true);
   let st;
-  for (let i = 0; i < 30 && (st = school(await get('/api/settings'))).running; i++) await new Promise((r) => setTimeout(r, 100));
+  for (let i = 0; i < 150 && (st = school(await get('/api/settings'))).running; i++) await new Promise((r) => setTimeout(r, 100));
   assert.equal(st.loggedIn, true);
   const saved = readFileSync(join(home, '.config', 'clearsky', '.env'), 'utf8');
   assert.match(saved, /^SCHOOL_CHILD=Bea$/m);

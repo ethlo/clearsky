@@ -37,7 +37,7 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
     send({ data: {} });
   });
   await new Promise((r) => gh.listen(0, '127.0.0.1', r));
-  const port = 7700 + Math.floor(Math.random() * 80);
+  const port = 7900 + Math.floor(Math.random() * 80);
   const server = spawn(process.execPath, [fileURLToPath(new URL('../bin/clearsky.mjs', import.meta.url)), 'serve', '--port', String(port)], {
     stdio: 'ignore', env: { PATH: process.env.PATH, HOME: mkdtempSync(join(tmpdir(), 'clearsky-page-')), CLEARSKY_POLL_MINUTES: '0',
       GITHUB_TOKEN: 'x', GITHUB_API_URL: `http://127.0.0.1:${gh.address().port}`, GITHUB_ORGS: 'acme',
