@@ -2144,11 +2144,22 @@ function newChat() {
   chat.cwd = null;
   chat.turns = 0;
   chat.title = null; chat.items = [];
+  if (chat.info?.permissions) { pickDefaults(); saveCp(); }
   rememberChat();
   showHistory(false);
   $('#chat-log').innerHTML = `<div class="chat-empty">Ask about your PRs, tickets and meetings. Copilot sees what's on your dashboard
     when the chat starts, and runs on your machine with your own Copilot login.</div>`;
   chatSub();
+}
+
+// A new chat starts with the defaults from Settings → Copilot, where set, else what you
+// picked last; changing a picker applies to the chat you're in.
+function pickDefaults() {
+  const i = chat.info || {}, d = i.defaults || {};
+  $('#cp-model').value = d.model || cpPrefs.model || '';
+  $('#cp-effort').value = d.effort || cpPrefs.effort || '';
+  const perm = d.permission || cpPrefs.permission;
+  $('#cp-perm').value = perm && i.permissions?.[perm] ? perm : 'ask';
 }
 
 async function loadCopilotInfo() {
@@ -2157,9 +2168,7 @@ async function loadCopilotInfo() {
   $('#cp-models').innerHTML = (i.models || []).map((m) => `<option value="${esc(m)}">`).join('');
   $('#cp-effort').innerHTML = `<option value="">default</option>${(i.efforts || []).map((e) => `<option>${esc(e)}</option>`).join('')}`;
   $('#cp-perm').innerHTML = Object.entries(i.permissions || {}).map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('');
-  $('#cp-model').value = cpPrefs.model || '';
-  $('#cp-effort').value = cpPrefs.effort || '';
-  $('#cp-perm').value = cpPrefs.permission && i.permissions?.[cpPrefs.permission] ? cpPrefs.permission : 'ask';
+  pickDefaults();
   $('#cp-allow').value = cpPrefs.allow || '';
   $('#cp-deny').value = cpPrefs.deny || '';
   $('#cp-skills').innerHTML = (i.skills || []).map((sk) =>

@@ -1234,12 +1234,17 @@ function applySettings(values) {
   }
   Object.assign(config, buildConfig());
   sourceCache.clear();
+  copilotInfoCache = null;
   standupCache = { at: 0, data: null };
 }
 
 // ---------------------------------------------------------------- Copilot chat
 
-const copilotCwd = () => process.env.COPILOT_CWD || join(here, '..');
+const copilotCwd = () => {
+  const d = (process.env.COPILOT_CWD || '').replace(/^~(?=\/|$)/, homedir());
+  try { if (d && statSync(d).isDirectory()) return d; } catch { /* gone: use Clearsky's folder */ }
+  return join(here, '..');
+};
 let copilotInfoCache = null;
 
 async function copilotInfo(force) {
@@ -1258,6 +1263,8 @@ async function copilotInfo(force) {
     models: ['auto', ...copilot.recentModels().filter((m) => m !== 'auto')],
     efforts: copilot.EFFORTS,
     permissions: Object.fromEntries(Object.entries(copilot.PERMISSIONS).map(([k, v]) => [k, v.label])),
+    // What a new chat starts with (Settings → Copilot); the chat's pickers override them.
+    defaults: { model: process.env.COPILOT_MODEL || '', effort: process.env.COPILOT_EFFORT || '', permission: process.env.COPILOT_PERMISSION || '' },
   };
   copilotInfoCache = { at: Date.now(), data };
   return data;

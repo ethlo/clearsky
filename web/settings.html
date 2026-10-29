@@ -143,10 +143,21 @@
 
   <section>
     <h2>Copilot</h2>
+    <p class="hint" style="margin:0 0 4px">Defaults for a new chat. The pickers in a chat still change that chat.</p>
+    <label for="COPILOT_MODEL">Model</label>
+    <input id="COPILOT_MODEL" data-key="COPILOT_MODEL" list="cp-models" placeholder="Copilot's default" spellcheck="false">
+    <datalist id="cp-models"></datalist>
+    <label for="COPILOT_EFFORT">Reasoning effort</label>
+    <select id="COPILOT_EFFORT" data-key="COPILOT_EFFORT"></select>
+    <label for="COPILOT_PERMISSION">Access</label>
+    <select id="COPILOT_PERMISSION" data-key="COPILOT_PERMISSION"></select>
+    <label for="COPILOT_CWD">Folder for general chats</label>
+    <input id="COPILOT_CWD" data-key="COPILOT_CWD" placeholder="the Clearsky folder" spellcheck="false">
+    <p class="hint">Where a chat runs when it isn't about a PR or ticket. Chats about a PR or ticket run in that repo's clone, or the worktree with the PR's branch. Clearsky's own skills (stand-up, triage) are available only from the Clearsky folder.</p>
     <label for="COPILOT_FOLDERS">Folders Copilot may use without asking</label>
-    <input id="COPILOT_FOLDERS" data-key="COPILOT_FOLDERS" placeholder="~/dev">
-    <p class="hint">Comma-separated, like <code>~/dev/kezzler, ~/dev/ethlo</code>. Copilot chats started from Clearsky can read and change files there, including worktrees next to your clones, without the "Access paths outside trusted directories" question. Commands and edits still follow the chat's mode (Ask, Assisted, Full). Empty means <code>~/dev</code>. Running chats pick it up on their next message.</p>
-    <div class="row"><button class="save" data-keys="COPILOT_FOLDERS">Save</button><span class="msg"></span></div>
+    <input id="COPILOT_FOLDERS" data-key="COPILOT_FOLDERS" placeholder="~/dev" spellcheck="false">
+    <p class="hint">Comma-separated, like <code>~/dev/kezzler, ~/dev/ethlo</code>. Copilot can read and change files there, including worktrees next to your clones, without the "Access paths outside trusted directories" question. Commands and edits still follow the access mode. Empty means <code>~/dev</code>. Running chats pick changes up on their next message.</p>
+    <div class="row"><button class="save" data-keys="COPILOT_MODEL,COPILOT_EFFORT,COPILOT_PERMISSION,COPILOT_CWD,COPILOT_FOLDERS">Save</button><span class="msg"></span></div>
   </section>
 
   <section id="extra" hidden>
@@ -237,7 +248,18 @@ function render(s) {
   $('#CLEARSKY_WORKDAYS').value = s.workdays || '';
   $('#CLEARSKY_MENTION_DAYS').value = s.mentionDays || '';
   $('#CLEARSKY_TIME_FORMAT').value = s.timeFormat || '24';
-  $('#COPILOT_FOLDERS').value = s.copilotFolders || '';
+  const cp = s.copilot || {};
+  $('#COPILOT_FOLDERS').value = cp.folders || '';
+  $('#COPILOT_CWD').value = cp.cwd || '';
+  $('#COPILOT_MODEL').value = cp.model || '';
+  // The choices come from Copilot itself (models you've used, its access modes).
+  fetch('/api/copilot').then((r) => r.json()).then((i) => {
+    $('#cp-models').innerHTML = (i.models || []).map((m) => `<option value="${esc(m)}">`).join('');
+    $('#COPILOT_EFFORT').innerHTML = `<option value="">Copilot's default</option>${(i.efforts || []).map((e) => `<option>${esc(e)}</option>`).join('')}`;
+    $('#COPILOT_PERMISSION').innerHTML = `<option value="">Ask (approve each step)</option>${Object.entries(i.permissions || {}).filter(([k]) => k !== 'ask').map(([k, l]) => `<option value="${esc(k)}">${esc(l)}</option>`).join('')}`;
+    $('#COPILOT_EFFORT').value = cp.effort || '';
+    $('#COPILOT_PERMISSION').value = cp.permission || '';
+  }).catch(() => {});
 
   const extra = s.extra || [], logins = s.logins || [];
   $('#extra').hidden = !extra.length && !logins.length;

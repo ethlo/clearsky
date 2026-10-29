@@ -103,6 +103,15 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
     await page.waitForTimeout(400);
   }
 
+  // Settings → Copilot: defaults for new chats, with Copilot's own choices; a saved default is used by a new chat.
+  await page.goto(`${base}/settings`);
+  await page.waitForSelector('#COPILOT_PERMISSION option[value="full"]', { state: 'attached' });
+  await page.selectOption('#COPILOT_PERMISSION', 'read');
+  await page.click('button.save[data-keys^="COPILOT_"]');
+  await page.waitForFunction(() => /saved/i.test(document.querySelector('button.save[data-keys^="COPILOT_"]').nextElementSibling.textContent), null, { timeout: 5000 });
+  await page.goto(`${base}/#copilot`);
+  await page.waitForFunction(() => document.querySelector('#cp-perm').value === 'read', null, { timeout: 5000 });
+
   // A Copilot chat; afterwards the menu lists it.
   await page.goto(`${base}/#copilot`);
   await page.selectOption('#cp-perm', 'full');
