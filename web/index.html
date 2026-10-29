@@ -263,6 +263,21 @@
   .chat-h { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
   .chat-h .spacer { flex: 1; }
   .chat-sub { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chat-ctx { display: flex; flex-direction: column; gap: 4px; padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--surface-2); font-size: 12.5px; }
+  .chat-ctx .ctx-line { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--text-2); }
+  .chat-ctx .ctx-title { font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chat-ctx .ctx-st { flex: none; display: inline-flex; align-items: center; gap: 5px; color: var(--muted); }
+  .chat-ctx .ctx-st i { width: 7px; height: 7px; border-radius: 50%; background: var(--line-strong); }
+  .chat-ctx .s-working i { background: var(--green); animation: pulse 1.2s ease-in-out infinite; }
+  .chat-ctx .s-waiting i { background: var(--accent); }
+  .chat-ctx .s-needs-you i { background: var(--amber); }
+  .chat-ctx .ctx-dir { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; }
+  .chat-ctx .ctx-item { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+  .chat-ctx .ctx-item a { color: var(--text); font-weight: 500; flex: none; }
+  .chat-ctx .ctx-item a:hover { color: var(--accent); }
+  .chat-ctx .ctx-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
+  .chat-ctx .ctx-item .badge { flex: none; }
+  .chat.max .chat-ctx { padding-left: max(14px, calc((100vw - 900px) / 2)); padding-right: max(14px, calc((100vw - 900px) / 2)); }
   .chat-opts { display: flex; flex-wrap: wrap; gap: 8px 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 12.5px; color: var(--text-2); }
   .chat-opts label { display: flex; align-items: center; gap: 6px; }
   .chat-opts input, .chat-opts select { font: inherit; font-size: 12.5px; color: var(--text); background: var(--surface-2); border: 1px solid var(--line);
@@ -410,6 +425,7 @@
     <button class="icon-btn small" id="chat-max" title="Maximize" aria-label="Maximize">⤢</button>
     <button class="icon-btn small" id="chat-close" aria-label="Close">✕</button>
   </div>
+  <div class="chat-ctx" id="chat-ctx" hidden></div>
   <div class="chat-opts">
     <label>Model <input id="cp-model" list="cp-models" placeholder="default" spellcheck="false"></label>
     <datalist id="cp-models"></datalist>
@@ -521,6 +537,7 @@ function sessionChips(url) {
 async function loadLinks() {
   try { cpLinks = await getJson('/api/copilot/links'); } catch { return; }
   renderToday();
+  if (!$('#chat').hidden) drawCtx();
 }
 function renderCopilotCard() {
   const el = $('#c-copilot'), live = cpLinks.live || [];
@@ -1237,7 +1254,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideCard()
 
 // ---------------------------------------------------------------- Copilot chat
 
-const chat = { session: null, cwd: null, turns: 0, stop: null, info: null, refs: [] };
+const chat = { session: null, cwd: null, turns: 0, stop: null, info: null, refs: [], title: null, items: [] };
 const CUR_KEY = 'clearsky.chatSession';
 // Remember the open chat, so a reload picks it up again.
 function rememberChat() {
@@ -1252,7 +1269,43 @@ const saveCp = () => {
   try { localStorage.setItem(CP_KEY, JSON.stringify(cpPrefs)); } catch {}
   chatSub();
 };
+// The header under the title: what this chat is about, where it runs and where it's at.
+function itemIndex() {
+  const out = new Map(), g = state.github || {}, j = state.jira || {}, jm = state.jiraMentions || {};
+  const pr = (p, status, tone) => /\/pull\/\d+/.test(p.url || '') && !out.has(itemKey(p.url)) && out.set(itemKey(p.url), { title: p.title, url: p.url, status, tone });
+  (g.reviewRequested || []).forEach((p) => pr(p, p.rerequested ? 'Re-review' : 'Review requested', 'amber'));
+  (g.myPrs || []).forEach((p) => pr(p, p.status?.label, toneOf[p.status?.tone] || 'gray'));
+  [...(g.mentions || []), ...(g.assigned || [])].forEach((p) => pr(p));
+  (j.assigned || []).forEach((i) => out.set(`issue:${i.key}`, { title: i.summary, url: i.url, status: i.status, tone: statusTone(i.statusCategory) }));
+  (jm.tickets || []).forEach((t) => !out.has(`issue:${t.key}`) && out.set(`issue:${t.key}`, { title: t.summary, url: t.url }));
+  return out;
+}
+function drawCtx() {
+  const el = $('#chat-ctx');
+  const keys = new Set(chat.items);
+  // Items linked to this session elsewhere: attached earlier, its branch, or its title.
+  for (const [k, list] of Object.entries(cpLinks.links || {})) if (list.some((x) => x.id === chat.session)) keys.add(k);
+  const live = [...(cpLinks.live || []), ...Object.values(cpLinks.links || {}).flat()].find((x) => x.id === chat.session);
+  const title = chat.title || live?.title;
+  const status = chat.stop ? 'working' : live?.status || (chat.turns ? 'waiting' : null);
+  if (!chat.turns && !keys.size && !chat.cwd) { el.hidden = true; return; }
+  const idx = itemIndex();
+  const items = [...keys].map((k) => {
+    const info = idx.get(k) || {};
+    const label = k.replace(/^pr:/, '').replace(/^issue:/, '');
+    const url = info.url || (k.startsWith('pr:') ? `https://github.com/${label.replace('#', '/pull/')}` : jiraBaseGuess() ? `${jiraBaseGuess()}/browse/${label}` : '');
+    return `<div class="ctx-item">📎 ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(label)}</a>` : `<b>${esc(label)}</b>`}
+      ${info.status ? `<span class="badge b-${info.tone || 'gray'}">${esc(info.status)}</span>` : ''}<span>${esc(info.title || '')}</span></div>`;
+  }).join('');
+  el.hidden = false;
+  el.innerHTML = `<div class="ctx-line"><span class="ctx-title">${esc(title || (chat.turns ? 'Copilot session' : 'New chat'))}</span>
+      ${status ? `<span class="ctx-st s-${esc(status)}"><i></i>${esc(STATUS_TEXT[status] || status)}</span>` : ''}</div>
+    ${items}
+    ${chat.cwd ? `<div class="ctx-dir" title="${esc(chat.cwd)}">📁 ${esc(chat.cwd.replace(/^\/home\/[^/]+/, '~'))}</div>` : ''}`;
+}
+
 function chatSub() {
+  drawCtx();
   const i = chat.info;
   $('#chat-sub').textContent = !i ? '' : !i.available ? 'Copilot CLI not found' : `${i.permissions[$('#cp-perm').value] || ''}${chat.turns ? ` · ${chat.turns} turn${chat.turns > 1 ? 's' : ''}` : ''}`;
 }
@@ -1287,6 +1340,7 @@ function newChat() {
   chat.session = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   chat.cwd = null;
   chat.turns = 0;
+  chat.title = null; chat.items = [];
   rememberChat();
   showHistory(false);
   $('#chat-log').innerHTML = `<div class="chat-empty">Ask about your PRs, tickets and meetings. Copilot sees what's on your dashboard
@@ -1336,6 +1390,8 @@ async function openSession(id, cwd) {
     const q = cwd ? `?cwd=${encodeURIComponent(cwd)}` : '';
     const h = await getJson(`/api/copilot/sessions/${encodeURIComponent(id)}${q}`);
     chat.session = h.id; chat.cwd = h.cwd; chat.turns = h.messages.filter((m) => m.role === 'me').length || 1;
+    chat.items = [];
+    chat.title = h.title || h.messages.find((m) => m.role === 'me')?.text.trim().split('\n')[0].slice(0, 120) || null;
     $('#chat-log').innerHTML = '';
     for (const m of h.messages) {
       if (m.role === 'me') addMsg('me', esc(m.text));
@@ -1448,6 +1504,8 @@ async function send(text) {
   const refs = chat.refs.map(({ kind, key, repo, number }) => ({ kind, key, repo, number }));
   addMsg('me', `${refs.length ? `<span class="refs-sent">📎 ${chat.refs.map((r) => esc(refLabel(r))).join(', ')}</span>` : ''}${esc(text)}`);
   chat.refs = [];
+  chat.items = [...new Set([...chat.items, ...refs.map((r) => (r.kind === 'pr' ? `pr:${r.repo}#${r.number}` : `issue:${r.key}`))])];
+  if (!chat.turns && !chat.title) chat.title = text.trim().split('\n')[0].slice(0, 120);
   drawRefs();
   const out = addMsg('cp', '<span class="typing">Thinking</span>');
   const segs = [];
@@ -1460,13 +1518,14 @@ async function send(text) {
     else if (e.type === 'permission' || e.type === 'error') segs.push(e);
     else if (e.type === 'session') { chat.session = e.id; rememberChat(); }
     else if (e.type === 'commands' && chat.info) chat.info.commands = e.commands;
-    else if (e.type === 'cwd') { chat.cwd = e.cwd; segs.push({ type: 'note', text: `Working in ${e.cwd}` }); }
+    else if (e.type === 'cwd') { chat.cwd = e.cwd; segs.push({ type: 'note', text: `Working in ${e.cwd}` }); drawCtx(); }
     if (e.type === 'done' || e.type === 'error') ended = true;
   };
   let ended = false;
   const ctrl = new AbortController();
   chat.stop = () => ctrl.abort();
   $('#chat-send').textContent = 'Stop';
+  drawCtx();
   try {
     const res = await fetchWithToken('/api/copilot', { method: 'POST', signal: ctrl.signal,
       body: JSON.stringify({ message: skillPrompt(text), session: chat.session, resume: chat.turns > 0, cwd: chat.cwd, refs, ...cpPrefs, permission: $('#cp-perm').value }) });
