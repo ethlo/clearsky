@@ -134,6 +134,10 @@
   .row:hover .hide, .hide:focus { opacity: 1; }
   @media (hover: none) { .hide { opacity: .7; } }
   .hide:hover { background: var(--surface-2); color: var(--text); }
+  .ask { flex: none; border: 0; background: none; color: var(--accent); opacity: .35; cursor: pointer; padding: 2px 5px; border-radius: 6px; font-size: 13px; }
+  .row:hover .ask, .todo li:hover .ask, .ask:focus { opacity: 1; }
+  @media (hover: none) { .ask { opacity: .7; } }
+  .ask:hover { background: var(--accent-soft); }
   .badge { flex: none; display: inline-block; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 6px; white-space: nowrap; margin-top: 1px; }
   .b-red { background: var(--red-soft); color: var(--red); } .b-amber { background: var(--amber-soft); color: var(--amber); }
   .b-green { background: var(--green-soft); color: var(--green); } .b-blue { background: var(--blue-soft); color: var(--blue); }
@@ -451,6 +455,17 @@ function refAttrs({ issue, pr }) {
   return '';
 }
 
+// A PR or Jira ticket from its link, to hand to Copilot.
+function refFromUrl(url = '') {
+  let m = url.match(/github\.com\/([\w.-]+\/[\w.-]+)\/pull\/(\d+)/);
+  if (m) return { kind: 'pr', repo: m[1], number: Number(m[2]) };
+  m = url.match(/\/browse\/([A-Z][A-Z0-9_]+-\d+)/);
+  return m ? { kind: 'issue', key: m[1] } : null;
+}
+function askButton(url, title) {
+  return refFromUrl(url) ? `<button class="ask" data-ask="${esc(url)}" data-title="${esc(title)}" title="Ask Copilot about this" aria-label="Ask Copilot about this">✦</button>` : '';
+}
+
 function row({ url, stamp, dismissKey, title, meta, badge, tone, quote, issue, pr }) {
   return `<li class="row">
     ${badge ? `<span class="badge b-${tone || 'gray'}">${esc(badge)}</span>` : ''}
@@ -459,6 +474,7 @@ function row({ url, stamp, dismissKey, title, meta, badge, tone, quote, issue, p
       ${meta ? `<div class="meta">${esc(meta)}</div>` : ''}
       ${quote ? `<div class="quote">${esc(quote)}</div>` : ''}
     </div>
+    ${askButton(url, title)}
     <button class="hide" title="Dismiss until something new happens" aria-label="Dismiss" data-key="${esc(dismissKey || url)}" data-stamp="${esc(stamp ?? '')}">✕</button>
   </li>`;
 }
@@ -583,7 +599,7 @@ function renderPlan() {
   const todo = (p.suggestions.length ? `<ol class="todo">${p.suggestions.map((s) => `<li>
       <div><a class="t" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a><div class="d">${esc(s.detail)}</div></div>
       <span class="m">~${dur(s.minutes)}</span>
-      <span class="acts"><button class="done" data-done="${esc(s.key)}" data-stamp="${esc(s.stamp ?? '')}" title="Done: hide until there's something new" aria-label="Mark done">${DONE_ICON}</button><button class="mute" data-mute="${esc(s.key)}" title="Mute for a while" aria-label="Mute for a while">${MUTE_ICON}</button></span></li>`).join('')}</ol>`
+      <span class="acts">${askButton(s.url, s.title)}<button class="done" data-done="${esc(s.key)}" data-stamp="${esc(s.stamp ?? '')}" title="Done: hide until there's something new" aria-label="Mark done">${DONE_ICON}</button><button class="mute" data-mute="${esc(s.key)}" title="Mute for a while" aria-label="Mute for a while">${MUTE_ICON}</button></span></li>`).join('')}</ol>`
     : '<div class="empty">Nothing urgent fits right now.</div>') + laterHtml(p.done || [], p.muted || []);
   el.innerHTML = `${refreshButton('plan')}<div><div class="eyebrow">Now</div><div class="now-line">${line}</div><div class="now-sub">${sub}</div>${alert}${calErr}${agenda}</div>
     <div><div class="eyebrow">Do next</div>${todo}</div>`;
@@ -958,6 +974,7 @@ function parseRef(q) {
 function drawRefs() {
   $('#cp-refs').querySelectorAll('.ref').forEach((el) => el.remove());
   for (const [i, r] of chat.refs.entries()) {
+    if (r.key && r.title?.startsWith(r.key)) r.title = r.title.slice(r.key.length).replace(/^\s*·\s*/, '');
     const el = document.createElement('span');
     el.className = 'ref';
     el.innerHTML = `<span title="${esc(r.title || '')}">${esc(refLabel(r))}${r.title ? ` ${esc(r.title)}` : ''}</span><button type="button" data-unref="${i}" aria-label="Remove">✕</button>`;
@@ -1131,6 +1148,15 @@ $('#cp-skills').addEventListener('click', (e) => {
 // ---------------------------------------------------------------- wiring
 
 document.addEventListener('click', (e) => {
+  const ask = e.target.closest('[data-ask]');
+  if (ask) {
+    // Start a fresh chat with this PR or ticket attached, ready for your question.
+    if (!chat.session || chat.turns) newChat();
+    chat.refs = [];
+    addRef({ ...refFromUrl(ask.dataset.ask), title: ask.dataset.title });
+    openChat(true);
+    return;
+  }
   const key = e.target.closest('.hide')?.dataset.key;
   if (key) { const b = e.target.closest('.hide'); dismissed[key] = b.dataset.stamp; dismiss({ key, stamp: b.dataset.stamp }); return; }
   const more = e.target.closest('.more')?.dataset.more;
