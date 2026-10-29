@@ -1207,9 +1207,6 @@ setInterval(() => {
   for (const [id, c] of acpChats) if (!c.busy && !c.waiting.size && Date.now() - c.lastUsed > 20 * 6e4) { c.agent.close(); acpChats.delete(id); }
 }, 60_000).unref();
 
-// One-shot runs (Assisted and Full) by session, so Stop can end one you switched away from.
-const oneShotStops = new Map();
-
 // Stop a turn on purpose. Closing the page or switching chats leaves it running.
 function stopCopilot(chat) {
   const c = acpChats.get(chat);
@@ -1218,8 +1215,7 @@ function stopCopilot(chat) {
     for (const r of c.waiting.values()) r({ outcome: 'cancelled' });
     c.waiting.clear(); c.pending.clear();
   }
-  oneShotStops.get(chat)?.();
-  return !!(c || oneShotStops.has(chat));
+  return !!c;
 }
 
 // A short-lived Copilot process, for listing or reading sessions.
@@ -1277,19 +1273,16 @@ async function copilotSessions(bin, force) {
   return withStatus(data);
 }
 
-// Chats in this panel that are running a one-shot turn right now.
-const oneShotRunning = new Set();
-
 // Where each session is at, worked out fresh each time:
 //   working: Copilot is busy on it (here, or in a terminal or editor);
-//   needs-you: it asked to use a tool and waits for your answer (Ask mode here);
+//   needs-you: it asked to use a tool and waits for your answer (here);
 //   waiting: open in a terminal or here, done with its turn, waiting for your next message;
 //   closed: not open anywhere.
 function withStatus(list) {
   const open = openCopilotSessions();
   return list.map((x) => {
     const c = acpChats.get(x.id);
-    const status = c?.waiting.size ? 'needs-you' : c?.busy || oneShotRunning.has(x.id) || open[x.id]?.working ? 'working'
+    const status = c?.waiting.size ? 'needs-you' : c?.busy || open[x.id]?.working ? 'working'
       : c || open[x.id] ? 'waiting' : 'closed';
     return { ...x, open: !!open[x.id] && !c, working: status === 'working', here: !!c, status };
   });
@@ -1464,13 +1457,7 @@ function attachCopilot(chat, req, res) {
   const c = acpChats.get(chat);
   res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
   const send = (e) => { if (!res.writableEnded && !res.destroyed) res.write(`${JSON.stringify(e)}\n`); };
-  if (!c?.busy) {
-    // A one-shot run (Assisted or Full) has no live feed; say when it's over.
-    if (!oneShotRunning.has(chat)) { send({ type: 'done' }); return res.end(); }
-    send({ type: 'text', text: 'Working in the background; the answer shows here when it is done.' });
-    const timer = setInterval(() => { if (!oneShotRunning.has(chat)) { clearInterval(timer); send({ type: 'done' }); res.end(); } }, 2000);
-    return res.on('close', () => clearInterval(timer));
-  }
+  if (!c?.busy) { send({ type: 'done' }); return res.end(); }
   for (const ev of c.pending.values()) send(ev);
   const emit = (e) => { send(e); if (e.type === 'done') res.end(); };
   c.emit = emit;
@@ -1656,29 +1643,10 @@ function serve() {
           res.on('close', linkRefs);
           if (checkout) emit({ type: 'cwd', cwd: checkout });
           sessionsCache = null;
-          const live = acpChats.get(body.session);
-          if (copilot.PERMISSIONS[options.permission].acp) {
-            try {
-              await acpTurn({ chat: body.session, options, prompt, resumeId: body.resume ? body.session : null, cwd, emit, res, bin: info.bin });
-            } catch (e) { emit({ type: 'error', message: e.message }); }
-            return res.end();
-          }
-          if (live) { live.agent.close(); acpChats.delete(body.session); }
-          const args = copilot.copilotArgs({ prompt, session: body.session, resume: !!body.resume, cwd, ...options });
-          oneShotRunning.add(body.session);
-          const stop = copilot.runCopilot(info.bin, args, {
-            env: copilotEnv(),
-            onData: (text) => emit({ type: 'text', text }),
-            onEnd: ({ code, stderr }) => {
-              if (code !== 0) emit({ type: 'error', message: `Copilot exited with ${code}${stderr ? `: ${stderr.trim().split('\n').slice(-3).join(' ')}` : ''}` });
-              else emit({ type: 'done' });
-              oneShotRunning.delete(body.session); oneShotStops.delete(body.session);
-              res.end();
-            },
-          });
-          // Like Ask chats, it keeps going when you switch away; Stop ends it.
-          oneShotStops.set(body.session, stop);
-          return;
+          try {
+            await acpTurn({ chat: body.session, options, prompt, resumeId: body.resume ? body.session : null, cwd, emit, res, bin: info.bin });
+          } catch (e) { emit({ type: 'error', message: e.message }); }
+          return res.end();
         }
         if (url.pathname === '/api/mute') {
           const { key, for: span } = await readJson(req);
@@ -1777,7 +1745,7 @@ function serve() {
         if (!info.available) return json(res, 400, { error: 'GitHub Copilot CLI not found' });
         const cwd = isDir(url.searchParams.get('cwd')) ? url.searchParams.get('cwd') : copilotCwd();
         const c = acpChats.get(histId);
-        const busy = !!c?.busy || oneShotRunning.has(histId);
+        const busy = !!c?.busy;
         // A chat that only exists in this server so far may not be readable from disk yet.
         const messages = await copilotHistory(info.bin, histId, cwd).catch((e) => { if (c || busy) return []; throw e; });
         return json(res, 200, { id: histId, cwd, here: !!c, busy, messages });

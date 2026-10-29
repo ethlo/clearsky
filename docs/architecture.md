@@ -23,7 +23,7 @@ It runs on the laptop, uses the logins already there, has no dependencies beyond
 | Settings | `web/settings.html`, `lib/settings.mjs` | writes `~/.config/clearsky/.env` (mode 600); never sends saved secrets back |
 | Sources | built in, plus `lib/sources/*.mjs` and `~/.config/clearsky/sources/*.mjs` | each one fetches one service; see the contract in `lib/sources.mjs` |
 | State | `lib/state.mjs` → `~/.config/clearsky/state.json` | done, muted and dismissed items, what was already notified, session links |
-| Copilot | `lib/acp.mjs`, `lib/copilot.mjs` | the Copilot CLI over ACP (JSON-RPC on stdio), or one-shot runs |
+| Copilot | `lib/acp.mjs`, `lib/copilot.mjs` | the Copilot CLI over ACP (JSON-RPC on stdio), in every access mode |
 | Calendar | `lib/eds.mjs`, `lib/ics.mjs` | GNOME's Evolution cache (SQLite) or an iCal link, parsed locally |
 | Notifications | `lib/notify.mjs` | what's new since last time; desktop banners over D-Bus (`gdbus`), or the browser's |
 
@@ -70,7 +70,7 @@ Sessions link to PRs and tickets in three ways:
 
 A chat about a PR runs in your local clone of that repo.
 
-Copilot gets none of Clearsky's tokens. Ask mode approves each step, and skills never merge, approve, force-push or comment without asking.
+Every access mode runs over ACP, so anything Copilot wants your OK for (each step in Ask, what the judge won't approve in Assisted) shows as Allow/Deny. Copilot gets none of Clearsky's tokens, and skills never merge, approve, force-push or comment without asking.
 
 ## Security
 

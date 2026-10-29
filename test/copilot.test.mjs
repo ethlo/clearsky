@@ -31,18 +31,37 @@ test('the chat panel talks to the local Copilot CLI with the chosen options', as
   // Answers stream as JSON lines; join the text events.
   const events = async (res) => (await res.text()).trim().split('\n').map((l) => JSON.parse(l));
   const textOf = (evs) => evs.filter((e) => e.type === 'text').map((e) => e.text).join('');
-  const first = textOf(await events(await ask({ message: 'What first?', session: 'sess-1234', model: 'claude-opus-5', permission: 'read', allow: 'shell(git:*)' })));
-  assert.ok(first.startsWith('Hello '));
-  const r = JSON.parse(first.slice(6));
+  const info0 = (evs) => JSON.parse(textOf(evs).match(/info=(.*)\n/)[1]);
+  const firstEvs = await events(await ask({ message: 'What first?', session: 'sess-1234', model: 'claude-opus-5', permission: 'read', allow: 'shell(git:*)' }));
+  const r = info0(firstEvs);
   assert.match(r.prompt, /work dashboard[\s\S]*What first\?$/);
-  assert.equal(r.session, 'sess-1234');
   assert.equal(r.model, 'claude-opus-5');
   assert.equal(r.hasToken, false, "Clearsky's tokens aren't passed to Copilot");
   assert.ok(r.flags.includes('--deny-tool') && r.flags.includes('--allow-tool'));
 
-  const next = JSON.parse(textOf(await events(await ask({ message: 'And then?', session: 'sess-1234', resume: true, permission: 'full' }))).slice(6));
-  assert.equal(next.prompt, 'And then?');
-  assert.equal(next.resume, 'sess-1234');
+  // Every mode runs over ACP, so a step Copilot won't run unattended (here: Full mode, resumed)
+  // still reaches the panel as Allow/Deny instead of being refused.
+  const fullEvs = [];
+  {
+    const rd = (await ask({ message: 'And then, gated?', session: 'sess-1234', resume: true, permission: 'full' })).body.getReader();
+    let buf = '';
+    for (;;) {
+      const { value, done } = await rd.read();
+      if (done) break;
+      buf += new TextDecoder().decode(value);
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const e of lines.map((l) => JSON.parse(l))) {
+        fullEvs.push(e);
+        if (e.type === 'permission') await ask0(`${base}/api/copilot/permission`, { chat: 'sess-1234', id: e.id, option: 'yes' });
+      }
+    }
+  }
+  const next = info0(fullEvs);
+  assert.equal(next.prompt, 'And then, gated?');
+  assert.equal(next.session, 'sess-1234', 'resumed the same session');
+  assert.ok(next.flags.includes('--allow-all-tools'));
+  assert.match(textOf(fullEvs), /answer=yes/);
   assert.equal((await ask({ message: 'x', session: 'sess-1234', model: 'bad model; rm' })).status, 400);
 
   // Ask mode: Copilot's approval question shows up in the stream and the answer goes back.
@@ -116,8 +135,8 @@ test('the chat panel talks to the local Copilot CLI with the chosen options', as
   assert.equal(hist.cwd, '/tmp');
 
   // Attached PRs and tickets go in front of the message.
-  const withRef = JSON.parse(textOf(await events(await ask({ message: 'Summarise', session: 'sess-ref-1', resume: true, permission: 'read',
-    refs: [{ kind: 'issue', key: 'SSP-1234' }, { kind: 'pr', repo: 'bad repo', number: 1 }] }))).slice(6));
+  const withRef = info0(await events(await ask({ message: 'Summarise', session: 'sess-ref-1', resume: true, permission: 'read',
+    refs: [{ kind: 'issue', key: 'SSP-1234' }, { kind: 'pr', repo: 'bad repo', number: 1 }] })));
   assert.match(withRef.prompt, /^I am asking about these items:\n\n## SSP-1234[\s\S]*\n---\nMy message:\nSummarise$/);
   assert.ok(!/bad repo/.test(withRef.prompt), 'invalid references are dropped');
 });

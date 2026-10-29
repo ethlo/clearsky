@@ -21,6 +21,7 @@ if (args[0] === 'skill' && args[1] === 'list') {
         ? { sessions: [{ sessionId: 'personal-1', cwd: '/tmp/me', title: 'Personal hack', updatedAt: new Date().toISOString() }, { sessionId: 'cli-old-session', cwd: '/tmp', title: 'From the terminal', updatedAt: '2026-10-01T10:00:00Z' }] }
         : { sessions: [{ sessionId: 'acp-session-1', cwd: '/tmp/work', title: 'Check the repo', updatedAt: new Date(Date.now() - 36e5).toISOString() }], nextCursor: 'p2' } });
     } else if (m.method === 'session/load') {
+      if (m.params.sessionId.startsWith('sess-')) { sid = m.params.sessionId; out({ id: m.id, result: {} }); return; }
       if (m.params.sessionId !== 'cli-old-session') { out({ id: m.id, error: { code: -32002, message: 'no such session' } }); return; }
       upd(m.params.sessionId, { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: 'You are helping me with my work. This is my work dashboard right now:\n\nstuff\n\n---\nMy message:\nWhat broke?' } });
       upd(m.params.sessionId, { sessionUpdate: 'tool_call', toolCallId: 'x', title: 'Read log', status: 'pending' });
@@ -36,7 +37,11 @@ if (args[0] === 'skill' && args[1] === 'list') {
     }
     else if (m.method === 'session/prompt') {
       const say = (text) => out({ method: 'session/update', params: { sessionId: sid, update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text } } } });
+      const flags = args.filter((a, i) => a.startsWith('--') || ['shell', 'write', 'plan'].includes(a) && args[i - 1]?.startsWith('--'));
       say(`flags=${args.filter((a) => a.startsWith('--')).join(' ')} `);
+      say(`info=${JSON.stringify({ prompt: m.params.prompt[0].text, flags, session: sid, model: args.includes('--model') ? args[args.indexOf('--model') + 1] : null, hasToken: !!process.env.GITHUB_TOKEN })}\n`);
+      // Allowed tools run without asking, except a prompt that says "gated" (like a step Copilot's judge wants you to OK).
+      if (args.includes('--allow-all-tools') && !m.params.prompt[0].text.includes('gated')) { out({ id: m.id, result: { stopReason: 'end_turn' } }); return; }
       out({ method: 'session/update', params: { update: { sessionUpdate: 'tool_call', toolCallId: 't1', title: 'git status', kind: 'execute', status: 'pending' } } });
       waiting = { prompt: m.id, say };
       out({ id: 900, method: 'session/request_permission', params: { sessionId: sid, toolCall: { toolCallId: 't1', title: 'Run git status', rawInput: { command: 'git status' } },
