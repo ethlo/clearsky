@@ -59,3 +59,32 @@ test('merges the iCal link and GNOME Online Accounts, and survives one of them f
     server.close();
   }
 });
+
+test("a shared family calendar shows others' events without taking your time", async () => {
+  const home = gnomeHome();
+  const sources = join(home, '.config', 'evolution', 'sources');
+  writeFileSync(join(sources, 'goa-home.source'), '[Data Source]\nDisplayName=me@home.test\nEnabled=true\n\n[Authentication]\nUser=me@home.test\n');
+  writeFileSync(join(sources, 'cal-family.source'), '[Data Source]\nDisplayName=Family\nEnabled=true\nParent=goa-home\n\n[Calendar]\nBackendName=caldav\n');
+  const dir = join(home, '.cache', 'evolution', 'calendar', 'cal-family');
+  mkdirSync(dir, { recursive: true });
+  const db = new DatabaseSync(join(dir, 'cache.db'));
+  db.exec('CREATE TABLE ECacheObjects (ECacheUID TEXT, ECacheOBJ TEXT)');
+  db.prepare('INSERT INTO ECacheObjects VALUES (?, ?)').run('f1', ics('f1', 'Football practice', 9));
+  db.prepare('INSERT INTO ECacheObjects VALUES (?, ?)').run('f2', ics('f2', 'Dentist (Morten)', 10));
+  db.prepare('INSERT INTO ECacheObjects VALUES (?, ?)').run('f3', ics('f3', 'Parents meeting', 17)
+    .replace('END:VEVENT', 'ORGANIZER:mailto:me@home.test\r\nEND:VEVENT'));
+  db.close();
+  const cal = await calendar({ HOME: home, CALENDAR_EMAIL: 'me@work.test', EVOLUTION_CALENDARS: 'cal-family', CALENDAR_MY_NAMES: 'Morten' });
+  const fyi = Object.fromEntries(cal.events.map((e) => [e.title, e.fyi]));
+  assert.deepEqual(fyi, { 'Football practice': true, 'Dentist (Morten)': false, Planning: false, Retro: false, 'Parents meeting': false });
+  assert.equal(cal.events.find((e) => e.title === 'Football practice').calendar, 'Family');
+
+  const { planNow } = await import('../bin/clearsky.mjs');
+  const at = (h) => { const d = new Date(); d.setHours(h, 0, 0, 0); return d.toISOString(); };
+  const plan = planNow({ calendar: { events: [
+    { title: 'Football practice', start: at(11), end: at(12), fyi: true, calendar: 'Family' },
+    { title: 'Planning', start: at(13), end: at(14) },
+  ] } }, Date.parse(at(10)) + 30 * 6e4, {}, {}, {});
+  assert.equal(plan.next.title, 'Planning', 'the family event does not end your free time');
+  assert.deepEqual(plan.agenda.map((e) => e.title).slice(0, 1), ['Football practice'], 'but it is in the agenda');
+});

@@ -13,7 +13,7 @@ test('the chat panel talks to the local Copilot CLI with the chosen options', as
   const home = mkdtempSync(join(tmpdir(), 'clearsky-cp-'));
   const server = spawn(process.execPath, [fileURLToPath(new URL('../bin/clearsky.mjs', import.meta.url)), 'serve', '--port', String(port)], {
     cwd: home, stdio: 'ignore',
-    env: { PATH: process.env.PATH, HOME: home, GITHUB_TOKEN: 'gh-secret', COPILOT_BIN: fileURLToPath(new URL('./fake-copilot.mjs', import.meta.url)) },
+    env: { PATH: process.env.PATH, HOME: home, CLEARSKY_POLL_MINUTES: '0', GITHUB_TOKEN: 'gh-secret', COPILOT_BIN: fileURLToPath(new URL('./fake-copilot.mjs', import.meta.url)) },
   });
   t.after(() => server.kill());
   for (let i = 0; i < 50; i++) { try { await fetch(base); break; } catch { await new Promise((r) => setTimeout(r, 100)); } }

@@ -88,10 +88,14 @@
     <div id="cal-pick" hidden>
       <label>Calendars to include</label>
       <div id="cal-list" class="cal-list"></div>
-      <p class="hint">Add a personal Google account in Online Accounts (Calendar only) to see family appointments here too.</p>
+      <p class="hint">Add a personal Google account in Online Accounts (Calendar only) to see family appointments here too.
+        On a shared calendar (one not named after your address, like "Family"), events only take your time when you're invited,
+        or when one of these names is in the title; the rest just show in the agenda.</p>
+      <label for="CALENDAR_MY_NAMES">Your names in shared calendar titles</label>
+      <input id="CALENDAR_MY_NAMES" data-key="CALENDAR_MY_NAMES" placeholder="Morten, Dad">
     </div>
     <input type="hidden" id="EVOLUTION_CALENDARS" data-key="EVOLUTION_CALENDARS">
-    <div class="row"><button class="save" data-keys="CALENDAR_EMAIL,EVOLUTION_CALENDARS">Save</button><span class="msg"></span></div>
+    <div class="row"><button class="save" data-keys="CALENDAR_EMAIL,EVOLUTION_CALENDARS,CALENDAR_MY_NAMES">Save</button><span class="msg"></span></div>
     <p style="margin-top:14px"><b>Option B, iCal link</b> (only if your admin allows it). You can use both; meetings are merged:</p>
     <ol>
       <li>Open <a href="https://calendar.google.com/calendar/r/settings" target="_blank" rel="noopener">Google Calendar settings</a>.</li>
@@ -193,6 +197,7 @@ function render(s) {
   $('#cal-remove').hidden = !s.calendar.url;
   $('#GOOGLE_CALENDAR_ICS').placeholder = s.calendar.url ? `${s.calendar.url}; paste a new one to replace` : 'https://calendar.google.com/calendar/ical/…/basic.ics';
   $('#CALENDAR_EMAIL').value = s.calendar.email || '';
+  $('#CALENDAR_MY_NAMES').value = s.calendar.myNames || '';
   // Your work calendar is always in; tick any others (family, personal) to include them.
   const cals = (s.calendar.all || []).filter((c) => c.synced || c.picked);
   $('#cal-pick').hidden = !cals.length;

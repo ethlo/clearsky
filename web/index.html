@@ -68,6 +68,8 @@
   .agenda div { display: flex; gap: 10px; font-size: 13px; color: var(--text-2); }
   .agenda time { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 44px; flex: none; white-space: nowrap; }
   .agenda .on { color: var(--accent); font-weight: 500; }
+  .agenda .fyi { color: var(--muted); }
+  .agenda small { color: var(--muted); font-size: 11.5px; }
   .todo { list-style: none; margin: 0; padding: 0; counter-reset: n; }
   .todo li { display: grid; grid-template-columns: 22px 1fr auto auto; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); align-items: start; }
   .todo li:first-child { border-top: 0; padding-top: 0; }
@@ -77,6 +79,24 @@
   .todo .d { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; }
   .todo .m { color: var(--muted); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 
+  /* summary line and zones */
+  .summary { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 18px 2px 4px; font-size: 13.5px; color: var(--muted); }
+  .summary a { color: var(--muted); white-space: nowrap; }
+  .summary a b { font-weight: 600; font-variant-numeric: tabular-nums; margin-right: 3px; }
+  .summary a.hot { color: var(--text); }
+  .summary a.hot b { color: var(--accent); }
+  .summary a.bad b { color: var(--red); }
+  .summary a:hover { color: var(--accent); }
+  .zone { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 22px 2px 10px; }
+  .card.clear { background: transparent; box-shadow: none; }
+  .card.clear h2 { color: var(--muted); font-weight: 500; }
+  .card.clear .card-b { padding-bottom: 4px; }
+  .card.clear .empty { padding: 0 0 10px; font-size: 13px; }
+  .quiet .card { background: transparent; box-shadow: none; }
+  .quiet .card-h h2 { font-weight: 550; color: var(--text-2); }
+  .quiet .row { padding: 7px 0; }
+  .quiet .row .title { font-weight: 450; color: var(--text-2); }
+  .quiet .row .meta { font-size: 12px; }
   /* kpis */
   .kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
   .kpi { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 12px 14px; }
@@ -85,7 +105,7 @@
   .kpi.alert b { color: var(--red); }
 
   /* cards */
-  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 16px; align-items: start; }
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); min-width: 0; }
   .card-h { display: flex; align-items: center; gap: 8px; padding: 14px 18px 10px; }
   .card-h h2 { font-size: 14.5px; font-weight: 600; margin: 0; letter-spacing: -.005em; }
@@ -126,7 +146,7 @@
   .row { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--line); }
   .group + ul .row:first-child, ul.rows .row:first-child { border-top: 0; }
   .row .main { flex: 1; min-width: 0; }
-  .row .title { font-weight: 550; overflow-wrap: anywhere; }
+  .row .title { font-weight: 500; overflow-wrap: anywhere; }
   .row .meta { color: var(--muted); font-size: 12.5px; margin-top: 1px; overflow-wrap: anywhere; }
   .row .quote { color: var(--text-2); font-size: 12.5px; margin-top: 4px; padding-left: 10px; border-left: 2px solid var(--line-strong);
     overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
@@ -142,8 +162,12 @@
   .b-red { background: var(--red-soft); color: var(--red); } .b-amber { background: var(--amber-soft); color: var(--amber); }
   .b-green { background: var(--green-soft); color: var(--green); } .b-blue { background: var(--blue-soft); color: var(--blue); }
   .b-gray { background: var(--gray-soft); color: var(--text-2); }
+  /* Labels that only say what something is stay quiet; colour is for what needs you. */
+  .b-blue, .b-gray { background: none; color: var(--muted); font-weight: 500; padding: 2px 0; min-width: 0; }
   .empty { color: var(--muted); padding: 10px 0 6px; }
-  .err { color: var(--red); background: var(--red-soft); border-radius: 8px; padding: 8px 10px; font-size: 13px; margin: 4px 0 8px; }
+  .new-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin: 7px -4px 0 -12px; }
+  #notify.on { color: var(--accent); }
+  .err { color: var(--red); border-left: 2px solid var(--red); padding: 2px 0 2px 10px; font-size: 12.5px; margin: 4px 0 8px; overflow-wrap: anywhere; }
   .more { border: 0; background: none; color: var(--accent); padding: 8px 0 2px; font-weight: 500; }
 
   /* skeleton */
@@ -233,8 +257,8 @@
   .hs:hover, .hs.cur { background: var(--surface-2); }
   .hs b { font-weight: 500; font-size: 13.5px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .hs small { color: var(--muted); font-size: 11.5px; }
-  .badge { display: inline-block; font-size: 10.5px; border-radius: 99px; padding: 0 6px; margin-left: 6px; background: var(--accent-soft); color: var(--accent); vertical-align: 1px; }
-  .badge.work { background: var(--amber-soft); color: var(--amber); }
+  .hbadge { display: inline-block; font-size: 10.5px; border-radius: 99px; padding: 0 6px; margin-left: 6px; background: var(--accent-soft); color: var(--accent); vertical-align: 1px; }
+  .hbadge.work { background: var(--amber-soft); color: var(--amber); }
   .chat-refs { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 14px 0; position: relative; }
   .ref { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--accent); color: var(--accent); background: var(--accent-soft); border-radius: 99px; font-size: 12px; padding: 2px 4px 2px 10px; max-width: 100%; }
   .ref span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 280px; }
@@ -280,17 +304,23 @@
   <div class="spacer"></div>
   <div class="status"><span class="dot" id="dot"></span><span class="txt" id="status">Loading…</span></div>
   <button class="icon-btn" id="unhide" hidden title="Show hidden items">Show hidden</button>
+  <button class="icon-btn" id="notify" title="Notifications" aria-label="Notifications" hidden></button>
   <button class="icon-btn" id="refresh" title="Refresh">↻ Refresh</button>
   <button class="icon-btn primary" id="chat-open" title="Ask GitHub Copilot about your work">✦ Copilot</button>
 </div></div>
 
 <div class="page" id="today">
   <section class="plan" id="plan"></section>
-  <div class="kpis" id="kpis"></div>
+  <div class="summary" id="kpis"></div>
+  <h2 class="zone">Needs you</h2>
   <div class="grid">
     <section class="card" id="c-review"></section>
     <section class="card" id="c-prs"></section>
     <section class="card" id="c-mentions"></section>
+  </div>
+  <h2 class="zone">Keeping track</h2>
+  <div class="grid quiet">
+    <section class="card" id="c-waiting"></section>
     <section class="card" id="c-left"></section>
   </div>
 </div>
@@ -404,6 +434,69 @@ function loadAll(force) {
   setTimeout(loadPlan, 50);
 }
 
+// ---------------------------------------------------------------- what's new
+
+// The server checks every few minutes and remembers when each thing that needs you first
+// showed up. Anything newer than your last look gets a dot and counts in the tab title.
+let attention = { items: [], byKey: new Map(), lastPoll: null, notifier: null };
+const LOOK_KEY = 'clearsky.lastLook', NOTIFIED_KEY = 'clearsky.notifiedUpTo';
+let lastLook = Date.now();
+try { lastLook = Number(localStorage.getItem(LOOK_KEY)) || Date.now(); } catch {}
+function isNew(key, stamp) {
+  const it = attention.byKey.get(key);
+  return !!(it?.at && Date.parse(it.at) > lastLook && (stamp == null || String(it.stamp ?? '') === String(stamp ?? '') || it.kind === 'pr'));
+}
+function looked() {
+  lastLook = Date.now();
+  try { localStorage.setItem(LOOK_KEY, String(lastLook)); } catch {}
+}
+// Leaving the page counts as having looked; what arrives while you're away gets a dot.
+document.addEventListener('visibilitychange', () => { if (document.hidden) looked(); else { renderToday(); title(); } });
+window.addEventListener('pagehide', looked);
+function title() {
+  const n = attention.items.filter((it) => it.at && Date.parse(it.at) > lastLook).length;
+  document.title = n ? `(${n}) Clearsky` : 'Clearsky';
+}
+async function pollAttention() {
+  let a;
+  try { a = await getJson('/api/attention'); } catch { return; }
+  const polled = attention.lastPoll && a.lastPoll !== attention.lastPoll;
+  attention = { ...a, byKey: new Map(a.items.map((it) => [it.key, it])) };
+  notifyButton();
+  browserNotify();
+  title();
+  // The server fetched new data: show it.
+  if (polled) loadAll(false); else renderToday();
+}
+// Without notify-send on the machine, the open page shows the notifications instead.
+function browserNotify() {
+  if (attention.notifier !== 'browser' || !('Notification' in window) || Notification.permission !== 'granted') return;
+  let upTo = Date.now();
+  try { upTo = Number(localStorage.getItem(NOTIFIED_KEY)) || Date.now(); } catch {}
+  const fresh = attention.items.filter((it) => it.at && Date.parse(it.at) > upTo && !dismissed[it.key]);
+  for (const it of fresh.slice(0, 4)) {
+    const n = new Notification(it.title, { body: it.body || '', tag: it.key });
+    n.onclick = () => { window.open(it.url, '_blank', 'noopener'); n.close(); };
+  }
+  try { localStorage.setItem(NOTIFIED_KEY, String(Math.max(upTo, ...attention.items.map((it) => Date.parse(it.at) || 0)))); } catch {}
+}
+const BELL = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+function notifyButton() {
+  const b = $('#notify'), n = attention.notifier;
+  if (!n) return;
+  b.hidden = false;
+  b.innerHTML = BELL;
+  const browserOff = n === 'browser' && 'Notification' in window && Notification.permission !== 'granted';
+  b.classList.toggle('on', n === 'desktop' || (n === 'browser' && !browserOff));
+  b.title = n === 'desktop' ? 'Desktop notifications are on (workdays, working hours). Set CLEARSKY_NOTIFY=off to stop them.'
+    : n === 'off' ? 'Notifications are off (CLEARSKY_NOTIFY=off)'
+      : browserOff ? 'Click to get notified in this browser when something needs you' : 'Browser notifications are on while this page is open';
+}
+$('#notify').onclick = async () => {
+  if (attention.notifier === 'browser' && 'Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
+  notifyButton();
+};
+
 // One panel's refresh button: reload just its sources, then the plan that depends on them.
 function refreshPanel(names) {
   Promise.all(names.map((n) => loadSource(n, true))).then(loadPlan);
@@ -473,11 +566,12 @@ function refFromUrl(url = '') {
   return m ? { kind: 'issue', key: m[1] } : null;
 }
 function askButton(url, title) {
-  return refFromUrl(url) ? `<button class="ask" data-ask="${esc(url)}" data-title="${esc(title)}" title="Ask Copilot about this" aria-label="Ask Copilot about this">✦</button>` : '';
+  return refFromUrl(url) ? `<button class="ask" data-ask="${esc(url)}" data-title="${esc(title)}" title="Copilot: ask about this or run a skill on it" aria-label="Copilot on this" aria-haspopup="menu">✦</button>` : '';
 }
 
 function row({ url, stamp, dismissKey, title, meta, badge, tone, quote, issue, pr }) {
   return `<li class="row">
+    ${isNew(dismissKey || url, stamp) ? '<span class="new-dot" title="New since you last looked" aria-label="New"></span>' : ''}
     ${badge ? `<span class="badge b-${tone || 'gray'}">${esc(badge)}</span>` : ''}
     <div class="main">
       <a class="title" href="${esc(url)}" target="_blank" rel="noopener"${refAttrs({ issue, pr })}>${esc(title)}</a>
@@ -499,7 +593,7 @@ function rows(id, items, render, limit = 8) {
 }
 
 // Which sources feed each panel, for its refresh button.
-const PANEL_SOURCES = { plan: ['calendar'], 'c-review': ['github'], 'c-prs': ['github'],
+const PANEL_SOURCES = { plan: ['calendar'], 'c-review': ['github'], 'c-prs': ['github'], 'c-waiting': ['github'],
   'c-mentions': ['github', 'jiraMentions', 'slack'], 'c-left': ['jira', 'github'] };
 const REFRESH_ICON = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.61-3.89" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M12.5 1.8v2.9H9.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
@@ -513,6 +607,8 @@ function refreshButton(id) {
 }
 
 function card(el, title, count, body) {
+  // A "needs you" panel with nothing in it steps back.
+  el.classList.toggle('clear', count === 0 && !el.closest('.quiet'));
   el.innerHTML = `<div class="card-h"><h2>${esc(title)}</h2>${count != null ? `<span class="count">${count}</span>` : ''}${refreshButton(el.id)}</div>
     <div class="card-b">${body}</div>`;
 }
@@ -559,7 +655,43 @@ async function mute(key, span) {
   try { await post('/api/mute', { key, for: span }); } catch (e) { $('#status').textContent = `Could not save: ${e.message}`; }
   loadPlan();
 }
-menu.addEventListener('click', (e) => { const v = e.target.closest('[data-for]')?.dataset.for; if (v) mute(menu.dataset.key, v); });
+menu.addEventListener('click', (e) => {
+  const v = e.target.closest('[data-for]')?.dataset.for;
+  if (v) return mute(menu.dataset.key, v);
+  const sk = e.target.closest('[data-run]');
+  if (sk) { menu.hidden = true; startCopilotOn({ ...refFromUrl(menu.dataset.ask), title: menu.dataset.title }, sk.dataset.run); }
+});
+
+// ✦ on a PR or ticket: ask about it, or run one of your skills on it in a new chat.
+async function openAskMenu(btn) {
+  menu.dataset.key = '';
+  menu.dataset.ask = btn.dataset.ask;
+  menu.dataset.title = btn.dataset.title;
+  const draw = () => {
+    const ref = refFromUrl(btn.dataset.ask);
+    const skills = chat.info?.skills || [];
+    menu.innerHTML = `<div class="menu-h">Copilot on ${esc(refLabel(ref))}</div>
+      <button role="menuitem" data-run="">Ask a question…</button>
+      ${skills.length ? `<div class="menu-h">Run a skill</div>${skills.map((sk) => `<button role="menuitem" data-run="${esc(sk.name)}" title="${esc(sk.description || '')}">/${esc(sk.name)}</button>`).join('')}`
+        : chat.info ? '' : '<div class="menu-h">Loading skills…</div>'}`;
+  };
+  draw();
+  menu.hidden = false;
+  const r = btn.getBoundingClientRect();
+  menu.style.top = `${r.bottom + window.scrollY + 6}px`;
+  menu.style.left = `${Math.max(12, Math.min(r.right + window.scrollX - menu.offsetWidth, window.innerWidth - menu.offsetWidth - 12))}px`;
+  menu.querySelector('button').focus();
+  if (!chat.info) { await loadCopilotInfo(); if (!menu.hidden && menu.dataset.ask === btn.dataset.ask) draw(); }
+}
+
+// A new chat about one item; with a skill, it starts right away.
+function startCopilotOn(ref, skill) {
+  if (!chat.session || chat.turns || chat.stop) newChat();
+  chat.refs = [];
+  addRef(ref);
+  openChat(true);
+  if (skill) send(`/${skill}`);
+}
 menu.addEventListener('change', (e) => { if (e.target.type === 'date' && e.target.value) mute(menu.dataset.key, e.target.value); });
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-mute]');
@@ -605,7 +737,7 @@ function renderPlan() {
   const calErr = cal.error ? `<div class="err" style="margin-top:12px">Calendar: ${esc(cal.error)}</div>`
     : cal.errors ? `<div style="margin-top:12px;font-size:12px;color:var(--muted)">Calendar (${esc(cal.source)}) loaded; skipped ${Object.entries(cal.errors).map(([n, m]) => `${esc(n)}: ${esc(m)}`).join('; ')}</div>` : '';
   const agenda = p.agenda.length ? `<div class="agenda">${p.agenda.map((e) =>
-    `<div class="${p.now && e.start === p.now.start ? 'on' : ''}"><time>${hm(e.start)}</time><span>${esc(e.title)}</span></div>`).join('')}</div>` : '';
+    `<div class="${p.now && e.start === p.now.start ? 'on' : ''}${e.fyi ? ' fyi' : ''}"${e.fyi ? ' title="On a shared calendar, added by someone else: shown, but doesn\'t take your time"' : ''}><time>${hm(e.start)}</time><span>${esc(e.title)}${e.calendar ? ` <small>· ${esc(e.calendar)}</small>` : ''}</span></div>`).join('')}</div>` : '';
   const todo = (p.suggestions.length ? `<ol class="todo">${p.suggestions.map((s) => `<li>
       <div><a class="t" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a><div class="d">${esc(s.detail)}</div></div>
       <span class="m">~${dur(s.minutes)}</span>
@@ -617,48 +749,57 @@ function renderPlan() {
 
 function renderKpis() {
   const g = V.g, j = V.j, jm = V.jm, sl = V.sl;
-  const val = (src, fn) => (!src ? '<span class="sk" style="display:block;width:40px;height:22px;margin:3px 0"></span>' : src.error ? '–' : fn(src));
   const mine = (g?.myPrs || []);
   const needs = mine.filter((p) => p.status.owner === 'me' && !p.draft).length;
   const mentionCount = (g?.mentions?.length || 0) + (jm?.tickets?.length || 0) + (sl?.mentions?.length || 0);
-  // Each number jumps to the panel (and group) it counts.
-  const kpi = (v, label, to, alert) => `<a class="kpi${alert ? ' alert' : ''}" href="#${to}" data-jump="${to}"><b>${v}</b><span>${label}</span></a>`;
+  // One quiet line; counts that need you are highlighted, and each jumps to its list.
+  const item = (src, n, one, many, to, { hot, bad } = {}) => !src || src.error ? ''
+    : `<a class="${hot && n ? 'hot' : ''}${bad && n ? ' bad' : ''}" href="#${to}" data-jump="${to}"><b>${n}</b>${n === 1 ? one : many}</a>`;
   $('#kpis').innerHTML =
-    kpi(val(g, (x) => x.reviewRequested.length), 'Reviews waiting on you', 'c-review') +
-    kpi(val(g, () => needs), 'Your PRs need action', 'g-prs-me', needs > 0 && mine.some((p) => p.status.tone === 'bad')) +
-    kpi(val(g, () => mine.filter((p) => p.status.owner === 'others').length), 'Waiting on others', 'g-prs-others') +
-    kpi(g && jm ? mentionCount : val(null), 'Recent mentions', 'c-mentions') +
-    kpi(val(j, (x) => x.assigned.filter((i) => i.statusCategory === 'indeterminate').length), 'Jira in progress', 'g-left-indeterminate') +
-    kpi(val(j, (x) => x.assigned.length), 'Jira open', 'c-left');
+    item(g, g?.reviewRequested?.length || 0, 'review for you', 'reviews for you', 'c-review', { hot: true }) +
+    item(g, needs, 'PR on your move', 'PRs on your move', 'c-prs', { hot: true, bad: mine.some((p) => p.status.owner === 'me' && p.status.tone === 'bad') }) +
+    item(g && jm ? g : null, mentionCount, 'mention', 'mentions', 'c-mentions', { hot: true }) +
+    item(g, mine.filter((p) => p.status.owner === 'others').length, 'PR waiting on others', 'PRs waiting on others', 'c-waiting') +
+    item(j, (j?.assigned || []).filter((i) => i.statusCategory === 'indeterminate').length, 'ticket in progress', 'tickets in progress', 'g-left-indeterminate') +
+    item(j, j?.assigned?.length || 0, 'open ticket', 'open tickets', 'c-left');
 }
 
 function renderReview() {
   const g = V.g, el = $('#c-review');
-  if (!g) return card(el, 'Needs your review', null, skeleton());
-  if (g.error) return card(el, 'Needs your review', null, `<div class="err">${esc(g.error)}</div>`);
+  if (!g) return card(el, 'Reviews for you', null, skeleton());
+  if (g.error) return card(el, 'Reviews for you', null, `<div class="err">${esc(g.error)}</div>`);
   const list = [...g.reviewRequested].sort((a, b) => (b.rerequested - a.rerequested) || Date.parse(a.requestedAt) - Date.parse(b.requestedAt));
-  card(el, 'Needs your review', list.length, rows('review', list, (p) => row({
+  if (!list.length) return card(el, 'Reviews for you', 0, '<div class="empty">✓ No reviews waiting</div>');
+  card(el, 'Reviews for you', list.length, rows('review', list, (p) => row({
     url: p.url, stamp: p.stamp, title: p.title, pr: prRef(p),
-    badge: p.rerequested ? 'Re-review' : p.draft ? 'Draft' : 'Review', tone: p.rerequested ? 'amber' : p.draft ? 'gray' : 'blue',
+    badge: p.rerequested ? 'Re-review' : p.draft ? 'Draft' : null, tone: p.rerequested ? 'amber' : 'gray',
     meta: `${prRef(p)} · ${p.author} · requested ${ago(p.requestedAt)}${p.viaTeam ? ' via team' : ''} · +${p.size.additions} −${p.size.deletions}`,
   })));
 }
 
-function renderPrs() {
-  const g = V.g, el = $('#c-prs');
-  if (!g) return card(el, 'Your pull requests', null, skeleton());
-  if (g.error) return card(el, 'Your pull requests', null, `<div class="err">${esc(g.error)}</div>`);
-  const item = (p) => row({
+function prItem(p) {
+  return row({
     url: p.url, stamp: p.stamp, title: p.title, pr: prRef(p), badge: p.status.label, tone: toneOf[p.status.tone],
     meta: [prRef(p), p.approvals.length && `approved by ${p.approvals.join(', ')}`,
       p.changesRequested.length && `changes from ${p.changesRequested.join(', ')}`,
       p.pendingReviewers.length && `waiting on ${p.pendingReviewers.join(', ')}`, `updated ${ago(p.updatedAt)}`].filter(Boolean).join(' · '),
   });
-  const body = [['me', 'Your move'], ['others', 'Waiting on others']].map(([owner, label]) => {
-    const group = g.myPrs.filter((p) => p.status.owner === owner);
-    return group.length ? `<div class="group" id="g-prs-${owner}">${label}</div>${rows(`prs-${owner}`, group, item, 6)}` : '';
-  }).join('') || '<div class="empty">No open pull requests.</div>';
-  card(el, 'Your pull requests', g.myPrs.length, body);
+}
+
+function renderPrs() {
+  const g = V.g, el = $('#c-prs');
+  if (!g) return card(el, 'Your PRs', null, skeleton());
+  if (g.error) return card(el, 'Your PRs', null, `<div class="err">${esc(g.error)}</div>`);
+  const mine = g.myPrs.filter((p) => p.status.owner === 'me');
+  card(el, 'Your PRs', mine.length, mine.length ? rows('prs-me', mine, prItem, 6) : '<div class="empty">✓ Nothing on your move</div>');
+}
+
+function renderWaiting() {
+  const g = V.g, el = $('#c-waiting');
+  if (!g) return card(el, 'Waiting on others', null, skeleton(2));
+  if (g.error) return card(el, 'Waiting on others', null, '');
+  const list = g.myPrs.filter((p) => p.status.owner === 'others');
+  card(el, 'Waiting on others', list.length, list.length ? rows('prs-others', list, prItem, 4) : '<div class="empty">None of your PRs are waiting.</div>');
 }
 
 function renderMentions() {
@@ -668,38 +809,38 @@ function renderMentions() {
       pr: m.kind === 'PR' ? prRef(m) : null, badge: 'GitHub', tone: 'gray', meta: `${prRef(m)} · ${m.kind} · updated ${ago(m.updatedAt)}` }) })),
     // One row per ticket; dismissing it hides the ticket until someone mentions you there again.
     ...(jm?.tickets || []).map((t) => ({ at: t.at, html: () => row({ url: t.url, stamp: t.stamp, dismissKey: t.dismissKey,
-      title: `${t.key} · ${t.summary}`, issue: t.key, badge: 'Jira', tone: 'blue', quote: t.excerpt,
+      title: `${t.key} · ${t.summary}`, issue: t.key, badge: 'Jira', tone: 'gray', quote: t.excerpt,
       meta: [t.people.join(', '), t.count > 1 && `${t.count} mentions`, `latest ${ago(t.at)}`, t.status].filter(Boolean).join(' · ') }) })),
     ...(sl?.mentions || []).map((m) => ({ at: m.at, html: () => row({ url: m.url, stamp: m.stamp, title: `${m.by} in ${m.channel}`,
-      badge: 'Slack', tone: 'amber', meta: ago(m.at), quote: m.excerpt }) })),
+      badge: 'Slack', tone: 'gray', meta: ago(m.at), quote: m.excerpt }) })),
   ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
   const errs = [g?.error && `GitHub: ${g.error}`, jm?.error && `Jira: ${jm.error}`, sl?.error && `Slack: ${sl.error}`].filter(Boolean);
   const loading = !g || !jm || !sl;
   card(el, 'Mentions', loading && !all.length ? null : all.length,
     (errs.length ? `<div class="err">${esc(errs.join(' · '))}</div>` : '') +
-    (all.length ? rows('mentions', all, (m) => m.html()) : loading ? skeleton() : '<div class="empty">No recent mentions.</div>') +
+    (all.length ? rows('mentions', all, (m) => m.html(), 6) : loading ? skeleton() : '<div class="empty">✓ No new mentions</div>') +
     (loading && all.length ? skeleton(1) : ''));
 }
 
 function renderLeft() {
   const j = V.j, g = V.g, el = $('#c-left');
-  if (!j) return card(el, 'What you have left', null, skeleton(4));
+  if (!j) return card(el, 'Your tickets', null, skeleton(4));
   const item = (i) => row({ url: i.url, stamp: i.stamp, title: `${i.key} · ${i.summary}`, issue: i.key,
-    badge: i.status, tone: i.statusCategory === 'indeterminate' ? 'blue' : 'gray',
-    meta: [i.type, i.priority, i.due && `due ${i.due}`, i.updatedAt && `updated ${ago(i.updatedAt)}`].filter(Boolean).join(' · ') });
+    badge: null,
+    meta: [i.status, i.type, i.priority, i.due && `due ${i.due}`, i.updatedAt && `updated ${ago(i.updatedAt)}`].filter(Boolean).join(' · ') });
   const jira = j.error ? `<div class="err">Jira: ${esc(j.error)}</div>` : [['indeterminate', 'In progress'], ['new', 'To do']].map(([cat, label]) => {
     const group = j.assigned.filter((i) => (i.statusCategory || 'new') === cat);
-    return group.length ? `<div class="group" id="g-left-${cat}">${label}</div>${rows(`left-${cat}`, group, item, 6)}` : '';
+    return group.length ? `<div class="group" id="g-left-${cat}">${label}</div>${rows(`left-${cat}`, group, item, cat === 'new' ? 3 : 5)}` : '';
   }).join('') || '<div class="empty">Nothing assigned.</div>';
   const issues = g?.assigned || [];
   const gh = issues.length ? `<div class="group">GitHub issues</div>${rows('left-gh', issues, (i) => row({ url: i.url, stamp: i.stamp,
-    title: i.title, badge: 'Issue', tone: 'gray', meta: `${prRef(i)} · updated ${ago(i.updatedAt)}` }), 5)}` : '';
-  card(el, 'What you have left', (j.assigned?.length || 0) + issues.length, jira + gh);
+    title: i.title, meta: `${prRef(i)} · updated ${ago(i.updatedAt)}` }), 3)}` : '';
+  card(el, 'Your tickets', (j.assigned?.length || 0) + issues.length, jira + gh);
 }
 
 function renderToday() {
   view();
-  renderPlan(); renderKpis(); renderReview(); renderPrs(); renderMentions(); renderLeft();
+  renderPlan(); renderKpis(); renderReview(); renderPrs(); renderMentions(); renderWaiting(); renderLeft();
   $('#unhide').hidden = !hiddenCount;
   $('#unhide').textContent = `Show ${hiddenCount} hidden`;
 }
@@ -948,7 +1089,7 @@ function drawSessions() {
   const folder = (d) => (d || '').split('/').filter(Boolean).pop() || d || '';
   $('#hist-list').innerHTML = list.map((x) => `<button class="hs${x.id === chat.session ? ' cur' : ''}" data-sid="${esc(x.id)}" data-cwd="${esc(x.cwd || '')}">
       <b>${esc(x.title || 'Untitled session')}</b>
-      <small>${x.updatedAt ? esc(ago(x.updatedAt)) : ''}${x.cwd ? ` · ${esc(folder(x.cwd))}` : ''}</small>${x.working ? '<span class="badge work">working</span>' : x.open ? '<span class="badge" title="Open in a terminal or editor">open</span>' : ''}${x.here ? '<span class="badge">live here</span>' : ''}
+      <small>${x.updatedAt ? esc(ago(x.updatedAt)) : ''}${x.cwd ? ` · ${esc(folder(x.cwd))}` : ''}</small>${x.working ? '<span class="hbadge work">working</span>' : x.open ? '<span class="hbadge" title="Open in a terminal or editor">open</span>' : ''}${x.here ? '<span class="hbadge">live here</span>' : ''}
     </button>`).join('') || '<div class="chat-empty">No sessions match.</div>';
 }
 function showHistory(open = $('#chat-hist').hidden) {
@@ -1215,14 +1356,7 @@ $('#cp-skills').addEventListener('click', (e) => {
 
 document.addEventListener('click', (e) => {
   const ask = e.target.closest('[data-ask]');
-  if (ask) {
-    // Start a fresh chat with this PR or ticket attached, ready for your question.
-    if (!chat.session || chat.turns) newChat();
-    chat.refs = [];
-    addRef({ ...refFromUrl(ask.dataset.ask), title: ask.dataset.title });
-    openChat(true);
-    return;
-  }
+  if (ask) { e.stopPropagation(); return menu.hidden || menu.dataset.ask !== ask.dataset.ask ? openAskMenu(ask) : (menu.hidden = true); }
   const key = e.target.closest('.hide')?.dataset.key;
   if (key) { const b = e.target.closest('.hide'); dismissed[key] = b.dataset.stamp; dismiss({ key, stamp: b.dataset.stamp }); return; }
   const more = e.target.closest('.more')?.dataset.more;
@@ -1260,6 +1394,8 @@ getJson('/api/dismissed').then((d) => { dismissed = d.dismissed || {}; renderTod
 loadAll(false);
 route();
 setInterval(() => loadAll(false), REFRESH_MS);
+pollAttention();
+setInterval(pollAttention, 60_000);
 </script>
 </body>
 </html>

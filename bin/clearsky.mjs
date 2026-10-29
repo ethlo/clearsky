@@ -14,12 +14,13 @@ import { homedir } from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { eventsBetween } from '../lib/ics.mjs';
-import { edsCalendars, pickCalendars, edsCalendarText } from '../lib/eds.mjs';
+import { edsCalendars, pickCalendars, ownCalendars, edsCalendarText } from '../lib/eds.mjs';
 import { randomBytes } from 'node:crypto';
 import * as settings from '../lib/settings.mjs';
 import * as localState from '../lib/state.mjs';
 import * as copilot from '../lib/copilot.mjs';
 import { AcpAgent, chatEvent } from '../lib/acp.mjs';
+import { attentionItems, diffAttention, desktopNotify } from '../lib/notify.mjs';
 
 // ---------------------------------------------------------------- config
 
@@ -593,7 +594,13 @@ async function evolutionTexts() {
   if (!picked.length) return null;
   const synced = picked.filter((c) => c.cacheDb);
   if (!synced.length) throw new Error(`Evolution has ${picked.map((c) => c.name).join(', ')} but hasn't synced it yet; open GNOME Calendar once`);
-  return Promise.all(synced.map((c) => edsCalendarText(c.cacheDb)));
+  // Your own calendars block your time. A shared one (say the family calendar) only blocks
+  // for events you put there or were invited to; the rest just show.
+  const own = new Set(ownCalendars(all, email).map((c) => c.uid));
+  return Promise.all(synced.map(async (c) => ({
+    text: await edsCalendarText(c.cacheDb), name: c.name,
+    shared: !own.has(c.uid) && c.name.toLowerCase() !== c.account.toLowerCase(),
+  })));
 }
 
 // Reads the iCal link and GNOME Online Accounts side by side and merges them, so one
@@ -602,7 +609,7 @@ async function fetchCalendar() {
   const { icsUrl, email } = config.calendar;
   const tries = [];
   const urls = (icsUrl || '').split(/\s+/).filter(Boolean);
-  urls.forEach((url, i) => tries.push([urls.length > 1 ? `iCal link ${i + 1}` : 'iCal link', icsText(url).then((t) => [t])]));
+  urls.forEach((url, i) => tries.push([urls.length > 1 ? `iCal link ${i + 1}` : 'iCal link', icsText(url).then((text) => [{ text }])]));
   tries.push(['GNOME Online Accounts', evolutionTexts()]);
   const results = await Promise.all(tries.map(([name, p]) => p.then((texts) => ({ name, texts }), (e) => ({ name, error: e.message }))));
   const used = results.filter((r) => r.texts);
@@ -614,9 +621,19 @@ async function fetchCalendar() {
   }
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const seen = new Set();
-  const events = used.flatMap((r) => r.texts).flatMap((t) => eventsBetween(t, today.getTime(), today.getTime() + 2 * 864e5, email))
-    .filter((e) => !e.declined && !seen.has(`${e.uid}@${e.start}`) && seen.add(`${e.uid}@${e.start}`))
-    .map(({ declined, ...e }) => e)
+  // All your addresses: the work one and the accounts of the calendars you picked.
+  const me = [email, ...pickCalendars(edsCalendars(), { wanted: config.calendar.evolution, email }).map((c) => c.account),
+    ...(process.env.CALENDAR_MY_EMAILS || '').split(/[\s,]+/)].filter((m) => /@/.test(m || ''));
+  // Your name in a shared event's title also makes it yours (say "Dentist (Morten)").
+  const names = (process.env.CALENDAR_MY_NAMES || '').split(',').map((n) => n.trim().toLowerCase()).filter(Boolean);
+  const events = used.flatMap((r) => r.texts).flatMap((c) => eventsBetween(c.text, today.getTime(), today.getTime() + 2 * 864e5, me)
+    .map((e) => ({ ...e, calendar: c.shared ? c.name : undefined,
+      fyi: !!c.shared && !e.withMe && !names.some((n) => e.title.toLowerCase().includes(n)) })))
+    // The same event on your own calendar and a shared one: keep your copy, which blocks time.
+    .sort((a, b) => a.fyi - b.fyi)
+    .filter((e) => !e.declined && !seen.has(`${e.uid}@${e.start}`) && !seen.has(`${e.title}@${e.start}`)
+      && seen.add(`${e.uid}@${e.start}`) && seen.add(`${e.title}@${e.start}`))
+    .map(({ declined, withMe, organizer, ...e }) => e)
     .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
   const sources = used.map((r) => r.name);
   return { source: sources.join(' + '), sources, ...(Object.keys(errors).length && { errors }), events };
@@ -641,8 +658,10 @@ function reviewMinutes(p) {
 export function planNow(d, now = Date.now(), dismissedItems = localState.dismissed(stateFile), mutedItems = localState.muted(stateFile, now),
   doneAt = localState.doneAt(stateFile)) {
   const g = d.github || {}, j = d.jira || {}, s = d.slack || {}, cal = d.calendar || {};
-  const timed = (cal.events || []).filter((e) => !e.allDay && !e.transparent)
+  const shown = (cal.events || []).filter((e) => !e.allDay && !e.transparent)
     .map((e) => ({ ...e, s: Date.parse(e.start), e: Date.parse(e.end) }));
+  // Someone else's events on a shared calendar show in the agenda but don't take your time.
+  const timed = shown.filter((e) => !e.fyi);
   // The daily stand-up counts as a meeting even when the calendar doesn't have it (or isn't set up).
   const su = nextStandup(new Date(now));
   if (sameDay(su, new Date(now)) && !timed.some((e) => /stand-?\s?up|daily/i.test(e.title) && Math.abs(e.s - su) < 30 * 6e4)) {
@@ -710,7 +729,8 @@ export function planNow(d, now = Date.now(), dismissedItems = localState.dismiss
     afterHours: now >= workdayEnd,
     muted: mutedList,
     done: doneList,
-    agenda: timed.filter((e) => e.e > now && e.s < atLocalTime(now, '23:59')).map(strip),
+    agenda: [...timed, ...shown.filter((e) => e.fyi)].sort((a, b) => a.s - b.s)
+      .filter((e) => e.e > now && e.s < atLocalTime(now, '23:59')).map(strip),
     suggestions,
   };
 }
@@ -1257,6 +1277,50 @@ function localToken(file) {
   return t;
 }
 
+// ---------------------------------------------------------------- notifications
+
+const ATTENTION_SOURCES = ['github', 'jiraMentions', 'slack'];
+const poller = { lastPoll: null, notifier: null, timer: null };
+
+// Desktop banners come from notify-send when it's there; otherwise the open page shows them.
+function hasNotifySend() {
+  if (process.env.CLEARSKY_NOTIFY === 'off') return Promise.resolve('off');
+  if (process.env.CLEARSKY_NOTIFY === 'browser') return Promise.resolve('browser');
+  return execFileP(process.env.NOTIFY_SEND_BIN || 'notify-send', ['--version'], { timeout: 5000 }).then(() => 'desktop', () => 'browser');
+}
+
+// Banners only during working hours on workdays (07:00 until two hours after the workday ends).
+function notifyNow(now = new Date()) {
+  const end = atLocalTime(now, config.workdayEnd);
+  return isWorkday(now) && now.getHours() >= 7 && +now < +end + 2 * 36e5;
+}
+
+export async function pollAttention(force = true) {
+  const data = Object.fromEntries(await Promise.all(ATTENTION_SOURCES.map(async (n) => [n, await source(n, force)])));
+  const items = attentionItems(data);
+  const before = localState.seen(stateFile);
+  const { seen, fresh } = diffAttention(items, before, {
+    dismissed: localState.dismissed(stateFile), muted: localState.muted(stateFile), first: !Object.keys(before).length,
+  });
+  if (fresh.length || Object.keys(seen).length !== Object.keys(before).length) localState.setSeen(stateFile, seen);
+  poller.lastPoll = new Date().toISOString();
+  if (fresh.length && poller.notifier === 'desktop' && notifyNow()) {
+    const bin = process.env.NOTIFY_SEND_BIN || 'notify-send';
+    if (fresh.length > 4) desktopNotify({ title: `${fresh.length} new things need you`, body: fresh.slice(0, 4).map((x) => x.title).join('\n'), url: `http://127.0.0.1:${config.port}/` }, { bin });
+    else for (const it of fresh) desktopNotify(it, { bin });
+  }
+  return { items, seen, fresh };
+}
+
+function startPolling() {
+  const every = Math.max(1, Number(process.env.CLEARSKY_POLL_MINUTES) || 3) * 6e4;
+  hasNotifySend().then((n) => { poller.notifier = n; });
+  const tick = () => pollAttention(true).catch((e) => console.error(`clearsky: poll failed: ${e.message}`));
+  setTimeout(tick, 2000).unref?.();
+  poller.timer = setInterval(tick, every);
+  poller.timer.unref?.();
+}
+
 function serve() {
   // Every state-changing request must carry this token and come from this origin, so other
   // websites open in the browser can't change settings or start logins. It's kept across
@@ -1368,6 +1432,13 @@ function serve() {
         return json(res, 200, { ...data, fetchedAt: new Date(sourceCache.get(src)?.at || Date.now()).toISOString() });
       }
       if (url.pathname === '/favicon.ico') { res.writeHead(204); return res.end(); }
+      // What needs you, with when each first showed up, so the page can mark what's new.
+      if (url.pathname === '/api/attention') {
+        const data = Object.fromEntries(await Promise.all(ATTENTION_SOURCES.map(async (n) => [n, await source(n, false)])));
+        const seen = localState.seen(stateFile);
+        return json(res, 200, { lastPoll: poller.lastPoll, notifier: poller.notifier,
+          items: attentionItems(data).map((it) => ({ ...it, at: seen[it.key]?.stamp === String(it.stamp ?? '') ? seen[it.key].at : null })) });
+      }
       if (url.pathname === '/api/copilot') return json(res, 200, { ...await copilotInfo(url.searchParams.has('refresh')), commands: copilotCommands });
       if (url.pathname === '/api/copilot/sessions') {
         const info = await copilotInfo();
@@ -1409,6 +1480,7 @@ function serve() {
     }
   }).listen(config.port, '127.0.0.1', () => {
     console.log(`clearsky: http://127.0.0.1:${config.port}  (settings and logins: http://127.0.0.1:${config.port}/settings)`);
+    if (process.env.CLEARSKY_POLL_MINUTES !== '0') startPolling();
   });
 }
 
