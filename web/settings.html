@@ -75,6 +75,12 @@
 
   <section>
     <h2>Google Calendar <span class="state" id="cal-state"></span></h2>
+    <p id="cal-detail"></p>
+    <p><b>Option A, no new login:</b> add your work Google account in your desktop's <b>Settings → Online Accounts → Google</b>, with Calendar switched on. Enter your work email below and save. Clearsky reads the calendar GNOME syncs.</p>
+    <label for="CALENDAR_EMAIL">Your work calendar email</label>
+    <input id="CALENDAR_EMAIL" data-key="CALENDAR_EMAIL" type="email" placeholder="you@company.com">
+    <div class="row"><button class="save" data-keys="CALENDAR_EMAIL">Save</button><span class="msg"></span></div>
+    <p style="margin-top:14px"><b>Option B, iCal link</b> (only if your admin allows it):</p>
     <ol>
       <li>Open <a href="https://calendar.google.com/calendar/r/settings" target="_blank" rel="noopener">Google Calendar settings</a>.</li>
       <li>Under <b>Settings for my calendars</b>, click your calendar, then <b>Integrate calendar</b>.</li>
@@ -82,9 +88,8 @@
     </ol>
     <label for="GOOGLE_CALENDAR_ICS">Secret address in iCal format</label>
     <input id="GOOGLE_CALENDAR_ICS" data-key="GOOGLE_CALENDAR_ICS" type="password" autocomplete="off" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics">
-    <label for="CALENDAR_EMAIL">Your calendar email (to skip meetings you declined)</label>
-    <input id="CALENDAR_EMAIL" data-key="CALENDAR_EMAIL" type="email" placeholder="you@company.com">
-    <div class="row"><button class="save" data-keys="GOOGLE_CALENDAR_ICS,CALENDAR_EMAIL">Save</button><span class="msg"></span></div>
+    <div class="row"><button class="save" data-keys="GOOGLE_CALENDAR_ICS">Save</button>
+      <button class="secondary" id="cal-remove" hidden>Remove link</button><span class="msg"></span></div>
   </section>
 
   <section>
@@ -163,7 +168,13 @@ function render(s) {
   $('#jira-login').textContent = j.cli === 'logged-in' ? 'Log in again' : 'Log in to Atlassian';
   $('#jira-login').className = j.cli === 'logged-in' ? 'secondary' : '';
 
-  state($('#cal-state'), !!s.calendar.url, s.calendar.url ? 'connected' : 'not connected');
+  const evo = s.calendar.evolution || [];
+  const evoOk = evo.some((c) => c.synced);
+  state($('#cal-state'), !!s.calendar.url || evoOk, s.calendar.url ? 'iCal link' : evoOk ? 'via GNOME' : 'not connected');
+  $('#cal-detail').textContent = s.calendar.url ? 'Using an iCal link. Remove it to use GNOME Online Accounts instead.'
+    : evo.length ? `Found in GNOME Online Accounts: ${evo.map((c) => `${c.name}${c.synced ? '' : ' (not synced yet; open GNOME Calendar once)'}`).join(', ')}.`
+    : s.calendar.email ? `No calendar for ${s.calendar.email} in GNOME Online Accounts yet.` : '';
+  $('#cal-remove').hidden = !s.calendar.url;
   $('#GOOGLE_CALENDAR_ICS').placeholder = s.calendar.url ? `${s.calendar.url}; paste a new one to replace` : 'https://calendar.google.com/calendar/ical/…/basic.ics';
   $('#CALENDAR_EMAIL').value = s.calendar.email || '';
 
@@ -199,6 +210,12 @@ document.querySelectorAll('.save').forEach((btn) => btn.addEventListener('click'
     btn.disabled = false;
   }
 }));
+
+$('#cal-remove').addEventListener('click', async () => {
+  const msg = $('#cal-remove').nextElementSibling;
+  try { render(await post('/api/settings', { GOOGLE_CALENDAR_ICS: '' })); msg.textContent = 'Removed.'; msg.className = 'msg on'; }
+  catch (e) { msg.textContent = e.message; msg.className = 'msg bad'; }
+});
 
 $('#gh-login').addEventListener('click', async () => {
   const msg = $('#gh-msg');

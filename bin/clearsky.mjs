@@ -14,6 +14,7 @@ import { homedir } from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { eventsBetween } from '../lib/ics.mjs';
+import { edsCalendars, pickCalendars, edsCalendarText } from '../lib/eds.mjs';
 import { randomBytes } from 'node:crypto';
 import * as settings from '../lib/settings.mjs';
 
@@ -73,7 +74,8 @@ const buildConfig = (env = process.env) => ({
   },
   calendar: {
     icsUrl: env.CALENDAR_ICS_URL || env.GOOGLE_CALENDAR_ICS, // optional; Google Calendar "secret address in iCal format"
-    email: env.CALENDAR_EMAIL, // optional; used to drop events you declined
+    email: env.CALENDAR_EMAIL, // used to drop events you declined, and to find your Evolution calendar
+    evolution: env.EVOLUTION_CALENDARS, // optional; Evolution calendar names or uids to read
   },
   workdayEnd: env.CLEARSKY_WORKDAY_END || '17:00',
   standupTime: env.CLEARSKY_STANDUP_TIME || '09:45', // daily stand-up (local time)
@@ -490,20 +492,46 @@ async function fetchSlack() {
 
 // ---------------------------------------------------------------- Calendar
 
-async function fetchCalendar() {
-  const { icsUrl, email } = config.calendar;
-  if (!icsUrl) return { disabled: true };
-  const res = await fetch(icsUrl);
+async function icsText(url) {
+  const res = await fetch(url);
   if (!res.ok) throw new Error(`calendar feed returned ${res.status} ${res.statusText}`);
   const text = await res.text();
   if (!text.includes('BEGIN:VCALENDAR')) {
     throw new Error('the calendar link returned a web page, not an iCal feed; in Settings, paste the "Secret address in iCal format" (ends in basic.ics)');
   }
+  return text;
+}
+
+// Calendars synced by GNOME Online Accounts / Evolution, matched by CALENDAR_EMAIL
+// or named in EVOLUTION_CALENDARS.
+async function evolutionTexts() {
+  const { email, evolution } = config.calendar;
+  const all = edsCalendars();
+  const picked = pickCalendars(all, { wanted: evolution, email });
+  if (!picked.length) return null;
+  const synced = picked.filter((c) => c.cacheDb);
+  if (!synced.length) throw new Error(`Evolution has ${picked.map((c) => c.name).join(', ')} but hasn't synced it yet; open GNOME Calendar once`);
+  return Promise.all(synced.map((c) => edsCalendarText(c.cacheDb)));
+}
+
+async function fetchCalendar() {
+  const { icsUrl, email } = config.calendar;
+  let texts, source;
+  if (icsUrl) {
+    texts = [await icsText(icsUrl)];
+    source = 'ical link';
+  } else {
+    texts = await evolutionTexts();
+    source = 'GNOME Online Accounts';
+  }
+  if (!texts) return { disabled: true };
   const today = new Date(); today.setHours(0, 0, 0, 0);
-  const events = eventsBetween(text, today.getTime(), today.getTime() + 2 * 864e5, email)
-    .filter((e) => !e.declined)
-    .map(({ declined, ...e }) => e);
-  return { events };
+  const seen = new Set();
+  const events = texts.flatMap((t) => eventsBetween(t, today.getTime(), today.getTime() + 2 * 864e5, email))
+    .filter((e) => !e.declined && !seen.has(`${e.uid}@${e.start}`) && seen.add(`${e.uid}@${e.start}`))
+    .map(({ declined, ...e }) => e)
+    .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+  return { source, events };
 }
 
 // ---------------------------------------------------------------- Now / Next

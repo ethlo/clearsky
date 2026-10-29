@@ -27,7 +27,9 @@ Tokens:
 
 - **GitHub:** nothing, if you're logged in with the GitHub CLI (`gh auth login`); Clearsky then uses `gh auth token`. Otherwise a fine-grained token with read access to Pull requests, Issues, Contents and Metadata on your work org. A classic token with `repo` scope also works. If your org uses SSO, authorize the token for it.
 - **Jira:** no token in Clearsky. All Jira calls go through `acli`, so it uses whatever account `acli jira auth` is logged in as.
-- **Google Calendar (optional):** in Google Calendar, open Settings, pick your calendar, then **Integrate calendar**, and copy **Secret address in iCal format** into `CALENDAR_ICS_URL`. Set `CALENDAR_EMAIL` too, so meetings you declined are skipped. If the secret address is missing, your Workspace admin has turned it off.
+- **Google Calendar (optional), either way:**
+  - **GNOME Online Accounts:** add your work Google account under Settings → Online Accounts with Calendar switched on, and set `CALENDAR_EMAIL`. Clearsky reads the calendar Evolution syncs locally, from its SQLite cache via `node:sqlite`, so it needs no login of its own. Use `EVOLUTION_CALENDARS` to pick other calendars by name.
+  - **iCal link:** in Google Calendar, open Settings, pick your calendar, then **Integrate calendar**, and copy **Secret address in iCal format** into `GOOGLE_CALENDAR_ICS`. Workspace admins often turn this off.
 - **Slack (optional):** a user token, see below. Without `SLACK_TOKEN` the Slack part is skipped.
 
 ### Slack token
