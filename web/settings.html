@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clearsky settings</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --text: #1d2330; --muted: #677085; --line: #e3e6ec;
+    --bad: #c2362b; --good: #1f7a3d; --accent: #2f5bd3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #12151b; --card: #1a1e26; --text: #e6e9ef; --muted: #8d95a8; --line: #2a303b;
+      --bad: #ff7a6e; --good: #5bd08a; --accent: #8fa7ff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: baseline; gap: 12px; padding: 20px 24px 8px; flex-wrap: wrap; }
+  h1 { font-size: 20px; margin: 0; }
+  header a { color: var(--accent); }
+  .meta { color: var(--muted); font-size: 13px; }
+  main { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; padding: 8px 24px 32px; max-width: 1200px; }
+  @media (max-width: 520px) { main { grid-template-columns: 1fr; padding: 8px 12px 24px; } header { padding: 16px 12px 8px; } }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
+  h2 { font-size: 15px; margin: 0 0 4px; display: flex; gap: 8px; align-items: center; }
+  .state { font-size: 12px; font-weight: 600; border: 1px solid currentColor; border-radius: 99px; padding: 0 8px; }
+  .on { color: var(--good); } .off { color: var(--muted); } .bad { color: var(--bad); }
+  p { margin: 6px 0; color: var(--muted); }
+  ol { margin: 6px 0; padding-left: 20px; color: var(--muted); }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 3px; }
+  input { width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 8px; }
+  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+  button, .btn { font: inherit; color: #fff; background: var(--accent); border: 0; border-radius: 6px; padding: 6px 12px;
+    cursor: pointer; text-decoration: none; display: inline-block; }
+  button.secondary { color: var(--accent); background: none; border: 1px solid var(--line); }
+  button:disabled { opacity: .6; cursor: default; }
+  .msg { font-size: 13px; }
+  .code { font: 600 20px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Settings</h1>
+  <a href="/">← Back to dashboard</a>
+  <span class="meta" id="file"></span>
+</header>
+<main>
+  <section>
+    <h2>GitHub <span class="state" id="gh-state"></span></h2>
+    <p id="gh-detail"></p>
+    <div class="row">
+      <button id="gh-login">Log in with GitHub</button>
+      <span class="msg" id="gh-msg"></span>
+    </div>
+    <label for="GITHUB_ORGS">Work organizations (comma-separated; empty means all)</label>
+    <input id="GITHUB_ORGS" data-key="GITHUB_ORGS" placeholder="kezzler-eng">
+    <label for="GITHUB_TOKEN">Or a personal access token instead of the gh login (optional)</label>
+    <input id="GITHUB_TOKEN" data-key="GITHUB_TOKEN" type="password" autocomplete="off" placeholder="leave empty to keep">
+    <div class="row"><button class="save" data-keys="GITHUB_ORGS,GITHUB_TOKEN">Save</button><span class="msg"></span></div>
+  </section>
+
+  <section>
+    <h2>Jira <span class="state" id="jira-state"></span></h2>
+    <p id="jira-detail"></p>
+    <div class="row">
+      <button id="jira-login">Log in to Atlassian</button>
+      <span class="msg" id="jira-msg"></span>
+    </div>
+    <p>This runs <code>acli jira auth login --web</code>, which opens the Atlassian login in your browser. Clearsky stores no Jira credentials.</p>
+  </section>
+
+  <section>
+    <h2>Google Calendar <span class="state" id="cal-state"></span></h2>
+    <ol>
+      <li>Open <a href="https://calendar.google.com/calendar/r/settings" target="_blank" rel="noopener">Google Calendar settings</a>.</li>
+      <li>Under <b>Settings for my calendars</b>, click your calendar, then <b>Integrate calendar</b>.</li>
+      <li>Copy <b>Secret address in iCal format</b> and paste it below.</li>
+    </ol>
+    <label for="GOOGLE_CALENDAR_ICS">Secret address in iCal format</label>
+    <input id="GOOGLE_CALENDAR_ICS" data-key="GOOGLE_CALENDAR_ICS" type="password" autocomplete="off" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics">
+    <label for="CALENDAR_EMAIL">Your calendar email (to skip meetings you declined)</label>
+    <input id="CALENDAR_EMAIL" data-key="CALENDAR_EMAIL" type="email" placeholder="you@company.com">
+    <div class="row"><button class="save" data-keys="GOOGLE_CALENDAR_ICS,CALENDAR_EMAIL">Save</button><span class="msg"></span></div>
+  </section>
+
+  <section>
+    <h2>Slack <span class="state" id="slack-state"></span></h2>
+    <ol>
+      <li><a id="slack-create" target="_blank" rel="noopener">Create the Clearsky Slack app</a> (pre-filled; pick your work workspace).</li>
+      <li>Click <b>Install to Workspace</b>. Your admins may need to approve it.</li>
+      <li>Under <b>OAuth &amp; Permissions</b>, copy the <b>User OAuth Token</b> (<code>xoxp-…</code>) and paste it below.</li>
+    </ol>
+    <label for="SLACK_TOKEN">User OAuth Token</label>
+    <input id="SLACK_TOKEN" data-key="SLACK_TOKEN" type="password" autocomplete="off" placeholder="xoxp-…">
+    <div class="row"><button class="save" data-keys="SLACK_TOKEN">Save</button><span class="msg"></span></div>
+  </section>
+
+  <section>
+    <h2>General</h2>
+    <label for="CLEARSKY_WORKDAY_END">Workday ends at (for Now / Next)</label>
+    <input id="CLEARSKY_WORKDAY_END" data-key="CLEARSKY_WORKDAY_END" placeholder="17:00">
+    <label for="CLEARSKY_MENTION_DAYS">Show mentions from the last … days</label>
+    <input id="CLEARSKY_MENTION_DAYS" data-key="CLEARSKY_MENTION_DAYS" inputmode="numeric" placeholder="14">
+    <div class="row"><button class="save" data-keys="CLEARSKY_WORKDAY_END,CLEARSKY_MENTION_DAYS">Save</button><span class="msg"></span></div>
+  </section>
+</main>
+
+<script>
+const CSRF = '__CSRF__';
+const SECRET = new Set(['GITHUB_TOKEN', 'GOOGLE_CALENDAR_ICS', 'SLACK_TOKEN']);
+const $ = (s) => document.querySelector(s);
+
+const manifest = {
+  display_information: { name: 'Clearsky', description: 'Shows Slack messages that mention you on your Clearsky dashboard.' },
+  oauth_config: { scopes: { user: ['search:read'] } },
+  settings: { org_deploy_enabled: false, socket_mode_enabled: false, token_rotation_enabled: false },
+};
+$('#slack-create').href = 'https://api.slack.com/apps?new_app=1&manifest_json=' + encodeURIComponent(JSON.stringify(manifest));
+
+async function post(path, body) {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Clearsky-Token': CSRF },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+function state(el, on, text) {
+  el.textContent = text;
+  el.className = `state ${on === true ? 'on' : on === 'bad' ? 'bad' : 'off'}`;
+}
+
+function render(s) {
+  $('#file').textContent = `Saved to ${s.file}`;
+  const gh = s.github;
+  state($('#gh-state'), gh.cli === 'logged-in' || !!gh.token, gh.token ? 'token' : gh.cli === 'logged-in' ? 'connected' : gh.cli === 'missing' ? 'gh missing' : 'not connected');
+  $('#gh-detail').textContent = gh.token ? `Using a personal access token ${gh.token}.`
+    : gh.cli === 'logged-in' ? `Using the GitHub CLI login${gh.user ? ` as ${gh.user}` : ''}.`
+    : gh.cli === 'missing' ? 'The GitHub CLI (gh) is not installed. Install it, or paste a token below.'
+    : 'Log in with the GitHub CLI, or paste a token below.';
+  $('#gh-login').hidden = gh.cli === 'missing';
+  $('#gh-login').textContent = gh.cli === 'logged-in' ? 'Log in again' : 'Log in with GitHub';
+  $('#gh-login').className = gh.cli === 'logged-in' ? 'secondary' : '';
+  $('#GITHUB_ORGS').value = gh.orgs || '';
+
+  const j = s.jira;
+  state($('#jira-state'), j.cli === 'logged-in' ? true : j.cli === 'missing' ? 'bad' : false,
+    j.cli === 'logged-in' ? 'connected' : j.cli === 'missing' ? 'acli missing' : 'not connected');
+  $('#jira-detail').textContent = j.cli === 'logged-in' ? `acli is logged in${j.site ? ` to ${j.site}` : ''}.`
+    : j.cli === 'missing' ? 'The Atlassian CLI (acli) is not installed.' : 'acli is not logged in.';
+  $('#jira-login').hidden = j.cli === 'missing';
+  $('#jira-login').textContent = j.cli === 'logged-in' ? 'Log in again' : 'Log in to Atlassian';
+  $('#jira-login').className = j.cli === 'logged-in' ? 'secondary' : '';
+
+  state($('#cal-state'), !!s.calendar.url, s.calendar.url ? 'connected' : 'not connected');
+  $('#GOOGLE_CALENDAR_ICS').placeholder = s.calendar.url ? `${s.calendar.url}; paste a new one to replace` : 'https://calendar.google.com/calendar/ical/…/basic.ics';
+  $('#CALENDAR_EMAIL').value = s.calendar.email || '';
+
+  state($('#slack-state'), !!s.slack.token, s.slack.token ? 'connected' : 'not connected');
+  $('#SLACK_TOKEN').placeholder = s.slack.token ? `${s.slack.token}; paste a new one to replace` : 'xoxp-…';
+
+  $('#CLEARSKY_WORKDAY_END').value = s.workdayEnd || '';
+  $('#CLEARSKY_MENTION_DAYS').value = s.mentionDays || '';
+}
+
+async function load() {
+  render(await (await fetch('/api/settings')).json());
+}
+
+document.querySelectorAll('.save').forEach((btn) => btn.addEventListener('click', async () => {
+  const msg = btn.nextElementSibling;
+  const body = {};
+  for (const key of btn.dataset.keys.split(',')) {
+    const v = document.querySelector(`[data-key="${key}"]`).value.trim();
+    if (SECRET.has(key) && !v) continue; // empty secret field means "keep the current one"
+    body[key] = v;
+  }
+  btn.disabled = true; msg.textContent = 'Saving…'; msg.className = 'msg';
+  try {
+    render(await post('/api/settings', body));
+    for (const key of Object.keys(body)) if (SECRET.has(key)) document.querySelector(`[data-key="${key}"]`).value = '';
+    msg.textContent = 'Saved.'; msg.className = 'msg on';
+  } catch (e) {
+    msg.textContent = e.message; msg.className = 'msg bad';
+  } finally {
+    btn.disabled = false;
+  }
+}));
+
+$('#gh-login').addEventListener('click', async () => {
+  const msg = $('#gh-msg');
+  msg.textContent = 'Starting…'; msg.className = 'msg';
+  try {
+    const { code, url } = await post('/api/login/github');
+    msg.innerHTML = `Enter <span class="code">${code}</span> at <a href="${url}" target="_blank" rel="noopener">${url}</a>, then reload this page.`;
+  } catch (e) {
+    msg.textContent = e.message; msg.className = 'msg bad';
+  }
+});
+
+$('#jira-login').addEventListener('click', async () => {
+  const msg = $('#jira-msg');
+  msg.textContent = 'Starting…'; msg.className = 'msg';
+  try {
+    const { url } = await post('/api/login/jira');
+    msg.innerHTML = url ? `Finish the login at <a href="${url}" target="_blank" rel="noopener">Atlassian</a>, then reload this page.`
+      : 'A browser window should open for the Atlassian login. Reload this page when done.';
+  } catch (e) {
+    msg.textContent = e.message; msg.className = 'msg bad';
+  }
+});
+
+load();
+</script>
+</body>
+</html>

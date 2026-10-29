@@ -14,6 +14,8 @@ import { homedir } from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { eventsBetween } from '../lib/ics.mjs';
+import { randomBytes } from 'node:crypto';
+import * as settings from '../lib/settings.mjs';
 
 // ---------------------------------------------------------------- config
 
@@ -29,14 +31,15 @@ function loadEnvFile(path) {
 }
 
 const here = dirname(fileURLToPath(import.meta.url));
+export const userEnvFile = join(homedir(), '.config', 'clearsky', '.env');
 loadEnvFile(join(process.cwd(), '.env'));
 loadEnvFile(join(here, '..', '.env'));
-loadEnvFile(join(homedir(), '.config', 'clearsky', '.env'));
+loadEnvFile(userEnvFile);
 
-const env = process.env;
 const list = (v) => (v || '').split(',').map((s) => s.trim()).filter(Boolean);
 
-const config = {
+// Built from the environment; rebuilt when settings are saved from the page.
+const buildConfig = (env = process.env) => ({
   days: Number(env.CLEARSKY_MENTION_DAYS || 14),
   cacheSeconds: Number(env.CLEARSKY_CACHE_SECONDS || 120),
   port: Number(env.CLEARSKY_PORT || 7777),
@@ -63,7 +66,8 @@ const config = {
     token: env.SLACK_TOKEN, // optional; user token (xoxp-) with search:read
     api: (env.SLACK_API_URL || 'https://slack.com/api').replace(/\/$/, ''),
   },
-};
+});
+const config = buildConfig();
 
 // ---------------------------------------------------------------- helpers
 
@@ -585,6 +589,128 @@ export async function collect() {
   };
 }
 
+// ---------------------------------------------------------------- Stand-up
+
+// Start of the previous workday (Friday when it's Monday).
+export function previousWorkday(now = new Date()) {
+  const d = new Date(now); d.setHours(0, 0, 0, 0);
+  do d.setDate(d.getDate() - 1); while (d.getDay() === 0 || d.getDay() === 6);
+  return d;
+}
+
+async function standupGitHub(since) {
+  config.github.token ||= await ghCliToken();
+  if (!config.github.token) return { error: 'GITHUB_TOKEN is not set and `gh auth token` gave nothing' };
+  const { viewer } = await gql('query { viewer { login } }');
+  const me = viewer.login;
+  const scope = `${config.github.orgs.map((o) => `org:${o}`).join(' ')} archived:false`;
+  const day = since.toISOString().slice(0, 10);
+  const data = await gql(
+    `query($mine: String!, $reviewed: String!, $me: String!, $from: DateTime!) {
+      mine: search(query: $mine, type: ISSUE, first: 50) { nodes { ... on PullRequest {
+        number title url state isDraft createdAt mergedAt repository { nameWithOwner } } } }
+      reviewed: search(query: $reviewed, type: ISSUE, first: 50) { nodes { ... on PullRequest {
+        number title url repository { nameWithOwner } author { login }
+        reviews(last: 20, author: $me) { nodes { state submittedAt } } } } }
+      viewer { contributionsCollection(from: $from) { commitContributionsByRepository(maxRepositories: 50) {
+        repository { nameWithOwner owner { login } } contributions { totalCount } } } }
+    }`,
+    {
+      mine: `is:pr author:${me} updated:>=${day} ${scope}`,
+      reviewed: `is:pr reviewed-by:${me} -author:${me} updated:>=${day} ${scope}`,
+      me,
+      from: since.toISOString(),
+    },
+  );
+  const after = (iso) => iso && Date.parse(iso) >= since.getTime();
+  const pr = (p) => ({ repo: p.repository.nameWithOwner, number: p.number, title: p.title, url: p.url });
+  const mine = data.mine.nodes.filter((p) => p?.number);
+  const orgs = config.github.orgs.map((o) => o.toLowerCase());
+  return {
+    merged: mine.filter((p) => after(p.mergedAt)).map(pr),
+    opened: mine.filter((p) => after(p.createdAt) && !after(p.mergedAt)).map((p) => ({ ...pr(p), draft: p.isDraft })),
+    reviewed: data.reviewed.nodes.filter((p) => p?.number).map((p) => {
+      const mineNow = p.reviews.nodes.filter((r) => after(r.submittedAt) && r.state !== 'PENDING');
+      return mineNow.length ? { ...pr(p), author: p.author?.login, verdict: mineNow.at(-1).state } : null;
+    }).filter(Boolean),
+    commits: data.viewer.contributionsCollection.commitContributionsByRepository
+      .filter((c) => !orgs.length || orgs.includes(c.repository.owner.login.toLowerCase()))
+      .map((c) => ({ repo: c.repository.nameWithOwner, count: c.contributions.totalCount })),
+  };
+}
+
+async function standupJira(since) {
+  const days = Math.max(1, Math.ceil((Date.now() - since.getTime()) / 864e5));
+  const fields = ['key', 'summary', 'status'];
+  let issues;
+  try {
+    issues = await jiraSearch(`issuekey IN updatedBy(currentUser(), "-${days}d") ORDER BY updated DESC`, fields, 50);
+  } catch {
+    // Not every site has updatedBy(); status changes are the next best signal.
+    issues = await jiraSearch(`status CHANGED BY currentUser() AFTER -${days}d ORDER BY updated DESC`, fields, 50);
+  }
+  const shaped = issues.map((i) => {
+    const f = fieldsOf(i);
+    return { key: i.key, summary: f.summary, url: browseUrl(i), status: nameOf(f.status), done: f.status?.statusCategory?.key === 'done' };
+  });
+  return { done: shaped.filter((i) => i.done), touched: shaped.filter((i) => !i.done) };
+}
+
+const verdictText = { APPROVED: 'approved', CHANGES_REQUESTED: 'requested changes', COMMENTED: 'commented', DISMISSED: 'dismissed' };
+
+export function standupText(s) {
+  const out = [];
+  const y = s.yesterday, t = s.today;
+  const line = (x) => out.push(`- ${x}`);
+  out.push(`*Yesterday* (since ${s.sinceLabel})`);
+  y.github.merged?.forEach((p) => line(`Merged ${p.repo}#${p.number}: ${p.title}`));
+  y.jira.done?.forEach((i) => line(`Finished ${i.key}: ${i.summary}`));
+  y.github.opened?.forEach((p) => line(`Opened ${p.draft ? 'draft ' : ''}${p.repo}#${p.number}: ${p.title}`));
+  y.github.reviewed?.forEach((p) => line(`Reviewed ${p.repo}#${p.number} by ${p.author} (${verdictText[p.verdict] || p.verdict})`));
+  y.jira.touched?.forEach((i) => line(`Worked on ${i.key}: ${i.summary} (${i.status})`));
+  const commits = (y.github.commits || []).filter((c) => c.count);
+  if (commits.length) line(`Commits: ${commits.map((c) => `${c.count} in ${c.repo.split('/')[1]}`).join(', ')}`);
+  if (out.length === 1) line('Nothing recorded on GitHub or Jira.');
+  out.push('', '*Today*');
+  const before = out.length;
+  t.inProgress.forEach((i) => line(`Continue ${i.key}: ${i.summary}`));
+  if (t.reviews.length) line(`Review ${t.reviews.map((p) => `${p.repo}#${p.number}`).join(', ')}`);
+  t.myPrs.forEach((p) => line(`${p.status.label}: ${p.repo}#${p.number} ${p.title}`));
+  if (t.meetings.length) line(`Meetings: ${t.meetings.map((e) => `${new Date(e.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ${e.title}`).join(', ')}`);
+  if (out.length === before) line('Pick up the next item from the queue.');
+  out.push('', '*Blockers*');
+  if (s.blockers.length) s.blockers.forEach((b) => line(b.text));
+  else line('None');
+  return out.join('\n');
+}
+
+export async function standup(work) {
+  const since = previousWorkday();
+  const [github, jira] = await Promise.all([settle(standupGitHub(since)), settle(standupJira(since))]);
+  const w = work || await collect();
+  const today = {
+    inProgress: (w.jira.assigned || []).filter((i) => i.statusCategory === 'indeterminate').slice(0, 5),
+    reviews: w.github.reviewRequested || [],
+    myPrs: (w.github.myPrs || []).filter((p) => p.status.owner === 'me' && !p.draft),
+    meetings: (w.plan?.agenda || []).filter((e) => new Date(e.start).toDateString() === new Date().toDateString()),
+  };
+  const days = (iso) => (Date.now() - Date.parse(iso)) / 864e5;
+  const blockers = (w.github.myPrs || [])
+    .filter((p) => p.status.owner === 'others' && p.status.label === 'Waiting for review' && days(p.updatedAt) >= 1)
+    .map((p) => ({ url: p.url, text: `${p.repo}#${p.number} has waited ${Math.floor(days(p.updatedAt))}d for review` +
+      (p.pendingReviewers.length ? ` (${p.pendingReviewers.join(', ')})` : '') }));
+  const s = {
+    generatedAt: new Date().toISOString(),
+    since: since.toISOString(),
+    sinceLabel: since.toLocaleDateString([], { weekday: 'long' }),
+    yesterday: { github, jira },
+    today,
+    blockers,
+  };
+  s.text = standupText(s);
+  return s;
+}
+
 // ---------------------------------------------------------------- Markdown
 
 function ago(iso) {
@@ -639,6 +765,7 @@ export function toMarkdown(d) {
 // ---------------------------------------------------------------- server
 
 let cache = { at: 0, data: null, pending: null };
+let standupCache = { at: 0, data: null };
 
 async function cached(force) {
   if (!force && cache.data && Date.now() - cache.at < config.cacheSeconds * 1000) return cache.data;
@@ -649,11 +776,65 @@ async function cached(force) {
   return cache.pending;
 }
 
+async function readJson(req) {
+  let body = '';
+  for await (const chunk of req) {
+    body += chunk;
+    if (body.length > 64 * 1024) throw new Error('request too large');
+  }
+  return body ? JSON.parse(body) : {};
+}
+
+function applySettings(values) {
+  for (const [k, v] of Object.entries(values)) {
+    if (v) process.env[k] = v;
+    else delete process.env[k];
+  }
+  Object.assign(config, buildConfig());
+  cache = { at: 0, data: null, pending: null };
+}
+
 function serve() {
   const page = readFileSync(join(here, '..', 'web', 'index.html'));
+  // Every state-changing request must carry this per-run token and come from this origin,
+  // so other websites open in the browser can't change settings or start logins.
+  const csrf = randomBytes(18).toString('hex');
+  const settingsPage = readFileSync(join(here, '..', 'web', 'settings.html'), 'utf8').replace('__CSRF__', csrf);
+  const origins = new Set([`http://127.0.0.1:${config.port}`, `http://localhost:${config.port}`]);
+  const json = (res, code, body) => {
+    res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.end(JSON.stringify(body));
+  };
+
   createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
     try {
+      if (req.method === 'POST') {
+        if (req.headers['x-clearsky-token'] !== csrf || (req.headers.origin && !origins.has(req.headers.origin))) {
+          return json(res, 403, { error: 'forbidden' });
+        }
+        if (url.pathname === '/api/settings') {
+          const values = settings.validate(await readJson(req));
+          settings.writeEnvFile(userEnvFile, values);
+          applySettings(values);
+          return json(res, 200, await settings.status(config, { path: userEnvFile }));
+        }
+        if (url.pathname === '/api/login/github') return json(res, 200, await settings.githubLogin());
+        if (url.pathname === '/api/login/jira') return json(res, 200, await settings.jiraLogin(config.jira.acli));
+        return json(res, 404, { error: 'not found' });
+      }
+      if (url.pathname === '/api/settings') return json(res, 200, await settings.status(config, { path: userEnvFile }));
+      if (url.pathname === '/settings') {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+        return res.end(settingsPage);
+      }
+      if (url.pathname === '/api/standup') {
+        const force = url.searchParams.has('refresh');
+        if (force || !standupCache.data || Date.now() - standupCache.at > config.cacheSeconds * 1000) {
+          standupCache = { at: Date.now(), data: await standup(await cached(force)) };
+        }
+        return json(res, 200, standupCache.data);
+      }
       if (url.pathname === '/api/work') {
         const data = await cached(url.searchParams.has('refresh'));
         res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -665,10 +846,10 @@ function serve() {
       }
       res.writeHead(404).end('Not found');
     } catch (e) {
-      res.writeHead(500, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: e.message }));
+      json(res, e instanceof SyntaxError || /^(unknown setting|.* must |the |workday)/.test(e.message) ? 400 : 500, { error: e.message });
     }
   }).listen(config.port, '127.0.0.1', () => {
-    console.log(`clearsky: http://127.0.0.1:${config.port}`);
+    console.log(`clearsky: http://127.0.0.1:${config.port}  (settings and logins: http://127.0.0.1:${config.port}/settings)`);
   });
 }
 
@@ -677,7 +858,10 @@ function serve() {
 if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
   const args = process.argv.slice(2);
   if (args.includes('-h') || args.includes('--help')) {
-    console.log('usage: clearsky [--json] | clearsky serve [--port N] | clearsky jira-debug');
+    console.log('usage: clearsky [--json] | clearsky standup [--json] | clearsky serve [--port N] | clearsky jira-debug');
+  } else if (args[0] === 'standup') {
+    const s = await standup();
+    console.log(args.includes('--json') ? JSON.stringify(s, null, 2) : s.text);
   } else if (args[0] === 'jira-debug') {
     await jiraDebug();
   } else if (args[0] === 'serve') {

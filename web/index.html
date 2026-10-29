@@ -37,6 +37,15 @@
   .agenda span { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 1px 8px; }
   .agenda span.on { color: var(--accent); border-color: var(--accent); }
   @media (max-width: 520px) { .plan { margin: 8px 12px 4px; } }
+  nav { display: flex; gap: 4px; }
+  nav a { color: var(--muted); text-decoration: none; padding: 3px 10px; border-radius: 6px; }
+  nav a.active { color: var(--text); background: var(--card); border: 1px solid var(--line); }
+  nav a:hover { color: var(--accent); text-decoration: none; }
+  #standup { padding: 8px 24px 32px; max-width: 900px; }
+  #standup section { padding: 16px 20px; }
+  #standup pre { white-space: pre-wrap; font: 14px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; margin: 8px 0 0; }
+  #standup .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  @media (max-width: 520px) { #standup { padding: 8px 12px 24px; } }
   .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; padding: 8px 24px 16px; }
   .tile { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
   .tile b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; }
@@ -69,6 +78,7 @@
 <body>
 <header>
   <h1>Clearsky</h1>
+  <nav><a href="#" id="tab-dash">Dashboard</a><a href="#standup" id="tab-standup">Stand-up</a><a href="/settings">Settings</a></nav>
   <span class="meta" id="meta">Loading...</span>
   <button id="refresh">Refresh</button>
   <button id="unhide" hidden>Show hidden</button>
@@ -76,6 +86,16 @@
 <div class="plan" id="plan" hidden></div>
 <div class="tiles" id="tiles"></div>
 <main id="main"></main>
+<div id="standup" hidden>
+  <section>
+    <div class="row">
+      <h2 style="margin:0">Stand-up</h2>
+      <button id="copy">Copy</button>
+      <span class="meta" id="standup-meta"></span>
+    </div>
+    <pre id="standup-text">Loading...</pre>
+  </section>
+</div>
 
 <script>
 const REFRESH_MS = 5 * 60 * 1000;
@@ -235,9 +255,38 @@ document.addEventListener('click', (e) => {
   const key = e.target.closest('.hide')?.dataset.key;
   if (key) { hidden[key] = Date.now(); saveHidden(); if (last) render(last); }
 });
-$('#refresh').onclick = () => load(true);
+async function loadStandup(force) {
+  $('#standup-meta').textContent = 'Loading...';
+  try {
+    const res = await fetch(`/api/standup${force ? '?refresh=1' : ''}`);
+    const s = await res.json();
+    if (!res.ok) throw new Error(s.error || res.statusText);
+    $('#standup-text').textContent = s.text;
+    const errs = [s.yesterday.github.error && `GitHub: ${s.yesterday.github.error}`, s.yesterday.jira.error && `Jira: ${s.yesterday.jira.error}`].filter(Boolean);
+    $('#standup-meta').textContent = errs.length ? errs.join(' · ') : `Since ${s.sinceLabel} · updated ${new Date(s.generatedAt).toLocaleTimeString()}`;
+  } catch (e) {
+    $('#standup-meta').textContent = `Failed to load: ${e.message}`;
+  }
+}
+
+function route() {
+  const standup = location.hash === '#standup';
+  for (const id of ['#plan', '#tiles', '#main']) $(id).style.display = standup ? 'none' : '';
+  $('#standup').hidden = !standup;
+  $('#tab-dash').classList.toggle('active', !standup);
+  $('#tab-standup').classList.toggle('active', standup);
+  if (standup) loadStandup(false);
+}
+window.addEventListener('hashchange', route);
+$('#copy').onclick = async () => {
+  try { await navigator.clipboard.writeText($('#standup-text').textContent); $('#copy').textContent = 'Copied'; }
+  catch { $('#copy').textContent = 'Select and copy'; }
+  setTimeout(() => { $('#copy').textContent = 'Copy'; }, 1500);
+};
+$('#refresh').onclick = () => (location.hash === '#standup' ? loadStandup(true) : load(true));
 $('#unhide').onclick = () => { hidden = {}; saveHidden(); if (last) render(last); };
 load(false);
+route();
 setInterval(() => load(false), REFRESH_MS);
 </script>
 </body>

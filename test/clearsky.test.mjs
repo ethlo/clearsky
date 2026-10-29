@@ -33,6 +33,21 @@ before(async () => {
 
     if (req.url === '/graphql') {
       if (json.query.includes('viewer { login }')) return send({ data: { viewer: { login: 'me' } } });
+      if (json.query.includes('contributionsCollection')) return send({ data: {
+        mine: { nodes: [
+          { number: 5, title: 'Shipped thing', url: 'u5', state: 'MERGED', isDraft: false, createdAt: hoursAgo(72), mergedAt: hoursAgo(5), repository: { nameWithOwner: 'acme/api' } },
+          { number: 6, title: 'New thing', url: 'u6', state: 'OPEN', isDraft: true, createdAt: hoursAgo(4), mergedAt: null, repository: { nameWithOwner: 'acme/api' } },
+          { number: 7, title: 'Old open', url: 'u7', state: 'OPEN', isDraft: false, createdAt: hoursAgo(24 * 9), mergedAt: null, repository: { nameWithOwner: 'acme/api' } },
+        ] },
+        reviewed: { nodes: [
+          { number: 8, title: 'Their PR', url: 'u8', repository: { nameWithOwner: 'acme/web' }, author: { login: 'anna' }, reviews: { nodes: [{ state: 'APPROVED', submittedAt: hoursAgo(3) }] } },
+          { number: 9, title: 'Reviewed long ago', url: 'u9', repository: { nameWithOwner: 'acme/web' }, author: { login: 'bob' }, reviews: { nodes: [{ state: 'COMMENTED', submittedAt: hoursAgo(24 * 9) }] } },
+        ] },
+        viewer: { contributionsCollection: { commitContributionsByRepository: [
+          { repository: { nameWithOwner: 'acme/api', owner: { login: 'acme' } }, contributions: { totalCount: 4 } },
+          { repository: { nameWithOwner: 'me/dotfiles', owner: { login: 'me' } }, contributions: { totalCount: 9 } },
+        ] } },
+      } });
       return send({ data: {
         reviewRequested: { nodes: [
           pr({ number: 7, author: { login: 'anna' }, url: 'https://github.com/acme/api/pull/7',
@@ -121,6 +136,22 @@ test('collects GitHub, Jira and Slack into one view', async () => {
   assert.match(md, /## Needs my review \(1\)/);
   assert.match(md, /\*\*Changes requested\*\* \(your move\)/);
   assert.match(md, /## Slack mentions \(2\)/);
+});
+
+test('stand-up: yesterday from GitHub and Jira, today from the queue', async () => {
+  const { standup, previousWorkday } = await import('../bin/clearsky.mjs');
+  assert.equal(previousWorkday(new Date('2026-11-02T10:00:00')).getDay(), 5, 'Monday looks back to Friday');
+  const s = await standup();
+  assert.equal(s.yesterday.github.error, undefined);
+  assert.deepEqual(s.yesterday.github.merged.map((p) => p.number), [5]);
+  assert.deepEqual(s.yesterday.github.opened.map((p) => p.number), [6]);
+  assert.deepEqual(s.yesterday.github.reviewed.map((p) => [p.number, p.verdict]), [[8, 'APPROVED']]);
+  assert.deepEqual(s.yesterday.github.commits, [{ repo: 'acme/api', count: 4 }], 'only work orgs');
+  assert.deepEqual(s.yesterday.jira.touched.map((i) => i.key), ['OPS-9']);
+  assert.match(s.text, /Merged acme\/api#5: Shipped thing/);
+  assert.match(s.text, /Reviewed acme\/web#8 by anna \(approved\)/);
+  assert.match(s.text, /Worked on OPS-9: Pager rotation \(In Review\)/);
+  assert.match(s.text, /\*Today\*\n- Continue OPS-1: Rotate certs/);
 });
 
 test('PR status: who has the ball', async () => {

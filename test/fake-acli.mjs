@@ -23,6 +23,8 @@ if (args[1] === 'workitem' && args[2] === 'search') {
     print([{ key: 'OPS-1', self: self('OPS-1'), fields: { summary: 'Rotate certs',
       status: { name: 'In Progress', statusCategory: { key: 'indeterminate' } }, priority: { name: 'High' },
       duedate: null, updated: hoursAgo(1), issuetype: { name: 'Task' }, project: { key: 'OPS' } } }]);
+  } else if (jql.startsWith('issuekey IN updatedBy(')) {
+    print([{ key: 'OPS-9', self: self('OPS-9'), fields: { summary: 'Pager rotation', status: { name: 'In Review', statusCategory: { key: 'indeterminate' } } } }]);
   } else if (jql.startsWith('comment ~ currentUser()')) {
     print({ issues: [{ key: 'OPS-2', self: self('OPS-2'), fields: { summary: 'Outage follow-up', status: { name: 'Open' } } }] });
   } else {
