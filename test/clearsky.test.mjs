@@ -33,20 +33,18 @@ before(async () => {
 
     if (req.url === '/graphql') {
       if (json.query.includes('viewer { login }')) return send({ data: { viewer: { login: 'me' } } });
-      if (json.query.includes('contributionsCollection')) return send({ data: {
+      if (json.query.includes('reviewed: search')) return send({ data: {
         mine: { nodes: [
-          { number: 5, title: 'Shipped thing', url: 'u5', state: 'MERGED', isDraft: false, createdAt: hoursAgo(72), mergedAt: hoursAgo(5), repository: { nameWithOwner: 'acme/api' } },
-          { number: 6, title: 'New thing', url: 'u6', state: 'OPEN', isDraft: true, createdAt: hoursAgo(4), mergedAt: null, repository: { nameWithOwner: 'acme/api' } },
+          { number: 5, title: 'Shipped thing', url: 'u5', state: 'MERGED', isDraft: false, createdAt: hoursAgo(72), mergedAt: hoursAgo(5), repository: { nameWithOwner: 'acme/api' },
+            commits: { nodes: [{ commit: { committedDate: hoursAgo(6), authors: { nodes: [{ user: { login: 'me' } }] } } }, { commit: { committedDate: hoursAgo(7), authors: { nodes: [{ user: { login: 'me' } }] } } }, { commit: { committedDate: hoursAgo(24 * 9), authors: { nodes: [{ user: { login: 'me' } }] } } }] } },
+          { number: 6, title: 'New thing', url: 'u6', state: 'OPEN', isDraft: true, createdAt: hoursAgo(4), mergedAt: null, repository: { nameWithOwner: 'acme/api' },
+            commits: { nodes: [{ commit: { committedDate: hoursAgo(3), authors: { nodes: [{ user: { login: 'me' } }] } } }, { commit: { committedDate: hoursAgo(2), authors: { nodes: [{ user: { login: 'anna' } }] } } }] } },
           { number: 7, title: 'Old open', url: 'u7', state: 'OPEN', isDraft: false, createdAt: hoursAgo(24 * 9), mergedAt: null, repository: { nameWithOwner: 'acme/api' } },
         ] },
         reviewed: { nodes: [
           { number: 8, title: 'Their PR', url: 'u8', repository: { nameWithOwner: 'acme/web' }, author: { login: 'anna' }, reviews: { nodes: [{ state: 'APPROVED', submittedAt: hoursAgo(3) }] } },
           { number: 9, title: 'Reviewed long ago', url: 'u9', repository: { nameWithOwner: 'acme/web' }, author: { login: 'bob' }, reviews: { nodes: [{ state: 'COMMENTED', submittedAt: hoursAgo(24 * 9) }] } },
         ] },
-        viewer: { contributionsCollection: { commitContributionsByRepository: [
-          { repository: { nameWithOwner: 'acme/api', owner: { login: 'acme' } }, contributions: { totalCount: 4 } },
-          { repository: { nameWithOwner: 'me/dotfiles', owner: { login: 'me' } }, contributions: { totalCount: 9 } },
-        ] } },
       } });
       return send({ data: {
         reviewRequested: { nodes: [
@@ -160,7 +158,7 @@ test('stand-up: yesterday from GitHub and Jira, today from the queue', async () 
   assert.deepEqual(s.yesterday.github.merged.map((p) => p.number), [5]);
   assert.deepEqual(s.yesterday.github.opened.map((p) => p.number), [6]);
   assert.deepEqual(s.yesterday.github.reviewed.map((p) => [p.number, p.verdict]), [[8, 'APPROVED']]);
-  assert.deepEqual(s.yesterday.github.commits, [{ repo: 'acme/api', count: 4 }], 'only work orgs');
+  assert.deepEqual(s.yesterday.github.commits, [{ repo: 'acme/api', count: 3 }], 'my recent commits on my PRs');
   assert.deepEqual(s.yesterday.jira.touched.map((i) => i.key), ['OPS-9']);
   assert.match(s.text, /Merged acme\/api#5: Shipped thing/);
   assert.match(s.text, /Reviewed acme\/web#8 by anna \(approved\)/);

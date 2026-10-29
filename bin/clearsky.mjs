@@ -646,26 +646,31 @@ async function standupGitHub(since) {
   const scope = `${config.github.orgs.map((o) => `org:${o}`).join(' ')} archived:false`;
   const day = since.toISOString().slice(0, 10);
   const data = await gql(
-    `query($mine: String!, $reviewed: String!, $me: String!, $from: DateTime!) {
+    `query($mine: String!, $reviewed: String!, $me: String!) {
       mine: search(query: $mine, type: ISSUE, first: 50) { nodes { ... on PullRequest {
-        number title url state isDraft createdAt mergedAt repository { nameWithOwner } } } }
+        number title url state isDraft createdAt mergedAt repository { nameWithOwner }
+        commits(last: 100) { nodes { commit { committedDate authors(first: 5) { nodes { user { login } } } } } } } } }
       reviewed: search(query: $reviewed, type: ISSUE, first: 50) { nodes { ... on PullRequest {
         number title url repository { nameWithOwner } author { login }
         reviews(last: 20, author: $me) { nodes { state submittedAt } } } } }
-      viewer { contributionsCollection(from: $from) { commitContributionsByRepository(maxRepositories: 50) {
-        repository { nameWithOwner owner { login } } contributions { totalCount } } } }
     }`,
     {
       mine: `is:pr author:${me} updated:>=${day} ${scope}`,
       reviewed: `is:pr reviewed-by:${me} -author:${me} updated:>=${day} ${scope}`,
       me,
-      from: since.toISOString(),
     },
   );
   const after = (iso) => iso && Date.parse(iso) >= since.getTime();
   const pr = (p) => ({ repo: p.repository.nameWithOwner, number: p.number, title: p.title, url: p.url });
   const mine = data.mine.nodes.filter((p) => p?.number);
-  const orgs = config.github.orgs.map((o) => o.toLowerCase());
+  // Commits are counted from my PRs: GitHub's contribution counts hide private org work
+  // ("restricted contributions"), so contributionsCollection reports 0 there.
+  const commitsByRepo = new Map();
+  for (const p of mine) {
+    const n = (p.commits?.nodes || []).filter((c) => after(c.commit.committedDate) &&
+      c.commit.authors.nodes.some((a) => a.user?.login === me)).length;
+    if (n) commitsByRepo.set(p.repository.nameWithOwner, (commitsByRepo.get(p.repository.nameWithOwner) || 0) + n);
+  }
   return {
     merged: mine.filter((p) => after(p.mergedAt)).map(pr),
     opened: mine.filter((p) => after(p.createdAt) && !after(p.mergedAt)).map((p) => ({ ...pr(p), draft: p.isDraft })),
@@ -673,9 +678,7 @@ async function standupGitHub(since) {
       const mineNow = p.reviews.nodes.filter((r) => after(r.submittedAt) && r.state !== 'PENDING');
       return mineNow.length ? { ...pr(p), author: p.author?.login, verdict: mineNow.at(-1).state } : null;
     }).filter(Boolean),
-    commits: data.viewer.contributionsCollection.commitContributionsByRepository
-      .filter((c) => !orgs.length || orgs.includes(c.repository.owner.login.toLowerCase()))
-      .map((c) => ({ repo: c.repository.nameWithOwner, count: c.contributions.totalCount })),
+    commits: [...commitsByRepo].map(([repo, count]) => ({ repo, count })),
   };
 }
 
