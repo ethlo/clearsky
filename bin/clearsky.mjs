@@ -1505,7 +1505,7 @@ function toolDetail(call = {}) {
   return String(text).slice(0, 400);
 }
 
-async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, renameTo }) {
+async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin }) {
   const sig = JSON.stringify(copilot.optionArgs(options));
   let c = acpChats.get(chat);
   if (c && (c.sig !== sig || c.agent.closed)) { resumeId = c.agent.sessionId; c.agent.close(); acpChats.delete(chat); c = null; }
@@ -1541,13 +1541,6 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, r
   res.on('close', () => { if (c.emit === emit) c.emit = () => {}; });
   c.busy = true;
   const r = await agent.prompt(prompt).finally(() => { c.busy = false; });
-  // Copilot's own /rename, quietly, once the first answer is in.
-  if (renameTo && r?.stopReason !== 'cancelled' && agent.commands?.some((x) => x.name === 'rename')) {
-    const show = agent.onUpdate;
-    agent.onUpdate = () => {};
-    c.busy = true;
-    await agent.prompt(`/rename ${renameTo.replace(/\s+/g, ' ')}`).catch(() => {}).finally(() => { c.busy = false; agent.onUpdate = show; });
-  }
   c.emit({ type: 'done', stopReason: r?.stopReason });
   c.emit = () => {};
 }
@@ -1770,7 +1763,7 @@ function serve() {
             if (e.type === 'session') { sessionId = e.id; linkRefs(); }
             if (!res.writableEnded && !res.destroyed) res.write(`${JSON.stringify(e)}\n`);
           };
-          // A new chat about one item is named after it, here and in Copilot (so the terminal shows it too).
+          // A new chat about one item is named after it. (Copilot 1.0.105 ignores /rename over ACP, so the name lives here.)
           const itemName = !body.resume && refs.length === 1 ? itemSessionName(refs[0]) : null;
           // Remember which PRs and tickets this session is about, for the links on the page.
           const linkRefs = () => {
@@ -1782,7 +1775,7 @@ function serve() {
           if (checkout) emit({ type: 'cwd', cwd: checkout });
           sessionsCache = null;
           try {
-            await acpTurn({ chat: body.session, options, prompt, resumeId: body.resume ? body.session : null, cwd, emit, res, bin: info.bin, renameTo: itemName });
+            await acpTurn({ chat: body.session, options, prompt, resumeId: body.resume ? body.session : null, cwd, emit, res, bin: info.bin });
           } catch (e) { emit({ type: 'error', message: e.message }); }
           return res.end();
         }
