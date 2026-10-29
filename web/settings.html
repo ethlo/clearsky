@@ -4,15 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Clearsky settings</title>
+<script>try { const t = localStorage.getItem('clearsky.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch {}</script>
 <style>
   :root {
     --bg: #f6f7f9; --card: #fff; --text: #1d2330; --muted: #677085; --line: #e3e6ec;
     --bad: #c2362b; --good: #1f7a3d; --accent: #2f5bd3;
   }
+  :root { color-scheme: light dark; }
+  :root[data-theme="light"] { color-scheme: light; }
+  /* Dark: follows the system unless you picked Light or Dark (saved per device). */
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #12151b; --card: #1a1e26; --text: #e6e9ef; --muted: #8d95a8; --line: #2a303b;
+    :root:not([data-theme="light"]) { --bg: #12151b; --card: #1a1e26; --text: #e6e9ef; --muted: #8d95a8; --line: #2a303b;
       --bad: #ff7a6e; --good: #5bd08a; --accent: #8fa7ff; }
   }
+  :root[data-theme="dark"] { color-scheme: dark; --bg: #12151b; --card: #1a1e26; --text: #e6e9ef; --muted: #8d95a8; --line: #2a303b;
+      --bad: #ff7a6e; --good: #5bd08a; --accent: #8fa7ff; }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
     font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }

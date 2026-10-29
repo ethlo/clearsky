@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="csrf" content="__CSRF__">
 <title>Clearsky</title>
+<script>try { const t = localStorage.getItem('clearsky.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch {}</script>
 <style>
   [hidden] { display: none !important; }
   :root {
@@ -15,8 +16,11 @@
     --shadow: 0 1px 2px rgba(16, 24, 40, .05); --shadow-lg: 0 12px 32px -8px rgba(16, 24, 40, .18), 0 4px 8px -4px rgba(16, 24, 40, .08);
     --radius: 12px;
   }
+  :root { color-scheme: light dark; }
+  :root[data-theme="light"] { color-scheme: light; }
+  /* Dark: follows the system unless you picked Light or Dark (saved per device). */
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme="light"]) {
       --bg: #0c0e12; --surface: #14171c; --surface-2: #1b1f26; --text: #f2f4f7; --text-2: #c5cad3; --muted: #8a93a3;
       --line: #252a33; --line-strong: #333a45; --accent: #6b9bff; --accent-soft: #17223a;
       --red: #ff8a80; --red-soft: #2a1715; --amber: #fdb022; --amber-soft: #2a2010;
@@ -24,6 +28,13 @@
       --shadow: none; --shadow-lg: 0 12px 32px -8px rgba(0, 0, 0, .6);
     }
   }
+  :root[data-theme="dark"] { color-scheme: dark;
+      --bg: #0c0e12; --surface: #14171c; --surface-2: #1b1f26; --text: #f2f4f7; --text-2: #c5cad3; --muted: #8a93a3;
+      --line: #252a33; --line-strong: #333a45; --accent: #6b9bff; --accent-soft: #17223a;
+      --red: #ff8a80; --red-soft: #2a1715; --amber: #fdb022; --amber-soft: #2a2010;
+      --green: #47cd89; --green-soft: #10251a; --violet: #b692f6; --blue: #84adff; --blue-soft: #14213a; --gray-soft: #1f242c;
+      --shadow: none; --shadow-lg: 0 12px 32px -8px rgba(0, 0, 0, .6);
+    }
   * { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
   body { margin: 0; background: var(--bg); color: var(--text);
@@ -48,6 +59,25 @@
   .plan.day-only { display: block; }
   .plan.day-only .day { border-top: 0; padding-top: 0; margin-top: 0; }
   .bar .spacer { flex: 1; }
+  /* menu, top left */
+  .menu-btn { width: 34px; height: 34px; padding: 0; justify-content: center; position: relative; }
+  .menu-btn .tab-n { position: absolute; top: -5px; right: -7px; margin: 0; }
+  .where { color: var(--muted); font-weight: 500; }
+  .drawer-scrim { position: fixed; inset: 0; z-index: 45; background: rgba(16, 24, 40, .3); }
+  .drawer { position: fixed; z-index: 46; top: 0; left: 0; bottom: 0; width: min(280px, 85vw); background: var(--surface); border-right: 1px solid var(--line);
+    box-shadow: var(--shadow-lg); display: flex; flex-direction: column; padding: 12px; gap: 4px; overflow-y: auto; }
+  .drawer .brand { padding: 6px 8px 12px; }
+  .drawer nav { flex-direction: column; gap: 2px; }
+  .drawer nav a { display: flex; align-items: center; gap: 10px; padding: 9px 10px; font-size: 14.5px; }
+  .drawer nav a .tab-n { margin-left: auto; }
+  .drawer nav a .ico { width: 18px; text-align: center; color: var(--muted); }
+  .drawer nav a.active .ico { color: var(--accent); }
+  .drawer hr { border: 0; border-top: 1px solid var(--line); margin: 8px 4px; }
+  .drawer .lbl { font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 6px 10px 4px; }
+  .seg { display: flex; gap: 2px; margin: 0 8px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
+  .seg button { flex: 1; border: 0; background: none; color: var(--text-2); border-radius: 6px; padding: 5px 0; font-size: 13px; }
+  .seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: 0 0 0 1px var(--line), var(--shadow); }
+  .drawer .foot { margin-top: auto; padding: 10px; font-size: 12px; color: var(--muted); }
   .status { color: var(--muted); font-size: 12.5px; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
   .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); }
   .dot.busy { background: var(--accent); animation: pulse 1s ease-in-out infinite; }
@@ -358,9 +388,16 @@
 
   @media (max-width: 1100px) { .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
   @media (max-width: 900px) { .grid, .plan { grid-template-columns: minmax(0, 1fr); } }
+  /* On a wide screen Copilot sits beside the page instead of over it. */
+  @media (min-width: 1100px) {
+    body.chat-on { padding-right: min(460px, 38vw); }
+    body.chat-on .chat:not(.max) { width: min(460px, 38vw); box-shadow: none; }
+  }
+  .mic { width: 36px; padding: 0; justify-content: center; flex: none; }
+  .mic.on { background: var(--red-soft); color: var(--red); border-color: var(--red); animation: pulse 1.2s ease-in-out infinite; }
   @media (max-width: 560px) {
     .bar-in, .page { padding-left: 16px; padding-right: 16px; }
-    .bar-in { gap: 10px; flex-wrap: wrap; } .status .txt { display: none; }
+    .bar-in { gap: 10px; } .status .txt, .where, #refresh .lbl { display: none; }
     .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   /* Reader: a source's item read in full, such as a school message. */
@@ -391,15 +428,33 @@
 </head>
 <body>
 <div class="bar"><div class="bar-in">
-  <div class="brand"><i></i>Clearsky</div>
-  <nav><a href="#" id="tab-today">Work</a><a href="#personal" id="tab-personal" hidden>Personal</a><a href="#standup" id="tab-standup">Stand-up</a><a href="/settings">Settings</a></nav>
+  <button class="icon-btn menu-btn" id="menu-btn" aria-label="Menu" aria-expanded="false" aria-controls="drawer">☰<span class="tab-n" id="menu-n" hidden></span></button>
+  <div class="brand"><i></i>Clearsky <span class="where" id="where">· Work</span></div>
   <div class="spacer"></div>
   <div class="status"><span class="dot" id="dot"></span><span class="txt" id="status">Loading…</span></div>
   <button class="icon-btn" id="unhide" hidden title="Show hidden items">Show hidden</button>
   <button class="icon-btn" id="notify" title="Notifications" aria-label="Notifications" hidden></button>
-  <button class="icon-btn" id="refresh" title="Refresh">↻ Refresh</button>
+  <button class="icon-btn" id="refresh" title="Refresh">↻<span class="lbl"> Refresh</span></button>
   <button class="icon-btn primary" id="chat-open" title="Ask GitHub Copilot about your work">✦ Copilot</button>
 </div></div>
+
+<div class="drawer-scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" hidden aria-label="Menu">
+  <div class="brand"><i></i>Clearsky</div>
+  <nav>
+    <a href="#" id="tab-today"><span class="ico">▦</span>Work</a>
+    <a href="#personal" id="tab-personal" hidden><span class="ico">⌂</span>Personal</a>
+    <a href="#standup" id="tab-standup"><span class="ico">☰</span>Stand-up</a>
+    <a href="#" id="nav-copilot"><span class="ico">✦</span>Copilot<span class="tab-n" id="nav-copilot-n" hidden></span></a>
+    <a href="/settings"><span class="ico">⚙</span>Settings</a>
+  </nav>
+  <hr>
+  <div class="lbl">Theme</div>
+  <div class="seg" id="theme" role="group" aria-label="Theme">
+    <button data-theme-pick="auto">Auto</button><button data-theme-pick="light">Light</button><button data-theme-pick="dark">Dark</button>
+  </div>
+  <div class="foot">Theme is saved on this device.</div>
+</aside>
 
 <div class="page" id="today">
   <section class="plan" id="plan"></section>
@@ -474,6 +529,7 @@
   <div class="chat-refs" id="cp-refs"><button class="chip" id="cp-ref-add" type="button" title="Give Copilot a PR or Jira ticket to work with">＋ PR or ticket</button></div>
   <form class="chat-in" id="chat-form">
     <textarea id="chat-text" rows="3" placeholder="Ask about your work… / for skills · Enter to send, Shift+Enter for a new line"></textarea>
+    <button class="icon-btn mic" id="chat-mic" type="button" hidden title="Talk: click, speak, click again to stop" aria-label="Talk" aria-pressed="false">🎤</button>
     <button class="icon-btn primary" id="chat-send" type="submit">Send</button>
   </form>
 </aside>
@@ -1150,7 +1206,7 @@ function renderExtra() {
 function renderPersonal(needs = 0) {
   const has = extraSources.some((x) => x.area === 'personal');
   $('#tab-personal').hidden = !has;
-  $('#tab-personal').innerHTML = `Personal${needs ? `<span class="tab-n" title="${needs} waiting for you">${needs}</span>` : ''}`;
+  $('#tab-personal').innerHTML = `<span class="ico">⌂</span>Personal${needs ? `<span class="tab-n" title="${needs} waiting for you">${needs}</span>` : ''}`;
   if (!has) return;
   const p = state.plan?.plan;
   $('#p-day').innerHTML = p ? dayHtml(p) : '';
@@ -1164,6 +1220,7 @@ function renderPersonal(needs = 0) {
 function renderToday() {
   view();
   renderPlan(); renderKpis(); renderReview(); renderPrs(); renderMentions(); renderWaiting(); renderLeft(); renderExtra(); renderCopilotCard();
+  menuBadges();
   $('#unhide').hidden = !hiddenCount;
   $('#unhide').textContent = `Show ${hiddenCount} hidden`;
 }
@@ -1607,6 +1664,7 @@ $('#chat-log').addEventListener('click', async (e) => {
 
 function openChat(open = true) {
   $('#chat').hidden = !open;
+  document.body.classList.toggle('chat-on', open);
   try { localStorage.setItem('clearsky.chatOpen', open ? '1' : ''); } catch {}
   if (open) {
     if (!chat.session) {
@@ -1640,6 +1698,57 @@ try { if (localStorage.getItem('clearsky.chatMax')) $('#chat-max').click(); } ca
 
 $('#chat-open').onclick = () => openChat($('#chat').hidden);
 $('#chat-close').onclick = () => openChat(false);
+
+// ---------------------------------------------------------------- menu and theme
+
+function menu_(open) {
+  $('#drawer').hidden = $('#scrim').hidden = !open;
+  $('#menu-btn').setAttribute('aria-expanded', String(open));
+  if (open) $('#drawer nav a.active, #drawer nav a')?.focus();
+}
+$('#menu-btn').onclick = () => menu_($('#drawer').hidden);
+$('#scrim').onclick = () => menu_(false);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#drawer').hidden) menu_(false); });
+$('#nav-copilot').onclick = (e) => { e.preventDefault(); menu_(false); openChat(true); };
+// The menu button carries what waits for you on the tab you're not looking at, and Copilot.
+function menuBadges() {
+  const live = (cpLinks.live || []).filter((x) => x.status !== 'working').length;
+  $('#nav-copilot-n').hidden = !live; $('#nav-copilot-n').textContent = live;
+  const personal = Number($('#tab-personal .tab-n')?.textContent || 0);
+  const n = live + (location.hash === '#personal' ? 0 : personal);
+  $('#menu-n').hidden = !n; $('#menu-n').textContent = n;
+}
+
+function setTheme(t) {
+  if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
+  try { localStorage.setItem('clearsky.theme', t === 'auto' ? '' : t); } catch {}
+  for (const b of document.querySelectorAll('[data-theme-pick]')) b.setAttribute('aria-pressed', String(b.dataset.themePick === (t || 'auto')));
+}
+$('#theme').onclick = (e) => { const b = e.target.closest('[data-theme-pick]'); if (b) setTheme(b.dataset.themePick); };
+setTheme(document.documentElement.dataset.theme || 'auto');
+
+// ---------------------------------------------------------------- talk
+
+// Click to talk, with the browser's own speech recognition (Chrome sends the audio to Google
+// to turn it into text). What you say lands in the message box; you still press Send.
+const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null;
+if (Speech) {
+  $('#chat-mic').hidden = false;
+  $('#chat-mic').onclick = () => {
+    if (rec) { rec.stop(); return; }
+    const box = $('#chat-text'), before = box.value ? `${box.value.replace(/\s*$/, '')} ` : '';
+    rec = new Speech();
+    rec.lang = navigator.language || 'en-US';
+    rec.interimResults = true;
+    rec.continuous = true;
+    rec.onresult = (e) => { box.value = before + [...e.results].map((r) => r[0].transcript).join('').trim(); };
+    rec.onerror = (e) => { if (e.error !== 'aborted' && e.error !== 'no-speech') addMsg('cp', `<div class="err">Talk: ${esc(e.error === 'not-allowed' ? 'the browser blocked the microphone' : e.error)}</div>`); };
+    rec.onend = () => { rec = null; $('#chat-mic').classList.remove('on'); $('#chat-mic').setAttribute('aria-pressed', 'false'); box.focus(); };
+    rec.start();
+    $('#chat-mic').classList.add('on'); $('#chat-mic').setAttribute('aria-pressed', 'true');
+  };
+}
 $('#chat-new').onclick = newChat;
 $('#chat-hist-btn').onclick = () => showHistory();
 $('#hist-q').addEventListener('input', drawSessions);
@@ -1741,6 +1850,8 @@ function route() {
   $('#tab-today').classList.toggle('active', !su && !pe);
   $('#tab-personal').classList.toggle('active', pe);
   $('#tab-standup').classList.toggle('active', su);
+  $('#where').textContent = `· ${su ? 'Stand-up' : pe ? 'Personal' : 'Work'}`;
+  menu_(false);
   hideCard();
   if (su && !standupData) { renderStandup(); loadStandup(false); }
 }

@@ -116,6 +116,8 @@ In the panel you can pick the model and reasoning effort, how much Copilot may d
 
 Type **/** in the message box for skills and, in Ask mode, every slash command your Copilot offers (`/review`, `/plan`, `/compact`…), plus `/new`, `/history` and `/ref` for the panel.
 
+The ☰ menu at the top left has the tabs, Copilot and Settings, and a Light / Dark / Auto theme switch (saved per device). On a wide screen Copilot sits beside the page; on a phone it fills the screen. In Chrome, 🎤 next to Send lets you talk instead of typing; the browser sends the audio to Google to turn it into text, and nothing is sent to Copilot until you press Send.
+
 **History** lists your Copilot sessions as Copilot itself knows them, whether you started them here, in a terminal or in your editor, with ones open elsewhere marked. Click one to see the conversation and carry on with it. The chat you had open comes back after a page reload.
 
 Sessions show up next to the PR or ticket they are about: one you started from that row or attached it to, one running in a checkout of the PR's branch, or one with the PR or ticket key in its title or branch. A dot shows if it is working (green), waiting for you (blue) or needs your OK (amber), and a click reopens it; the ✦ menu also offers **↩ Continue**. Any session that is working or waiting, linked or not, is listed in the **Copilot sessions** card under Needs you, and counted in the summary line.
