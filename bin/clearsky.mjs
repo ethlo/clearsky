@@ -18,6 +18,7 @@ import { edsCalendars, pickCalendars, edsCalendarText } from '../lib/eds.mjs';
 import { randomBytes } from 'node:crypto';
 import * as settings from '../lib/settings.mjs';
 import * as localState from '../lib/state.mjs';
+import * as copilot from '../lib/copilot.mjs';
 
 // ---------------------------------------------------------------- config
 
@@ -1003,6 +1004,55 @@ function applySettings(values) {
   standupCache = { at: 0, data: null };
 }
 
+// ---------------------------------------------------------------- Copilot chat
+
+const copilotCwd = () => process.env.COPILOT_CWD || join(here, '..');
+let copilotInfoCache = null;
+
+async function copilotInfo(force) {
+  if (!force && copilotInfoCache && Date.now() - copilotInfoCache.at < 10 * 6e4) return copilotInfoCache.data;
+  const bin = copilot.findCopilot(process.env.COPILOT_BIN);
+  let skills = [];
+  if (bin) {
+    try {
+      const { stdout } = await execFileP(bin, ['skill', 'list'], { cwd: copilotCwd(), timeout: 20_000, env: copilotEnv() });
+      skills = copilot.parseSkillList(stdout);
+    } catch { /* fall back to the files below */ }
+  }
+  if (!skills.length) skills = copilot.listSkills([join(copilotCwd(), '.github', 'skills'), join(homedir(), '.copilot', 'skills')]);
+  const data = {
+    available: !!bin, bin, cwd: copilotCwd(), skills,
+    models: ['auto', ...copilot.recentModels().filter((m) => m !== 'auto')],
+    efforts: copilot.EFFORTS,
+    permissions: Object.fromEntries(Object.entries(copilot.PERMISSIONS).map(([k, v]) => [k, v.label])),
+  };
+  copilotInfoCache = { at: Date.now(), data };
+  return data;
+}
+
+// Copilot signs in on its own; don't hand it Clearsky's tokens.
+function copilotEnv() {
+  const env = { ...process.env };
+  for (const k of ['GITHUB_TOKEN', 'GH_TOKEN', 'SLACK_TOKEN', 'GOOGLE_CALENDAR_ICS', 'CALENDAR_ICS_URL']) delete env[k];
+  return env;
+}
+
+// A compact view of what's on the dashboard right now, from the cache (no new fetches).
+function copilotContext() {
+  const get = (n) => sourceCache.get(n)?.data || {};
+  const g = get('github'), j = get('jira'), jm = get('jiraMentions'), cal = get('calendar');
+  const pr = (p) => `${p.repo}#${p.number} ${p.title}`;
+  const lines = [
+    `Now: ${new Date().toString()}`,
+    g.reviewRequested?.length && `Reviews requested from me:\n${g.reviewRequested.map((p) => `- ${pr(p)} (by ${p.author}, ${p.url})`).join('\n')}`,
+    g.myPrs?.length && `My open PRs:\n${g.myPrs.map((p) => `- ${pr(p)}: ${p.status.label} (${p.url})`).join('\n')}`,
+    jm.tickets?.length && `Jira tickets where I was mentioned:\n${jm.tickets.map((t) => `- ${t.key} ${t.summary}: ${t.people.join(', ')} said "${t.excerpt}"`).join('\n')}`,
+    j.assigned?.length && `My Jira issues:\n${j.assigned.slice(0, 40).map((i) => `- ${i.key} ${i.summary} [${i.status}${i.priority ? `, ${i.priority}` : ''}]`).join('\n')}`,
+    cal.events?.length && `Calendar (today and tomorrow):\n${cal.events.map((e) => `- ${e.start} to ${e.end} ${e.title}`).join('\n')}`,
+  ].filter(Boolean);
+  return lines.join('\n\n');
+}
+
 // "1h", "3h", "tomorrow" (the next workday's stand-up), "week", a YYYY-MM-DD date (that
 // day's stand-up), or null to unmute.
 function muteUntil(span, now = new Date()) {
@@ -1033,6 +1083,32 @@ function serve() {
       if (req.method === 'POST') {
         if (req.headers['x-clearsky-token'] !== csrf || (req.headers.origin && !origins.has(req.headers.origin))) {
           return json(res, 403, { error: 'forbidden' });
+        }
+        if (url.pathname === '/api/copilot') {
+          const body = await readJson(req);
+          const info = await copilotInfo();
+          if (!info.available) return json(res, 400, { error: 'GitHub Copilot CLI not found; install it or set COPILOT_BIN' });
+          const message = String(body.message || '').slice(0, 20_000);
+          if (!message.trim()) return json(res, 400, { error: 'empty message' });
+          if (!copilot.validModel(body.model)) return json(res, 400, { error: 'bad model name' });
+          if (body.session && !/^[\w-]{8,64}$/.test(body.session)) return json(res, 400, { error: 'bad session' });
+          const list = (v) => (Array.isArray(v) ? v : String(v || '').split(',')).map((x) => String(x).trim()).filter(Boolean);
+          // The first turn carries the dashboard so Copilot knows what you're looking at.
+          const prompt = body.resume ? message
+            : `You are helping me with my work. This is my work dashboard right now:\n\n${copilotContext()}\n\n---\n\n${message}`;
+          const args = copilot.copilotArgs({ prompt, session: body.session, resume: !!body.resume, model: body.model,
+            effort: body.effort, permission: body.permission, allow: list(body.allow), deny: list(body.deny), cwd: copilotCwd() });
+          res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+          const stop = copilot.runCopilot(info.bin, args, {
+            env: copilotEnv(),
+            onData: (chunk) => res.write(chunk),
+            onEnd: ({ code, stderr }) => {
+              if (code !== 0) res.write(`\n\n[Copilot exited with ${code}${stderr ? `: ${stderr.trim().split('\n').slice(-3).join(' ')}` : ''}]`);
+              res.end();
+            },
+          });
+          res.on('close', () => { if (!res.writableEnded) stop(); });
+          return;
         }
         if (url.pathname === '/api/mute') {
           const { key, for: span } = await readJson(req);
@@ -1069,6 +1145,7 @@ function serve() {
         const data = await source(src, url.searchParams.has('refresh'));
         return json(res, 200, { ...data, fetchedAt: new Date(sourceCache.get(src)?.at || Date.now()).toISOString() });
       }
+      if (url.pathname === '/api/copilot') return json(res, 200, await copilotInfo(url.searchParams.has('refresh')));
       if (url.pathname === '/api/dismissed') return json(res, 200, { dismissed: localState.dismissed(stateFile) });
       if (url.pathname === '/api/plan') {
         // Waits for every source (from cache when fresh); the page asks for it alongside them.

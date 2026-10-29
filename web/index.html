@@ -165,6 +165,47 @@
   .ref:hover { border-bottom-style: solid; }
 
   /* hover card */
+  /* Copilot chat */
+  .icon-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .icon-btn.primary:hover { color: #fff; filter: brightness(1.08); }
+  .icon-btn.small { height: 28px; font-size: 12.5px; padding: 0 10px; }
+  .chat { position: fixed; z-index: 40; top: 0; right: 0; bottom: 0; width: min(460px, 100vw); background: var(--surface);
+    border-left: 1px solid var(--line); box-shadow: var(--shadow-lg); display: flex; flex-direction: column; }
+  .chat-h { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  .chat-h .spacer { flex: 1; }
+  .chat-sub { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chat-opts { display: flex; flex-wrap: wrap; gap: 8px 12px; padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 12.5px; color: var(--text-2); }
+  .chat-opts label { display: flex; align-items: center; gap: 6px; }
+  .chat-opts input, .chat-opts select { font: inherit; font-size: 12.5px; color: var(--text); background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: 6px; padding: 3px 6px; }
+  #cp-model { width: 150px; }
+  .cp-tools { width: 100%; }
+  .cp-tools summary { cursor: pointer; color: var(--muted); }
+  .cp-tools label { margin-top: 6px; }
+  .cp-tools input { flex: 1; }
+  .cp-tools .hint { color: var(--muted); font-size: 11.5px; margin-top: 4px; }
+  .chat-skills { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 14px 0; }
+  .chat-skills:empty { display: none; }
+  .chip { border: 1px solid var(--line); background: var(--surface-2); color: var(--text-2); border-radius: 99px; font: inherit; font-size: 12px;
+    padding: 3px 10px; cursor: pointer; }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+  .chat-log { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+  .msg { font-size: 13.5px; line-height: 1.55; overflow-wrap: anywhere; }
+  .msg.me { align-self: flex-end; background: var(--accent-soft); color: var(--text); padding: 8px 12px; border-radius: 12px 12px 2px 12px; max-width: 85%; white-space: pre-wrap; }
+  .msg.cp { color: var(--text); }
+  .msg.cp pre { background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; overflow-x: auto; font-size: 12.5px; }
+  .msg.cp code { font-size: 12.5px; background: var(--surface-2); border-radius: 4px; padding: 1px 4px; }
+  .msg.cp pre code { background: none; padding: 0; }
+  .msg.cp .txt { white-space: pre-wrap; }
+  .msg.cp a { color: var(--accent); }
+  .msg .err { margin: 0; }
+  .typing { color: var(--muted); font-size: 12.5px; }
+  .typing::after { content: '…'; animation: pulse 1.2s infinite; }
+  .chat-empty { color: var(--muted); font-size: 13px; margin: auto; text-align: center; max-width: 300px; }
+  .chat-in { display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--line); align-items: flex-end; }
+  .chat-in textarea { flex: 1; resize: none; font: inherit; font-size: 13.5px; color: var(--text); background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: 8px; padding: 8px 10px; max-height: 200px; }
+  .chat-in textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
   .hc { position: absolute; z-index: 50; width: 380px; max-width: calc(100vw - 24px); background: var(--surface); border: 1px solid var(--line);
     border-radius: 12px; box-shadow: var(--shadow-lg); padding: 14px 16px; font-size: 13px; opacity: 0; transform: translateY(4px);
     transition: opacity .12s, transform .12s; pointer-events: none; }
@@ -193,6 +234,7 @@
   <div class="status"><span class="dot" id="dot"></span><span class="txt" id="status">Loading…</span></div>
   <button class="icon-btn" id="unhide" hidden title="Show hidden items">Show hidden</button>
   <button class="icon-btn" id="refresh" title="Refresh">↻ Refresh</button>
+  <button class="icon-btn primary" id="chat-open" title="Ask GitHub Copilot about your work">✦ Copilot</button>
 </div></div>
 
 <div class="page" id="today">
@@ -217,6 +259,33 @@
 </div>
 
 <div class="hc" id="hc" role="tooltip"></div>
+
+<aside class="chat" id="chat" hidden aria-label="Copilot">
+  <div class="chat-h">
+    <b>Copilot</b>
+    <span class="chat-sub" id="chat-sub"></span>
+    <span class="spacer"></span>
+    <button class="icon-btn small" id="chat-new" title="Start a new conversation">New chat</button>
+    <button class="icon-btn small" id="chat-close" aria-label="Close">✕</button>
+  </div>
+  <div class="chat-opts">
+    <label>Model <input id="cp-model" list="cp-models" placeholder="default" spellcheck="false"></label>
+    <datalist id="cp-models"></datalist>
+    <label>Effort <select id="cp-effort"><option value="">default</option></select></label>
+    <label>Access <select id="cp-perm"></select></label>
+    <details class="cp-tools"><summary>Tools</summary>
+      <label>Also allow <input id="cp-allow" placeholder="shell(git:*), shell(gh:*)" spellcheck="false"></label>
+      <label>Also deny <input id="cp-deny" placeholder="url(*), write(**/*.env)" spellcheck="false"></label>
+      <div class="hint">Comma-separated Copilot tool patterns. Deny always wins.</div>
+    </details>
+  </div>
+  <div class="chat-skills" id="cp-skills"></div>
+  <div class="chat-log" id="chat-log"></div>
+  <form class="chat-in" id="chat-form">
+    <textarea id="chat-text" rows="3" placeholder="Ask about your work… (Enter to send, Shift+Enter for a new line)"></textarea>
+    <button class="icon-btn primary" id="chat-send" type="submit">Send</button>
+  </form>
+</aside>
 
 <script>
 const REFRESH_MS = 5 * 60 * 1000;
@@ -668,6 +737,138 @@ document.addEventListener('mouseout', (e) => {
 document.addEventListener('focusin', (e) => { const el = e.target.closest('[data-issue],[data-pr]'); if (el) showCard(el); });
 document.addEventListener('focusout', (e) => { if (e.target.closest('[data-issue],[data-pr]')) hideTimer = setTimeout(hideCard, 200); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideCard(); });
+
+// ---------------------------------------------------------------- Copilot chat
+
+const chat = { session: null, turns: 0, stop: null, info: null };
+const CP_KEY = 'clearsky.copilot';
+let cpPrefs = {};
+try { cpPrefs = JSON.parse(localStorage.getItem(CP_KEY) || '{}'); } catch {}
+const saveCp = () => {
+  cpPrefs = { model: $('#cp-model').value.trim(), effort: $('#cp-effort').value, permission: $('#cp-perm').value,
+    allow: $('#cp-allow').value, deny: $('#cp-deny').value };
+  try { localStorage.setItem(CP_KEY, JSON.stringify(cpPrefs)); } catch {}
+  chatSub();
+};
+function chatSub() {
+  const i = chat.info;
+  $('#chat-sub').textContent = !i ? '' : !i.available ? 'Copilot CLI not found' : `${i.permissions[$('#cp-perm').value] || ''}${chat.turns ? ` · ${chat.turns} turn${chat.turns > 1 ? 's' : ''}` : ''}`;
+}
+
+const jiraBaseGuess = () => standupData?.jiraBase || (state.jira?.assigned?.[0]?.url || '').replace(/\/browse\/.*$/, '') || '';
+
+// Just enough Markdown for chat answers: code blocks, inline code, bold, and links for
+// URLs, Jira keys and PRs (which get hover cards).
+function md(text) {
+  return text.split(/```[\w-]*\n?/).map((part, i) => {
+    if (i % 2) return `<pre><code>${esc(part.replace(/\n$/, ''))}</code></pre>`;
+    let h = linkify(i ? part.replace(/^\n/, '') : part, jiraBaseGuess());
+    h = h.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, (m, pre, url) => `${pre}<a href="${url}" target="_blank" rel="noopener">${url}</a>`);
+    h = h.replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>').replace(/^#{1,4} (.+)$/gm, '<b>$1</b>');
+    return `<span class="txt">${h}</span>`;
+  }).join('');
+}
+
+function addMsg(cls, html) {
+  const log = $('#chat-log');
+  log.querySelector('.chat-empty')?.remove();
+  const el = document.createElement('div');
+  el.className = `msg ${cls}`;
+  el.innerHTML = html;
+  log.append(el);
+  log.scrollTop = log.scrollHeight;
+  return el;
+}
+
+function newChat() {
+  chat.stop?.();
+  chat.session = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  chat.turns = 0;
+  $('#chat-log').innerHTML = `<div class="chat-empty">Ask about your PRs, tickets and meetings. Copilot sees what's on your dashboard
+    when the chat starts, and runs on your machine with your own Copilot login.</div>`;
+  chatSub();
+}
+
+async function loadCopilotInfo() {
+  try { chat.info = await getJson('/api/copilot'); } catch (e) { chat.info = { available: false, error: e.message }; }
+  const i = chat.info;
+  $('#cp-models').innerHTML = (i.models || []).map((m) => `<option value="${esc(m)}">`).join('');
+  $('#cp-effort').innerHTML = `<option value="">default</option>${(i.efforts || []).map((e) => `<option>${esc(e)}</option>`).join('')}`;
+  $('#cp-perm').innerHTML = Object.entries(i.permissions || {}).map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('');
+  $('#cp-model').value = cpPrefs.model || '';
+  $('#cp-effort').value = cpPrefs.effort || '';
+  $('#cp-perm').value = cpPrefs.permission && i.permissions?.[cpPrefs.permission] ? cpPrefs.permission : 'read';
+  $('#cp-allow').value = cpPrefs.allow || '';
+  $('#cp-deny').value = cpPrefs.deny || '';
+  $('#cp-skills').innerHTML = (i.skills || []).map((sk) =>
+    `<button class="chip" data-skill="${esc(sk.name)}" title="${esc(sk.description)}">${esc(sk.name)}</button>`).join('');
+  if (!i.available) addMsg('cp', `<div class="err">${esc(i.error || 'The GitHub Copilot CLI wasn’t found on this machine. Install it, or set COPILOT_BIN in ~/.config/clearsky/.env.')}</div>`);
+  chatSub();
+}
+
+async function send(text) {
+  if (!text.trim() || chat.stop) return;
+  addMsg('me', esc(text));
+  const out = addMsg('cp', '<span class="typing">Thinking</span>');
+  const ctrl = new AbortController();
+  chat.stop = () => ctrl.abort();
+  $('#chat-send').textContent = 'Stop';
+  let answer = '';
+  try {
+    const res = await fetch('/api/copilot', { method: 'POST', signal: ctrl.signal,
+      headers: { 'Content-Type': 'application/json', 'X-Clearsky-Token': csrf },
+      body: JSON.stringify({ message: text, session: chat.session, resume: chat.turns > 0, ...cpPrefs }) });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+    const reader = res.body.getReader(), dec = new TextDecoder();
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      answer += dec.decode(value, { stream: true });
+      out.innerHTML = md(answer);
+      $('#chat-log').scrollTop = $('#chat-log').scrollHeight;
+    }
+    chat.turns++;
+  } catch (e) {
+    out.innerHTML = (answer ? md(answer) : '') + `<div class="err">${esc(e.name === 'AbortError' ? 'Stopped.' : e.message)}</div>`;
+    if (e.name === 'AbortError' && answer) chat.turns++;
+  } finally {
+    if (!answer && !out.querySelector('.err')) out.innerHTML = '<div class="err">No answer.</div>';
+    chat.stop = null;
+    $('#chat-send').textContent = 'Send';
+    chatSub();
+  }
+}
+
+function openChat(open = true) {
+  $('#chat').hidden = !open;
+  if (open) {
+    if (!chat.session) newChat();
+    if (!chat.info) loadCopilotInfo();
+    $('#chat-text').focus();
+  }
+}
+
+$('#chat-open').onclick = () => openChat($('#chat').hidden);
+$('#chat-close').onclick = () => openChat(false);
+$('#chat-new').onclick = newChat;
+for (const id of ['#cp-model', '#cp-effort', '#cp-perm', '#cp-allow', '#cp-deny']) $(id).addEventListener('change', saveCp);
+$('#chat-form').onsubmit = (e) => {
+  e.preventDefault();
+  if (chat.stop) return chat.stop();
+  const t = $('#chat-text').value;
+  $('#chat-text').value = '';
+  send(t);
+};
+$('#chat-text').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('#chat-form').requestSubmit(); }
+});
+$('#cp-skills').addEventListener('click', (e) => {
+  const name = e.target.closest('[data-skill]')?.dataset.skill;
+  if (!name) return;
+  const ta = $('#chat-text');
+  ta.value = `Use the ${name} skill. ${ta.value}`.trimEnd() + ' ';
+  ta.focus();
+});
 
 // ---------------------------------------------------------------- wiring
 
