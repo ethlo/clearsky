@@ -153,7 +153,8 @@ test('stand-up: yesterday from GitHub and Jira, today from the queue', async () 
   assert.deepEqual([...parseWorkdays('mon, wed,fri')], [1, 3, 5]);
   // Saturday: next is Monday, previous Friday.
   assert.equal(fmt(previousStandup(new Date('2026-10-31T12:00:00'))), 'Fri 09:45');
-  const s = await standup();
+  // A fixed 12-hour window, so the result doesn't depend on the time of day.
+  const s = await standup(undefined, new Date(Date.now() - 12 * 36e5));
   assert.equal(s.yesterday.github.error, undefined);
   assert.deepEqual(s.yesterday.github.merged.map((p) => p.number), [5]);
   assert.deepEqual(s.yesterday.github.opened.map((p) => p.number), [6]);

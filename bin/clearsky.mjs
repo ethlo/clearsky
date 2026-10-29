@@ -822,8 +822,8 @@ export function standupText(s) {
   return out.join('\n');
 }
 
-export async function standup(work) {
-  const since = previousStandup();
+// `since` overrides the start of the window (used by tests).
+export async function standup(work, since = previousStandup()) {
   const next = nextStandup();
   const [github, jira] = await Promise.all([settle(standupGitHub(since)), settle(standupJira(since))]);
   const w = work || await collect();
