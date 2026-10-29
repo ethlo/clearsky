@@ -152,18 +152,34 @@ test('the source module fits the contract and turns data into rows, notification
   assert.equal(s.enabled({ FLYT_SCHOOL_KEY: 'eksempel' }), true);
   const v = await fakeVisma();
   try {
-    const data = { ...await collectFlyt({ store: memStore({ session: 'sid', refresh: 'refresh-1' }), api: v.api }), customerKey: 'eksempel' };
+    const now = () => Date.parse('2026-10-29T12:00:00Z');
+    const data = { ...await collectFlyt({ store: memStore({ session: 'sid', refresh: 'refresh-1' }), api: v.api, now }), customerKey: 'eksempel' };
+    // A second child who got the same announcement: it shows once, under School.
+    const ola = data.children[0];
+    data.children.push({ ...ola, name: 'Kari', pupilId: 1002, threads: [], forms: [], consents: [],
+      notices: ola.notices.filter((n) => n.kind === 'announcement').map((n) => ({ ...n, id: n.id.replace(':1001:', ':1002:') })) });
+    assert.equal(s.panel.view, 'table');
     const items = hook(s, 'items', data);
-    assert.equal(items.length, 4);
+    assert.deepEqual(items.map((i) => [i.key, i.group, i.unread, i.files]), [
+      ['flyt:notice:1001:5', 'Ola', true, 1],
+      ['flyt:direct:1001:7', 'Ola', true, 0],
+      ['flyt:group:1001:c1', 'Ola', true, 1],
+      ['flyt:form:1001:11', 'Ola', true, null],
+      ['flyt:notice:1001:6', 'School', false, 0],
+      ['flyt:direct:1001:8', 'Ola', false, null],
+    ]);
     assert.equal(items[0].url, 'https://foresatt.visma.no/eksempel');
-    assert.equal(items[1].badge, 'Message (2)');
+    assert.deepEqual([items[1].from, items[1].at, items[1].detail], ['Lærer Hansen', '2026-10-28T07:15:00.000Z', true]);
     assert.equal(items[3].tone, 'amber');
+    assert.equal(items[3].meta, 'Answer by 2026-11-03');
+    // Reading it at school changes the stamp, so a hidden row would show again as read.
+    assert.notEqual(items[0].stamp, hook(s, 'items', { ...data, children: data.children.map((k) => ({ ...k, notices: k.notices.map((n) => ({ ...n, unread: false })) })) })[0].stamp);
     const notes = hook(s, 'attention', data);
     assert.equal(notes[0].title, 'Ola: Fravær registrert');
     const events = hook(s, 'events', data);
     assert.deepEqual(events.map((e) => [e.uid, e.fyi]), [['flyt:form:1001:11', true]]);
-    // A new message on a thread changes its stamp, so a dismissed row comes back.
-    assert.notEqual(items[1].stamp, waiting({ children: [{ ...data.children[0], threads: data.children[0].threads.map((t) => ({ ...t, unread: t.unread + 1 })), notices: [], forms: [], consents: [] }] })[0].stamp);
+    // A new message on a thread changes its notification stamp, so it notifies again.
+    assert.notEqual(waiting(data).find((w) => w.key === 'flyt:direct:1001:7').stamp, waiting({ children: [{ ...data.children[0], threads: data.children[0].threads.map((t) => ({ ...t, unread: t.unread + 1 })), notices: [], forms: [], consents: [] }] })[0].stamp);
   } finally { v.close(); }
 });
 

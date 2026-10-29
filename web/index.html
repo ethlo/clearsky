@@ -421,6 +421,35 @@
     .todo .acts { grid-column: 3; grid-row: 1; }
     .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
+  /* Inbox: a source panel shown as a mail list (panel.view 'table'). */
+  .pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
+  .pick button { font: inherit; font-size: 12.5px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface);
+    color: var(--text-2); cursor: pointer; }
+  .pick button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+  .pick .n { margin-left: 4px; font-weight: 600; }
+  .inbox { list-style: none; margin: 0; padding: 0; }
+  .inbox li { display: grid; grid-template-columns: 118px minmax(0, 150px) minmax(0, 90px) minmax(0, 1fr) 22px; gap: 10px; align-items: baseline;
+    padding: 7px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
+  .inbox li.head { border-top: 0; padding-top: 0; color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; }
+  .inbox .d { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .inbox .f, .inbox .g { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
+  .inbox .s { min-width: 0; }
+  .inbox .s a { color: var(--text); text-decoration: none; overflow-wrap: anywhere; }
+  .inbox .s a:hover { color: var(--accent); }
+  .inbox .s .p { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .inbox .s .badge { margin-right: 6px; }
+  .inbox li.unread .s a, .inbox li.unread .f { font-weight: 600; color: var(--text); }
+  .inbox li.unread .d { color: var(--accent); font-weight: 600; }
+  .inbox .att { text-align: right; color: var(--muted); }
+  @media (max-width: 640px) {
+    .inbox li.head { display: none; }
+    .inbox li { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "f d" "s att"; gap: 2px 8px; }
+    .inbox .f { grid-area: f; } .inbox .d { grid-area: d; } .inbox .s { grid-area: s; } .inbox .att { grid-area: att; }
+    .inbox .g { display: none; }
+    .inbox .f .gm { color: var(--muted); font-weight: 400; }
+  }
+  @media (min-width: 641px) { .inbox .f .gm { display: none; } }
+
   /* Reader: a source's item read in full, such as a school message. */
   a.icon-btn { text-decoration: none; }
   dialog.reader { width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 0; border: 1px solid var(--line);
@@ -1216,13 +1245,53 @@ function renderExtra() {
     if (d.disabled) { el.hidden = true; continue; }
     el.hidden = false;
     const list = vis((d.items || []).map((i) => ({ ...i, src: x.name, url: i.url || '', dismissKey: i.key ? `${x.name}:${i.key}` : undefined })));
-    if (x.area === 'personal' && x.panel.zone === 'needs' && !d.error) personalNeeds += list.length;
-    card(el, x.panel.title, d.error ? null : list.length, (d.error ? `<div class="err">${esc(d.error)}${d.needsLogin ? ' <a href="/settings#extra">Log in again in Settings</a>' : ''}</div>` : '') +
-      (list.length ? rows(`x-${x.name}`, list, (i) => row(i), 5)
+    const table = x.panel.view === 'table';
+    // An inbox counts what's unread; other panels count what they show.
+    const count = table ? list.filter((i) => i.unread).length : list.length;
+    if (x.area === 'personal' && x.panel.zone === 'needs' && !d.error) personalNeeds += count;
+    card(el, x.panel.title, d.error ? null : count, (d.error ? `<div class="err">${esc(d.error)}${d.needsLogin ? ' <a href="/settings#extra">Log in again in Settings</a>' : ''}</div>` : '') +
+      (list.length ? (table ? tableView(x, list) : rows(`x-${x.name}`, list, (i) => row(i), 5))
         : d.error ? '' : '<div class="empty">Nothing here.</div>'));
   }
   renderPersonal(personalNeeds);
 }
+
+// A source panel as an inbox: newest first, date, sender and group as columns, filtered by
+// group (School, or a child), with a paperclip on anything that has files.
+const groupPick = {};
+function tableView(x, list, limit = 12) {
+  const groups = [...new Set(list.map((i) => i.group).filter(Boolean))]
+    .sort((a, b) => (a === 'School' ? -1 : b === 'School' ? 1 : a.localeCompare(b)));
+  const pick = groups.includes(groupPick[x.name]) ? groupPick[x.name] : '';
+  const items = list.filter((i) => !pick || i.group === pick).sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+  const unread = (g) => list.filter((i) => i.unread && (!g || i.group === g)).length;
+  const chip = (g, label) => `<button data-pick="${esc(x.name)}" data-group="${esc(g)}" class="${pick === g ? 'on' : ''}">${esc(label)}${unread(g) ? `<span class="n">${unread(g)}</span>` : ''}</button>`;
+  const id = `x-${x.name}-${pick}`;
+  const shown = expanded.has(id) ? items : items.slice(0, limit);
+  const date = (iso) => {
+    if (!iso) return '';
+    const d = new Date(iso), now = new Date();
+    if (d.toDateString() === now.toDateString()) return hm(iso);
+    return `${d.toLocaleDateString([], { day: 'numeric', month: 'short', ...(d.getFullYear() !== now.getFullYear() && { year: 'numeric' }) })} ${hm(iso)}`;
+  };
+  const line = (i) => `<li class="${i.unread ? 'unread' : ''}">
+    <span class="d" title="${esc(i.at ? new Date(i.at).toLocaleString([], { dateStyle: 'full', timeStyle: 'short', hourCycle: hourCycle() }) : '')}">${esc(date(i.at))}</span>
+    <span class="f" title="${esc(i.from || '')}">${esc(i.from || '')}${i.group ? ` <span class="gm">· ${esc(i.group)}</span>` : ''}</span>
+    <span class="g" title="${esc(i.group || '')}">${esc(i.group || '')}</span>
+    <span class="s">${i.badge ? `<span class="badge b-${i.tone || 'gray'}">${esc(i.badge)}</span>` : ''}<a href="${esc(i.url)}" target="_blank" rel="noopener"${i.detail && i.key ? ` data-read="${esc(i.src)}" data-key="${esc(i.key)}"` : ''}>${esc(i.title || '(no subject)')}</a>
+      ${i.meta ? `<div class="p">${esc(i.meta)}</div>` : i.quote ? `<div class="p">${esc(i.quote)}</div>` : ''}</span>
+    <span class="att">${i.files ? `<span title="${i.files} file${i.files > 1 ? 's' : ''}" aria-label="Has attachments">📎</span>` : ''}</span>
+  </li>`;
+  return (groups.length > 1 ? `<div class="pick">${chip('', 'All')}${groups.map((g) => chip(g, g)).join('')}</div>` : '') +
+    `<ul class="inbox"><li class="head"><span>Date</span><span>From</span><span>Group</span><span>Subject</span><span></span></li>${shown.map(line).join('')}</ul>` +
+    (items.length > shown.length ? `<button class="more" data-more="${id}">Show ${items.length - shown.length} more</button>` : '');
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-pick]');
+  if (!b) return;
+  groupPick[b.dataset.pick] = b.dataset.group;
+  renderExtra();
+});
 
 // The Personal tab: personal sources' panels, under the same day schedule as Work.
 function renderPersonal(needs = 0) {
