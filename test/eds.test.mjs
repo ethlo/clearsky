@@ -31,6 +31,12 @@ test('reads a calendar synced by GNOME Online Accounts / Evolution', async () =>
   const picked = pickCalendars(all, { email: 'me@work.test' });
   assert.deepEqual(picked.map((c) => c.uid), ['cal-work'], 'the calendar named after the account');
   assert.deepEqual(pickCalendars(all, { wanted: 'Holidays', email: 'x' }).map((c) => c.uid), ['cal-holidays']);
+  // Hidden in GNOME Calendar's sidebar (Selected=false) still counts; holidays never stand in for it.
+  writeFileSync(join(sources, 'cal-work.source'), '[Data Source]\nDisplayName=me@work.test\nEnabled=true\nParent=goa-work\n\n[Calendar]\nBackendName=caldav\nSelected=false\n');
+  assert.deepEqual(pickCalendars(edsCalendars(home, []), { email: 'me@work.test' }).map((c) => c.uid), ['cal-work']);
+  writeFileSync(join(sources, 'cal-work.source'), '[Data Source]\nDisplayName=Team\nEnabled=true\nParent=goa-work\n\n[Calendar]\nBackendName=caldav\n');
+  assert.deepEqual(pickCalendars(edsCalendars(home, []), { email: 'me@work.test' }).map((c) => c.uid), ['cal-work'], 'falls back to the account, minus holidays');
+  writeFileSync(join(sources, 'cal-work.source'), '[Data Source]\nDisplayName=me@work.test\nEnabled=true\nParent=goa-work\n\n[Calendar]\nBackendName=caldav\nSelected=true\n');
 
   const events = eventsBetween(await edsCalendarText(picked[0].cacheDb), Date.parse('2026-10-28T23:00:00Z'), Date.parse('2026-10-29T23:00:00Z'));
   assert.deepEqual(events.map((e) => [e.title, e.start]), [['Planning', '2026-10-29T12:00:00.000Z']]);
