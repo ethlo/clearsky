@@ -139,8 +139,22 @@ test('collects GitHub, Jira and Slack into one view', async () => {
 });
 
 test('stand-up: yesterday from GitHub and Jira, today from the queue', async () => {
-  const { standup, previousWorkday } = await import('../bin/clearsky.mjs');
-  assert.equal(previousWorkday(new Date('2026-11-02T10:00:00')).getDay(), 5, 'Monday looks back to Friday');
+  const { standup, nextStandup, previousStandup } = await import('../bin/clearsky.mjs');
+  const fmt = (d) => `${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()]} ${d.toTimeString().slice(0, 5)}`;
+  // Stand-up at 09:45 (default). Monday morning: next is today, previous was Friday.
+  assert.equal(fmt(nextStandup(new Date('2026-11-02T08:00:00'))), 'Mon 09:45');
+  assert.equal(fmt(previousStandup(new Date('2026-11-02T08:00:00'))), 'Fri 09:45');
+  // Monday afternoon: next is Tuesday, so the summary covers since Monday's stand-up.
+  assert.equal(fmt(nextStandup(new Date('2026-11-02T14:00:00'))), 'Tue 09:45');
+  assert.equal(fmt(previousStandup(new Date('2026-11-02T14:00:00'))), 'Mon 09:45');
+  // During the stand-up it is still today's.
+  assert.equal(fmt(nextStandup(new Date('2026-11-02T09:50:00'))), 'Mon 09:45');
+  const { parseWorkdays } = await import('../bin/clearsky.mjs');
+  assert.deepEqual([...parseWorkdays('Mon-Fri')], [1, 2, 3, 4, 5]);
+  assert.deepEqual([...parseWorkdays('Sun-Thu')], [0, 1, 2, 3, 4]);
+  assert.deepEqual([...parseWorkdays('mon, wed,fri')], [1, 3, 5]);
+  // Saturday: next is Monday, previous Friday.
+  assert.equal(fmt(previousStandup(new Date('2026-10-31T12:00:00'))), 'Fri 09:45');
   const s = await standup();
   assert.equal(s.yesterday.github.error, undefined);
   assert.deepEqual(s.yesterday.github.merged.map((p) => p.number), [5]);
@@ -172,7 +186,7 @@ test('Now / Next: free slot and tasks that fit it', async () => {
   const at = (h, m = 0) => { const d = new Date(); d.setHours(h, m, 0, 0); return d.getTime(); };
   const ev = (title, h1, m1, h2, m2) => ({ title, start: new Date(at(h1, m1)).toISOString(), end: new Date(at(h2, m2)).toISOString(), allDay: false });
   const data = {
-    calendar: { events: [ev('Standup', 9, 0, 9, 15), ev('1:1', 9, 15, 9, 45), ev('Design review', 10, 30, 11, 30)] },
+    calendar: { events: [ev('Sync', 9, 0, 9, 15), ev('1:1', 9, 15, 9, 45), ev('Daily stand-up', 9, 45, 10, 0), ev('Design review', 11, 0, 12, 0)] },
     github: {
       reviewRequested: [
         { repo: 'a/b', number: 1, title: 'Big', url: 'u1', requestedAt: new Date(at(8)).toISOString(), size: { additions: 900, deletions: 10 } },
@@ -183,10 +197,11 @@ test('Now / Next: free slot and tasks that fit it', async () => {
     jira: { assigned: [{ key: 'OPS-1', summary: 'Certs', url: 'u4', statusCategory: 'indeterminate' }], mentions: [] },
     slack: { disabled: true },
   };
-  // During standup: back-to-back 1:1 extends the busy block to 9:45, then 45 min free.
+  // During the sync: back-to-back 1:1 and stand-up extend the busy block to 10:00, then 60 min free.
   const p = planNow(data, at(9, 5));
-  assert.equal(p.now.title, 'Standup');
+  assert.equal(p.now.title, 'Sync');
   assert.equal(p.next.title, 'Design review');
-  assert.equal(p.freeMinutes, 45);
+  assert.equal(p.freeMinutes, 60);
+  assert.ok(!p.agenda.some((e) => e.title === 'Stand-up'), 'calendar already has the stand-up');
   assert.deepEqual(p.suggestions.map((s) => s.title), ['Merge a/b#3', 'Review a/b#2', 'Continue OPS-1']);
 });

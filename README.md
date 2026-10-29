@@ -7,7 +7,7 @@ One page that shows what needs your attention at work:
 - **My PRs:** each open PR shows who has the ball (changes requested, CI failing, merge conflict, unresolved threads, ready to merge) or who you are waiting on.
 - **Mentions:** GitHub issues and PRs that mention you, Jira comments that @mention you, and (optionally) Slack messages that @mention you, from the last 14 days.
 - **What I have left:** your open Jira issues (in progress, then to do), plus GitHub issues assigned to you.
-- **Stand-up tab:** a ready-to-paste Yesterday / Today / Blockers summary. Yesterday covers the previous workday (Friday on Mondays): PRs merged, opened and reviewed, commits, and Jira issues you finished or worked on. Today comes from the dashboard queue and your meetings.
+- **Stand-up tab:** a ready-to-paste Yesterday / Today / Blockers summary for your next daily stand-up (`CLEARSKY_STANDUP_TIME`, default 09:45, on `CLEARSKY_WORKDAYS`, default Mon-Fri). It covers everything since the previous stand-up, so on Monday that's since Friday's: PRs merged, opened and reviewed, commits, and Jira issues you finished or worked on. Today comes from the dashboard queue and your meetings. The dashboard reminds you 30 minutes before, and the stand-up counts as a meeting in Now / Next.
 - **Settings page** (`/settings`): log in to GitHub and Jira with one click, and set up Google Calendar and Slack with guided links. Everything is saved to `~/.config/clearsky/.env`.
 
 It is a single Node script with no dependencies. It runs on your machine, talks to GitHub, Jira and Slack with your own tokens, and keeps no data anywhere.

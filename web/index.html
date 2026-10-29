@@ -152,6 +152,10 @@ function render(d) {
   const p = d.plan, hm = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const link = (e) => e.url ? ` <a href="${esc(e.url)}" target="_blank" rel="noopener">join</a>` : '';
   let head = '';
+  const su = d.nextStandup && (Date.parse(d.nextStandup) - Date.now()) / 6e4;
+  if (su !== undefined && su <= 30 && su > -15) {
+    head += `<div style="margin-bottom:6px"><b>Stand-up ${su > 0 ? `in ${Math.ceil(su)} min` : 'now'}</b> (${hm(d.nextStandup)}) · <a href="#standup">your summary is ready</a></div>`;
+  }
   if (d.calendar?.error) head += `<div class="err">Calendar: ${esc(d.calendar.error)}</div>`;
   if (p.now) head += `Now: <b>${esc(p.now.title)}</b> until ${hm(p.now.end)}${link(p.now)}. `;
   if (p.afterHours) head += 'After hours. Here is what is waiting:';
@@ -263,7 +267,8 @@ async function loadStandup(force) {
     if (!res.ok) throw new Error(s.error || res.statusText);
     $('#standup-text').textContent = s.text;
     const errs = [s.yesterday.github.error && `GitHub: ${s.yesterday.github.error}`, s.yesterday.jira.error && `Jira: ${s.yesterday.jira.error}`].filter(Boolean);
-    $('#standup-meta').textContent = errs.length ? errs.join(' · ') : `Since ${s.sinceLabel} · updated ${new Date(s.generatedAt).toLocaleTimeString()}`;
+    const at = new Date(s.nextStandup).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+    $('#standup-meta').textContent = errs.length ? errs.join(' · ') : `For ${at} · covers since ${s.sinceLabel} · updated ${new Date(s.generatedAt).toLocaleTimeString()}`;
   } catch (e) {
     $('#standup-meta').textContent = `Failed to load: ${e.message}`;
   }

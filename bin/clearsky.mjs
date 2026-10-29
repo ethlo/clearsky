@@ -36,6 +36,20 @@ loadEnvFile(join(process.cwd(), '.env'));
 loadEnvFile(join(here, '..', '.env'));
 loadEnvFile(userEnvFile);
 
+const DAY_NAMES = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+// "Mon-Fri", "Sun-Thu" or "Mon,Tue,Thu" -> set of JS weekday numbers.
+export function parseWorkdays(spec) {
+  const days = new Set();
+  for (const part of spec.toLowerCase().split(',').map((p) => p.trim()).filter(Boolean)) {
+    const [a, b] = part.split('-').map((x) => DAY_NAMES.indexOf(x.slice(0, 3)));
+    if (a < 0 || (b !== undefined && b < 0)) throw new Error(`bad workday "${part}"`);
+    if (b === undefined) { days.add(a); continue; }
+    for (let d = a; ; d = (d + 1) % 7) { days.add(d); if (d === b) break; }
+  }
+  return days;
+}
+
 const list = (v) => (v || '').split(',').map((s) => s.trim()).filter(Boolean);
 
 // Built from the environment; rebuilt when settings are saved from the page.
@@ -62,6 +76,8 @@ const buildConfig = (env = process.env) => ({
     email: env.CALENDAR_EMAIL, // optional; used to drop events you declined
   },
   workdayEnd: env.CLEARSKY_WORKDAY_END || '17:00',
+  standupTime: env.CLEARSKY_STANDUP_TIME || '09:45', // daily stand-up (local time)
+  workdays: parseWorkdays(env.CLEARSKY_WORKDAYS || 'Mon-Fri'),
   slack: {
     token: env.SLACK_TOKEN, // optional; user token (xoxp-) with search:read
     api: (env.SLACK_API_URL || 'https://slack.com/api').replace(/\/$/, ''),
@@ -508,6 +524,12 @@ export function planNow(d, now = Date.now()) {
   const g = d.github || {}, j = d.jira || {}, s = d.slack || {}, cal = d.calendar || {};
   const timed = (cal.events || []).filter((e) => !e.allDay && !e.transparent)
     .map((e) => ({ ...e, s: Date.parse(e.start), e: Date.parse(e.end) }));
+  // The daily stand-up counts as a meeting even when the calendar doesn't have it (or isn't set up).
+  const su = nextStandup(new Date(now));
+  if (sameDay(su, new Date(now)) && !timed.some((e) => /stand-?\s?up|daily/i.test(e.title) && Math.abs(e.s - su) < 30 * 6e4)) {
+    timed.push({ title: 'Stand-up', start: su.toISOString(), end: new Date(+su + 15 * 6e4).toISOString(), allDay: false, url: null, s: +su, e: +su + 15 * 6e4 });
+    timed.sort((a, b) => a.s - b.s);
+  }
 
   const current = timed.find((e) => e.s <= now && now < e.e) || null;
   // Back-to-back meetings (gaps under 5 minutes) count as one busy block.
@@ -574,6 +596,7 @@ export async function collect() {
   return {
     generatedAt: new Date().toISOString(),
     plan: planNow({ github, jira, slack, calendar }),
+    nextStandup: nextStandup().toISOString(),
     summary: {
       reviewsWaiting: github.reviewRequested?.length ?? null,
       myPrsNeedingAction: github.myPrs ? needsMe.length : null,
@@ -591,11 +614,28 @@ export async function collect() {
 
 // ---------------------------------------------------------------- Stand-up
 
-// Start of the previous workday (Friday when it's Monday).
-export function previousWorkday(now = new Date()) {
-  const d = new Date(now); d.setHours(0, 0, 0, 0);
-  do d.setDate(d.getDate() - 1); while (d.getDay() === 0 || d.getDay() === 6);
+const isWorkday = (d) => config.workdays.has(d.getDay());
+const sameDay = (a, b) => a.toDateString() === b.toDateString();
+
+function standupOn(day) {
+  const [h, m] = config.standupTime.split(':').map(Number);
+  const d = new Date(day); d.setHours(h, m || 0, 0, 0);
   return d;
+}
+
+// The next stand-up: today's if it hasn't started more than 15 minutes ago, else the next workday's.
+export function nextStandup(now = new Date()) {
+  let d = standupOn(now);
+  if (!config.workdays.size) return d;
+  while (!isWorkday(d) || +d + 15 * 6e4 <= +now) { d.setDate(d.getDate() + 1); d = standupOn(d); }
+  return d;
+}
+
+// The stand-up before the next one; the summary covers everything since then.
+export function previousStandup(now = new Date()) {
+  const d = nextStandup(now);
+  do d.setDate(d.getDate() - 1); while (!isWorkday(d));
+  return standupOn(d);
 }
 
 async function standupGitHub(since) {
@@ -685,14 +725,15 @@ export function standupText(s) {
 }
 
 export async function standup(work) {
-  const since = previousWorkday();
+  const since = previousStandup();
+  const next = nextStandup();
   const [github, jira] = await Promise.all([settle(standupGitHub(since)), settle(standupJira(since))]);
   const w = work || await collect();
   const today = {
     inProgress: (w.jira.assigned || []).filter((i) => i.statusCategory === 'indeterminate').slice(0, 5),
     reviews: w.github.reviewRequested || [],
     myPrs: (w.github.myPrs || []).filter((p) => p.status.owner === 'me' && !p.draft),
-    meetings: (w.plan?.agenda || []).filter((e) => new Date(e.start).toDateString() === new Date().toDateString()),
+    meetings: (w.plan?.agenda || []).filter((e) => sameDay(new Date(e.start), new Date()) && e.title !== 'Stand-up'),
   };
   const days = (iso) => (Date.now() - Date.parse(iso)) / 864e5;
   const blockers = (w.github.myPrs || [])
@@ -702,7 +743,8 @@ export async function standup(work) {
   const s = {
     generatedAt: new Date().toISOString(),
     since: since.toISOString(),
-    sinceLabel: since.toLocaleDateString([], { weekday: 'long' }),
+    sinceLabel: `${since.toLocaleDateString([], { weekday: 'long' })} ${since.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+    nextStandup: next.toISOString(),
     yesterday: { github, jira },
     today,
     blockers,
