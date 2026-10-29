@@ -22,6 +22,17 @@ Report in a short list, newest first:
 - **Ticket:** status, assignee, the acceptance criteria or description, and comments since the last commit.
 - **What's left:** your reading of what still needs doing, as a checklist.
 
+## Check before you act
+
+Things may already be done, by me or by an earlier session. Before each step, check its current state and skip it if it's done:
+
+- **Reviewers:** list who is already requested (`gh pr view --json reviewRequests,reviews`). Don't request someone again who is still requested, or who reviewed after the last commit, unless I ask.
+- **Ticket status:** read it first. Don't move a ticket that is already in the target status or further on.
+- **Pushes:** compare the local branch with the remote (`git status -sb`). Don't push or commit again when there's nothing new.
+- **Review threads:** skip threads I or you already answered, resolved threads, and outdated ones. Copilot's reviewer bot (`copilot-pull-request-reviewer`) leaves suggestions after every push; treat them as optional unless I say otherwise.
+
+When nothing is left for me to do, say so plainly and name who it's waiting on (for example "Waiting on anna's review, requested 2h ago"), instead of redoing a step.
+
 ## 3. Continue
 
 Ask me once whether to go ahead with the checklist, unless I already said to continue. Then, in this order:
