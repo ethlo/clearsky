@@ -397,7 +397,7 @@
   .mic.on { background: var(--red-soft); color: var(--red); border-color: var(--red); animation: pulse 1.2s ease-in-out infinite; }
   @media (max-width: 560px) {
     .bar-in, .page { padding-left: 16px; padding-right: 16px; }
-    .bar-in { gap: 10px; } .status .txt, .where, #refresh .lbl { display: none; }
+    .bar-in { gap: 8px; } .status .txt, .where, .bar .lbl, .bar .bname { display: none; }
     .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   /* Reader: a source's item read in full, such as a school message. */
@@ -429,13 +429,13 @@
 <body>
 <div class="bar"><div class="bar-in">
   <button class="icon-btn menu-btn" id="menu-btn" aria-label="Menu" aria-expanded="false" aria-controls="drawer">☰<span class="tab-n" id="menu-n" hidden></span></button>
-  <div class="brand"><i></i>Clearsky <span class="where" id="where">· Work</span></div>
+  <div class="brand"><i></i><span class="bname">Clearsky</span> <span class="where" id="where">· Work</span></div>
   <div class="spacer"></div>
   <div class="status"><span class="dot" id="dot"></span><span class="txt" id="status">Loading…</span></div>
   <button class="icon-btn" id="unhide" hidden title="Show hidden items">Show hidden</button>
   <button class="icon-btn" id="notify" title="Notifications" aria-label="Notifications" hidden></button>
   <button class="icon-btn" id="refresh" title="Refresh">↻<span class="lbl"> Refresh</span></button>
-  <button class="icon-btn primary" id="chat-open" title="Ask GitHub Copilot about your work">✦ Copilot</button>
+  <button class="icon-btn primary" id="chat-open" title="Ask GitHub Copilot about your work">✦<span class="lbl"> Copilot</span></button>
 </div></div>
 
 <div class="drawer-scrim" id="scrim" hidden></div>
