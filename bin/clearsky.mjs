@@ -1572,12 +1572,17 @@ function toolDetail(call = {}) {
   return String(text).slice(0, 400);
 }
 
+// Folders Copilot chats may use without asking: Settings, else your code folders (~/dev).
+const copilotFolders = () => (process.env.COPILOT_FOLDERS ? list(process.env.COPILOT_FOLDERS) : codeDirs());
+
 async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin }) {
-  const sig = JSON.stringify(copilot.optionArgs(options));
+  // Changing the folders in Settings starts the chat's Copilot again (resuming it) on its next turn.
+  const args = [...copilot.optionArgs(options), ...copilot.folderArgs(copilotFolders())];
+  const sig = JSON.stringify(args);
   let c = acpChats.get(chat);
   if (c && (c.sig !== sig || c.agent.closed)) { resumeId = c.agent.sessionId; c.agent.close(); acpChats.delete(chat); c = null; }
   if (!c) {
-    const agent = new AcpAgent(bin, copilot.optionArgs(options), { env: copilotEnv() });
+    const agent = new AcpAgent(bin, args, { env: copilotEnv() });
     c = { agent, sig, cwd, waiting: new Map(), pending: new Map(), emit: () => {}, lastUsed: Date.now() };
     const id = await agent.start(cwd, resumeId);
     acpChats.set(id, c);

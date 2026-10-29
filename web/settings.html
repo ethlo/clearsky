@@ -141,6 +141,14 @@
     <div class="row"><button class="save" data-keys="CLEARSKY_STANDUP_TIME,CLEARSKY_WORKDAYS,CLEARSKY_WORKDAY_END,CLEARSKY_MENTION_DAYS,CLEARSKY_TIME_FORMAT">Save</button><span class="msg"></span></div>
   </section>
 
+  <section>
+    <h2>Copilot</h2>
+    <label for="COPILOT_FOLDERS">Folders Copilot may use without asking</label>
+    <input id="COPILOT_FOLDERS" data-key="COPILOT_FOLDERS" placeholder="~/dev">
+    <p class="hint">Comma-separated, like <code>~/dev/kezzler, ~/dev/ethlo</code>. Copilot chats started from Clearsky can read and change files there, including worktrees next to your clones, without the "Access paths outside trusted directories" question. Commands and edits still follow the chat's mode (Ask, Assisted, Full). Empty means <code>~/dev</code>. Running chats pick it up on their next message.</p>
+    <div class="row"><button class="save" data-keys="COPILOT_FOLDERS">Save</button><span class="msg"></span></div>
+  </section>
+
   <section id="extra" hidden>
     <h2>Other sources</h2>
     <p class="hint">Settings for sources added in <code>lib/sources/</code> or <code>~/.config/clearsky/sources/</code>.</p>
@@ -229,6 +237,7 @@ function render(s) {
   $('#CLEARSKY_WORKDAYS').value = s.workdays || '';
   $('#CLEARSKY_MENTION_DAYS').value = s.mentionDays || '';
   $('#CLEARSKY_TIME_FORMAT').value = s.timeFormat || '24';
+  $('#COPILOT_FOLDERS').value = s.copilotFolders || '';
 
   const extra = s.extra || [], logins = s.logins || [];
   $('#extra').hidden = !extra.length && !logins.length;

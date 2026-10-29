@@ -151,3 +151,14 @@ test('the chat panel talks to the local Copilot CLI with the chosen options', as
   assert.match(withRef.prompt, /^I am asking about these items:\n\n## SSP-1234[\s\S]*\n---\nMy message:\nSummarise$/);
   assert.ok(!/bad repo/.test(withRef.prompt), 'invalid references are dropped');
 });
+
+test('lets Copilot use your code folders without asking', async () => {
+  const { folderArgs } = await import('../lib/copilot.mjs');
+  const { validate } = await import('../lib/settings.mjs');
+  const home = mkdtempSync(join(tmpdir(), 'clearsky-home-'));
+  mkdirSync(join(home, 'dev', 'kezzler'), { recursive: true });
+  assert.deepEqual(folderArgs(['~/dev/kezzler', '~/dev/gone', '/nope'], home), ['--add-dir', join(home, 'dev', 'kezzler')]);
+  assert.equal(validate({ COPILOT_FOLDERS: '~/dev/kezzler, /home/m/dev/ethlo' }).COPILOT_FOLDERS, '~/dev/kezzler, /home/m/dev/ethlo');
+  assert.throws(() => validate({ COPILOT_FOLDERS: 'dev/kezzler' }), /full paths/);
+  assert.throws(() => validate({ COPILOT_FOLDERS: '~/dev/../..' }), /full paths/);
+});
