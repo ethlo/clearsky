@@ -200,7 +200,7 @@ test('Now / Next: free slot and tasks that fit it', async () => {
     slack: { disabled: true },
   };
   // During the sync: back-to-back 1:1 and stand-up extend the busy block to 10:00, then 60 min free.
-  const p = planNow(data, at(9, 5), {}, {});
+  const p = planNow(data, at(9, 5), {}, {}, {});
   assert.equal(p.now.title, 'Sync');
   assert.equal(p.next.title, 'Design review');
   assert.equal(p.freeMinutes, 60);
@@ -209,9 +209,10 @@ test('Now / Next: free slot and tasks that fit it', async () => {
 
   // Dismissed (same stamp) and muted items drop out; a dismissed item with new activity comes back.
   const later = new Date(at(9, 5) + 36e5).toISOString();
-  const q = planNow(data, at(9, 5), { u3: 's3' }, { u2: later });
+  const q = planNow(data, at(9, 5), { u3: 's3' }, { u2: later }, {});
   const titles = q.suggestions.map((s) => s.title);
   assert.ok(!titles.includes('Merge a/b#3') && !titles.includes('Review a/b#2'), titles.join());
   assert.deepEqual(q.muted.map((m) => [m.key, m.until]), [['u2', later]]);
-  assert.equal(planNow(data, at(9, 5), { u3: 'older' }, {}).suggestions[0].title, 'Merge a/b#3');
+  assert.deepEqual(q.done.map((c) => c.key), ['u3'], 'done tasks are listed with their time');
+  assert.equal(planNow(data, at(9, 5), { u3: 'older' }, {}, {}).suggestions[0].title, 'Merge a/b#3');
 });

@@ -74,6 +74,7 @@ clearsky jira-debug   # raw acli output, if Jira data looks wrong
 On the page:
 - ↻ on a panel reloads just that panel (Shift-click reloads everything).
 - ✕ dismisses an item until something new happens on it (a commit, review, comment or status change). Jira mentions are grouped per ticket, so dismissing one hides the ticket until someone mentions you there again.
+- ✓ on a "Do next" task marks it done: it stays hidden until something new happens on it, and "Show N done" lists when you did it (with Undo).
 - The clock on a "Do next" task mutes it for an hour, until tomorrow's stand-up, a week, or a date you pick, even if there's new activity.
 
 Dismissed and muted items are saved in `~/.config/clearsky/state.json`, so the plan respects them too.

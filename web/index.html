@@ -91,9 +91,12 @@
   .card-h h2 { font-size: 14.5px; font-weight: 600; margin: 0; letter-spacing: -.005em; }
   .todo li { position: relative; }
   .mute { flex: none; border: 0; background: none; color: var(--muted); padding: 3px; border-radius: 6px; cursor: pointer; opacity: .45; display: grid; place-items: center; }
-  .todo li:hover .mute, .mute:focus-visible { opacity: 1; }
+  .acts { display: flex; gap: 2px; }
+  .done { flex: none; border: 0; background: none; color: var(--muted); padding: 3px; border-radius: 6px; cursor: pointer; opacity: .45; display: grid; place-items: center; }
+  .todo li:hover .mute, .mute:focus-visible, .todo li:hover .done, .done:focus-visible { opacity: 1; }
   .mute:hover { background: var(--surface-2); color: var(--text); }
-  @media (hover: none) { .mute { opacity: .8; } }
+  .done:hover { background: var(--green-soft); color: var(--green); }
+  @media (hover: none) { .mute, .done { opacity: .8; } }
   .menu { position: absolute; z-index: 30; min-width: 190px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
     box-shadow: var(--shadow-lg); padding: 6px; display: flex; flex-direction: column; }
   .menu[hidden] { display: none; }
@@ -370,13 +373,17 @@ const prRef = (p) => `${p.repo}#${p.number}`;
 
 const MUTE_ICON = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 5.5v3l2 1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 2.5 1.8 3.7M13 2.5l1.2 1.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
 const when = (iso) => new Date(iso).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
-let showMuted = false;
+const DONE_ICON = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+let showLater = false;
 
-function mutedHtml(list) {
-  if (!list.length) return '';
-  return `<button class="muted-toggle" id="muted-toggle">${showMuted ? 'Hide' : 'Show'} ${list.length} muted</button>${showMuted ? `<ul class="muted-list">${list.map((m) => `<li>
-    <a href="${esc(m.url)}" target="_blank" rel="noopener">${esc(m.title)}</a><span>until ${when(m.until)}</span>
-    <button data-unmute="${esc(m.key)}">Unmute</button></li>`).join('')}</ul>` : ''}`;
+// Tasks marked done (back when something new happens) and muted ones (back at a set time).
+function laterHtml(done, muted) {
+  if (!done.length && !muted.length) return '';
+  const label = [done.length && `${done.length} done`, muted.length && `${muted.length} muted`].filter(Boolean).join(', ');
+  const item = (m, note, btn) => `<li><a href="${esc(m.url)}" target="_blank" rel="noopener">${esc(m.title)}</a><span>${note}</span>${btn}</li>`;
+  return `<button class="muted-toggle" id="muted-toggle">${showLater ? 'Hide' : 'Show'} ${label}</button>${showLater ? `<ul class="muted-list">${
+    done.map((m) => item(m, m.doneAt ? `done ${when(m.doneAt)}` : 'done', `<button data-undone="${esc(m.key)}">Undo</button>`)).join('')}${
+    muted.map((m) => item(m, `until ${when(m.until)}`, `<button data-unmute="${esc(m.key)}">Unmute</button>`)).join('')}</ul>` : ''}`;
 }
 
 // The small menu a mute button opens.
@@ -409,7 +416,11 @@ document.addEventListener('click', (e) => {
   if (!e.target.closest('.menu')) menu.hidden = true;
   const un = e.target.closest('[data-unmute]')?.dataset.unmute;
   if (un) mute(un, null);
-  if (e.target.closest('#muted-toggle')) { showMuted = !showMuted; renderPlan(); }
+  if (e.target.closest('#muted-toggle')) { showLater = !showLater; renderPlan(); }
+  const done = e.target.closest('[data-done]');
+  if (done) { dismissed[done.dataset.done] = done.dataset.stamp; dismiss({ key: done.dataset.done, stamp: done.dataset.stamp, done: true }); }
+  const undone = e.target.closest('[data-undone]')?.dataset.undone;
+  if (undone) { delete dismissed[undone]; dismiss({ key: undone, stamp: null }); }
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') menu.hidden = true; });
 
@@ -444,8 +455,8 @@ function renderPlan() {
   const todo = (p.suggestions.length ? `<ol class="todo">${p.suggestions.map((s) => `<li>
       <div><a class="t" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a><div class="d">${esc(s.detail)}</div></div>
       <span class="m">~${s.minutes} min</span>
-      <button class="mute" data-mute="${esc(s.key)}" title="Mute for a while" aria-label="Mute for a while">${MUTE_ICON}</button></li>`).join('')}</ol>`
-    : '<div class="empty">Nothing urgent fits right now.</div>') + mutedHtml(p.muted || []);
+      <span class="acts"><button class="done" data-done="${esc(s.key)}" data-stamp="${esc(s.stamp ?? '')}" title="Done: hide until there's something new" aria-label="Mark done">${DONE_ICON}</button><button class="mute" data-mute="${esc(s.key)}" title="Mute for a while" aria-label="Mute for a while">${MUTE_ICON}</button></span></li>`).join('')}</ol>`
+    : '<div class="empty">Nothing urgent fits right now.</div>') + laterHtml(p.done || [], p.muted || []);
   el.innerHTML = `${refreshButton('plan')}<div><div class="eyebrow">Now</div><div class="now-line">${line}</div><div class="now-sub">${sub}</div>${alert}${calErr}${agenda}</div>
     <div><div class="eyebrow">Do next</div>${todo}</div>`;
 }

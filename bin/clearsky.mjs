@@ -635,7 +635,8 @@ function reviewMinutes(p) {
 
 // What to do in the next free slot: the current/next meeting, how long the gap is,
 // and up to three tasks that fit it, most urgent first.
-export function planNow(d, now = Date.now(), dismissedItems = localState.dismissed(stateFile), mutedItems = localState.muted(stateFile, now)) {
+export function planNow(d, now = Date.now(), dismissedItems = localState.dismissed(stateFile), mutedItems = localState.muted(stateFile, now),
+  doneAt = localState.doneAt(stateFile)) {
   const g = d.github || {}, j = d.jira || {}, s = d.slack || {}, cal = d.calendar || {};
   const timed = (cal.events || []).filter((e) => !e.allDay && !e.transparent)
     .map((e) => ({ ...e, s: Date.parse(e.start), e: Date.parse(e.end) }));
@@ -656,34 +657,37 @@ export function planNow(d, now = Date.now(), dismissedItems = localState.dismiss
   const freeMinutes = Math.max(0, Math.round((freeUntil - freeFrom) / 6e4));
 
   const recent = (iso, hours) => Date.now() - Date.parse(iso) < hours * 36e5;
-  // Items you dismissed on the page stay out of the plan until something new happens on them.
+  // Each task carries the key and stamp of the item behind it. Marking it done (or dismissing the
+  // item on the page) keeps it out until that stamp changes, i.e. until there's something new.
   const off = (key, stamp) => localState.isDismissed(dismissedItems, key, stamp);
-  const live = (list) => (list || []).filter((x) => !off(x.url, x.stamp));
+  const toStart = (j.assigned || []).filter((i) => i.statusCategory !== 'indeterminate');
   const candidates = [
-    ...live(g.myPrs).filter((p) => p.status.label === 'Ready to merge')
-      .map((p) => ({ title: `Merge ${p.repo}#${p.number}`, detail: p.title, url: p.url, minutes: 5, why: 'approved and green' })),
-    ...live(s.mentions).filter((m) => recent(m.at, 24))
-      .map((m) => ({ title: `Reply to ${m.by} in ${m.channel}`, detail: m.excerpt, url: m.url, minutes: 5, why: 'Slack mention' })),
-    ...(j.tickets || jiraMentionsByTicket(j.mentions)).filter((t) => recent(t.at, 48) && !off(t.dismissKey, t.stamp))
-      .map((t) => ({ key: t.dismissKey, title: `Answer ${t.by} on ${t.key}`, detail: t.excerpt, url: t.url, minutes: 10, why: 'Jira mention' })),
-    ...live(g.reviewRequested).filter((p) => !p.draft)
+    ...(g.myPrs || []).filter((p) => p.status.label === 'Ready to merge')
+      .map((p) => ({ title: `Merge ${p.repo}#${p.number}`, detail: p.title, url: p.url, stamp: p.stamp, minutes: 5, why: 'approved and green' })),
+    ...(s.mentions || []).filter((m) => recent(m.at, 24))
+      .map((m) => ({ title: `Reply to ${m.by} in ${m.channel}`, detail: m.excerpt, url: m.url, stamp: m.stamp, minutes: 5, why: 'Slack mention' })),
+    ...(j.tickets || jiraMentionsByTicket(j.mentions)).filter((t) => recent(t.at, 48))
+      .map((t) => ({ key: t.dismissKey, title: `Answer ${t.by} on ${t.key}`, detail: t.excerpt, url: t.url, stamp: t.stamp, minutes: 10, why: 'Jira mention' })),
+    ...[...(g.reviewRequested || [])].filter((p) => !p.draft)
       .sort((a, b) => (b.rerequested - a.rerequested) || Date.parse(a.requestedAt) - Date.parse(b.requestedAt))
-      .map((p) => ({ title: `${p.rerequested ? 'Re-review' : 'Review'} ${p.repo}#${p.number}`, detail: p.title, url: p.url,
+      .map((p) => ({ title: `${p.rerequested ? 'Re-review' : 'Review'} ${p.repo}#${p.number}`, detail: p.title, url: p.url, stamp: p.stamp,
         minutes: reviewMinutes(p), why: `someone is waiting, requested ${Math.max(1, Math.round((Date.now() - Date.parse(p.requestedAt)) / 36e5))}h ago` })),
-    ...live(g.myPrs).filter((p) => p.status.owner === 'me' && !p.draft && p.status.label !== 'Ready to merge')
-      .map((p) => ({ title: `${p.status.label}: ${p.repo}#${p.number}`, detail: p.title, url: p.url, minutes: 30, why: 'your PR is blocked on you' })),
-    ...live(j.assigned).filter((i) => i.statusCategory === 'indeterminate')
-      .map((i) => ({ title: `Continue ${i.key}`, detail: i.summary, url: i.url, minutes: 90, why: 'in progress' })),
-    ...live(j.assigned).filter((i) => i.statusCategory !== 'indeterminate').slice(0, 3)
-      .map((i) => ({ title: `Start ${i.key}`, detail: i.summary, url: i.url, minutes: 90, why: i.priority ? `${i.priority} priority` : 'next in your queue' })),
+    ...(g.myPrs || []).filter((p) => p.status.owner === 'me' && !p.draft && p.status.label !== 'Ready to merge')
+      .map((p) => ({ title: `${p.status.label}: ${p.repo}#${p.number}`, detail: p.title, url: p.url, stamp: p.stamp, minutes: 30, why: 'your PR is blocked on you' })),
+    ...(j.assigned || []).filter((i) => i.statusCategory === 'indeterminate')
+      .map((i) => ({ title: `Continue ${i.key}`, detail: i.summary, url: i.url, stamp: i.stamp, minutes: 90, why: 'in progress' })),
+    // The next three to start, skipping ones marked done (which still show in the done list).
+    ...[...toStart.filter((i) => off(i.url, i.stamp)), ...toStart.filter((i) => !off(i.url, i.stamp)).slice(0, 3)]
+      .map((i) => ({ title: `Start ${i.key}`, detail: i.summary, url: i.url, stamp: i.stamp, minutes: 90, why: i.priority ? `${i.priority} priority` : 'next in your queue' })),
   ];
 
   for (const c of candidates) c.key ||= c.url;
+  const doneList = candidates.filter((c) => off(c.key, c.stamp)).map((c) => ({ ...c, doneAt: doneAt[c.key] || null }));
   // Muted from the "Do next" list: left out until the chosen time, whatever happens on them.
-  const mutedList = candidates.filter((c) => mutedItems[c.key]).map((c) => ({ ...c, until: mutedItems[c.key] }));
+  const mutedList = candidates.filter((c) => mutedItems[c.key] && !off(c.key, c.stamp)).map((c) => ({ ...c, until: mutedItems[c.key] }));
   const suggestions = [];
   let left = freeMinutes;
-  for (const c of candidates.filter((x) => !mutedItems[x.key])) {
+  for (const c of candidates.filter((x) => !mutedItems[x.key] && !off(x.key, x.stamp))) {
     if (suggestions.length === 3) break;
     // Deep work still gets suggested for a long-enough gap even if it won't finish.
     const fits = c.minutes <= left || (c.minutes >= 90 && freeMinutes >= 45 && left >= 20);
@@ -702,6 +706,7 @@ export function planNow(d, now = Date.now(), dismissedItems = localState.dismiss
     freeMinutes,
     afterHours: now >= workdayEnd,
     muted: mutedList,
+    done: doneList,
     agenda: timed.filter((e) => e.e > now && e.s < atLocalTime(now, '23:59')).map(strip),
     suggestions,
   };
