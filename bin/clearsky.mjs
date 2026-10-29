@@ -338,7 +338,7 @@ function commentInfo(body) {
   return { ids: ids.filter(Boolean), text: parts.join('') };
 }
 
-function excerpt(text, myId) {
+function excerpt(text, myId, max = 220) {
   const plain = (text || '')
     .replaceAll(`[~accountid:${myId}]`, '@you').replaceAll(`[~${myId}]`, '@you')
     .replace(/\[~[^\]]+\]/g, '@someone')
@@ -347,7 +347,7 @@ function excerpt(text, myId) {
     .replace(/[*_]{1,2}([^*_]+)[*_]{1,2}/g, '$1')
     .replace(/\s+/g, ' ')
     .trim();
-  return plain.length > 220 ? `${plain.slice(0, 217)}...` : plain;
+  return plain.length > max ? `${plain.slice(0, max - 3)}...` : plain;
 }
 
 const userId = (u) => u?.accountId || u?.name || u?.key || null;
@@ -363,8 +363,10 @@ async function jiraMe() {
   throw new Error('could not work out your Jira account id; set JIRA_ACCOUNT_ID');
 }
 
+let jiraBase = null; // learnt from issue URLs acli returns
 function browseUrl(issue) {
-  const base = config.jira.url || (issue.self ? new URL(issue.self).origin : '');
+  if (issue.self && !jiraBase) jiraBase = new URL(issue.self).origin;
+  const base = config.jira.url || (issue.self ? new URL(issue.self).origin : jiraBase || '');
   return base ? `${base}/browse/${issue.key}` : null;
 }
 
@@ -378,7 +380,7 @@ async function mapLimit(items, n, fn) {
   return out;
 }
 
-async function fetchJira() {
+async function fetchJiraWork() {
   const assigned = (await jiraSearch(config.jira.assignedJql,
     ['key', 'summary', 'status', 'priority', 'duedate', 'updated', 'issuetype', 'project'], 100)).map((i) => {
     const f = fieldsOf(i);
@@ -395,7 +397,11 @@ async function fetchJira() {
       updatedAt: f.updated || null,
     };
   });
+  return { assigned };
+}
 
+// The slow part: one acli call per candidate issue, so it's loaded separately.
+async function fetchJiraMentions() {
   // Find candidate issues, then confirm the mention by reading their comments.
   const me = await jiraMe();
   const days = config.days;
@@ -434,7 +440,41 @@ async function fetchJira() {
   });
   const mentions = perIssue.flat().sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
 
-  return { user: me.name, assigned, mentions };
+  return { user: me.name, mentions };
+}
+
+async function fetchJira() {
+  const [work, mentions] = await Promise.all([settle(fetchJiraWork()), settle(fetchJiraMentions())]);
+  return mergeJira(work, mentions);
+}
+
+function mergeJira(work, mentions) {
+  const error = work.error || mentions.error;
+  return { ...mentions, ...work, error: error || undefined, mentionsError: mentions.error };
+}
+
+// Hover-card details for one issue.
+const issueCache = new Map();
+export async function issuePreview(key) {
+  const hit = issueCache.get(key);
+  if (hit && Date.now() - hit.at < 10 * 6e4) return hit.data;
+  const out = await acli(['workitem', 'view', key, '--fields', 'summary,status,assignee,reporter,priority,issuetype,description', '--json']);
+  const f = out?.fields || out || {};
+  const text = f.description ? commentInfo(f.description).text : '';
+  const data = {
+    key,
+    url: browseUrl({ key, self: out?.self }),
+    summary: f.summary || '',
+    status: nameOf(f.status),
+    statusCategory: f.status?.statusCategory?.key || null,
+    type: nameOf(f.issuetype),
+    priority: nameOf(f.priority),
+    assignee: f.assignee?.displayName || null,
+    reporter: f.reporter?.displayName || null,
+    description: excerpt(text, null, 600),
+  };
+  issueCache.set(key, { at: Date.now(), data });
+  return data;
 }
 
 // Print raw acli output, to check the shapes if Jira data looks wrong.
@@ -514,24 +554,29 @@ async function evolutionTexts() {
   return Promise.all(synced.map((c) => edsCalendarText(c.cacheDb)));
 }
 
+// Reads the iCal link and GNOME Online Accounts side by side and merges them, so one
+// broken source doesn't hide the other. It only fails when every configured source fails.
 async function fetchCalendar() {
   const { icsUrl, email } = config.calendar;
-  let texts, source;
-  if (icsUrl) {
-    texts = [await icsText(icsUrl)];
-    source = 'ical link';
-  } else {
-    texts = await evolutionTexts();
-    source = 'GNOME Online Accounts';
+  const tries = [];
+  if (icsUrl) tries.push(['iCal link', icsText(icsUrl).then((t) => [t])]);
+  tries.push(['GNOME Online Accounts', evolutionTexts()]);
+  const results = await Promise.all(tries.map(([name, p]) => p.then((texts) => ({ name, texts }), (e) => ({ name, error: e.message }))));
+  const used = results.filter((r) => r.texts);
+  const errors = Object.fromEntries(results.filter((r) => r.error).map((r) => [r.name, r.error]));
+  if (!used.length) {
+    const msgs = Object.entries(errors);
+    if (!msgs.length) return { disabled: true };
+    return { error: msgs.map(([n, m]) => (msgs.length > 1 ? `${n}: ${m}` : m)).join('; '), errors };
   }
-  if (!texts) return { disabled: true };
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const seen = new Set();
-  const events = texts.flatMap((t) => eventsBetween(t, today.getTime(), today.getTime() + 2 * 864e5, email))
+  const events = used.flatMap((r) => r.texts).flatMap((t) => eventsBetween(t, today.getTime(), today.getTime() + 2 * 864e5, email))
     .filter((e) => !e.declined && !seen.has(`${e.uid}@${e.start}`) && seen.add(`${e.uid}@${e.start}`))
     .map(({ declined, ...e }) => e)
     .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
-  return { source, events };
+  const sources = used.map((r) => r.name);
+  return { source: sources.join(' + '), sources, ...(Object.keys(errors).length && { errors }), events };
 }
 
 // ---------------------------------------------------------------- Now / Next
@@ -619,9 +664,26 @@ export function planNow(d, now = Date.now()) {
 
 const settle = (p) => p.catch((e) => ({ error: e.message }));
 
-export async function collect() {
-  const [github, jira, slack, calendar] = await Promise.all(
-    [settle(fetchGitHub()), settle(fetchJira()), settle(fetchSlack()), settle(fetchCalendar())]);
+// Each source is fetched and cached on its own, so the page can show whatever is ready.
+const SOURCES = { github: fetchGitHub, jira: fetchJiraWork, jiraMentions: fetchJiraMentions, slack: fetchSlack, calendar: fetchCalendar };
+const sourceCache = new Map();
+
+export function source(name, force) {
+  const hit = sourceCache.get(name);
+  if (hit?.pending) return hit.pending;
+  if (!force && hit && Date.now() - hit.at < config.cacheSeconds * 1000) return Promise.resolve(hit.data);
+  const pending = settle(SOURCES[name]()).then((data) => {
+    sourceCache.set(name, { at: Date.now(), data });
+    return data;
+  });
+  sourceCache.set(name, { ...hit, pending });
+  return pending;
+}
+
+export async function collect(force) {
+  const [github, jiraWork, jiraMentions, slack, calendar] = await Promise.all(
+    ['github', 'jira', 'jiraMentions', 'slack', 'calendar'].map((n) => source(n, force)));
+  const jira = mergeJira(jiraWork, jiraMentions);
   const needsMe = (github.myPrs || []).filter((p) => p.status.owner === 'me' && !p.draft);
   return {
     generatedAt: new Date().toISOString(),
@@ -781,6 +843,7 @@ export async function standup(work) {
     since: since.toISOString(),
     sinceLabel: `${since.toLocaleDateString([], { weekday: 'long' })} ${since.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
     nextStandup: next.toISOString(),
+    jiraBase: config.jira.url || jiraBase,
     yesterday: { github, jira },
     today,
     blockers,
@@ -842,16 +905,30 @@ export function toMarkdown(d) {
 
 // ---------------------------------------------------------------- server
 
-let cache = { at: 0, data: null, pending: null };
 let standupCache = { at: 0, data: null };
 
-async function cached(force) {
-  if (!force && cache.data && Date.now() - cache.at < config.cacheSeconds * 1000) return cache.data;
-  cache.pending ||= collect().then((data) => {
-    cache = { at: Date.now(), data, pending: null };
-    return data;
-  }).catch((e) => { cache.pending = null; throw e; });
-  return cache.pending;
+// Hover-card details for one pull request.
+const prCache = new Map();
+export async function prPreview(repo, number) {
+  const key = `${repo}#${number}`;
+  const hit = prCache.get(key);
+  if (hit && Date.now() - hit.at < 5 * 6e4) return hit.data;
+  config.github.token ||= await ghCliToken();
+  const [owner, name] = repo.split('/');
+  const { repository } = await gql(`query($owner: String!, $name: String!, $number: Int!) {
+    repository(owner: $owner, name: $name) { pullRequest(number: $number) {
+      title url state isDraft reviewDecision additions deletions changedFiles bodyText updatedAt author { login } } } }`,
+  { owner, name, number: Number(number) });
+  const pr = repository?.pullRequest;
+  if (!pr) throw new Error(`${key} not found`);
+  const data = {
+    key, url: pr.url, title: pr.title, author: pr.author?.login, draft: pr.isDraft,
+    state: pr.state, reviewDecision: pr.reviewDecision, updatedAt: pr.updatedAt,
+    size: { additions: pr.additions, deletions: pr.deletions, files: pr.changedFiles },
+    description: (pr.bodyText || '').replace(/\s+/g, ' ').trim().slice(0, 600),
+  };
+  prCache.set(key, { at: Date.now(), data });
+  return data;
 }
 
 async function readJson(req) {
@@ -869,7 +946,8 @@ function applySettings(values) {
     else delete process.env[k];
   }
   Object.assign(config, buildConfig());
-  cache = { at: 0, data: null, pending: null };
+  sourceCache.clear();
+  standupCache = { at: 0, data: null };
 }
 
 function serve() {
@@ -909,12 +987,29 @@ function serve() {
       if (url.pathname === '/api/standup') {
         const force = url.searchParams.has('refresh');
         if (force || !standupCache.data || Date.now() - standupCache.at > config.cacheSeconds * 1000) {
-          standupCache = { at: Date.now(), data: await standup(await cached(force)) };
+          standupCache = { at: Date.now(), data: await standup(await collect(force)) };
         }
         return json(res, 200, standupCache.data);
       }
+      const src = url.pathname.match(/^\/api\/source\/(\w+)$/)?.[1];
+      if (src) {
+        if (!SOURCES[src]) return json(res, 404, { error: 'unknown source' });
+        return json(res, 200, await source(src, url.searchParams.has('refresh')));
+      }
+      if (url.pathname === '/api/plan') {
+        // Waits for every source (from cache when fresh); the page asks for it alongside them.
+        const { plan, nextStandup: next, summary, generatedAt } = await collect(false);
+        return json(res, 200, { plan, nextStandup: next, summary, generatedAt });
+      }
+      const issueKey = url.pathname.match(/^\/api\/issue\/([A-Z][A-Z0-9_]+-\d+)$/)?.[1];
+      if (issueKey) return json(res, 200, await issuePreview(issueKey));
+      if (url.pathname === '/api/pr') {
+        const repo = url.searchParams.get('repo') || '', number = url.searchParams.get('number') || '';
+        if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !/^\d+$/.test(number)) return json(res, 400, { error: 'bad PR reference' });
+        return json(res, 200, await prPreview(repo, number));
+      }
       if (url.pathname === '/api/work') {
-        const data = await cached(url.searchParams.has('refresh'));
+        const data = await collect(url.searchParams.has('refresh'));
         res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
         return res.end(JSON.stringify(data));
       }

@@ -80,7 +80,7 @@
     <label for="CALENDAR_EMAIL">Your work calendar email</label>
     <input id="CALENDAR_EMAIL" data-key="CALENDAR_EMAIL" type="email" placeholder="you@company.com">
     <div class="row"><button class="save" data-keys="CALENDAR_EMAIL">Save</button><span class="msg"></span></div>
-    <p style="margin-top:14px"><b>Option B, iCal link</b> (only if your admin allows it):</p>
+    <p style="margin-top:14px"><b>Option B, iCal link</b> (only if your admin allows it). You can use both; meetings are merged:</p>
     <ol>
       <li>Open <a href="https://calendar.google.com/calendar/r/settings" target="_blank" rel="noopener">Google Calendar settings</a>.</li>
       <li>Under <b>Settings for my calendars</b>, click your calendar, then <b>Integrate calendar</b>.</li>
@@ -170,10 +170,14 @@ function render(s) {
 
   const evo = s.calendar.evolution || [];
   const evoOk = evo.some((c) => c.synced);
-  state($('#cal-state'), !!s.calendar.url || evoOk, s.calendar.url ? 'iCal link' : evoOk ? 'via GNOME' : 'not connected');
-  $('#cal-detail').textContent = s.calendar.url ? 'Using an iCal link. Remove it to use GNOME Online Accounts instead.'
-    : evo.length ? `Found in GNOME Online Accounts: ${evo.map((c) => `${c.name}${c.synced ? '' : ' (not synced yet; open GNOME Calendar once)'}`).join(', ')}.`
-    : s.calendar.email ? `No calendar for ${s.calendar.email} in GNOME Online Accounts yet.` : '';
+  const using = [s.calendar.url && 'iCal link', evoOk && 'GNOME'].filter(Boolean);
+  state($('#cal-state'), using.length > 0, using.length ? using.join(' + ') : 'not connected');
+  $('#cal-detail').textContent = [
+    s.calendar.url ? 'iCal link saved.' : '',
+    evo.length ? `GNOME Online Accounts: ${evo.map((c) => `${c.name}${c.synced ? '' : ' (not synced yet; open GNOME Calendar once)'}`).join(', ')}.`
+      : s.calendar.email ? `No calendar for ${s.calendar.email} in GNOME Online Accounts yet.` : '',
+    s.calendar.url || evo.length ? 'Meetings from both are merged.' : '',
+  ].filter(Boolean).join(' ');
   $('#cal-remove').hidden = !s.calendar.url;
   $('#GOOGLE_CALENDAR_ICS').placeholder = s.calendar.url ? `${s.calendar.url}; paste a new one to replace` : 'https://calendar.google.com/calendar/ical/…/basic.ics';
   $('#CALENDAR_EMAIL').value = s.calendar.email || '';
