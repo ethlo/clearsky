@@ -10,6 +10,8 @@ if (args[0] === 'skill' && args[1] === 'list') {
   process.stdout.write('Personal skills:\n  standup - Write my stand-up\n\nBuiltin skills:\n  github-pr-media - Add media to PRs\n');
 } else if (args.includes('--acp')) {
   let waiting = null;
+  // FAKE_COPILOT_IDS=random gives each new chat its own id (for trying several chats by hand).
+  let sid = 'acp-session-1';
   createInterface({ input: process.stdin }).on('line', (line) => {
     const m = JSON.parse(line);
     const upd = (sessionId, update) => out({ method: 'session/update', params: { sessionId, update } });
@@ -28,15 +30,16 @@ if (args[0] === 'skill' && args[1] === 'list') {
       out({ id: m.id, result: {} });
     }
     else if (m.method === 'session/new') {
-      out({ id: m.id, result: { sessionId: 'acp-session-1' } });
-      upd('acp-session-1', { sessionUpdate: 'available_commands_update', availableCommands: [{ name: 'standup', description: 'Write my stand-up' }, { name: 'review', description: 'Review changes', input: { hint: 'what' } }] });
+      if (process.env.FAKE_COPILOT_IDS === 'random') sid = `acp-${Math.random().toString(16).slice(2, 10)}`;
+      out({ id: m.id, result: { sessionId: sid } });
+      upd(sid, { sessionUpdate: 'available_commands_update', availableCommands: [{ name: 'standup', description: 'Write my stand-up' }, { name: 'review', description: 'Review changes', input: { hint: 'what' } }] });
     }
     else if (m.method === 'session/prompt') {
-      const say = (text) => out({ method: 'session/update', params: { sessionId: 'acp-session-1', update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text } } } });
+      const say = (text) => out({ method: 'session/update', params: { sessionId: sid, update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text } } } });
       say(`flags=${args.filter((a) => a.startsWith('--')).join(' ')} `);
       out({ method: 'session/update', params: { update: { sessionUpdate: 'tool_call', toolCallId: 't1', title: 'git status', kind: 'execute', status: 'pending' } } });
       waiting = { prompt: m.id, say };
-      out({ id: 900, method: 'session/request_permission', params: { sessionId: 'acp-session-1', toolCall: { toolCallId: 't1', title: 'Run git status', rawInput: { command: 'git status' } },
+      out({ id: 900, method: 'session/request_permission', params: { sessionId: sid, toolCall: { toolCallId: 't1', title: 'Run git status', rawInput: { command: 'git status' } },
         options: [{ optionId: 'yes', name: 'Allow once', kind: 'allow_once' }, { optionId: 'no', name: 'Deny', kind: 'reject_once' }] } });
     } else if (m.id === 900 && waiting) {
       out({ method: 'session/update', params: { update: { sessionUpdate: 'tool_call_update', toolCallId: 't1', status: 'completed' } } });

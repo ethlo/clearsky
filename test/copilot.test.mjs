@@ -72,6 +72,29 @@ test('the chat panel talks to the local Copilot CLI with the chosen options', as
   assert.deepEqual(seen.filter((e) => e.type === 'tool').map((e) => e.status), ['pending', 'completed']);
   assert.equal(seen.at(-1).type, 'done');
 
+  // Leaving a chat mid-turn (switching or reloading) doesn't stop it: coming back shows the
+  // open question, answering it finishes the turn, and Stop ends one on purpose.
+  {
+    const ctrl = new AbortController();
+    const res2 = await fetch(`${base}/api/copilot`, { method: 'POST', signal: ctrl.signal, headers: { 'X-Clearsky-Token': csrf, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: 'Again', session: 'acp-session-1', resume: true, permission: 'ask' }) });
+    const rd = res2.body.getReader();
+    let got = '';
+    while (!got.includes('"permission"')) got += new TextDecoder().decode((await rd.read()).value);
+    ctrl.abort();
+    await new Promise((r) => setTimeout(r, 200));
+    const live = await fetch(`${base}/api/copilot/sessions/acp-session-1/live`);
+    const lr = live.body.getReader();
+    let feed = '';
+    while (!feed.includes('"permission"')) feed += new TextDecoder().decode((await lr.read()).value);
+    const q = JSON.parse(feed.split('\n').find((l) => l.includes('"permission"')));
+    assert.equal((await ask0(`${base}/api/copilot/permission`, { chat: 'acp-session-1', id: q.id, option: 'yes' })).status, 200);
+    for (;;) { const { value, done } = await lr.read(); if (done) break; feed += new TextDecoder().decode(value); }
+    assert.match(feed, /answer=yes/);
+    assert.match(feed, /"type":"done"/);
+    assert.equal((await ask0(`${base}/api/copilot/stop`, { chat: 'nope-0000' })).status, 200);
+  }
+
   // Copilot's slash commands (built-ins and skills) are offered in the panel.
   assert.deepEqual((await (await fetch(`${base}/api/copilot`)).json()).commands.map((c) => c.name), ['standup', 'review']);
   assert.ok(textOf(seen).includes('--no-ask-user'), "Ask mode turns off Copilot's own questions, which the panel can't show");

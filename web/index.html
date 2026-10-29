@@ -293,6 +293,23 @@
   .chat-h { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
   .chat-h .spacer { flex: 1; }
   .chat-sub { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cp-tabs { display: flex; gap: 4px; padding: 6px 10px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: thin; align-items: center; }
+  .cp-tab { display: inline-flex; align-items: center; gap: 6px; flex: none; max-width: 190px; border: 1px solid transparent; background: none; color: var(--text-2);
+    border-radius: 7px; padding: 4px 8px; font-size: 12.5px; }
+  .cp-tab:hover { background: var(--surface-2); color: var(--text); }
+  .cp-tab.on { background: var(--surface); border-color: var(--line); color: var(--text); box-shadow: var(--shadow); font-weight: 500; }
+  .cp-tab span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cp-tab i { width: 7px; height: 7px; border-radius: 50%; background: var(--line-strong); flex: none; }
+  .cp-tab.s-working i { background: var(--green); animation: pulse 1.2s ease-in-out infinite; }
+  .cp-tab.s-waiting i { background: var(--accent); }
+  .cp-tab.s-needs-you i { background: var(--amber); }
+  .cp-tab kbd { font: 10.5px ui-monospace, monospace; color: var(--muted); }
+  .cp-tab .x { color: var(--muted); padding: 0 2px; border-radius: 4px; visibility: hidden; }
+  .cp-tab:hover .x { visibility: visible; }
+  .cp-tab .x:hover { color: var(--text); background: var(--line); }
+  .cp-tabs .add { flex: none; border: 0; background: none; color: var(--muted); font-size: 16px; padding: 0 8px; border-radius: 6px; }
+  .cp-tabs .add:hover { color: var(--accent); background: var(--surface-2); }
+  .chat.max .cp-tabs { padding-left: max(10px, calc((100vw - 900px) / 2)); padding-right: max(10px, calc((100vw - 900px) / 2)); }
   .chat-ctx { display: flex; flex-direction: column; gap: 4px; padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--surface-2); font-size: 12.5px; }
   .chat-ctx .ctx-line { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--text-2); }
   .chat-ctx .ctx-title { font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -508,6 +525,7 @@
     <button class="icon-btn small" id="chat-max" title="Maximize" aria-label="Maximize">⤢</button>
     <button class="icon-btn small" id="chat-close" aria-label="Close">✕</button>
   </div>
+  <div class="cp-tabs" id="cp-tabs" role="tablist" aria-label="Your Copilot chats"></div>
   <div class="chat-ctx" id="chat-ctx" hidden></div>
   <div class="chat-opts">
     <label>Model <input id="cp-model" list="cp-models" placeholder="default" spellcheck="false"></label>
@@ -1363,6 +1381,61 @@ const saveCp = () => {
   try { localStorage.setItem(CP_KEY, JSON.stringify(cpPrefs)); } catch {}
   chatSub();
 };
+// ---------------------------------------------------------------- switching chats
+
+// Chats you had open here lately, so you can hop between them (Alt+1…9, Alt+N for a new one).
+const RECENT_KEY = 'clearsky.recentChats';
+let recentChats = [];
+try { recentChats = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]'); } catch {}
+function saveRecent() { try { localStorage.setItem(RECENT_KEY, JSON.stringify(recentChats.slice(0, 8))); } catch {} }
+function remember(id, cwd, title) {
+  if (!id) return;
+  // Tabs keep their place; a chat new to the list goes first.
+  const old = recentChats.find((x) => x.id === id);
+  if (old) Object.assign(old, { cwd: cwd || old.cwd, title: title || old.title });
+  else recentChats = [{ id, cwd: cwd || null, title: title || null }, ...recentChats].slice(0, 8);
+  saveRecent();
+}
+function chatTabs() {
+  const live = new Map((cpLinks.live || []).map((x) => [x.id, x]));
+  const known = new Map(Object.values(cpLinks.links || {}).flat().map((x) => [x.id, x]));
+  const ids = [...new Set([...(cpLinks.live || []).map((x) => x.id), ...recentChats.map((x) => x.id)])];
+  // Busy and waiting chats first, then the ones you used last; at most eight.
+  return ids.map((id) => {
+    const r = recentChats.find((x) => x.id === id), l = live.get(id) || known.get(id);
+    const current = id === chat.session && (chat.turns || chat.stop);
+    const status = current && chat.stop ? ($('#chat-log .perm-b button') ? 'needs-you' : 'working') : live.get(id)?.status || 'closed';
+    return { id, cwd: l?.cwd || r?.cwd, title: (current && chat.title) || r?.title || l?.title || 'Copilot chat', status, live: live.has(id) };
+  }).sort((a, b) => (b.live - a.live)).slice(0, 8);
+}
+function drawTabs() {
+  const tabs = chatTabs();
+  const isNew = !chat.turns && !chat.stop;
+  $('#cp-tabs').innerHTML = tabs.map((t, i) => `<button class="cp-tab s-${esc(t.status)}${t.id === chat.session && !isNew ? ' on' : ''}" role="tab" aria-selected="${t.id === chat.session}"
+      data-tab="${esc(t.id)}" data-cwd="${esc(t.cwd || '')}" title="${esc(t.title)}${STATUS_TEXT[t.status] ? ` · ${STATUS_TEXT[t.status]}` : ''}${i < 9 ? ` (Alt+${i + 1})` : ''}">
+      <i></i><span>${esc(t.title)}</span>${t.live ? '' : `<span class="x" data-forget="${esc(t.id)}" title="Remove from this list" aria-label="Remove">✕</span>`}</button>`).join('')
+    + `${isNew ? '<button class="cp-tab on" role="tab" aria-selected="true"><i></i><span>New chat</span></button>' : ''}<button class="add" id="cp-tab-new" title="New chat (Alt+N)" aria-label="New chat">＋</button>`;
+  $('#cp-tabs').hidden = !tabs.length && isNew;
+}
+$('#cp-tabs').addEventListener('click', (e) => {
+  const f = e.target.closest('[data-forget]');
+  if (f) { e.stopPropagation(); recentChats = recentChats.filter((x) => x.id !== f.dataset.forget); saveRecent(); if (f.dataset.forget === chat.session) newChat(); else drawTabs(); return; }
+  if (e.target.closest('#cp-tab-new')) { newChat(); $('#chat-text').focus(); return; }
+  const t = e.target.closest('[data-tab]');
+  if (t && t.dataset.tab !== chat.session) openSession(t.dataset.tab, t.dataset.cwd);
+});
+document.addEventListener('keydown', (e) => {
+  if ($('#chat').hidden || !e.altKey || e.ctrlKey || e.metaKey) return;
+  if (e.key === 'n' || e.key === 'N') { e.preventDefault(); newChat(); $('#chat-text').focus(); return; }
+  const n = Number(e.key);
+  if (n >= 1 && n <= 9) {
+    const t = chatTabs()[n - 1];
+    if (t) { e.preventDefault(); if (t.id !== chat.session) openSession(t.id, t.cwd); }
+  }
+});
+// While the panel is open, keep the dots fresh.
+setInterval(() => { if (!$('#chat').hidden && !document.hidden) loadLinks(); }, 10_000);
+
 // The header under the title: what this chat is about, where it runs and where it's at.
 function itemIndex() {
   const out = new Map(), g = state.github || {}, j = state.jira || {}, jm = state.jiraMentions || {};
@@ -1375,6 +1448,11 @@ function itemIndex() {
   return out;
 }
 function drawCtx() {
+  drawTabs();
+  if (chat.session && chat.turns && chat.title) {
+    const r = recentChats.find((x) => x.id === chat.session);
+    if (!r) remember(chat.session, chat.cwd, chat.title); else if (r.title !== chat.title) { r.title = chat.title; saveRecent(); }
+  }
   const el = $('#chat-ctx');
   const keys = new Set(chat.items);
   // Items linked to this session elsewhere: attached earlier, its branch, or its title.
@@ -1430,8 +1508,15 @@ function addMsg(cls, html) {
   return el;
 }
 
-function newChat() {
+// Stop watching the chat on screen (it goes on in the background) before showing another.
+function detach() {
   chat.stop?.();
+  chat.stop = chat.halt = null;
+  $('#chat-send').textContent = 'Send';
+}
+
+function newChat() {
+  detach();
   chat.session = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   chat.cwd = null;
   chat.turns = 0;
@@ -1478,7 +1563,7 @@ function renderAnswer(segs) {
 
 // Reopen a Copilot session (from here, the terminal or an editor) with its conversation so far.
 async function openSession(id, cwd) {
-  chat.stop?.();
+  detach();
   showHistory(false);
   $('#chat-log').innerHTML = '<span class="typing">Opening session</span>';
   try {
@@ -1492,8 +1577,10 @@ async function openSession(id, cwd) {
       if (m.role === 'me') addMsg('me', esc(m.text));
       else { const el = addMsg('cp', renderAnswer(m.segs)); el.segs = m.segs; }
     }
-    if (!h.messages.length) addMsg('cp', '<span class="perm-done">Nothing said in this session yet. Carry on below.</span>');
+    if (!h.messages.length && !h.busy) addMsg('cp', '<span class="perm-done">Nothing said in this session yet. Carry on below.</span>');
     rememberChat();
+    remember(h.id, h.cwd);
+    if (h.busy) attachLive(h.id);
   } catch (e) {
     newChat();
     addMsg('cp', `<div class="err">Couldn't open that session: ${esc(e.message)}</div>`);
@@ -1611,14 +1698,18 @@ async function send(text) {
     if (e.type === 'text') { if (last?.type === 'text') last.text += e.text; else segs.push({ type: 'text', text: e.text }); }
     else if (e.type === 'tool') { const t = segs.find((g) => g.type === 'tool' && g.id === e.id); if (t) Object.assign(t, Object.fromEntries(Object.entries(e).filter(([, v]) => v != null))); else segs.push(e); }
     else if (e.type === 'permission' || e.type === 'error') segs.push(e);
-    else if (e.type === 'session') { chat.session = e.id; rememberChat(); }
+    else if (e.type === 'session') { if (here()) { chat.session = e.id; rememberChat(); } mine.id = e.id; remember(e.id, chat.cwd, mine.title); drawTabs(); }
     else if (e.type === 'commands' && chat.info) chat.info.commands = e.commands;
-    else if (e.type === 'cwd') { chat.cwd = e.cwd; segs.push({ type: 'note', text: `Working in ${e.cwd}` }); drawCtx(); }
+    else if (e.type === 'cwd') { if (here()) { chat.cwd = e.cwd; drawCtx(); } segs.push({ type: 'note', text: `Working in ${e.cwd}` }); }
     if (e.type === 'done' || e.type === 'error') ended = true;
   };
   let ended = false;
   const ctrl = new AbortController();
-  chat.stop = () => ctrl.abort();
+  // This turn's chat; a new one gets Copilot's own id once it starts.
+  const mine = { id: chat.session, title: chat.turns ? null : text.trim().split('\n')[0].slice(0, 120) };
+  const here = () => chat.session === mine.id;
+  chat.stop = () => ctrl.abort(); // stop watching (switching chats); the turn goes on
+  chat.halt = () => haltTurn(mine.id);
   $('#chat-send').textContent = 'Stop';
   drawCtx();
   try {
@@ -1639,19 +1730,67 @@ async function send(text) {
     const last = segs.at(-1);
     if (last?.type === 'text') last.text = last.text.trimEnd();
     if (!ended) segs.push({ type: 'error', message: 'Interrupted: Copilot stopped before finishing (was Clearsky restarted?). Send a message to carry on in this session.' });
-    chat.turns++;
+    if (here()) chat.turns++;
   } catch (e) {
-    segs.push({ type: 'error', message: e.name === 'AbortError' ? 'Stopped.' : e.message });
-    if (e.name === 'AbortError' && segs.length > 1) chat.turns++;
+    segs.push({ type: 'error', message: e.name === 'AbortError' ? 'Stopped watching; it goes on in the background.' : e.message });
+    if (e.name === 'AbortError' && here()) chat.turns++;
   } finally {
-    rememberChat();
+    if (here()) rememberChat();
     setTimeout(loadLinks, 500);
     if (!segs.length) segs.push({ type: 'error', message: 'No answer.' });
+    // Switched to another chat meanwhile: that one owns the panel now.
+    if (!here()) return;
     draw();
-    chat.stop = null;
+    chat.stop = chat.halt = null;
     $('#chat-send').textContent = 'Send';
     chatSub();
   }
+}
+
+// Stop a turn on purpose (the Stop button), here or one that went on in the background.
+async function haltTurn(id) {
+  try { await post('/api/copilot/stop', { chat: id }); } catch {}
+  setTimeout(() => { if (chat.session === id && chat.stop) chat.stop(); }, 3000);
+}
+
+// Back on a chat that is still busy: show its open questions and follow it to the end of the
+// turn, then reload it so the whole answer is there.
+async function attachLive(id) {
+  const out = addMsg('cp', '<span class="typing">Still working</span>');
+  const segs = [];
+  out.segs = segs;
+  const draw = () => { out.innerHTML = renderAnswer(segs) || '<span class="typing">Still working</span>'; $('#chat-log').scrollTop = $('#chat-log').scrollHeight; drawCtx(); };
+  const ctrl = new AbortController();
+  chat.stop = () => ctrl.abort();
+  chat.halt = () => haltTurn(id);
+  $('#chat-send').textContent = 'Stop';
+  drawCtx();
+  let done = false;
+  try {
+    const res = await fetch(`/api/copilot/sessions/${encodeURIComponent(id)}/live`, { signal: ctrl.signal });
+    const reader = res.body.getReader(), dec = new TextDecoder();
+    let buf = '';
+    for (;;) {
+      const { value, done: end } = await reader.read();
+      if (end) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const l of lines) {
+        let e; try { e = JSON.parse(l); } catch { continue; }
+        const last = segs.at(-1);
+        if (e.type === 'text') { if (last?.type === 'text') last.text += e.text; else segs.push({ type: 'text', text: e.text }); }
+        else if (e.type === 'tool') { const t = segs.find((g) => g.type === 'tool' && g.id === e.id); if (t) Object.assign(t, Object.fromEntries(Object.entries(e).filter(([, v]) => v != null))); else segs.push(e); }
+        else if (e.type === 'permission' || e.type === 'error') segs.push(e);
+        else if (e.type === 'done') done = true;
+      }
+      draw();
+    }
+  } catch { /* switched away */ }
+  if (chat.session !== id) return;
+  chat.stop = chat.halt = null;
+  $('#chat-send').textContent = 'Send';
+  if (done) openSession(id, chat.cwd); else chatSub();
 }
 
 // Approve or deny a step Copilot asked about (Ask mode).
@@ -1766,7 +1905,7 @@ try { if (localStorage.getItem('clearsky.chatOpen')) openChat(true); } catch {}
 for (const id of ['#cp-model', '#cp-effort', '#cp-perm', '#cp-allow', '#cp-deny']) $(id).addEventListener('change', saveCp);
 $('#chat-form').onsubmit = (e) => {
   e.preventDefault();
-  if (chat.stop) return chat.stop();
+  if (chat.stop) return chat.halt ? chat.halt() : chat.stop();
   const t = $('#chat-text').value;
   $('#chat-text').value = '';
   send(t);

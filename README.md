@@ -118,6 +118,8 @@ Type **/** in the message box for skills and, in Ask mode, every slash command y
 
 The ☰ menu at the top left has the tabs, Copilot and Settings, and a Light / Dark / Auto theme switch (saved per device). On a wide screen Copilot sits beside the page; on a phone it fills the screen. In Chrome, 🎤 next to Send lets you talk instead of typing; the browser sends the audio to Google to turn it into text, and nothing is sent to Copilot until you press Send.
 
+Tabs along the top of the panel hold the chats that are working or waiting on you, plus the ones you used lately here, each with a status dot. Click one, or press Alt+1…9, to switch; Alt+N starts a new chat. Switching (or reloading the page) doesn't stop a chat: it carries on in the background, and when you come back you see any question it's waiting on and follow it to the end. **Stop** ends a turn on purpose.
+
 **History** lists your Copilot sessions as Copilot itself knows them, whether you started them here, in a terminal or in your editor, with ones open elsewhere marked. Click one to see the conversation and carry on with it. The chat you had open comes back after a page reload.
 
 Sessions show up next to the PR or ticket they are about: one you started from that row or attached it to, one running in a checkout of the PR's branch, or one with the PR or ticket key in its title or branch. A dot shows if it is working (green), waiting for you (blue) or needs your OK (amber), and a click reopens it; the ✦ menu also offers **↩ Continue**. Any session that is working or waiting, linked or not, is listed in the **Copilot sessions** card under Needs you, and counted in the summary line.

@@ -1204,8 +1204,23 @@ let copilotCommands = null;
 // Ask-mode chats keep a Copilot process running between turns, keyed by Copilot's session id.
 const acpChats = new Map();
 setInterval(() => {
-  for (const [id, c] of acpChats) if (Date.now() - c.lastUsed > 20 * 6e4) { c.agent.close(); acpChats.delete(id); }
+  for (const [id, c] of acpChats) if (!c.busy && !c.waiting.size && Date.now() - c.lastUsed > 20 * 6e4) { c.agent.close(); acpChats.delete(id); }
 }, 60_000).unref();
+
+// One-shot runs (Assisted and Full) by session, so Stop can end one you switched away from.
+const oneShotStops = new Map();
+
+// Stop a turn on purpose. Closing the page or switching chats leaves it running.
+function stopCopilot(chat) {
+  const c = acpChats.get(chat);
+  if (c) {
+    c.agent.cancel();
+    for (const r of c.waiting.values()) r({ outcome: 'cancelled' });
+    c.waiting.clear(); c.pending.clear();
+  }
+  oneShotStops.get(chat)?.();
+  return !!(c || oneShotStops.has(chat));
+}
 
 // A short-lived Copilot process, for listing or reading sessions.
 async function withAgent(bin, fn) {
@@ -1320,6 +1335,12 @@ async function copilotLinks(bin) {
   const links = linkSessions(recent, { prs: [...(gh.myPrs || []), ...(gh.reviewRequested || [])], refs: localState.sessionRefs(stateFile), workspace: workspaceInfo });
   // Every session that is busy or waiting on you, linked to an item or not.
   const live = sessions.filter((x) => x.status !== 'closed').map(({ id, title, updatedAt, cwd, status }) => ({ id, title: title || 'Untitled session', updatedAt, cwd, status }));
+  // Chats running here that Copilot doesn't list yet (before their first answer is saved).
+  const titles = localState.sessionTitles(stateFile);
+  for (const [id, c] of acpChats) if (!sessions.some((x) => x.id === id)) {
+    live.push({ id, title: titles[id] || 'New chat', updatedAt: new Date(c.lastUsed).toISOString(), cwd: c.cwd || null,
+      status: c.waiting.size ? 'needs-you' : c.busy ? 'working' : 'waiting' });
+  }
   return { links, live };
 }
 
@@ -1406,7 +1427,7 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin })
   if (c && (c.sig !== sig || c.agent.closed)) { resumeId = c.agent.sessionId; c.agent.close(); acpChats.delete(chat); c = null; }
   if (!c) {
     const agent = new AcpAgent(bin, copilot.optionArgs(options), { env: copilotEnv() });
-    c = { agent, sig, waiting: new Map(), lastUsed: Date.now() };
+    c = { agent, sig, cwd, waiting: new Map(), pending: new Map(), emit: () => {}, lastUsed: Date.now() };
     const id = await agent.start(cwd, resumeId);
     acpChats.set(id, c);
     // A new chat gets Copilot's own session id; the panel keeps using that from now on.
@@ -1414,26 +1435,46 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin })
   }
   c.lastUsed = Date.now();
   const { agent } = c;
+  // Events go to whichever page is watching this chat; none while you look at another one.
+  c.emit = emit;
   if (agent.commands) { copilotCommands = agent.commands; emit({ type: 'commands', commands: agent.commands }); }
   agent.onUpdate = (u) => {
-    if (u.sessionUpdate === 'available_commands_update') { copilotCommands = agent.commands; emit({ type: 'commands', commands: agent.commands }); return; }
-    const e = chatEvent(u); if (e && (e.type !== 'text' || e.text)) emit(e);
+    if (u.sessionUpdate === 'available_commands_update') { copilotCommands = agent.commands; c.emit({ type: 'commands', commands: agent.commands }); return; }
+    const e = chatEvent(u); if (e && (e.type !== 'text' || e.text)) c.emit(e);
   };
   agent.onPermission = (p) => new Promise((resolve) => {
     const id = randomBytes(6).toString('hex');
-    c.waiting.set(id, resolve);
-    emit({ type: 'permission', id, title: p.toolCall?.title || 'Copilot wants to use a tool', kind: p.toolCall?.kind,
-      detail: toolDetail(p.toolCall), options: (p.options || []).map((o) => ({ id: o.optionId, name: o.name, kind: o.kind })) });
+    const ev = { type: 'permission', id, title: p.toolCall?.title || 'Copilot wants to use a tool', kind: p.toolCall?.kind,
+      detail: toolDetail(p.toolCall), options: (p.options || []).map((o) => ({ id: o.optionId, name: o.name, kind: o.kind })) };
+    c.waiting.set(id, (answer) => { c.pending.delete(id); resolve(answer); });
+    c.pending.set(id, ev);
+    c.emit(ev);
   });
-  res.on('close', () => {
-    if (res.writableEnded) return;
-    agent.cancel();
-    for (const r of c.waiting.values()) r({ outcome: 'cancelled' });
-    c.waiting.clear();
-  });
+  // Switching chats or reloading the page leaves the turn running; Stop ends it.
+  res.on('close', () => { if (c.emit === emit) c.emit = () => {}; });
   c.busy = true;
   const r = await agent.prompt(prompt).finally(() => { c.busy = false; });
-  emit({ type: 'done', stopReason: r?.stopReason });
+  c.emit({ type: 'done', stopReason: r?.stopReason });
+  c.emit = () => {};
+}
+
+// Watch a chat that is still running (after switching back to it): its open questions, then
+// what it does from now on, until the turn ends.
+function attachCopilot(chat, req, res) {
+  const c = acpChats.get(chat);
+  res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+  const send = (e) => { if (!res.writableEnded && !res.destroyed) res.write(`${JSON.stringify(e)}\n`); };
+  if (!c?.busy) {
+    // A one-shot run (Assisted or Full) has no live feed; say when it's over.
+    if (!oneShotRunning.has(chat)) { send({ type: 'done' }); return res.end(); }
+    send({ type: 'text', text: 'Working in the background; the answer shows here when it is done.' });
+    const timer = setInterval(() => { if (!oneShotRunning.has(chat)) { clearInterval(timer); send({ type: 'done' }); res.end(); } }, 2000);
+    return res.on('close', () => clearInterval(timer));
+  }
+  for (const ev of c.pending.values()) send(ev);
+  const emit = (e) => { send(e); if (e.type === 'done') res.end(); };
+  c.emit = emit;
+  res.on('close', () => { if (c.emit === emit) c.emit = () => {}; });
 }
 
 // A compact view of what's on the dashboard right now, from the cache (no new fetches).
@@ -1546,6 +1587,10 @@ function serve() {
         if (req.headers['x-clearsky-token'] !== csrf || (req.headers.origin && !origins.has(req.headers.origin))) {
           return json(res, 403, { error: 'forbidden' });
         }
+        if (url.pathname === '/api/copilot/stop') {
+          const { chat } = await readJson(req);
+          return json(res, 200, { stopped: stopCopilot(String(chat || '')) });
+        }
         if (url.pathname === '/api/copilot/permission') {
           const { chat, id, option } = await readJson(req);
           const waiting = acpChats.get(chat)?.waiting;
@@ -1583,8 +1628,8 @@ function serve() {
           res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
           let sessionId = body.session;
           const emit = (e) => {
-            if (e.type === 'session') sessionId = e.id;
-            if (!res.writableEnded) res.write(`${JSON.stringify(e)}\n`);
+            if (e.type === 'session') { sessionId = e.id; linkRefs(); }
+            if (!res.writableEnded && !res.destroyed) res.write(`${JSON.stringify(e)}\n`);
           };
           // Remember which PRs and tickets this session is about, for the links on the page.
           const linkRefs = () => {
@@ -1604,17 +1649,18 @@ function serve() {
           if (live) { live.agent.close(); acpChats.delete(body.session); }
           const args = copilot.copilotArgs({ prompt, session: body.session, resume: !!body.resume, cwd, ...options });
           oneShotRunning.add(body.session);
-          res.on('close', () => oneShotRunning.delete(body.session));
           const stop = copilot.runCopilot(info.bin, args, {
             env: copilotEnv(),
             onData: (text) => emit({ type: 'text', text }),
             onEnd: ({ code, stderr }) => {
               if (code !== 0) emit({ type: 'error', message: `Copilot exited with ${code}${stderr ? `: ${stderr.trim().split('\n').slice(-3).join(' ')}` : ''}` });
               else emit({ type: 'done' });
+              oneShotRunning.delete(body.session); oneShotStops.delete(body.session);
               res.end();
             },
           });
-          res.on('close', () => { if (!res.writableEnded) stop(); });
+          // Like Ask chats, it keeps going when you switch away; Stop ends it.
+          oneShotStops.set(body.session, stop);
           return;
         }
         if (url.pathname === '/api/mute') {
@@ -1711,8 +1757,14 @@ function serve() {
         const info = await copilotInfo();
         if (!info.available) return json(res, 400, { error: 'GitHub Copilot CLI not found' });
         const cwd = isDir(url.searchParams.get('cwd')) ? url.searchParams.get('cwd') : copilotCwd();
-        return json(res, 200, { id: histId, cwd, here: acpChats.has(histId), messages: await copilotHistory(info.bin, histId, cwd) });
+        const c = acpChats.get(histId);
+        const busy = !!c?.busy || oneShotRunning.has(histId);
+        // A chat that only exists in this server so far may not be readable from disk yet.
+        const messages = await copilotHistory(info.bin, histId, cwd).catch((e) => { if (c || busy) return []; throw e; });
+        return json(res, 200, { id: histId, cwd, here: !!c, busy, messages });
       }
+      const attach = url.pathname.match(/^\/api\/copilot\/sessions\/([\w-]{8,64})\/live$/)?.[1];
+      if (attach) return attachCopilot(attach, req, res);
       if (url.pathname === '/api/dismissed') return json(res, 200, { dismissed: localState.dismissed(stateFile) });
       if (url.pathname === '/api/plan') {
         // Waits for every source (from cache when fresh); the page asks for it alongside them.
