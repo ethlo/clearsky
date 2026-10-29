@@ -113,6 +113,11 @@ test('the chat panel talks to the local Copilot CLI with the chosen options', as
     let feed = '';
     while (!feed.includes('"permission"')) feed += new TextDecoder().decode((await lr.read()).value);
     const q = JSON.parse(feed.split('\n').find((l) => l.includes('"permission"')));
+    // A chat waiting on your OK holds up a restart, and the restart note names it.
+    const rs = await (await fetch(`${base}/api/restart`)).json();
+    assert.deepEqual(rs.busy.map((c) => [c.id, c.status]), [['acp-session-1', 'needs-you']]);
+    assert.equal(rs.pending, null);
+    assert.equal(rs.updateReady, false);
     assert.equal((await ask0(`${base}/api/copilot/permission`, { chat: 'acp-session-1', id: q.id, option: 'yes' })).status, 200);
     for (;;) { const { value, done } = await lr.read(); if (done) break; feed += new TextDecoder().decode(value); }
     assert.match(feed, /answer=yes/);

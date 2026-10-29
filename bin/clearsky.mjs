@@ -1758,12 +1758,33 @@ function startPolling() {
 // then start a fresh server (or, under systemd, exit for it to restart us). Idle chats carry on
 // after the restart, because a new message reopens the session.
 const restart = { pending: null, timer: null, server: null };
+// A restart waits for chats started here that are mid-answer or waiting on your Allow/Deny.
+// Chats done with their turn, and Copilot in a terminal or editor, don't hold it up.
 const chatsBusy = () => [...acpChats.values()].filter((c) => c.busy || c.waiting.size).length;
+function busyChats() {
+  const names = localState.sessionNames(stateFile), titles = new Map((sessionsCache?.data || []).map((x) => [x.id, x.title]));
+  return [...acpChats.entries()].filter(([, c]) => c.busy || c.waiting.size)
+    .map(([id, c]) => ({ id, title: names[id] || titles.get(id) || 'Copilot chat', status: c.waiting.size ? 'needs-you' : 'working' }));
+}
+// Whether Clearsky's files changed since this process started (a pull), so a restart would update it.
+const startedAt = Date.now();
+function updateReady() {
+  const root = join(here, '..');
+  for (const dir of ['bin', 'lib', 'lib/sources', 'web']) {
+    let names = [];
+    try { names = readdirSync(join(root, dir)); } catch { continue; }
+    for (const n of names) {
+      try { if (/\.(mjs|html)$/.test(n) && statSync(join(root, dir, n)).mtimeMs > startedAt) return true; } catch { /* gone */ }
+    }
+  }
+  return false;
+}
 function restartWhenIdle({ maxWaitMinutes = 60, force = false } = {}) {
-  if (restart.pending) return restart.pending;
-  restart.pending = { since: new Date().toISOString(), until: new Date(Date.now() + maxWaitMinutes * 6e4).toISOString(), busy: chatsBusy() };
-  const check = () => {
-    if (!force && chatsBusy()) {
+  // "Restart now" while a restart waits: stop waiting.
+  if (restart.pending) { if (force) { restart.pending.force = true; restart.check?.(); } return restart.pending; }
+  restart.pending = { since: new Date().toISOString(), until: new Date(Date.now() + maxWaitMinutes * 6e4).toISOString(), busy: chatsBusy(), force };
+  const check = restart.check = () => {
+    if (!restart.pending.force && chatsBusy()) {
       if (Date.now() > Date.parse(restart.pending.until)) { console.log('clearsky: restart given up, Copilot is still working'); clearInterval(restart.timer); restart.pending = null; }
       return;
     }
@@ -1807,6 +1828,7 @@ function serve() {
         }
         if (url.pathname === '/api/restart') {
           const { maxWaitMinutes, force } = await readJson(req).catch(() => ({}));
+          if (force === true) console.log(`clearsky: restart now, stopping ${chatsBusy()} busy chat(s)`);
           return json(res, 200, { restart: restartWhenIdle({ maxWaitMinutes: Math.min(Math.max(Number(maxWaitMinutes) || 60, 1), 240), force: force === true }) });
         }
         if (url.pathname === '/api/copilot/stop') {
@@ -2026,6 +2048,7 @@ function serve() {
         const keys = [...new Set([...(j.assigned || []), ...(jm.tickets || [])].map((t) => t.key).filter(Boolean))];
         return json(res, 200, { branches: await branchesFor(keys, codeDirs()) });
       }
+      if (url.pathname === '/api/restart') return json(res, 200, { pending: restart.pending, busy: busyChats(), updateReady: updateReady() });
       if (url.pathname === '/api/actions') return json(res, 200, { actions: localState.actions(stateFile) });
       if (url.pathname === '/api/work') {
         const data = await collect(url.searchParams.has('refresh'));

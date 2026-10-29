@@ -80,6 +80,13 @@
   .ni.cp:hover .x { visibility: visible; }
   .ni.cp .x:hover { color: var(--text); background: var(--line); }
   .side-foot { margin-top: auto; padding: 14px 8px 0; display: flex; flex-direction: column; gap: 8px; }
+  .restart-note { font-size: 12px; color: var(--text-2); background: var(--amber-soft); border: 1px solid color-mix(in srgb, var(--amber) 35%, transparent);
+    border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+  .restart-note b { color: var(--text); font-weight: 600; }
+  .restart-note ul { margin: 0; padding-left: 16px; }
+  .restart-note .acts { display: flex; gap: 6px; }
+  .restart-note button { font: inherit; font-size: 12px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--text); cursor: pointer; }
+  .restart-note button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   .side-foot .row1 { display: flex; align-items: center; gap: 6px; }
   .status { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 7px; white-space: nowrap; flex: 1; min-width: 0; }
   .status .txt { overflow: hidden; text-overflow: ellipsis; }
@@ -573,6 +580,7 @@
   <div class="sg" id="side-personal-h" hidden>Personal</div>
   <nav id="side-personal"></nav>
   <div class="side-foot">
+    <div class="restart-note" id="restart-note" hidden></div>
     <a class="ni" href="/settings"><span class="ico">⚙</span><span class="lab">Settings</span></a>
     <div class="row1">
       <div class="status"><span class="dot" id="dot"></span><span class="txt" id="status">Loading…</span></div>
@@ -1976,6 +1984,43 @@ document.addEventListener('mouseout', (e) => {
 document.addEventListener('focusin', (e) => { const el = e.target.closest('[data-issue],[data-pr]'); if (el) showCard(el); });
 document.addEventListener('focusout', (e) => { if (e.target.closest('[data-issue],[data-pr]')) hideTimer = setTimeout(hideCard, 200); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideCard(); });
+
+// ---------------------------------------------------------------- restarting Clearsky
+// After an update (or `clearsky restart`), Clearsky restarts once no chat started here is
+// mid-answer or waiting on your Allow/Deny. This note says what it waits for, and Restart now
+// stops those chats (they can be continued afterwards).
+let restartInfo = null;
+async function loadRestart() {
+  try { restartInfo = await getJson('/api/restart'); } catch { return; }
+  const { pending, busy = [], updateReady } = restartInfo, el = $('#restart-note');
+  el.hidden = !pending && !updateReady;
+  if (el.hidden) return;
+  const list = busy.length ? `<ul>${busy.map((c) => `<li>${esc(c.title)} (${c.status === 'needs-you' ? 'waiting for your OK' : 'working'})</li>`).join('')}</ul>` : '';
+  el.innerHTML = pending
+    ? `<div><b>Restart waiting</b> for ${busy.length ? `${busy.length} Copilot chat${busy.length > 1 ? 's' : ''} to finish:` : 'a moment…'}</div>${list}
+       <div class="acts"><button class="primary" data-restart="now">Restart now</button></div>`
+    : `<div><b>Update ready.</b> Restart to use it${busy.length ? ` (waits for ${busy.length} busy chat${busy.length > 1 ? 's' : ''})` : ''}.</div>${list}
+       <div class="acts"><button class="primary" data-restart="idle">Restart</button>${busy.length ? '<button data-restart="now">Restart now</button>' : ''}</div>`;
+}
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-restart]');
+  if (!b) return;
+  const now = b.dataset.restart === 'now', busy = restartInfo?.busy || [];
+  if (now && busy.length && !confirm(`Restart now? This stops:\n${busy.map((c) => `• ${c.title}`).join('\n')}\n\nYou can continue them afterwards.`)) return;
+  b.disabled = true;
+  try { await post('/api/restart', { force: now }); } catch (err) { b.disabled = false; return alert(err.message); }
+  $('#restart-note').innerHTML = '<div><b>Restarting…</b> the page reloads when Clearsky is back.</div>';
+  // Wait for the old server to go away and the new one to answer, then reload.
+  const started = Date.now();
+  let wentDown = false;
+  const poll = async () => {
+    try { await fetch('/api/restart', { cache: 'no-store' }); if (wentDown || Date.now() - started > 60_000) return location.reload(); } catch { wentDown = true; }
+    setTimeout(poll, 1000);
+  };
+  setTimeout(poll, 1000);
+});
+loadRestart();
+setInterval(() => { if (!document.hidden) loadRestart(); }, 15_000);
 
 // ---------------------------------------------------------------- Copilot chat
 
