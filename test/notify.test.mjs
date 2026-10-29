@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, chmodSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { attentionItems, diffAttention, desktopNotify } from '../lib/notify.mjs';
+import { EventEmitter } from 'node:events';
+import { attentionItems, diffAttention, desktopNotify, DbusNotifier, notifyArgs, parseSignal } from '../lib/notify.mjs';
 
 const data = {
   github: {
@@ -73,4 +74,37 @@ test('a desktop notification opens the item when you click Open', async () => {
   for (let i = 0; i < 20 && !existsSync(log); i++) await new Promise((r) => setTimeout(r, 50));
   assert.equal(readFileSync(log, 'utf8').trim(), 'https://github.com/acme/api/pull/7');
   assert.match(readFileSync(`${log}.args`, 'utf8'), /--app-name=Clearsky .*Review requested Fix/);
+});
+
+test('D-Bus banners: one per item, and clicking Open opens the link with the activation token', async () => {
+  assert.deepEqual(notifyArgs({ title: "Anna's PR", body: 'a\nb' }, 7).slice(8, 14),
+    ["'Clearsky'", 'uint32 7', "'dialog-information'", "'Anna\\'s PR'", "'a\\nb'", "['default', 'Open', 'open', 'Open']"]);
+  assert.deepEqual(parseSignal("/org/freedesktop/Notifications: org.freedesktop.Notifications.ActionInvoked (uint32 12, 'open')"),
+    { signal: 'ActionInvoked', id: 12, value: 'open' });
+  assert.equal(parseSignal('something else'), null);
+
+  const monitor = Object.assign(new EventEmitter(), { stdout: new EventEmitter(), kill() {} });
+  const calls = [], opened = [];
+  let next = 40;
+  const run = (bin, args, opts) => {
+    if (args[0] === 'monitor') return monitor;
+    opened.push({ url: args[0], token: opts.env.XDG_ACTIVATION_TOKEN });
+    return Object.assign(new EventEmitter(), { unref() {} });
+  };
+  const call = (bin, args, opts, cb) => { calls.push(args); cb(null, `(uint32 ${next++},)\n`); };
+  const n = new DbusNotifier({ run, call });
+
+  assert.equal(await n.notify({ key: 'review:7', title: 'Review requested', url: 'https://github.com/acme/api/pull/7' }), true);
+  assert.equal(await n.notify({ key: 'review:7', title: 'Review requested again', url: 'https://github.com/acme/api/pull/7' }), true);
+  assert.equal(calls[0][9], 'uint32 0');
+  assert.equal(calls[1][9], 'uint32 40', 'the second banner replaces the first');
+
+  monitor.stdout.emit('data', "/org/freedesktop/Notifications: org.freedesktop.Notifications.ActivationToken (uint32 41, 'tok')\n/org/freedesktop/Notif");
+  monitor.stdout.emit('data', "ications: org.freedesktop.Notifications.ActionInvoked (uint32 41, 'open')\n");
+  assert.deepEqual(opened, [{ url: 'https://github.com/acme/api/pull/7', token: 'tok' }]);
+
+  await n.notify({ key: 'x', title: 'Bad link', url: 'file:///etc/passwd' });
+  monitor.stdout.emit('data', "/org/freedesktop/Notifications: org.freedesktop.Notifications.ActionInvoked (uint32 42, 'open')\n");
+  assert.equal(opened.length, 1, 'only web links open');
+  n.stop();
 });

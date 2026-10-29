@@ -25,7 +25,7 @@ It runs on the laptop, uses the logins already there, has no dependencies beyond
 | State | `lib/state.mjs` → `~/.config/clearsky/state.json` | done, muted and dismissed items, what was already notified, session links |
 | Copilot | `lib/acp.mjs`, `lib/copilot.mjs` | the Copilot CLI over ACP (JSON-RPC on stdio), or one-shot runs |
 | Calendar | `lib/eds.mjs`, `lib/ics.mjs` | GNOME's Evolution cache (SQLite) or an iCal link, parsed locally |
-| Notifications | `lib/notify.mjs` | what's new since last time; `notify-send` banners, or the browser's |
+| Notifications | `lib/notify.mjs` | what's new since last time; desktop banners over D-Bus (`gdbus`), or the browser's |
 
 ## Sources
 

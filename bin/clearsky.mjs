@@ -20,7 +20,7 @@ import * as settings from '../lib/settings.mjs';
 import * as localState from '../lib/state.mjs';
 import * as copilot from '../lib/copilot.mjs';
 import { AcpAgent, chatEvent } from '../lib/acp.mjs';
-import { attentionItems, diffAttention, desktopNotify } from '../lib/notify.mjs';
+import { attentionItems, diffAttention, desktopNotify, DbusNotifier } from '../lib/notify.mjs';
 import { loadSources, makeContext, hook, asList } from '../lib/sources.mjs';
 
 // ---------------------------------------------------------------- config
@@ -1518,11 +1518,20 @@ const ATTENTION_SOURCES = ['github', 'jiraMentions', 'slack'];
 const poller = { lastPoll: null, notifier: null, timer: null };
 
 // Desktop banners come from notify-send when it's there; otherwise the open page shows them.
+// Desktop banners go over D-Bus with gdbus (clicks work), else through notify-send, else the
+// open page shows them. CLEARSKY_NOTIFY=notify-send forces the old way.
+let dbusNotifier = null;
 function hasNotifySend() {
   if (process.env.CLEARSKY_NOTIFY === 'off') return Promise.resolve('off');
   if (process.env.CLEARSKY_NOTIFY === 'browser') return Promise.resolve('browser');
-  return execFileP(process.env.NOTIFY_SEND_BIN || 'notify-send', ['--version'], { timeout: 5000 }).then(() => 'desktop', () => 'browser');
+  const notifySend = () => execFileP(process.env.NOTIFY_SEND_BIN || 'notify-send', ['--version'], { timeout: 5000 }).then(() => 'desktop', () => 'browser');
+  if (process.env.CLEARSKY_NOTIFY === 'notify-send' || process.env.NOTIFY_SEND_BIN) return notifySend();
+  const bin = process.env.GDBUS_BIN || 'gdbus';
+  return execFileP(bin, ['call', '--session', '--dest', 'org.freedesktop.Notifications', '--object-path', '/org/freedesktop/Notifications',
+    '--method', 'org.freedesktop.Notifications.GetServerInformation'], { timeout: 5000 })
+    .then(() => { dbusNotifier = new DbusNotifier({ bin }); dbusNotifier.start(); return 'desktop'; }, notifySend);
 }
+const sendBanner = (item) => (dbusNotifier ? dbusNotifier.notify(item) : desktopNotify(item, { bin: process.env.NOTIFY_SEND_BIN || 'notify-send' }));
 
 // Banners only during working hours on workdays (07:00 until two hours after the workday ends).
 function notifyNow(now = new Date()) {
@@ -1547,10 +1556,9 @@ async function pollOnce(force) {
   if (fresh.length || Object.keys(seen).length !== Object.keys(before).length) localState.setSeen(stateFile, seen);
   poller.lastPoll = new Date().toISOString();
   if (fresh.length && poller.notifier === 'desktop' && notifyNow()) {
-    const bin = process.env.NOTIFY_SEND_BIN || 'notify-send';
     // More than two at once (say after the laptop wakes up) become one banner.
-    if (fresh.length > 2) desktopNotify({ title: `${fresh.length} new things need you`, body: fresh.slice(0, 4).map((x) => x.title).join('\n'), url: `http://127.0.0.1:${config.port}/` }, { bin });
-    else for (const it of fresh) desktopNotify(it, { bin });
+    if (fresh.length > 2) sendBanner({ key: 'clearsky:summary', title: `${fresh.length} new things need you`, body: fresh.slice(0, 4).map((x) => x.title).join('\n'), url: `http://127.0.0.1:${config.port}/` });
+    else for (const it of fresh) sendBanner(it);
   }
   if (fresh.length) localState.logNotified(stateFile, fresh.map((x) => ({ key: x.key, kind: x.kind, stamp: String(x.stamp ?? ''), at: new Date().toISOString(), via: poller.notifier, quiet: !notifyNow() })));
   return { items, seen, fresh };
