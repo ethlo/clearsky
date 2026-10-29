@@ -19,6 +19,7 @@ import { randomBytes } from 'node:crypto';
 import * as settings from '../lib/settings.mjs';
 import * as localState from '../lib/state.mjs';
 import * as copilot from '../lib/copilot.mjs';
+import { AcpAgent, chatEvent } from '../lib/acp.mjs';
 
 // ---------------------------------------------------------------- config
 
@@ -1037,6 +1038,50 @@ function copilotEnv() {
   return env;
 }
 
+// Ask-mode chats keep a Copilot process running between turns, keyed by the panel's chat id.
+const acpChats = new Map();
+// Copilot's own session id for a chat, when it differs from the panel's (Ask mode picks its own).
+const chatSessions = new Map();
+setInterval(() => {
+  for (const [id, c] of acpChats) if (Date.now() - c.lastUsed > 20 * 6e4) { c.agent.close(); acpChats.delete(id); }
+}, 60_000).unref();
+
+function toolDetail(call = {}) {
+  const input = call.rawInput;
+  if (!input || typeof input !== 'object') return '';
+  const text = input.command || input.path || input.url || JSON.stringify(input);
+  return String(text).slice(0, 400);
+}
+
+async function acpTurn({ chat, options, prompt, resumeId, emit, res, bin }) {
+  const sig = JSON.stringify(copilot.optionArgs(options));
+  let c = acpChats.get(chat);
+  if (c && (c.sig !== sig || c.agent.closed)) { resumeId = c.agent.sessionId; c.agent.close(); acpChats.delete(chat); c = null; }
+  if (!c) {
+    const agent = new AcpAgent(bin, copilot.optionArgs(options), { env: copilotEnv() });
+    c = { agent, sig, waiting: new Map(), lastUsed: Date.now() };
+    acpChats.set(chat, c);
+    chatSessions.set(chat, await agent.start(copilotCwd(), resumeId));
+  }
+  c.lastUsed = Date.now();
+  const { agent } = c;
+  agent.onUpdate = (u) => { const e = chatEvent(u); if (e && (e.type !== 'text' || e.text)) emit(e); };
+  agent.onPermission = (p) => new Promise((resolve) => {
+    const id = randomBytes(6).toString('hex');
+    c.waiting.set(id, resolve);
+    emit({ type: 'permission', id, title: p.toolCall?.title || 'Copilot wants to use a tool', kind: p.toolCall?.kind,
+      detail: toolDetail(p.toolCall), options: (p.options || []).map((o) => ({ id: o.optionId, name: o.name, kind: o.kind })) });
+  });
+  res.on('close', () => {
+    if (res.writableEnded) return;
+    agent.cancel();
+    for (const r of c.waiting.values()) r({ outcome: 'cancelled' });
+    c.waiting.clear();
+  });
+  const r = await agent.prompt(prompt);
+  emit({ type: 'done', stopReason: r?.stopReason });
+}
+
 // A compact view of what's on the dashboard right now, from the cache (no new fetches).
 function copilotContext() {
   const get = (n) => sourceCache.get(n)?.data || {};
@@ -1084,6 +1129,15 @@ function serve() {
         if (req.headers['x-clearsky-token'] !== csrf || (req.headers.origin && !origins.has(req.headers.origin))) {
           return json(res, 403, { error: 'forbidden' });
         }
+        if (url.pathname === '/api/copilot/permission') {
+          const { chat, id, option } = await readJson(req);
+          const waiting = acpChats.get(chat)?.waiting;
+          const resolve = waiting?.get(id);
+          if (!resolve) return json(res, 404, { error: 'that question has already been answered or expired' });
+          waiting.delete(id);
+          resolve(option ? { outcome: 'selected', optionId: String(option) } : { outcome: 'cancelled' });
+          return json(res, 200, { ok: true });
+        }
         if (url.pathname === '/api/copilot') {
           const body = await readJson(req);
           const info = await copilotInfo();
@@ -1091,19 +1145,32 @@ function serve() {
           const message = String(body.message || '').slice(0, 20_000);
           if (!message.trim()) return json(res, 400, { error: 'empty message' });
           if (!copilot.validModel(body.model)) return json(res, 400, { error: 'bad model name' });
-          if (body.session && !/^[\w-]{8,64}$/.test(body.session)) return json(res, 400, { error: 'bad session' });
+          if (!body.session || !/^[\w-]{8,64}$/.test(body.session)) return json(res, 400, { error: 'bad session' });
           const list = (v) => (Array.isArray(v) ? v : String(v || '').split(',')).map((x) => String(x).trim()).filter(Boolean);
+          const options = { model: body.model, effort: body.effort, permission: copilot.PERMISSIONS[body.permission] ? body.permission : 'ask',
+            allow: list(body.allow), deny: list(body.deny) };
           // The first turn carries the dashboard so Copilot knows what you're looking at.
           const prompt = body.resume ? message
             : `You are helping me with my work. This is my work dashboard right now:\n\n${copilotContext()}\n\n---\n\n${message}`;
-          const args = copilot.copilotArgs({ prompt, session: body.session, resume: !!body.resume, model: body.model,
-            effort: body.effort, permission: body.permission, allow: list(body.allow), deny: list(body.deny), cwd: copilotCwd() });
-          res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+          // Answers stream back as one JSON event per line: text, tool, permission, done, error.
+          res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+          const emit = (e) => { if (!res.writableEnded) res.write(`${JSON.stringify(e)}\n`); };
+          // An Ask-mode chat has its own Copilot session id; later one-shot turns continue that one.
+          const live = acpChats.get(body.session);
+          if (copilot.PERMISSIONS[options.permission].acp) {
+            try {
+              await acpTurn({ chat: body.session, options, prompt, resumeId: body.resume ? chatSessions.get(body.session) || body.session : null, emit, res, bin: info.bin });
+            } catch (e) { emit({ type: 'error', message: e.message }); }
+            return res.end();
+          }
+          if (live) { live.agent.close(); acpChats.delete(body.session); }
+          const args = copilot.copilotArgs({ prompt, session: chatSessions.get(body.session) || body.session, resume: !!body.resume, cwd: copilotCwd(), ...options });
           const stop = copilot.runCopilot(info.bin, args, {
             env: copilotEnv(),
-            onData: (chunk) => res.write(chunk),
+            onData: (text) => emit({ type: 'text', text }),
             onEnd: ({ code, stderr }) => {
-              if (code !== 0) res.write(`\n\n[Copilot exited with ${code}${stderr ? `: ${stderr.trim().split('\n').slice(-3).join(' ')}` : ''}]`);
+              if (code !== 0) emit({ type: 'error', message: `Copilot exited with ${code}${stderr ? `: ${stderr.trim().split('\n').slice(-3).join(' ')}` : ''}` });
+              else emit({ type: 'done' });
               res.end();
             },
           });

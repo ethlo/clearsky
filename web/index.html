@@ -199,6 +199,18 @@
   .msg.cp .txt { white-space: pre-wrap; }
   .msg.cp a { color: var(--accent); }
   .msg .err { margin: 0; }
+  .tool { display: flex; gap: 8px; align-items: baseline; color: var(--text-2); font-size: 12.5px; padding: 3px 0; }
+  .tool span { color: var(--muted); }
+  .tool i { margin-left: auto; font-style: normal; color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+  .tool.s-failed i { color: var(--red); }
+  .tool.s-completed i { color: var(--green); }
+  .perm { border: 1px solid var(--amber); background: var(--amber-soft); border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
+  .perm-t { font-weight: 600; font-size: 13px; }
+  .perm code { display: block; margin-top: 6px; white-space: pre-wrap; word-break: break-all; }
+  .perm-b { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .perm-b button { font: inherit; font-size: 12.5px; border-radius: 6px; padding: 4px 10px; cursor: pointer; border: 1px solid var(--line-strong); background: var(--surface); color: var(--text); }
+  .perm-b button.ok { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .perm-done { font-size: 12.5px; color: var(--text-2); }
   .typing { color: var(--muted); font-size: 12.5px; }
   .typing::after { content: '…'; animation: pulse 1.2s infinite; }
   .chat-empty { color: var(--muted); font-size: 13px; margin: auto; text-align: center; max-width: 300px; }
@@ -797,7 +809,7 @@ async function loadCopilotInfo() {
   $('#cp-perm').innerHTML = Object.entries(i.permissions || {}).map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('');
   $('#cp-model').value = cpPrefs.model || '';
   $('#cp-effort').value = cpPrefs.effort || '';
-  $('#cp-perm').value = cpPrefs.permission && i.permissions?.[cpPrefs.permission] ? cpPrefs.permission : 'read';
+  $('#cp-perm').value = cpPrefs.permission && i.permissions?.[cpPrefs.permission] ? cpPrefs.permission : 'ask';
   $('#cp-allow').value = cpPrefs.allow || '';
   $('#cp-deny').value = cpPrefs.deny || '';
   $('#cp-skills').innerHTML = (i.skills || []).map((sk) =>
@@ -806,39 +818,78 @@ async function loadCopilotInfo() {
   chatSub();
 }
 
+// One answer is a list of segments: text, tool steps and approval questions, in order.
+function renderAnswer(segs) {
+  return segs.map((g) => {
+    if (g.type === 'text') return md(g.text);
+    if (g.type === 'tool') return `<div class="tool s-${esc(g.status || 'pending')}"><span>⚙</span>${esc(g.title || 'Tool')}<i>${esc((g.status || '').replace('_', ' '))}</i></div>`;
+    if (g.type === 'permission') {
+      return `<div class="perm"><div class="perm-t">${esc(g.title)}</div>${g.detail ? `<code>${esc(g.detail)}</code>` : ''}
+        <div class="perm-b">${g.answered ? `<span class="perm-done">${esc(g.answered)}</span>`
+          : g.options.map((o) => `<button class="${/^allow/.test(o.kind) ? 'ok' : 'no'}" data-perm="${esc(g.id)}" data-option="${esc(o.id)}" data-name="${esc(o.name)}">${esc(o.name)}</button>`).join('')}</div></div>`;
+    }
+    if (g.type === 'error') return `<div class="err">${esc(g.message)}</div>`;
+    return '';
+  }).join('');
+}
+
 async function send(text) {
   if (!text.trim() || chat.stop) return;
   addMsg('me', esc(text));
   const out = addMsg('cp', '<span class="typing">Thinking</span>');
+  const segs = [];
+  out.segs = segs;
+  const draw = () => { out.innerHTML = renderAnswer(segs) || '<span class="typing">Thinking</span>'; $('#chat-log').scrollTop = $('#chat-log').scrollHeight; };
+  const apply = (e) => {
+    const last = segs.at(-1);
+    if (e.type === 'text') { if (last?.type === 'text') last.text += e.text; else segs.push({ type: 'text', text: e.text }); }
+    else if (e.type === 'tool') { const t = segs.find((g) => g.type === 'tool' && g.id === e.id); if (t) Object.assign(t, Object.fromEntries(Object.entries(e).filter(([, v]) => v != null))); else segs.push(e); }
+    else if (e.type === 'permission' || e.type === 'error') segs.push(e);
+  };
   const ctrl = new AbortController();
   chat.stop = () => ctrl.abort();
   $('#chat-send').textContent = 'Stop';
-  let answer = '';
   try {
     const res = await fetch('/api/copilot', { method: 'POST', signal: ctrl.signal,
       headers: { 'Content-Type': 'application/json', 'X-Clearsky-Token': csrf },
-      body: JSON.stringify({ message: text, session: chat.session, resume: chat.turns > 0, ...cpPrefs }) });
+      body: JSON.stringify({ message: text, session: chat.session, resume: chat.turns > 0, ...cpPrefs, permission: $('#cp-perm').value }) });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
     const reader = res.body.getReader(), dec = new TextDecoder();
+    let buf = '';
     for (;;) {
       const { value, done } = await reader.read();
       if (done) break;
-      answer += dec.decode(value, { stream: true });
-      out.innerHTML = md(answer);
-      $('#chat-log').scrollTop = $('#chat-log').scrollHeight;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const l of lines) if (l.trim()) { try { apply(JSON.parse(l)); } catch {} }
+      draw();
     }
-    out.innerHTML = md(answer.trimEnd());
+    const last = segs.at(-1);
+    if (last?.type === 'text') last.text = last.text.trimEnd();
     chat.turns++;
   } catch (e) {
-    out.innerHTML = (answer ? md(answer) : '') + `<div class="err">${esc(e.name === 'AbortError' ? 'Stopped.' : e.message)}</div>`;
-    if (e.name === 'AbortError' && answer) chat.turns++;
+    segs.push({ type: 'error', message: e.name === 'AbortError' ? 'Stopped.' : e.message });
+    if (e.name === 'AbortError' && segs.length > 1) chat.turns++;
   } finally {
-    if (!answer && !out.querySelector('.err')) out.innerHTML = '<div class="err">No answer.</div>';
+    if (!segs.length) segs.push({ type: 'error', message: 'No answer.' });
+    draw();
     chat.stop = null;
     $('#chat-send').textContent = 'Send';
     chatSub();
   }
 }
+
+// Approve or deny a step Copilot asked about (Ask mode).
+$('#chat-log').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-perm]');
+  if (!b) return;
+  const msg = b.closest('.msg'), seg = msg?.segs?.find((g) => g.type === 'permission' && g.id === b.dataset.perm);
+  if (seg) seg.answered = b.dataset.name;
+  b.closest('.perm-b').innerHTML = `<span class="perm-done">${esc(b.dataset.name)}</span>`;
+  try { await post('/api/copilot/permission', { chat: chat.session, id: b.dataset.perm, option: b.dataset.option }); }
+  catch (err) { if (seg) seg.answered = `Couldn't send: ${err.message}`; }
+});
 
 function openChat(open = true) {
   $('#chat').hidden = !open;

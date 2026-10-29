@@ -87,7 +87,7 @@ The server also answers JSON on 127.0.0.1: `/api/source/<github|jira|jiraMention
 
 **✦ Copilot** in the top bar opens a chat with the GitHub Copilot CLI on your machine (`copilot`, logged in with your work account). The first message includes what's on your dashboard, so you can ask things like "what should I do first?". Answers link Jira keys and PRs with hover cards.
 
-In the panel you can pick the model and reasoning effort, how much Copilot may do (read only, plan only, edit files, or full), extra allowed or denied tool patterns, and click a skill to use it. Copilot runs in the Clearsky folder (or `COPILOT_CWD`), so the skills below are available. If `copilot` isn't on your PATH, Clearsky looks under nvm, or set `COPILOT_BIN`. Clearsky's own tokens are not passed to it.
+In the panel you can pick the model and reasoning effort, how much Copilot may do: **Ask** (Allow/Deny buttons for each step, using Copilot's Agent Client Protocol mode), **Assisted** (Copilot's safety judge approves steps), **Full**, Read only, or Plan only, extra allowed or denied tool patterns, and click a skill to use it. Copilot runs in the Clearsky folder (or `COPILOT_CWD`), so the skills below are available. If `copilot` isn't on your PATH, Clearsky looks under nvm, or set `COPILOT_BIN`. Clearsky's own tokens are not passed to it.
 
 ## Copilot skills
 
