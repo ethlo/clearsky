@@ -45,7 +45,7 @@
 
   /* Layout: a menu on the left, and one work area that takes the rest of the width.
      Opening anything (an item, a Copilot chat, the calendar) uses the whole work area. */
-  html, body { height: 100%; }
+  html, body { height: 100%; overflow: hidden; } /* the work area scrolls, not the page */
   .app { display: grid; grid-template-columns: 236px minmax(0, 1fr); height: 100%; }
   .work { background: var(--surface); min-width: 0; height: 100%; overflow: hidden; display: flex; flex-direction: column; }
   .view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -442,6 +442,9 @@
   .ref-pick li small { margin-left: auto; color: var(--muted); white-space: nowrap; }
   .ref-pick .none { color: var(--muted); font-size: 12.5px; padding: 8px; }
   .msg.me .refs-sent { display: block; font-size: 11.5px; color: var(--text-2); margin-bottom: 4px; }
+  .msg.me.is-queued { opacity: .7; }
+  #chat-title { cursor: text; } #chat-title .rename { font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--accent); border-radius: 6px; padding: 0 6px; width: min(100%, 420px); }
+  .msg.me .queued { display: block; font-size: 11px; color: var(--text-2); margin-top: 4px; }
   .chat-empty { color: var(--muted); font-size: 13px; margin: auto; text-align: center; max-width: 340px; }
   .chat-in { display: flex; gap: 8px; padding: 12px 24px 16px; align-items: flex-end; }
   .chat-in textarea { flex: 1; resize: none; font: inherit; font-size: 13.5px; color: var(--text); background: var(--surface-2); border: 1px solid var(--line);
@@ -575,7 +578,7 @@
   <section class="view" id="chat" hidden aria-label="Copilot">
     <header class="vh">
       <button class="back" data-back>← Back · Esc</button>
-      <h1 id="chat-title">Copilot</h1>
+      <h1 id="chat-title" title="Click to rename">Copilot</h1>
       <span class="sub" id="chat-sub"></span>
       <span class="spacer"></span>
       <button class="icon-btn small" id="chat-hist-btn" title="Your Copilot sessions, from this app, the terminal or your editor">History</button>
@@ -1209,28 +1212,28 @@ function inboxItems() {
   const g = state.github, j = state.jira, jm = state.jiraMentions, sl = state.slack, out = [];
   const add = (group, kind, x) => out.push({ group, kind, ...x, k: x.dismissKey || x.url });
   if (g && !g.error) {
-    [...g.reviewRequested].sort((a, b) => (b.rerequested - a.rerequested) || Date.parse(a.requestedAt) - Date.parse(b.requestedAt))
+    [...(g.reviewRequested || [])].sort((a, b) => (b.rerequested - a.rerequested) || Date.parse(a.requestedAt) - Date.parse(b.requestedAt))
       .forEach((p) => add('needs', 'review', { url: p.url, stamp: p.stamp, pr: prRef(p), ref: `${shortRepo(p.repo)} #${p.number}`, title: p.title,
         step: `${p.author} · +${p.size.additions} −${p.size.deletions}${p.viaTeam ? ' · via team' : ''}`, glyph: 'rev',
         label: p.rerequested ? ['re-review', 'amber'] : [p.draft ? 'draft' : 'review'], at: p.requestedAt, src: 'GitHub', data: p }));
-    g.myPrs.forEach((p) => add(p.status.owner === 'me' ? 'needs' : 'waiting', 'pr', { url: p.url, stamp: p.stamp, pr: prRef(p),
+    (g.myPrs || []).forEach((p) => add(p.status.owner === 'me' ? 'needs' : 'waiting', 'pr', { url: p.url, stamp: p.stamp, pr: prRef(p),
       ref: `${shortRepo(p.repo)} #${p.number}`, title: p.title, step: prMeta(p),
       glyph: p.status.owner === 'me' ? GLYPH[p.status.tone] || 'todo' : 'wait',
       label: [p.status.label.toLowerCase(), p.status.owner === 'me' ? TONE[p.status.tone] : null], at: p.updatedAt, src: 'GitHub', data: p }));
-    g.mentions.forEach((m) => add('needs', 'mention', { url: m.url, stamp: m.stamp, pr: m.kind === 'PR' ? prRef(m) : null,
+    (g.mentions || []).forEach((m) => add('needs', 'mention', { url: m.url, stamp: m.stamp, pr: m.kind === 'PR' ? prRef(m) : null,
       ref: `${shortRepo(m.repo)} #${m.number}`, title: m.title, step: `mentioned you in this ${m.kind === 'PR' ? 'PR' : 'issue'}`, glyph: 'ment',
       label: ['GitHub'], at: m.updatedAt, src: 'GitHub', data: m }));
     (g.assigned || []).forEach((i) => add('tickets', 'issue', { url: i.url, stamp: i.stamp, ref: `${shortRepo(i.repo)} #${i.number}`, title: i.title,
       glyph: 'todo', label: ['GitHub issue'], at: i.updatedAt, src: 'GitHub', data: i }));
   }
-  if (jm && !jm.error) jm.tickets.forEach((t) => add('needs', 'mention', { url: t.url, stamp: t.stamp, dismissKey: t.dismissKey, issue: t.key,
+  if (jm && !jm.error) (jm.tickets || []).forEach((t) => add('needs', 'mention', { url: t.url, stamp: t.stamp, dismissKey: t.dismissKey, issue: t.key,
     ref: t.key, title: t.summary, step: `${t.people.join(', ')}${t.count > 1 ? ` · ${t.count} mentions` : ''}`, quote: t.excerpt, glyph: 'ment',
     label: ['Jira'], at: t.at, src: 'Jira', data: t }));
-  if (sl && !sl.error) sl.mentions.forEach((m) => add('needs', 'mention', { url: m.url, stamp: m.stamp, ref: m.channel, title: `${m.by} in ${m.channel}`,
+  if (sl && !sl.error) (sl.mentions || []).forEach((m) => add('needs', 'mention', { url: m.url, stamp: m.stamp, ref: m.channel, title: `${m.by} in ${m.channel}`,
     step: m.excerpt, quote: m.excerpt, glyph: 'ment', label: ['Slack'], at: m.at, src: 'Slack', data: m }));
   if (j && !j.error) {
     const cat = (i) => (i.statusCategory === 'indeterminate' ? 0 : 1);
-    [...j.assigned].sort((a, b) => cat(a) - cat(b)).forEach((i) => add('tickets', 'ticket', { url: i.url, stamp: i.stamp, issue: i.key, ref: i.key,
+    [...(j.assigned || [])].sort((a, b) => cat(a) - cat(b)).forEach((i) => add('tickets', 'ticket', { url: i.url, stamp: i.stamp, issue: i.key, ref: i.key,
       title: i.summary, step: [i.status, i.type, i.priority && `${i.priority} priority`].filter(Boolean).join(' · '),
       glyph: cat(i) ? 'todo' : 'prog', label: i.due ? [`due ${i.due}`, 'amber'] : [cat(i) ? 'to do' : 'in progress'], at: i.updatedAt, src: 'Jira', data: i }));
   }
@@ -1689,7 +1692,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideCard()
 
 // ---------------------------------------------------------------- Copilot chat
 
-const chat = { session: null, cwd: null, turns: 0, stop: null, info: null, refs: [], title: null, items: [] };
+const chat = { session: null, cwd: null, turns: 0, stop: null, info: null, refs: [], title: null, items: [], queued: [] };
 const CUR_KEY = 'clearsky.chatSession';
 // Remember the open chat, so a reload picks it up again.
 function rememberChat() {
@@ -1806,7 +1809,7 @@ function drawCtx() {
 
 function chatSub() {
   drawCtx();
-  $('#chat-title').textContent = chat.title || (chat.turns ? 'Copilot session' : 'New chat');
+  if (!$('#chat-title input')) $('#chat-title').textContent = chat.title || (chat.turns ? 'Copilot session' : 'New chat');
   const i = chat.info;
   $('#chat-sub').textContent = !i ? '' : !i.available ? 'Copilot CLI not found' : `${i.permissions[$('#cp-perm').value] || ''}${chat.turns ? ` · ${chat.turns} turn${chat.turns > 1 ? 's' : ''}` : ''}`;
 }
@@ -1840,7 +1843,8 @@ function addMsg(cls, html) {
 function detach() {
   chat.stop?.();
   chat.stop = chat.halt = null;
-  $('#chat-send').textContent = 'Send';
+  chat.queued = [];
+  sendLabel();
 }
 
 function newChat() {
@@ -2036,9 +2040,10 @@ async function send(text) {
   // This turn's chat; a new one gets Copilot's own id once it starts.
   const mine = { id: chat.session, title: chat.turns ? null : text.trim().split('\n')[0].slice(0, 120) };
   const here = () => chat.session === mine.id;
+  let halted = false;
   chat.stop = () => ctrl.abort(); // stop watching (switching chats); the turn goes on
-  chat.halt = () => haltTurn(mine.id);
-  $('#chat-send').textContent = 'Stop';
+  chat.halt = () => { halted = true; haltTurn(mine.id); };
+  sendLabel();
   drawCtx();
   try {
     const res = await fetchWithToken('/api/copilot', { method: 'POST', signal: ctrl.signal,
@@ -2060,7 +2065,7 @@ async function send(text) {
     if (!ended) segs.push({ type: 'error', message: 'Interrupted: Copilot stopped before finishing (was Clearsky restarted?). Send a message to carry on in this session.' });
     if (here()) chat.turns++;
   } catch (e) {
-    segs.push({ type: 'error', message: e.name === 'AbortError' ? 'Stopped watching; it goes on in the background.' : e.message });
+    segs.push({ type: 'error', message: e.name !== 'AbortError' ? e.message : halted ? 'Stopped.' : 'Stopped watching; it goes on in the background.' });
     if (e.name === 'AbortError' && here()) chat.turns++;
   } finally {
     if (here()) rememberChat();
@@ -2070,8 +2075,9 @@ async function send(text) {
     if (!here()) return;
     draw();
     chat.stop = chat.halt = null;
-    $('#chat-send').textContent = 'Send';
+    sendLabel();
     chatSub();
+    sendQueued();
   }
 }
 
@@ -2091,7 +2097,7 @@ async function attachLive(id) {
   const ctrl = new AbortController();
   chat.stop = () => ctrl.abort();
   chat.halt = () => haltTurn(id);
-  $('#chat-send').textContent = 'Stop';
+  sendLabel();
   drawCtx();
   let done = false;
   try {
@@ -2117,7 +2123,8 @@ async function attachLive(id) {
   } catch { /* switched away */ }
   if (chat.session !== id) return;
   chat.stop = chat.halt = null;
-  $('#chat-send').textContent = 'Send';
+  sendLabel();
+  if (sendQueued()) return;
   if (done) openSession(id, chat.cwd); else chatSub();
 }
 
@@ -2194,11 +2201,28 @@ document.addEventListener('mousedown', (e) => { if (!e.target.closest('.ref-pick
 for (const id of ['#cp-model', '#cp-effort', '#cp-perm', '#cp-allow', '#cp-deny']) $(id).addEventListener('change', saveCp);
 $('#chat-form').onsubmit = (e) => {
   e.preventDefault();
-  if (chat.stop) return chat.halt ? chat.halt() : chat.stop();
   const t = $('#chat-text').value;
+  // While Copilot works, a message waits for the turn to end; an empty box means Stop.
+  if (chat.stop && !t.trim()) return chat.halt ? chat.halt() : chat.stop();
   $('#chat-text').value = '';
-  send(t);
+  if (chat.stop) {
+    const el = addMsg('me', `${esc(t)}<span class="queued">Sends when Copilot is done</span>`);
+    el.classList.add('is-queued');
+    chat.queued.push({ text: t, el });
+  } else send(t);
+  sendLabel();
 };
+// The button says what Enter will do.
+function sendLabel() { $('#chat-send').textContent = !chat.stop ? 'Send' : $('#chat-text').value.trim() ? 'Queue' : 'Stop'; }
+$('#chat-text').addEventListener('input', sendLabel);
+// After a turn: send the next message you typed meanwhile. True if it did.
+function sendQueued() {
+  const next = chat.queued.shift();
+  if (!next) return false;
+  next.el.remove();
+  send(next.text);
+  return true;
+}
 // "/" at the start of the message opens a menu of skills and a few panel commands.
 const SLASH = [
   { name: 'new', description: 'Start a new chat', run: () => newChat() },
@@ -2236,6 +2260,34 @@ function pickSlash(i) {
   slash = null;
   if (x.run) x.run(); else ta.focus();
 }
+// Click the chat's title to rename it; Enter saves, Esc cancels.
+$('#chat-title').addEventListener('click', () => {
+  const h = $('#chat-title');
+  if (!chat.session || !chat.turns || h.querySelector('input')) return;
+  const input = Object.assign(document.createElement('input'), { value: chat.title || '', className: 'rename', maxLength: 120 });
+  input.setAttribute('aria-label', 'Chat name');
+  h.replaceChildren(input);
+  input.focus(); input.select();
+  let done = false;
+  const finish = async (save) => {
+    if (done) return;
+    done = true;
+    const v = input.value.trim();
+    h.textContent = (save && v) || chat.title || 'Copilot session';
+    if (save && v && v !== chat.title) {
+      chat.title = v;
+      rememberChat();
+      await post('/api/copilot/rename', { id: chat.session, title: v }).catch(() => {});
+      loadLinks();
+    }
+    drawCtx();
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+  });
+  input.addEventListener('blur', () => finish(true));
+});
 // /commands go to Copilot as typed; without its command list, skills are asked for in words.
 function skillPrompt(text) {
   if (chat.info?.commands) return text;

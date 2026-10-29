@@ -117,13 +117,13 @@ In the panel you can pick the model and reasoning effort, how much Copilot may d
 
 **＋ PR or ticket** attaches pull requests and Jira tickets to your next message: pick from what's on your dashboard, or paste a key (SSP-1234), `org/repo#12` or a link. Clearsky adds their details (description, status, files and reviews, latest comments) in front of your message, so you don't have to explain what you mean. The ✦ on any PR or ticket row asks about it, or runs one of your skills on it, in a new chat with that item attached.
 
-Type **/** in the message box for skills and, in Ask mode, every slash command your Copilot offers (`/review`, `/plan`, `/compact`…), plus `/new`, `/history` and `/ref` for the chat.
+Type **/** in the message box for skills and every slash command your Copilot offers (`/review`, `/plan`, `/compact`…), plus `/new`, `/history` and `/ref` for the chat.
 
 A chat uses the whole work area, with what it's about (linked PRs and tickets, folder, status), your skills and its settings on the right. The menu has Settings and a Light / Dark / Auto theme switch (saved per device); on a phone it folds away behind ☰. In Chrome, 🎤 next to Send lets you talk instead of typing; the browser sends the audio to Google to turn it into text, and nothing is sent to Copilot until you press Send.
 
 **Copilot** in the menu lists the chats that are working or waiting on you, plus the ones you used lately here, each with a status dot. Click one, or press Alt+1…9, to switch; Alt+N starts a new chat. Switching (or reloading the page) doesn't stop a chat: it carries on in the background, and when you come back you see any question it's waiting on and follow it to the end. **Stop** ends a turn on purpose.
 
-**History** lists your Copilot sessions as Copilot itself knows them, whether you started them here, in a terminal or in your editor, with ones open elsewhere marked. Click one to see the conversation and carry on with it. The chat you had open comes back after a page reload.
+**History** lists your Copilot sessions as Copilot itself knows them, whether you started them here, in a terminal or in your editor, with ones open elsewhere marked. Click one to see the conversation and carry on with it. The chat you had open comes back after a page reload. Click a chat's title to rename it (the name is kept in Clearsky). A message you send while Copilot is still working waits and goes when the turn ends; Enter on an empty box, or **Stop**, stops the turn.
 
 Sessions show up next to the PR or ticket they are about: one you started from that row or attached it to, one running in a checkout of the PR's branch, or one with the PR or ticket key in its title or branch. A dot shows if it is working (green), waiting for you (blue) or needs your OK (amber), and a click reopens it; the ✦ menu also offers **↩ Continue**. Any session that is working or waiting, linked or not, is listed under **Copilot now** at the top of the Inbox, and one waiting for you counts in the Inbox number.
 

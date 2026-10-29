@@ -120,6 +120,11 @@ test('the chat panel talks to the local Copilot CLI with the chosen options', as
     assert.equal((await ask0(`${base}/api/copilot/stop`, { chat: 'nope-0000' })).status, 200);
   }
 
+  // Renaming a session: your name wins over Copilot's title.
+  assert.equal((await ask0(`${base}/api/copilot/rename`, { id: 'acp-session-1', title: 'Bluebear review' })).status, 200);
+  assert.equal((await ask0(`${base}/api/copilot/rename`, { id: '../x', title: 'y' })).status, 400);
+  assert.equal((await (await fetch(`${base}/api/copilot/sessions`)).json()).sessions.find((x) => x.id === 'acp-session-1').title, 'Bluebear review');
+
   // Copilot's slash commands (built-ins and skills) are offered in the panel.
   assert.deepEqual((await (await fetch(`${base}/api/copilot`)).json()).commands.map((c) => c.name), ['standup', 'review']);
   assert.ok(textOf(seen).includes('--no-ask-user'), "Ask mode turns off Copilot's own questions, which the panel can't show");

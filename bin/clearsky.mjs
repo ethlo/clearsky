@@ -1266,8 +1266,8 @@ export function sessionTitle(title, typed) {
 async function copilotSessions(bin, force) {
   if (!force && sessionsCache && Date.now() - sessionsCache.at < 30_000) return withStatus(sessionsCache.data);
   const list = await withAgent(bin, (a) => a.listSessions());
-  const titles = localState.sessionTitles(stateFile);
-  const data = list.map((x) => ({ id: x.sessionId, title: sessionTitle(x.title, titles[x.sessionId]), cwd: x.cwd || null, updatedAt: x.updatedAt || null }))
+  const titles = localState.sessionTitles(stateFile), names = localState.sessionNames(stateFile);
+  const data = list.map((x) => ({ id: x.sessionId, title: names[x.sessionId] || sessionTitle(x.title, titles[x.sessionId]), cwd: x.cwd || null, updatedAt: x.updatedAt || null }))
     .sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0));
   sessionsCache = { at: Date.now(), data };
   return withStatus(data);
@@ -1329,9 +1329,9 @@ async function copilotLinks(bin) {
   // Every session that is busy or waiting on you, linked to an item or not.
   const live = sessions.filter((x) => x.status !== 'closed').map(({ id, title, updatedAt, cwd, status }) => ({ id, title: title || 'Untitled session', updatedAt, cwd, status }));
   // Chats running here that Copilot doesn't list yet (before their first answer is saved).
-  const titles = localState.sessionTitles(stateFile);
+  const titles = localState.sessionTitles(stateFile), names = localState.sessionNames(stateFile);
   for (const [id, c] of acpChats) if (!sessions.some((x) => x.id === id)) {
-    live.push({ id, title: titles[id] || 'New chat', updatedAt: new Date(c.lastUsed).toISOString(), cwd: c.cwd || null,
+    live.push({ id, title: names[id] || titles[id] || 'New chat', updatedAt: new Date(c.lastUsed).toISOString(), cwd: c.cwd || null,
       status: c.waiting.size ? 'needs-you' : c.busy ? 'working' : 'waiting' });
   }
   return { links, live };
@@ -1598,6 +1598,14 @@ function serve() {
           const { chat } = await readJson(req);
           return json(res, 200, { stopped: stopCopilot(String(chat || '')) });
         }
+        // Your own name for a Copilot session; it wins over the title Copilot gave it.
+        if (url.pathname === '/api/copilot/rename') {
+          const { id, title } = await readJson(req);
+          if (!/^[\w-]{8,64}$/.test(String(id || '')) || typeof title !== 'string' || !title.trim()) return json(res, 400, { error: 'bad session or title' });
+          localState.setSessionName(stateFile, id, title.trim().split('\n')[0]);
+          sessionsCache = null;
+          return json(res, 200, { ok: true });
+        }
         if (url.pathname === '/api/copilot/permission') {
           const { chat, id, option } = await readJson(req);
           const waiting = acpChats.get(chat)?.waiting;
@@ -1751,7 +1759,7 @@ function serve() {
         const busy = !!c?.busy;
         // A chat that only exists in this server so far may not be readable from disk yet.
         const messages = await copilotHistory(info.bin, histId, cwd).catch((e) => { if (c || busy) return []; throw e; });
-        return json(res, 200, { id: histId, cwd, here: !!c, busy, messages });
+        return json(res, 200, { id: histId, cwd, here: !!c, busy, messages, title: localState.sessionNames(stateFile)[histId] || null });
       }
       const attach = url.pathname.match(/^\/api\/copilot\/sessions\/([\w-]{8,64})\/live$/)?.[1];
       if (attach) return attachCopilot(attach, req, res);
