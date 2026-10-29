@@ -496,7 +496,9 @@ async function fetchCalendar() {
   const res = await fetch(icsUrl);
   if (!res.ok) throw new Error(`calendar feed returned ${res.status} ${res.statusText}`);
   const text = await res.text();
-  if (!text.includes('BEGIN:VCALENDAR')) throw new Error('CALENDAR_ICS_URL did not return an iCal feed');
+  if (!text.includes('BEGIN:VCALENDAR')) {
+    throw new Error('the calendar link returned a web page, not an iCal feed; in Settings, paste the "Secret address in iCal format" (ends in basic.ics)');
+  }
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const events = eventsBetween(text, today.getTime(), today.getTime() + 2 * 864e5, email)
     .filter((e) => !e.declined)
