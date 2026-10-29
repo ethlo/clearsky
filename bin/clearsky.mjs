@@ -7,7 +7,7 @@
 //   clearsky serve        serve the dashboard on http://127.0.0.1:7777
 
 import { createServer } from 'node:http';
-import { readFileSync, existsSync, realpathSync, statSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, realpathSync, statSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
@@ -1039,6 +1039,9 @@ function copilotEnv() {
   return env;
 }
 
+// Slash commands Copilot last offered (its built-ins and your skills).
+let copilotCommands = null;
+
 // Ask-mode chats keep a Copilot process running between turns, keyed by Copilot's session id.
 const acpChats = new Map();
 setInterval(() => {
@@ -1165,7 +1168,11 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin })
   }
   c.lastUsed = Date.now();
   const { agent } = c;
-  agent.onUpdate = (u) => { const e = chatEvent(u); if (e && (e.type !== 'text' || e.text)) emit(e); };
+  if (agent.commands) { copilotCommands = agent.commands; emit({ type: 'commands', commands: agent.commands }); }
+  agent.onUpdate = (u) => {
+    if (u.sessionUpdate === 'available_commands_update') { copilotCommands = agent.commands; emit({ type: 'commands', commands: agent.commands }); return; }
+    const e = chatEvent(u); if (e && (e.type !== 'text' || e.text)) emit(e);
+  };
   agent.onPermission = (p) => new Promise((resolve) => {
     const id = randomBytes(6).toString('hex');
     c.waiting.set(id, resolve);
@@ -1210,10 +1217,18 @@ function muteUntil(span, now = new Date()) {
   throw new Error('unknown mute time');
 }
 
+function localToken(file) {
+  try { const t = readFileSync(file, 'utf8').trim(); if (/^[0-9a-f]{36}$/.test(t)) return t; } catch {}
+  const t = randomBytes(18).toString('hex');
+  try { mkdirSync(dirname(file), { recursive: true, mode: 0o700 }); writeFileSync(file, t, { mode: 0o600 }); } catch {}
+  return t;
+}
+
 function serve() {
-  // Every state-changing request must carry this per-run token and come from this origin,
-  // so other websites open in the browser can't change settings or start logins.
-  const csrf = randomBytes(18).toString('hex');
+  // Every state-changing request must carry this token and come from this origin, so other
+  // websites open in the browser can't change settings or start logins. It's kept across
+  // restarts so an open page keeps working.
+  const csrf = localToken(join(dirname(userEnvFile), 'csrf'));
   const page = readFileSync(join(here, '..', 'web', 'index.html'), 'utf8').replace('__CSRF__', csrf);
   const settingsPage = readFileSync(join(here, '..', 'web', 'settings.html'), 'utf8').replace('__CSRF__', csrf);
   const origins = new Set([`http://127.0.0.1:${config.port}`, `http://localhost:${config.port}`]);
@@ -1320,7 +1335,7 @@ function serve() {
         return json(res, 200, { ...data, fetchedAt: new Date(sourceCache.get(src)?.at || Date.now()).toISOString() });
       }
       if (url.pathname === '/favicon.ico') { res.writeHead(204); return res.end(); }
-      if (url.pathname === '/api/copilot') return json(res, 200, await copilotInfo(url.searchParams.has('refresh')));
+      if (url.pathname === '/api/copilot') return json(res, 200, { ...await copilotInfo(url.searchParams.has('refresh')), commands: copilotCommands });
       if (url.pathname === '/api/copilot/sessions') {
         const info = await copilotInfo();
         if (!info.available) return json(res, 400, { error: 'GitHub Copilot CLI not found' });

@@ -27,7 +27,10 @@ if (args[0] === 'skill' && args[1] === 'list') {
       upd(m.params.sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'broke.' } });
       out({ id: m.id, result: {} });
     }
-    else if (m.method === 'session/new') out({ id: m.id, result: { sessionId: 'acp-session-1' } });
+    else if (m.method === 'session/new') {
+      out({ id: m.id, result: { sessionId: 'acp-session-1' } });
+      upd('acp-session-1', { sessionUpdate: 'available_commands_update', availableCommands: [{ name: 'standup', description: 'Write my stand-up' }, { name: 'review', description: 'Review changes', input: { hint: 'what' } }] });
+    }
     else if (m.method === 'session/prompt') {
       const say = (text) => out({ method: 'session/update', params: { sessionId: 'acp-session-1', update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text } } } });
       say(`flags=${args.filter((a) => a.startsWith('--')).join(' ')} `);

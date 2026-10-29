@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -68,8 +68,16 @@ test('the chat panel talks to the local Copilot CLI with the chosen options', as
   assert.ok(perm, 'got a permission question');
   assert.match(textOf(seen), /flags=\s*answer=yes|answer=yes/);
   assert.ok(!/--allow-all-tools/.test(textOf(seen)), 'Ask mode does not pre-approve tools');
+  assert.ok(seen.some((e) => e.type === 'commands'));
   assert.deepEqual(seen.filter((e) => e.type === 'tool').map((e) => e.status), ['pending', 'completed']);
   assert.equal(seen.at(-1).type, 'done');
+
+  // Copilot's slash commands (built-ins and skills) are offered in the panel.
+  assert.deepEqual((await (await fetch(`${base}/api/copilot`)).json()).commands.map((c) => c.name), ['standup', 'review']);
+  assert.ok(textOf(seen).includes('--no-ask-user'), "Ask mode turns off Copilot's own questions, which the panel can't show");
+
+  // The page token survives a restart.
+  assert.equal(readFileSync(join(home, '.config', 'clearsky', 'csrf'), 'utf8'), csrf);
 
   // Sessions come from Copilot itself, wherever they were started, newest first.
   // A session a running Copilot holds (inuse.<pid>.hold) shows as open.

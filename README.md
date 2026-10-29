@@ -91,6 +91,8 @@ In the panel you can pick the model and reasoning effort, how much Copilot may d
 
 **＋ PR or ticket** attaches pull requests and Jira tickets to your next message: pick from what's on your dashboard, or paste a key (SSP-1234), `org/repo#12` or a link. Clearsky adds their details (description, status, files and reviews, latest comments) in front of your message, so you don't have to explain what you mean. The ✦ on any PR or ticket row (and in Do next) starts a new chat with that item attached.
 
+Type **/** in the message box for skills and, in Ask mode, every slash command your Copilot offers (`/review`, `/plan`, `/compact`…), plus `/new`, `/history` and `/ref` for the panel.
+
 **History** lists your Copilot sessions as Copilot itself knows them, whether you started them here, in a terminal or in your editor, with ones open elsewhere marked. Click one to see the conversation and carry on with it. The chat you had open comes back after a page reload.
 
 ## Copilot skills

@@ -340,7 +340,7 @@
   </div>
   <div class="chat-refs" id="cp-refs"><button class="chip" id="cp-ref-add" type="button" title="Give Copilot a PR or Jira ticket to work with">＋ PR or ticket</button></div>
   <form class="chat-in" id="chat-form">
-    <textarea id="chat-text" rows="3" placeholder="Ask about your work… (Enter to send, Shift+Enter for a new line)"></textarea>
+    <textarea id="chat-text" rows="3" placeholder="Ask about your work… / for skills · Enter to send, Shift+Enter for a new line"></textarea>
     <button class="icon-btn primary" id="chat-send" type="submit">Send</button>
   </form>
 </aside>
@@ -414,7 +414,17 @@ function refreshPanel(names) {
 // Dismissed items live in ~/.config/clearsky/state.json as { key: stamp }, so the plan and
 // every browser see them. An item comes back as soon as its stamp changes (new activity).
 let dismissed = {};
-const csrf = document.querySelector('meta[name=csrf]').content;
+let csrf = document.querySelector('meta[name=csrf]').content;
+// After the server restarts with a new token, pick it up from the page and try again once.
+async function fetchWithToken(url, opts) {
+  const go = () => fetch(url, { ...opts, headers: { 'Content-Type': 'application/json', ...opts.headers, 'X-Clearsky-Token': csrf } });
+  let res = await go();
+  if (res.status === 403) {
+    const fresh = (await (await fetch('/')).text()).match(/name="csrf" content="(\w+)"/)?.[1];
+    if (fresh && fresh !== csrf) { csrf = fresh; res = await go(); }
+  }
+  return res;
+}
 const isHidden = (x) => Object.hasOwn(dismissed, x.dismissKey || x.url) && dismissed[x.dismissKey || x.url] === String(x.stamp ?? '');
 const vis = (list) => (list || []).filter((x) => !isHidden(x));
 
@@ -433,7 +443,7 @@ function view() {
 }
 
 async function post(url, body) {
-  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Clearsky-Token': csrf }, body: JSON.stringify(body) });
+  const res = await fetchWithToken(url, { method: 'POST', body: JSON.stringify(body) });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || res.statusText);
   return data;
@@ -986,9 +996,9 @@ function addRef(r) {
   chat.refs.push(r);
   drawRefs();
 }
-function closeRefPick() { $('#cp-refs .ref-pick')?.remove(); }
+function closeRefPick() { $('#cp-refs .ref-pick:not(.slash)')?.remove(); }
 function openRefPick() {
-  if ($('#cp-refs .ref-pick')) return closeRefPick();
+  if ($('#cp-refs .ref-pick:not(.slash)')) return closeRefPick();
   const box = document.createElement('div');
   box.className = 'ref-pick';
   box.innerHTML = '<input placeholder="Find a PR or ticket, or paste SSP-1234 / a link" spellcheck="false"><ul></ul>';
@@ -1034,14 +1044,16 @@ async function send(text) {
     else if (e.type === 'tool') { const t = segs.find((g) => g.type === 'tool' && g.id === e.id); if (t) Object.assign(t, Object.fromEntries(Object.entries(e).filter(([, v]) => v != null))); else segs.push(e); }
     else if (e.type === 'permission' || e.type === 'error') segs.push(e);
     else if (e.type === 'session') { chat.session = e.id; rememberChat(); }
+    else if (e.type === 'commands' && chat.info) chat.info.commands = e.commands;
+    if (e.type === 'done' || e.type === 'error') ended = true;
   };
+  let ended = false;
   const ctrl = new AbortController();
   chat.stop = () => ctrl.abort();
   $('#chat-send').textContent = 'Stop';
   try {
-    const res = await fetch('/api/copilot', { method: 'POST', signal: ctrl.signal,
-      headers: { 'Content-Type': 'application/json', 'X-Clearsky-Token': csrf },
-      body: JSON.stringify({ message: text, session: chat.session, resume: chat.turns > 0, cwd: chat.cwd, refs, ...cpPrefs, permission: $('#cp-perm').value }) });
+    const res = await fetchWithToken('/api/copilot', { method: 'POST', signal: ctrl.signal,
+      body: JSON.stringify({ message: skillPrompt(text), session: chat.session, resume: chat.turns > 0, cwd: chat.cwd, refs, ...cpPrefs, permission: $('#cp-perm').value }) });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
     const reader = res.body.getReader(), dec = new TextDecoder();
     let buf = '';
@@ -1056,6 +1068,7 @@ async function send(text) {
     }
     const last = segs.at(-1);
     if (last?.type === 'text') last.text = last.text.trimEnd();
+    if (!ended) segs.push({ type: 'error', message: 'Interrupted: Copilot stopped before finishing (was Clearsky restarted?). Send a message to carry on in this session.' });
     chat.turns++;
   } catch (e) {
     segs.push({ type: 'error', message: e.name === 'AbortError' ? 'Stopped.' : e.message });
@@ -1134,14 +1147,67 @@ $('#chat-form').onsubmit = (e) => {
   $('#chat-text').value = '';
   send(t);
 };
+// "/" at the start of the message opens a menu of skills and a few panel commands.
+const SLASH = [
+  { name: 'new', description: 'Start a new chat', run: () => newChat() },
+  { name: 'history', description: 'Your Copilot sessions', run: () => showHistory(true) },
+  { name: 'ref', description: 'Attach a PR or ticket', run: () => openRefPick() },
+];
+let slash = null;
+function slashItems() {
+  const q = $('#chat-text').value.match(/^\/([\w-]*)$/)?.[1];
+  if (q == null) return null;
+  const skills = (chat.info?.skills || []).map((sk) => ({ ...sk, skill: true }));
+  // In Ask mode Copilot runs slash commands itself, so offer everything it listed.
+  const names = new Set(skills.map((x) => x.name));
+  const cmds = askMode() ? (chat.info?.commands || []).filter((c) => !names.has(c.name)).map((c) => ({ ...c, skill: true, kind: 'command' })) : [];
+  return [...skills, ...cmds, ...SLASH].filter((x) => x.name.toLowerCase().includes(q.toLowerCase()))
+    .sort((a, b) => b.name.toLowerCase().startsWith(q.toLowerCase()) - a.name.toLowerCase().startsWith(q.toLowerCase()));
+}
+function drawSlash() {
+  const items = slashItems();
+  $('#cp-refs .slash')?.remove();
+  if (!items) { slash = null; return; }
+  slash = { items, on: Math.min(slash?.on || 0, Math.max(items.length - 1, 0)) };
+  const box = document.createElement('div');
+  box.className = 'ref-pick slash';
+  box.innerHTML = `<ul>${items.map((x, i) => `<li data-si="${i}" class="${i === slash.on ? 'on' : ''}"><code>/${esc(x.name)}</code>${esc(x.description || '')}<small>${x.kind || (x.skill ? 'skill' : '')}</small></li>`).join('')
+    || '<li class="none">No skill or command matches.</li>'}</ul>`;
+  $('#cp-refs').append(box);
+}
+function pickSlash(i) {
+  const x = slash?.items[i];
+  if (!x) return;
+  const ta = $('#chat-text');
+  ta.value = x.skill ? `/${x.name} ` : '';
+  $('#cp-refs .slash')?.remove();
+  slash = null;
+  if (x.run) x.run(); else ta.focus();
+}
+const askMode = () => $('#cp-perm').value === 'ask';
+// Ask mode passes /commands to Copilot as typed; one-shot modes get skills in words.
+function skillPrompt(text) {
+  if (askMode() && chat.info?.commands) return text;
+  const m = text.match(/^\/([\w-]+)(?:\s+([\s\S]*))?$/);
+  const sk = m && (chat.info?.skills || []).find((x) => x.name === m[1]);
+  return sk ? `Use the ${sk.name} skill.${m[2] ? ` ${m[2]}` : ''}` : text;
+}
+$('#chat-text').addEventListener('input', drawSlash);
+$('#chat-text').addEventListener('blur', () => setTimeout(() => { $('#cp-refs .slash')?.remove(); slash = null; }, 150));
+$('#cp-refs').addEventListener('mousedown', (e) => { const li = e.target.closest('[data-si]'); if (li) { e.preventDefault(); pickSlash(+li.dataset.si); } });
 $('#chat-text').addEventListener('keydown', (e) => {
+  if (slash?.items.length) {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { slash.on = (slash.on + (e.key === 'ArrowDown' ? 1 : -1) + slash.items.length) % slash.items.length; drawSlash(); e.preventDefault(); return; }
+    if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') { e.preventDefault(); pickSlash(slash.on); return; }
+    if (e.key === 'Escape') { $('#cp-refs .slash')?.remove(); slash = null; e.stopPropagation(); return; }
+  }
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('#chat-form').requestSubmit(); }
 });
 $('#cp-skills').addEventListener('click', (e) => {
   const name = e.target.closest('[data-skill]')?.dataset.skill;
   if (!name) return;
   const ta = $('#chat-text');
-  ta.value = `Use the ${name} skill. ${ta.value}`.trimEnd() + ' ';
+  ta.value = `/${name} ${ta.value.replace(/^\/[\w-]*\s*/, '')}`.trimEnd() + ' ';
   ta.focus();
 });
 
