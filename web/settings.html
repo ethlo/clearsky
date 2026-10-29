@@ -35,9 +35,9 @@
   .cal-list span { text-align: left; }
   .cal-list small { color: var(--muted); font-size: 12px; }
   .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
-  input { width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line);
+  input, select { width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line);
     border-radius: 6px; padding: 6px 8px; }
-  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
   button, .btn { font: inherit; color: #fff; background: var(--accent); border: 0; border-radius: 6px; padding: 6px 12px;
     cursor: pointer; text-decoration: none; display: inline-block; }
@@ -130,7 +130,9 @@
     <input id="CLEARSKY_WORKDAY_END" data-key="CLEARSKY_WORKDAY_END" placeholder="17:00">
     <label for="CLEARSKY_MENTION_DAYS">Show mentions from the last … days</label>
     <input id="CLEARSKY_MENTION_DAYS" data-key="CLEARSKY_MENTION_DAYS" inputmode="numeric" placeholder="14">
-    <div class="row"><button class="save" data-keys="CLEARSKY_STANDUP_TIME,CLEARSKY_WORKDAYS,CLEARSKY_WORKDAY_END,CLEARSKY_MENTION_DAYS">Save</button><span class="msg"></span></div>
+    <label for="CLEARSKY_TIME_FORMAT">Clock</label>
+    <select id="CLEARSKY_TIME_FORMAT" data-key="CLEARSKY_TIME_FORMAT"><option value="24">24-hour (14:30)</option><option value="12">12-hour (2:30 PM)</option></select>
+    <div class="row"><button class="save" data-keys="CLEARSKY_STANDUP_TIME,CLEARSKY_WORKDAYS,CLEARSKY_WORKDAY_END,CLEARSKY_MENTION_DAYS,CLEARSKY_TIME_FORMAT">Save</button><span class="msg"></span></div>
   </section>
 
   <section id="extra" hidden>
@@ -220,6 +222,7 @@ function render(s) {
   $('#CLEARSKY_STANDUP_TIME').value = s.standupTime || '';
   $('#CLEARSKY_WORKDAYS').value = s.workdays || '';
   $('#CLEARSKY_MENTION_DAYS').value = s.mentionDays || '';
+  $('#CLEARSKY_TIME_FORMAT').value = s.timeFormat || '24';
 
   const extra = s.extra || [], logins = s.logins || [];
   $('#extra').hidden = !extra.length && !logins.length;

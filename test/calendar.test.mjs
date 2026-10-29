@@ -89,4 +89,24 @@ test("a shared family calendar shows others' events without taking your time", a
   ] } }, Date.parse(at(10)) + 30 * 6e4, {}, {}, {});
   assert.equal(plan.next.title, 'Planning', 'the family event does not end your free time');
   assert.deepEqual(plan.agenda.map((e) => e.title).slice(0, 1), ['Football practice'], 'but it is in the agenda');
+
+  // Today as a schedule keeps what is over, and a hidden calendar neither shows nor takes time.
+  const events = [
+    { title: 'Early', start: at(8), end: at(9), calendar: 'Work', work: true },
+    { title: 'Football practice', start: at(11), end: at(12), fyi: true, calendar: 'Family' },
+    { title: 'Gym', start: at(12), end: at(13), calendar: 'Personal' },
+    { title: 'Offsite', start: at(0), end: at(24), allDay: true, calendar: 'Work' },
+  ];
+  const noon = Date.parse(at(10)) + 30 * 6e4;
+  const day = planNow({ calendar: { events } }, noon, {}, {}, {});
+  assert.deepEqual(day.day.events.map((e) => e.title), ['Early', 'Football practice', 'Gym']);
+  assert.deepEqual(day.day.allDay.map((e) => e.title), ['Offsite']);
+  assert.equal(day.next.title, 'Gym');
+  process.env.CALENDAR_HIDDEN = 'personal';
+  try {
+    const hid = planNow({ calendar: { events } }, noon, {}, {}, {});
+    assert.deepEqual(hid.day.events.map((e) => e.title), ['Early', 'Football practice']);
+    assert.notEqual(hid.next?.title, 'Gym', 'a hidden calendar does not take your time');
+    assert.deepEqual(hid.calendars.find((c) => c.name === 'Personal'), { name: 'Personal', hidden: true }, 'it can be shown again');
+  } finally { delete process.env.CALENDAR_HIDDEN; }
 });

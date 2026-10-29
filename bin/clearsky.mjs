@@ -750,6 +750,14 @@ export function planNow(d, now = Date.now(), dismissedItems = localState.dismiss
     done: doneList,
     agenda: [...timed, ...shown.filter((e) => e.fyi)].sort((a, b) => a.s - b.s)
       .filter((e) => e.e > now && e.s < atLocalTime(now, '23:59')).map(strip),
+    // Today as a schedule: everything since midnight, done or not, and the all-day items.
+    day: {
+      events: [...timed, ...shown.filter((e) => e.fyi)].sort((a, b) => a.s - b.s)
+        .filter((e) => e.e > atLocalTime(now, '00:00') && e.s < atLocalTime(now, '23:59')).map(strip),
+      allDay: (cal.events || []).filter((e) => e.allDay && !hidden.has((e.calendar || '').toLowerCase())
+        && Date.parse(e.start) <= now && now < Date.parse(e.end)).map(({ title, calendar, work }) => ({ title, calendar, work })),
+      workdayEnd: new Date(workdayEnd).toISOString(),
+    },
     suggestions,
   };
 }

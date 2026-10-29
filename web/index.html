@@ -11,7 +11,7 @@
     --bg: #f7f8fa; --surface: #ffffff; --surface-2: #f2f4f7; --text: #111827; --text-2: #4b5563; --muted: #6b7280;
     --line: #e5e7eb; --line-strong: #d1d5db; --accent: #2563eb; --accent-soft: #eff4ff;
     --red: #b42318; --red-soft: #fef3f2; --amber: #b54708; --amber-soft: #fffaeb;
-    --green: #067647; --green-soft: #ecfdf3; --blue: #175cd3; --blue-soft: #eff8ff; --gray-soft: #f2f4f7;
+    --green: #067647; --green-soft: #ecfdf3; --violet: #6941c6; --blue: #175cd3; --blue-soft: #eff8ff; --gray-soft: #f2f4f7;
     --shadow: 0 1px 2px rgba(16, 24, 40, .05); --shadow-lg: 0 12px 32px -8px rgba(16, 24, 40, .18), 0 4px 8px -4px rgba(16, 24, 40, .08);
     --radius: 12px;
   }
@@ -20,7 +20,7 @@
       --bg: #0c0e12; --surface: #14171c; --surface-2: #1b1f26; --text: #f2f4f7; --text-2: #c5cad3; --muted: #8a93a3;
       --line: #252a33; --line-strong: #333a45; --accent: #6b9bff; --accent-soft: #17223a;
       --red: #ff8a80; --red-soft: #2a1715; --amber: #fdb022; --amber-soft: #2a2010;
-      --green: #47cd89; --green-soft: #10251a; --blue: #84adff; --blue-soft: #14213a; --gray-soft: #1f242c;
+      --green: #47cd89; --green-soft: #10251a; --violet: #b692f6; --blue: #84adff; --blue-soft: #14213a; --gray-soft: #1f242c;
       --shadow: none; --shadow-lg: 0 12px 32px -8px rgba(0, 0, 0, .6);
     }
   }
@@ -70,6 +70,44 @@
   .agenda .on { color: var(--accent); font-weight: 500; }
   .agenda .fyi { color: var(--muted); }
   .agenda small { color: var(--muted); font-size: 11.5px; }
+  /* today as a schedule */
+  .day { grid-column: 1 / -1; border-top: 1px solid var(--line); padding-top: 14px; margin-top: -6px; }
+  .day-scroll { overflow-x: auto; overflow-y: hidden; }
+  .day-axis { position: relative; min-width: 640px; }
+  .day-hours { position: relative; height: 18px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .day-hours span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+  .day-hours span:first-child { transform: none; }
+  .day-hours span:last-child { transform: translateX(-100%); }
+  .day-lanes { position: relative; background: repeating-linear-gradient(90deg, var(--line) 0 1px, transparent 1px var(--hour-w)); border-radius: 6px; }
+  .day-free { position: absolute; top: 0; bottom: 0; background: var(--green-soft); border-radius: 4px; }
+  .day-off { position: absolute; top: 0; bottom: 0; background: var(--surface-2); opacity: .7; }
+  .ev { position: absolute; height: 24px; border-radius: 5px; padding: 0 6px; font: inherit; font-size: 12px; line-height: 24px; text-align: left;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); cursor: pointer;
+    background: color-mix(in srgb, var(--c) 16%, var(--surface)); border: 0; border-left: 3px solid var(--c); }
+  .ev:hover, .ev:focus-visible, .ev.pinned { background: color-mix(in srgb, var(--c) 28%, var(--surface)); outline: none; }
+  .ev.fyi { background: transparent; border: 1px dashed color-mix(in srgb, var(--c) 60%, transparent); border-left-width: 3px; border-left-style: solid; color: var(--text-2); }
+  .ev.past { opacity: .5; }
+  .ev.on { box-shadow: 0 0 0 1.5px var(--c); font-weight: 500; }
+  .ev.short { padding: 0 2px; }
+  .day-now { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--red); border-radius: 1px; pointer-events: none; }
+  .day-now::before { content: ''; position: absolute; top: -3px; left: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--red); }
+  .day-foot { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin-top: 10px; font-size: 12px; color: var(--muted); }
+  .day-foot .allday { color: var(--text-2); }
+  .cal-tog { display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: 12px; color: var(--text-2); background: none; border: 0; padding: 2px 0; cursor: pointer; }
+  .cal-tog i { width: 9px; height: 9px; border-radius: 3px; background: var(--c); }
+  .cal-tog.off { color: var(--muted); text-decoration: line-through; }
+  .cal-tog.off i { background: transparent; box-shadow: inset 0 0 0 1.5px var(--c); }
+  .cal-tog:hover { color: var(--accent); }
+  .ev-pop { position: fixed; z-index: 60; width: 300px; max-width: calc(100vw - 32px); background: var(--surface); border: 1px solid var(--line);
+    border-radius: 10px; box-shadow: var(--shadow-lg); padding: 12px 14px; font-size: 13px; }
+  .ev-pop h4 { margin: 0 0 2px; font-size: 14px; }
+  .ev-pop .when { color: var(--text-2); font-variant-numeric: tabular-nums; }
+  .ev-pop dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 8px 0 0; color: var(--text-2); }
+  .ev-pop dt { color: var(--muted); }
+  .ev-pop dd { margin: 0; overflow-wrap: anywhere; }
+  .ev-pop .desc { margin-top: 8px; white-space: pre-wrap; max-height: 140px; overflow: auto; color: var(--text-2); font-size: 12.5px;
+    border-top: 1px solid var(--line); padding-top: 8px; }
+  .ev-pop .note { margin-top: 8px; font-size: 12px; color: var(--muted); }
   .todo { list-style: none; margin: 0; padding: 0; counter-reset: n; }
   .todo li { display: grid; grid-template-columns: 22px 1fr auto auto; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); align-items: start; }
   .todo li:first-child { border-top: 0; padding-top: 0; }
@@ -394,7 +432,9 @@ const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 // 45 min, 1 h, 2 h 15 min
 const dur = (min) => (min < 60 ? `${min} min` : `${Math.floor(min / 60)} h${min % 60 ? ` ${min % 60} min` : ''}`);
-const hm = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+// 24-hour clock unless Settings says 12.
+const hourCycle = () => (state.plan?.prefs?.hour12 ? 'h12' : 'h23');
+const hm = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: hourCycle() });
 
 function ago(iso) {
   if (!iso) return '';
@@ -413,7 +453,7 @@ function busy(delta) {
   pending += delta;
   $('#dot').classList.toggle('busy', pending > 0);
   if (pending > 0) $('#status').textContent = 'Updating…';
-  else $('#status').textContent = `Updated ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  else $('#status').textContent = `Updated ${hm(new Date())}`;
 }
 
 async function getJson(url) {
@@ -673,7 +713,7 @@ const prRef = (p) => `${p.repo}#${p.number}`;
 // ---------------------------------------------------------------- Today
 
 const MUTE_ICON = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 5.5v3l2 1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 2.5 1.8 3.7M13 2.5l1.2 1.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
-const when = (iso) => new Date(iso).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+const when = (iso) => new Date(iso).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: hourCycle() });
 const DONE_ICON = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 let showLater = false;
 
@@ -794,16 +834,130 @@ function renderPlan() {
   const cal = state.calendar || {};
   const calErr = cal.error ? `<div class="err" style="margin-top:12px">Calendar: ${esc(cal.error)}</div>`
     : cal.errors ? `<div style="margin-top:12px;font-size:12px;color:var(--muted)">Calendar (${esc(cal.source)}) loaded; skipped ${Object.entries(cal.errors).map(([n, m]) => `${esc(n)}: ${esc(m)}`).join('; ')}</div>` : '';
-  const agenda = p.agenda.length ? `<div class="agenda">${p.agenda.map((e) =>
-    `<div class="${p.now && e.start === p.now.start ? 'on' : ''}${e.fyi ? ' fyi' : ''}"${e.fyi ? ' title="On a shared calendar, added by someone else: shown, but doesn\'t take your time"' : ''}><time>${hm(e.start)}</time><span>${esc(e.title)}${e.calendar && !e.work ? ` <small>· ${esc(e.calendar)}</small>` : ''}</span></div>`).join('')}</div>` : '';
+  const agenda = '';
   const todo = (p.suggestions.length ? `<ol class="todo">${p.suggestions.map((s) => `<li>
       <div><a class="t" href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a><div class="d">${esc(s.detail)}</div></div>
       <span class="m">~${dur(s.minutes)}</span>
       <span class="acts">${askButton(s.url, s.title)}<button class="done" data-done="${esc(s.key)}" data-stamp="${esc(s.stamp ?? '')}" title="Done: hide until there's something new" aria-label="Mark done">${DONE_ICON}</button><button class="mute" data-mute="${esc(s.key)}" title="Mute for a while" aria-label="Mute for a while">${MUTE_ICON}</button></span></li>`).join('')}</ol>`
     : '<div class="empty">Nothing urgent fits right now.</div>') + laterHtml(p.done || [], p.muted || []);
   el.innerHTML = `${refreshButton('plan')}<div><div class="eyebrow">Now</div><div class="now-line">${line}</div><div class="now-sub">${sub}</div>${alert}${calErr}${agenda}</div>
-    <div><div class="eyebrow">Do next</div>${todo}</div>`;
+    <div><div class="eyebrow">Do next</div>${todo}</div>${dayHtml(p)}`;
+  // On a narrow screen the schedule scrolls; start it around now.
+  const sc = el.querySelector('.day-scroll'), nl = el.querySelector('.day-now');
+  if (sc && nl && sc.scrollWidth > sc.clientWidth) sc.scrollLeft = nl.offsetLeft - sc.clientWidth / 3;
 }
+
+// ---------------------------------------------------------------- today as a schedule
+
+const CAL_COLORS = ['var(--accent)', 'var(--green)', 'var(--violet)', 'var(--amber)', 'var(--red)', 'var(--muted)'];
+let dayEvents = [];
+function calColor(p, name) {
+  const names = (p.calendars || []).map((c) => c.name);
+  const ordered = [...new Set([...(p.day?.events || []).filter((e) => e.work).map((e) => e.calendar), ...names])];
+  const i = ordered.indexOf(name);
+  return CAL_COLORS[(i < 0 ? ordered.length : i) % CAL_COLORS.length];
+}
+
+// A strip from the first thing in the day (or 08:00) to the end of the workday (or the last
+// event), with meetings as blocks, overlaps on separate lanes, the free slot and a now line.
+function dayHtml(p) {
+  const day = p.day;
+  if (!day || (!p.calendar && !day.events.length)) return '';
+  const now = Date.now(), base = new Date(); base.setHours(0, 0, 0, 0);
+  const at = (h) => +base + h * 36e5;
+  const evs = day.events.map((e, i) => ({ ...e, i, s: Date.parse(e.start), e: Date.parse(e.end) }));
+  let from = Math.min(at(8), ...evs.map((e) => e.s)), to = Math.max(Date.parse(day.workdayEnd) || at(17), ...evs.map((e) => e.e), at(12));
+  from = Math.max(+base, Math.floor((from - +base) / 36e5) * 36e5 + +base);
+  to = Math.min(at(24), Math.ceil((to - +base) / 36e5) * 36e5 + +base);
+  const span = to - from, pct = (t) => `${((Math.min(Math.max(t, from), to) - from) / span) * 100}%`;
+  const hours = Math.round(span / 36e5);
+  // Lanes: each event takes the first lane free at its start.
+  const ends = [];
+  for (const e of evs) {
+    let lane = ends.findIndex((end) => end <= e.s);
+    if (lane < 0) { lane = ends.length; ends.push(0); }
+    ends[lane] = e.e; e.lane = lane;
+  }
+  const lanes = Math.max(1, ends.length);
+  dayEvents = evs;
+  const ticks = Array.from({ length: hours + 1 }, (_, h) => from + h * 36e5)
+    .filter((t, i) => hours <= 12 || i % 2 === 0)
+    .map((t) => `<span style="left:${pct(t)}">${new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: hourCycle() === 'h12' ? undefined : '2-digit', hourCycle: hourCycle() })}</span>`).join('');
+  const free = !p.afterHours && p.freeMinutes > 0 && Date.parse(p.freeUntil) > from
+    ? `<div class="day-free" style="left:${pct(Date.parse(p.freeFrom))};width:calc(${pct(Date.parse(p.freeUntil))} - ${pct(Date.parse(p.freeFrom))})" title="Free: ${hm(p.freeFrom)}–${hm(p.freeUntil)}"></div>` : '';
+  const off = Date.parse(day.workdayEnd) < to ? `<div class="day-off" style="left:${pct(Date.parse(day.workdayEnd))};right:0" title="After your workday"></div>` : '';
+  const blocks = evs.map((e) => {
+    const short = e.e - e.s < 20 * 6e4;
+    const cls = ['ev', e.fyi && 'fyi', e.e <= now && 'past', e.s <= now && now < e.e && 'on', short && 'short'].filter(Boolean).join(' ');
+    return `<button class="${cls}" data-ev="${e.i}" style="--c:${calColor(p, e.calendar)};left:${pct(e.s)};width:max(6px, calc(${pct(e.e)} - ${pct(e.s)} - 2px));top:${e.lane * 28 + 2}px"
+      aria-label="${esc(`${hm(e.start)}–${hm(e.end)} ${e.title}`)}">${short ? '' : esc(e.title)}</button>`;
+  }).join('');
+  const nowLine = now > from && now < to ? `<div class="day-now" style="left:${pct(now)}" title="Now, ${hm(new Date())}"></div>` : '';
+  const allDay = day.allDay.length ? `<span class="allday">All day: ${day.allDay.map((e) => esc(e.title)).join(' · ')}</span>` : '';
+  const cals = (p.calendars || []).length > 1 || (p.calendars || []).some((c) => c.hidden)
+    ? (p.calendars || []).map((c) => `<button class="cal-tog${c.hidden ? ' off' : ''}" data-cal="${esc(c.name)}" style="--c:${calColor(p, c.name)}"
+        title="${c.hidden ? 'Hidden: click to show' : 'Click to hide'} (hidden calendars don't take your time either)" aria-pressed="${!c.hidden}"><i></i>${esc(c.name)}</button>`).join('') : '';
+  const empty = !evs.length ? '<span>No meetings today.</span>' : '';
+  return `<div class="day"><div class="day-scroll"><div class="day-axis" style="--hour-w:calc(100% / ${hours})">
+      <div class="day-hours">${ticks}</div>
+      <div class="day-lanes" style="height:${lanes * 28 + 4}px">${free}${off}${blocks}${nowLine}</div>
+    </div></div>
+    <div class="day-foot">${empty}${allDay}${cals}</div></div>`;
+}
+
+// Details on hover (or focus); a click keeps them open so links work.
+let evPop = null, evPinned = null, evHideTimer = 0;
+function showEvent(btn, pin) {
+  const e = dayEvents[Number(btn.dataset.ev)];
+  if (!e) return;
+  clearTimeout(evHideTimer);
+  evPop ||= Object.assign(document.createElement('div'), { className: 'ev-pop', role: 'dialog' });
+  const row = (k, v) => (v ? `<dt>${k}</dt><dd>${v}</dd>` : '');
+  evPop.innerHTML = `<h4>${esc(e.title)}</h4>
+    <div class="when">${hm(e.start)}–${hm(e.end)} · ${dur(Math.round((Date.parse(e.end) - Date.parse(e.start)) / 6e4))}</div>
+    <dl>${row('Calendar', esc(e.calendar || ''))}${row('Where', esc(e.location || ''))}${row('Organizer', esc(e.organizer || ''))}
+      ${row('People', e.attendees ? String(e.attendees) : '')}${row('Join', e.url ? `<a class="join" href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.url.replace(/^https?:\/\//, '').slice(0, 40))}</a>` : '')}</dl>
+    ${e.description ? `<div class="desc">${esc(e.description)}</div>` : ''}
+    ${e.fyi ? '<div class="note">On a shared calendar, added by someone else: shown, but doesn\'t take your time.</div>' : ''}`;
+  document.body.append(evPop);
+  const r = btn.getBoundingClientRect(), w = evPop.offsetWidth, h = evPop.offsetHeight;
+  const left = Math.min(Math.max(16, r.left), innerWidth - w - 16);
+  const top = r.bottom + 6 + h > innerHeight - 8 ? Math.max(8, r.top - h - 6) : r.bottom + 6;
+  Object.assign(evPop.style, { left: `${left}px`, top: `${top}px` });
+  document.querySelectorAll('.ev.pinned').forEach((b) => b.classList.remove('pinned'));
+  evPinned = pin ? btn : null;
+  if (pin) btn.classList.add('pinned');
+}
+function hideEvent(force) {
+  if (evPinned && !force) return;
+  evPinned?.classList.remove('pinned'); evPinned = null;
+  evPop?.remove();
+}
+document.addEventListener('mouseover', (e) => {
+  const b = e.target.closest?.('.ev');
+  if (b && !evPinned) showEvent(b, false);
+  else if (e.target.closest?.('.ev-pop')) clearTimeout(evHideTimer);
+});
+document.addEventListener('mouseout', (e) => {
+  if (!e.target.closest?.('.ev, .ev-pop') || evPinned) return;
+  if (e.relatedTarget?.closest?.('.ev-pop, .ev')) return;
+  evHideTimer = setTimeout(() => hideEvent(false), 150);
+});
+document.addEventListener('focusin', (e) => { const b = e.target.closest?.('.ev'); if (b && !evPinned) showEvent(b, false); });
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('.ev');
+  if (b) { if (evPinned === b) hideEvent(true); else showEvent(b, true); return; }
+  if (!e.target.closest('.ev-pop')) hideEvent(true);
+  const t = e.target.closest('.cal-tog');
+  if (!t) return;
+  t.disabled = true;
+  try {
+    await post('/api/calendar/hidden', { name: t.dataset.cal, hidden: !t.classList.contains('off') });
+    await loadPlan();
+  } catch (err) { $('#status').textContent = `Could not save: ${err.message}`; }
+  t.disabled = false;
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && evPop?.isConnected) hideEvent(true); });
 
 function renderKpis() {
   const g = V.g, j = V.j, jm = V.jm, sl = V.sl;
@@ -951,7 +1105,7 @@ function renderStandup() {
     return;
   }
   if (s.error) { $('#su-body').innerHTML = `<div class="err">${esc(s.error)}</div>`; return; }
-  const at = new Date(s.nextStandup).toLocaleString([], { weekday: 'long', hour: '2-digit', minute: '2-digit' });
+  const at = new Date(s.nextStandup).toLocaleString([], { weekday: 'long', hour: '2-digit', minute: '2-digit', hourCycle: hourCycle() });
   const errs = [s.yesterday.github.error && `GitHub: ${s.yesterday.github.error}`, s.yesterday.jira.error && `Jira: ${s.yesterday.jira.error}`].filter(Boolean);
   $('#su-sub').textContent = `For ${at} · since ${s.sinceLabel}`;
   // The text is "*Heading*" lines followed by "- item" lines.
