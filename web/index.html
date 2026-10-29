@@ -428,9 +428,26 @@
   .pick button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
   .pick .n { margin-left: 4px; font-weight: 600; }
   .inbox { list-style: none; margin: 0; padding: 0; }
-  .inbox li { display: grid; grid-template-columns: 118px minmax(0, 150px) minmax(0, 90px) minmax(0, 1fr) 22px; gap: 10px; align-items: baseline;
+  .inbox li { display: grid; grid-template-columns: var(--cols, 118px 150px 90px minmax(0, 1fr) 22px); gap: 10px; align-items: baseline;
     padding: 7px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
   .inbox li.head { border-top: 0; padding-top: 0; color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; }
+  .inbox li:not(.head) { cursor: pointer; border-radius: 6px; }
+  .inbox li:not(.head):hover { background: var(--surface-2); }
+  .inbox li:not(.head):focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .inbox li.head > span { position: relative; overflow: visible; }
+  .inbox .rz { position: absolute; top: -4px; bottom: -4px; right: -8px; width: 8px; cursor: col-resize; touch-action: none; }
+  .inbox .rz::after { content: ''; position: absolute; left: 3px; top: 2px; bottom: 2px; width: 2px; border-radius: 1px; background: var(--line-strong); opacity: 0; }
+  .inbox li.head:hover .rz::after, .inbox .rz.on::after { opacity: 1; }
+  .inbox.no-d .d, .inbox.no-f .f, .inbox.no-g .g, .inbox.no-p .s .p, .inbox.no-att .att { display: none; }
+  .pick .cols { margin-left: auto; position: relative; font-size: 12.5px; }
+  .pick .cols summary { list-style: none; cursor: pointer; padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--text-2); }
+  .pick .cols summary::-webkit-details-marker { display: none; }
+  .pick .cols[open] summary { border-color: var(--accent); color: var(--accent); }
+  .pick .cols .menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; background: var(--surface); border: 1px solid var(--line);
+    border-radius: 8px; box-shadow: var(--shadow-lg); padding: 6px; min-width: 160px; }
+  .pick .cols label { display: flex; gap: 8px; align-items: center; padding: 4px 6px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+  .pick .cols label:hover { background: var(--surface-2); }
+  .pick .cols .reset { font: inherit; font-size: 12px; color: var(--accent); background: none; border: 0; padding: 4px 6px; cursor: pointer; }
   .inbox .d { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .inbox .f, .inbox .g { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); }
   .inbox .s { min-width: 0; }
@@ -442,10 +459,12 @@
   .inbox li.unread .d { color: var(--accent); font-weight: 600; }
   .inbox .att { text-align: right; color: var(--muted); }
   @media (max-width: 640px) {
-    .inbox li.head { display: none; }
+    .inbox li.head, .pick .cols { display: none; }
     .inbox li { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "f d" "s att"; gap: 2px 8px; }
     .inbox .f { grid-area: f; } .inbox .d { grid-area: d; } .inbox .s { grid-area: s; } .inbox .att { grid-area: att; }
     .inbox .g { display: none; }
+    /* A phone shows sender and date whatever the desktop columns are. */
+    .inbox.no-d .d, .inbox.no-f .f { display: inline; }
     .inbox .f .gm { color: var(--muted); font-weight: 400; }
   }
   @media (min-width: 641px) { .inbox .f .gm { display: none; } }
@@ -1258,8 +1277,24 @@ function renderExtra() {
 }
 
 // A source panel as an inbox: newest first, date, sender and group as columns, filtered by
-// group (School, or a child), with a paperclip on anything that has files.
+// group (School, or a child), with a paperclip on anything that has files. Columns can be
+// resized (drag a header edge) and hidden (Columns); that's kept in this browser.
 const groupPick = {};
+const COLS = [['d', 'Date', 118], ['f', 'From', 150], ['g', 'Group', 90], ['s', 'Subject'], ['p', 'Preview'], ['att', 'Attachments']];
+const COLS_KEY = 'clearsky.inbox.cols';
+let colPrefs = { widths: {}, hidden: [] };
+try { colPrefs = { widths: {}, hidden: [], ...JSON.parse(localStorage.getItem(COLS_KEY) || '{}') }; } catch {}
+const saveCols = () => { try { localStorage.setItem(COLS_KEY, JSON.stringify(colPrefs)); } catch {} };
+const colWidth = (c) => Math.min(480, Math.max(48, colPrefs.widths[c] || COLS.find((x) => x[0] === c)[2]));
+// The grid's columns, leaving out hidden ones. Preview sits under the subject, so it takes none.
+function colTemplate() {
+  const off = new Set(colPrefs.hidden);
+  return [...['d', 'f', 'g'].filter((c) => !off.has(c)).map((c) => `${colWidth(c)}px`), 'minmax(0, 1fr)', ...(off.has('att') ? [] : ['22px'])].join(' ');
+}
+const colClasses = () => colPrefs.hidden.map((c) => `no-${c}`).join(' ');
+function applyCols() {
+  for (const ul of document.querySelectorAll('.inbox')) { ul.style.setProperty('--cols', colTemplate()); ul.className = `inbox ${colClasses()}`; }
+}
 function tableView(x, list, limit = 12) {
   const groups = [...new Set(list.map((i) => i.group).filter(Boolean))]
     .sort((a, b) => (a === 'School' ? -1 : b === 'School' ? 1 : a.localeCompare(b)));
@@ -1275,7 +1310,7 @@ function tableView(x, list, limit = 12) {
     if (d.toDateString() === now.toDateString()) return hm(iso);
     return `${d.toLocaleDateString([], { day: 'numeric', month: 'short', ...(d.getFullYear() !== now.getFullYear() && { year: 'numeric' }) })} ${hm(iso)}`;
   };
-  const line = (i) => `<li class="${i.unread ? 'unread' : ''}">
+  const line = (i) => `<li class="${i.unread ? 'unread' : ''}" tabindex="0"${i.detail && i.key ? ` data-row-read="${esc(i.src)}" data-key="${esc(i.key)}" data-url="${esc(i.url)}"` : ` data-row-url="${esc(i.url)}"`}>
     <span class="d" title="${esc(i.at ? new Date(i.at).toLocaleString([], { dateStyle: 'full', timeStyle: 'short', hourCycle: hourCycle() }) : '')}">${esc(date(i.at))}</span>
     <span class="f" title="${esc(i.from || '')}">${esc(i.from || '')}${i.group ? ` <span class="gm">· ${esc(i.group)}</span>` : ''}</span>
     <span class="g" title="${esc(i.group || '')}">${esc(i.group || '')}</span>
@@ -1283,8 +1318,12 @@ function tableView(x, list, limit = 12) {
       ${i.meta ? `<div class="p">${esc(i.meta)}</div>` : i.quote ? `<div class="p">${esc(i.quote)}</div>` : ''}</span>
     <span class="att">${i.files ? `<span title="${i.files} file${i.files > 1 ? 's' : ''}" aria-label="Has attachments">📎</span>` : ''}</span>
   </li>`;
-  return (groups.length > 1 ? `<div class="pick">${chip('', 'All')}${groups.map((g) => chip(g, g)).join('')}</div>` : '') +
-    `<ul class="inbox"><li class="head"><span>Date</span><span>From</span><span>Group</span><span>Subject</span><span></span></li>${shown.map(line).join('')}</ul>` +
+  const cols = `<details class="cols"><summary>Columns</summary><div class="menu">${COLS.filter(([c]) => c !== 's').map(([c, label]) =>
+    `<label><input type="checkbox" data-col="${c}"${colPrefs.hidden.includes(c) ? '' : ' checked'}> ${label}</label>`).join('')}
+    <button class="reset" data-cols-reset>Reset widths</button></div></details>`;
+  const head = (c, label) => `<span class="${c}">${label}${['d', 'f', 'g'].includes(c) ? `<i class="rz" data-rz="${c}" title="Drag to resize"></i>` : ''}</span>`;
+  return `<div class="pick">${groups.length > 1 ? chip('', 'All') + groups.map((g) => chip(g, g)).join('') : ''}${cols}</div>` +
+    `<ul class="inbox ${colClasses()}" style="--cols: ${colTemplate()}"><li class="head">${head('d', 'Date')}${head('f', 'From')}${head('g', 'Group')}<span class="s">Subject</span><span class="att"></span></li>${shown.map(line).join('')}</ul>` +
     (items.length > shown.length ? `<button class="more" data-more="${id}">Show ${items.length - shown.length} more</button>` : '');
 }
 document.addEventListener('click', (e) => {
@@ -1292,6 +1331,42 @@ document.addEventListener('click', (e) => {
   if (!b) return;
   groupPick[b.dataset.pick] = b.dataset.group;
   renderExtra();
+});
+// The whole row opens the message; links and buttons inside it keep their own clicks.
+function openRow(li, e) {
+  if (li.dataset.rowRead) openReader(li.dataset.rowRead, li.dataset.key, li.dataset.url);
+  else if (li.dataset.rowUrl) window.open(li.dataset.rowUrl, '_blank', 'noopener');
+}
+document.addEventListener('click', (e) => {
+  const li = e.target.closest('.inbox li[tabindex]');
+  if (!li || e.target.closest('a, button, input, label') || getSelection().toString()) return;
+  openRow(li, e);
+});
+document.addEventListener('keydown', (e) => {
+  const li = e.target.closest?.('.inbox li[tabindex]');
+  if (li && e.target === li && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); openRow(li, e); }
+});
+document.addEventListener('change', (e) => {
+  const c = e.target.closest('[data-col]')?.dataset.col;
+  if (!c) return;
+  colPrefs.hidden = e.target.checked ? colPrefs.hidden.filter((x) => x !== c) : [...new Set([...colPrefs.hidden, c])];
+  saveCols(); applyCols();
+});
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('[data-cols-reset]')) return;
+  colPrefs.widths = {}; saveCols(); applyCols();
+});
+// Close the Columns menu on a click elsewhere.
+document.addEventListener('click', (e) => { for (const d of document.querySelectorAll('.pick .cols[open]')) if (!d.contains(e.target)) d.open = false; });
+document.addEventListener('pointerdown', (e) => {
+  const h = e.target.closest('[data-rz]');
+  if (!h) return;
+  e.preventDefault();
+  const c = h.dataset.rz, x0 = e.clientX, w0 = colWidth(c);
+  h.classList.add('on'); h.setPointerCapture(e.pointerId);
+  const move = (ev) => { colPrefs.widths[c] = Math.round(w0 + ev.clientX - x0); applyCols(); };
+  const up = () => { h.classList.remove('on'); h.removeEventListener('pointermove', move); h.removeEventListener('pointerup', up); colPrefs.widths[c] = colWidth(c); saveCols(); };
+  h.addEventListener('pointermove', move); h.addEventListener('pointerup', up);
 });
 
 // The Personal tab: personal sources' panels, under the same day schedule as Work.
