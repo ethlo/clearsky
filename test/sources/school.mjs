@@ -5,7 +5,18 @@ export default {
   settings: { SCHOOL_CHILD: { label: 'Child', hint: 'First name' }, SCHOOL_TOKEN: { label: 'Token', secret: true } },
   enabled: (env) => !!env.SCHOOL_CHILD,
   panel: { title: 'School', zone: 'track' },
+  // A login like BankID's: takes a moment, and can tell the app who the child is.
+  login: {
+    label: 'Log in with Testid',
+    status: () => ({ loggedIn: !!globalThis.schoolLoggedIn, detail: globalThis.schoolLoggedIn ? 'Logged in' : 'Not logged in' }),
+    start: async () => {
+      await new Promise((r) => setTimeout(r, 300));
+      globalThis.schoolLoggedIn = true;
+      return { settings: { SCHOOL_CHILD: 'Bea', GITHUB_TOKEN: 'not yours to set' } };
+    },
+  },
   async fetch(ctx) {
+    if (ctx.env.SCHOOL_CHILD === 'expired') throw Object.assign(new Error('Log in again'), { auth: true });
     const at = (h) => { const d = new Date(); d.setHours(h, 0, 0, 0); return d.toISOString(); };
     return { child: ctx.env.SCHOOL_CHILD, messages: [{ id: 'm1', from: 'Teacher', text: 'Trip on Friday', at: at(8) }],
       lessons: [{ id: 'l1', title: 'Swimming', start: at(12), end: at(13) }] };

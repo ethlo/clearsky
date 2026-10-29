@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, copyFileSync, writeFileSync, chmodSync } from 'node:fs';
+import { mkdtempSync, copyFileSync, writeFileSync, chmodSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -53,4 +53,36 @@ test('an extra source shows up in the page, notifications, Now / Next, stand-up 
   assert.match(su.text, /School: Ada has Swimming/);
   const st = await get('/api/settings');
   assert.deepEqual(st.extra.filter((f) => f.key.startsWith('SCHOOL_')).map((f) => [f.key, f.secret, f.value]), [['SCHOOL_CHILD', false, 'Ada'], ['SCHOOL_TOKEN', true, null]]);
+});
+
+test('a source login runs from Settings, saves what it learns, and fixes a panel that asked for it', async (t) => {
+  const port = 7780 + Math.floor(Math.random() * 80);
+  const base = `http://127.0.0.1:${port}`;
+  const home = mkdtempSync(join(tmpdir(), 'clearsky-src-home-'));
+  const server = spawn(process.execPath, [fileURLToPath(new URL('../bin/clearsky.mjs', import.meta.url)), 'serve', '--port', String(port)], {
+    cwd: home, stdio: 'ignore',
+    env: { PATH: process.env.PATH, HOME: home, CLEARSKY_POLL_MINUTES: '0', CLEARSKY_SOURCES_DIR: sourcesDir(), SCHOOL_CHILD: 'expired',
+      GITHUB_TOKEN: 'x', GITHUB_API_URL: 'http://127.0.0.1:9', ACLI_BIN: '/nonexistent/acli', COPILOT_BIN: '/nonexistent/copilot' },
+  });
+  t.after(() => server.kill());
+  for (let i = 0; i < 50; i++) { try { await fetch(base); break; } catch { await new Promise((r) => setTimeout(r, 100)); } }
+  const get = async (p) => (await fetch(base + p)).json();
+  const csrf = (await (await fetch(`${base}/settings`)).text()).match(/const CSRF = '([^']+)'/)[1];
+  const post = async (p) => (await fetch(base + p, { method: 'POST', headers: { 'X-Clearsky-Token': csrf, 'Content-Type': 'application/json' }, body: '{}' })).json();
+  const school = (st) => st.logins.find((l) => l.name === 'school');
+
+  const before = await get('/api/source/school');
+  assert.equal(before.needsLogin, true);
+  assert.deepEqual(school(await get('/api/settings')), { name: 'school', label: 'School', button: 'Log in with Testid', loggedIn: false, detail: 'Not logged in', running: false, error: null });
+
+  assert.equal(school(await post('/api/source/school/login')).running, true);
+  let st;
+  for (let i = 0; i < 30 && (st = school(await get('/api/settings'))).running; i++) await new Promise((r) => setTimeout(r, 100));
+  assert.equal(st.loggedIn, true);
+  const saved = readFileSync(join(home, '.config', 'clearsky', '.env'), 'utf8');
+  assert.match(saved, /^SCHOOL_CHILD=Bea$/m);
+  assert.doesNotMatch(saved, /GITHUB_TOKEN/, 'a source only sets its own settings');
+  assert.deepEqual((await get('/api/source/school')).items.map((i) => i.meta), ['Bea']);
+
+  assert.equal((await fetch(`${base}/api/source/github/login`, { method: 'POST', headers: { 'X-Clearsky-Token': csrf } })).status, 404);
 });

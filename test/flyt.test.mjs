@@ -102,7 +102,11 @@ test('a 401 mid-run renews and retries; a dead login asks you to log in again', 
     assert.ok((await client({ store, api: v.api }).get('v2/children')).children);
     assert.equal(v.state.renewals, 1);
     const dead = memStore({ session: 'sid', refresh: 'expired', access: 'x', expires: new Date(Date.now() + 3e5).toISOString() });
-    await assert.rejects(client({ store: dead, api: v.api }).get('v2/children'), /flyt-login/);
+    await assert.rejects(client({ store: dead, api: v.api }).get('v2/children'), (e) => e.auth && /Log in to Visma Flyt Skole again/.test(e.message));
+    assert.ok(dead.v.expiredAt, 'a dead login is remembered');
+    const sent = v.state.requests.length;
+    await assert.rejects(client({ store: dead, api: v.api }).get('v2/children'), (e) => e.auth);
+    assert.equal(v.state.requests.length, sent, 'and not tried again until you log in');
     await assert.rejects(client({ store: memStore(null), api: v.api }).get('v2/children'), /Not logged in/);
   } finally { v.close(); }
 });

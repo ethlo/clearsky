@@ -136,6 +136,7 @@
   <section id="extra" hidden>
     <h2>Other sources</h2>
     <p class="hint">Settings for sources added in <code>lib/sources/</code> or <code>~/.config/clearsky/sources/</code>.</p>
+    <div id="extra-logins"></div>
     <div id="extra-fields"></div>
     <div class="row"><button class="save" id="extra-save">Save</button><span class="msg"></span></div>
   </section>
@@ -220,8 +221,14 @@ function render(s) {
   $('#CLEARSKY_WORKDAYS').value = s.workdays || '';
   $('#CLEARSKY_MENTION_DAYS').value = s.mentionDays || '';
 
-  const extra = s.extra || [];
-  $('#extra').hidden = !extra.length;
+  const extra = s.extra || [], logins = s.logins || [];
+  $('#extra').hidden = !extra.length && !logins.length;
+  $('#extra-logins').innerHTML = logins.map((l) => `<h3>${esc(l.label)} <span class="state ${l.running ? 'off' : l.loggedIn ? 'on' : 'bad'}">${
+      l.running ? 'logging in…' : l.loggedIn ? 'logged in' : 'not logged in'}</span></h3>
+    <div class="row"><button data-login="${esc(l.name)}" class="${l.loggedIn ? 'secondary' : ''}"${l.running ? ' disabled' : ''}>${esc(l.loggedIn ? 'Log in again' : l.button)}</button>
+      <span class="msg${l.error ? ' bad' : ''}">${esc(l.running ? 'A browser window is open. Log in there; it closes by itself when you are in.' : l.error || l.detail)}</span></div>`).join('');
+  clearTimeout(render.poll);
+  if (logins.some((l) => l.running)) render.poll = setTimeout(load, 2000);
   if (extra.length && !$('#extra-fields').children.length) {
     $('#extra-fields').innerHTML = extra.map((f) => `<label for="${esc(f.key)}">${esc(f.label)}</label>
       <input id="${esc(f.key)}" data-key="${esc(f.key)}"${f.secret ? ' type="password" autocomplete="off"' : ''}>
@@ -271,6 +278,14 @@ $('#cal-remove').addEventListener('click', async () => {
   const msg = $('#cal-remove').nextElementSibling;
   try { render(await post('/api/settings', { GOOGLE_CALENDAR_ICS: '' })); msg.textContent = 'Removed.'; msg.className = 'msg on'; }
   catch (e) { msg.textContent = e.message; msg.className = 'msg bad'; }
+});
+
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-login]');
+  if (!btn) return;
+  btn.disabled = true;
+  try { render(await post(`/api/source/${btn.dataset.login}/login`)); }
+  catch (err) { btn.disabled = false; btn.nextElementSibling.textContent = err.message; btn.nextElementSibling.className = 'msg bad'; }
 });
 
 $('#gh-login').addEventListener('click', async () => {

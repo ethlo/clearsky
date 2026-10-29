@@ -859,7 +859,7 @@ function renderExtra() {
     if (d.disabled) { el.hidden = true; continue; }
     el.hidden = false;
     const list = vis((d.items || []).map((i) => ({ ...i, url: i.url || '', dismissKey: i.key ? `${x.name}:${i.key}` : undefined })));
-    card(el, x.panel.title, d.error ? null : list.length, (d.error ? `<div class="err">${esc(d.error)}</div>` : '') +
+    card(el, x.panel.title, d.error ? null : list.length, (d.error ? `<div class="err">${esc(d.error)}${d.needsLogin ? ' <a href="/settings#extra">Log in again in Settings</a>' : ''}</div>` : '') +
       (list.length ? rows(`x-${x.name}`, list, (i) => row(i), 5)
         : d.error ? '' : '<div class="empty">Nothing here.</div>'));
   }

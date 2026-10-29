@@ -743,7 +743,7 @@ export function planNow(d, now = Date.now(), dismissedItems = localState.dismiss
 
 // ---------------------------------------------------------------- collect
 
-const settle = (p) => p.catch((e) => ({ error: e.message }));
+const settle = (p) => p.catch((e) => ({ error: e.message, ...(e.auth && { needsLogin: true }) }));
 
 // Each source is fetched and cached on its own, so the page can show whatever is ready.
 const SOURCES = { github: fetchGitHub, jira: fetchJiraWork, jiraMentions: fetchJiraMentions, slack: fetchSlack, calendar: fetchCalendar };
@@ -1075,6 +1075,38 @@ async function readJson(req) {
     if (body.length > 64 * 1024) throw new Error('request too large');
   }
   return body ? JSON.parse(body) : {};
+}
+
+// Logins that extra sources start from Settings, such as BankID in a browser window. They
+// can take minutes, so they run in the background and Settings polls for the outcome.
+const sourceLogins = new Map();
+
+async function loginStatus() {
+  return Promise.all([...plugins.sources.values()].filter((p) => p.login).map(async (p) => {
+    let st = {};
+    try { st = (await p.login.status?.(makeContext(p).env)) || {}; } catch (e) { st = { detail: e.message }; }
+    const run = sourceLogins.get(p.name);
+    return { name: p.name, label: p.label, button: p.login.label || 'Log in', loggedIn: !!st.loggedIn, detail: st.detail || '',
+      running: run?.state === 'running', error: run?.state === 'error' ? run.message : null };
+  }));
+}
+
+const settingsStatus = async () => ({ ...await settings.status(config, { path: userEnvFile }), logins: await loginStatus() });
+
+function startSourceLogin(p) {
+  if (sourceLogins.get(p.name)?.state === 'running') return;
+  sourceLogins.set(p.name, { state: 'running' });
+  Promise.resolve().then(() => p.login.start(makeContext(p).env)).then((r) => {
+    // Only the source's own settings, e.g. a school key learned from the login.
+    const own = Object.fromEntries(Object.entries(r?.settings || {}).filter(([k, v]) => Object.hasOwn(p.settings || {}, k) && v));
+    if (Object.keys(own).length) {
+      const values = settings.validate(own);
+      settings.writeEnvFile(userEnvFile, values);
+      applySettings(values);
+    }
+    sourceLogins.delete(p.name);
+    sourceCache.delete(p.name);
+  }).catch((e) => sourceLogins.set(p.name, { state: 'error', message: e.message }));
 }
 
 function applySettings(values) {
@@ -1465,13 +1497,20 @@ function serve() {
           const values = settings.validate(await readJson(req));
           settings.writeEnvFile(userEnvFile, values);
           applySettings(values);
-          return json(res, 200, await settings.status(config, { path: userEnvFile }));
+          return json(res, 200, await settingsStatus());
         }
         if (url.pathname === '/api/login/github') return json(res, 200, await settings.githubLogin());
         if (url.pathname === '/api/login/jira') return json(res, 200, await settings.jiraLogin(config.jira.acli));
+        const login = url.pathname.match(/^\/api\/source\/([a-z][a-z0-9-]+)\/login$/);
+        if (login) {
+          const p = plugins.sources.get(login[1]);
+          if (!p?.login) return json(res, 404, { error: 'no such login' });
+          startSourceLogin(p);
+          return json(res, 200, await settingsStatus());
+        }
         return json(res, 404, { error: 'not found' });
       }
-      if (url.pathname === '/api/settings') return json(res, 200, await settings.status(config, { path: userEnvFile }));
+      if (url.pathname === '/api/settings') return json(res, 200, await settingsStatus());
       if (url.pathname === '/settings') {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
         return res.end(settingsPage);
