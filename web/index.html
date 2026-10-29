@@ -827,6 +827,7 @@ async function send(text) {
       out.innerHTML = md(answer);
       $('#chat-log').scrollTop = $('#chat-log').scrollHeight;
     }
+    out.innerHTML = md(answer.trimEnd());
     chat.turns++;
   } catch (e) {
     out.innerHTML = (answer ? md(answer) : '') + `<div class="err">${esc(e.name === 'AbortError' ? 'Stopped.' : e.message)}</div>`;
