@@ -581,3 +581,9 @@ a.ref:hover { border-bottom-style: solid; }
 .stand > a { font-weight: 600; color: var(--text); text-decoration: none; }
 .stand > a:hover { text-decoration: underline; }
 .stand .icon-btn.small { margin-left: 4px; }
+
+/* The quick filter above a list. */
+.list-q { font: inherit; font-size: 12.5px; color: var(--text); background: var(--surface-2); border: 1px solid var(--line); border-radius: 7px;
+  height: 28px; padding: 0 9px; width: 200px; margin-left: 12px; }
+.list-q:focus { outline: 2px solid var(--accent); outline-offset: -1px; width: 260px; }
+@media (max-width: 640px) { .list-q { width: 120px; } .list-q:focus { width: 160px; } }

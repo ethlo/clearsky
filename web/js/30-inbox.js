@@ -332,9 +332,21 @@ function itemRow(it, i) {
     <span class="age">${esc(shortAgo(it.at))}</span>${acts}</li>`;
 }
 
+// The quick filter above a list: every word must turn up in the row (its key, title, repo,
+// branch, status, who). Kept per list while the page is open.
+const listQ = {};
+function matchesQ(x, q) {
+  if (!q) return true;
+  const d = x.data || {};
+  const hay = [x.ref, x.issue, x.pr, x.title, x.step, x.src, ...(x.label || []), x.next?.label, d.repo, d.branch, d.status?.label || d.status, d.author,
+    d.type, d.priority, ...(d.pendingReviewers || []), ...(d.approvals || [])].filter(Boolean).join(' ').toLowerCase();
+  return q.toLowerCase().split(/\s+/).filter(Boolean).every((w) => hay.includes(w));
+}
 function renderList() {
-  const el = $('#list'), all = inboxItems(), live = all.filter((x) => !x.done && !x.snoozed);
+  const el = $('#list'), all = inboxItems(), q = (listQ[listView] || '').trim();
+  const live = all.filter((x) => !x.done && !x.snoozed && matchesQ(x, q));
   xrefAll = all;
+  if ($('#list-q').value !== (listQ[listView] || '')) $('#list-q').value = listQ[listView] || '';
   const by = (f) => live.filter(f);
   const sources = [['GitHub', state.github], ['Jira', state.jira], ['Jira mentions', state.jiraMentions], ['Slack', state.slack]];
   const errs = sources.filter(([, s]) => s?.error).map(([n, s]) => `<div class="err">${esc(n)}: ${esc(s.error)}</div>`).join('');
@@ -342,7 +354,7 @@ function renderList() {
   const groups = [];
   const group = (title, glyph, items, opts = {}) => groups.push({ title, glyph, items, ...opts });
   if (listView === 'inbox') {
-    group('Copilot now', 's-working', sessionItems(), { hideEmpty: true });
+    group('Copilot now', 's-working', sessionItems().filter((x) => matchesQ(x, q)), { hideEmpty: true });
     group('Needs you', 'ment', by((x) => x.group === 'needs'), { empty: loading ? null : 'Nothing needs you right now.' });
     group('Your tickets', 'prog', by((x) => x.group === 'tickets'), { hideEmpty: true });
     group('Waiting on others', 'wait', by((x) => x.group === 'waiting'), { hideEmpty: true, fold: !showWaiting });
@@ -359,6 +371,8 @@ function renderList() {
   listItems = [];
   let html = errs + (WORK_COLS[listView] ? workHead(listView) : '');
   applyWcols();
+  if (q) for (const g of groups) { g.hideEmpty = true; }
+  if (q && groups.every((g) => !g.items.length)) html += `<div class="empty">Nothing here matches “${esc(q)}”.</div>`;
   for (const g of groups) {
     if (!g.items.length && g.hideEmpty) continue;
     const head = `<div class="gh"><span class="st ${g.glyph}" style="width:12px;height:12px"></span>${esc(g.title)} <span class="n">${g.items.length}</span>`;
@@ -418,4 +432,17 @@ document.addEventListener('keydown', (e) => {
   else if (k === 'e') { cur.querySelector('[data-done]')?.click(); select(rows[i + 1] || rows[i - 1]); }
   else if (k === 'h') { const b = cur.querySelector('[data-mute]'); if (b) { e.preventDefault(); openMuteMenu(b); } }
   else if (k === 'a') { const b = cur.querySelector('[data-ask]'); if (b) { e.preventDefault(); openAskMenu(b); } }
+});
+
+$('#list-q').addEventListener('input', (e) => { listQ[listView] = e.target.value; renderList(); });
+$('#list-q').addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (e.target.value) { e.target.value = ''; listQ[listView] = ''; renderList(); } else $('#list').focus(); }
+  if (e.key === 'Enter' || e.key === 'ArrowDown') { e.preventDefault(); $('#list').focus(); }
+});
+// "/" jumps to the filter from a list.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey || $('#v-list').hidden || e.target.closest?.('input, textarea, select, [contenteditable]')) return;
+  e.preventDefault();
+  $('#list-q').focus();
+  $('#list-q').select();
 });

@@ -95,6 +95,14 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
   await page.goto(`${base}/#inbox`);
   await page.waitForSelector('#list li.r');
 
+  // The quick filter narrows the list as you type, and Esc clears it.
+  await page.keyboard.press('/');
+  await page.keyboard.type('their');
+  assert.equal(await page.locator('#list li.r').count(), 1);
+  assert.match(await page.locator('#list li.r').innerText(), /Their change/);
+  await page.keyboard.press('Escape');
+  assert.ok(await page.locator('#list li.r').count() >= 2);
+
   // Your PRs and Tickets as tables, with the branch.
   await page.goto(`${base}/#prs`);
   await page.waitForSelector('#list .wt-head');
