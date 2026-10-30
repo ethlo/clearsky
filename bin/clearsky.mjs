@@ -1445,6 +1445,8 @@ function restartWhenIdle({ maxWaitMinutes = 60, force = false } = {}) {
 }
 
 function serve() {
+  // A bug in a library (srt's proxy, say) shouldn't take the dashboard and every chat down with it.
+  process.on('uncaughtException', (e) => console.error(`clearsky: unexpected error, still running: ${e?.stack || e}`));
   // Every state-changing request must carry this token and come from this origin, so other
   // websites open in the browser can't change settings or start logins. It's kept across
   // restarts so an open page keeps working.

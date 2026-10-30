@@ -31,6 +31,9 @@ test('a write waits for your answer; one OK covers both halves of a push', async
   answer = false;
   const no = await f(req('POST', 'https://api.github.com/repos/acme/api/issues/1/comments', {}));
   assert.equal(no.action, 'deny'); assert.match(no.reason, /declined/);
+  const body = req('POST', 'https://api.github.com/repos/acme/api/issues', { title: 'x' });
+  await f(body);
+  assert.ok(body.bodyUsed, 'a denied request\'s body is read (srt crashes otherwise)');
   assert.equal((await f(req('POST', 'https://api.githubcopilot.com/mcp/', {}))).action, 'deny');
   assert.deepEqual(asked, ['git push to acme/api', 'POST acme/api/issues/1/comments']);
 });
