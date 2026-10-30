@@ -13,8 +13,6 @@ import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import { eventsBetween } from '../lib/ics.mjs';
-import { edsCalendars, pickCalendars, ownCalendars, edsCalendarText } from '../lib/eds.mjs';
 import { randomBytes } from 'node:crypto';
 import * as settings from '../lib/settings.mjs';
 import * as localState from '../lib/state.mjs';
@@ -27,7 +25,9 @@ import { isReadOnly, editInside } from '../lib/readonly.mjs';
 import { assistedReason } from '../lib/assisted.mjs';
 import { attentionItems, diffAttention, desktopNotify, DbusNotifier } from '../lib/notify.mjs';
 import { loadSources, makeContext, hook, asList } from '../lib/sources.mjs';
-import { pluginItems, replyNext } from '../lib/items.mjs';
+import { pluginItems } from '../lib/items.mjs';
+import { manifest as slackManifest, createSlack, workItems as slackItems } from '../lib/modules/slack.mjs';
+import { manifest as calendarManifest, createCalendar } from '../lib/modules/calendar.mjs';
 import { manifest as githubManifest, createGitHub, workItems as githubItems, PR_FIELDS, ITEM_FIELDS, ciState, isBot, latestReviewsByUser, openThreads, humanReviewers, myPrStatus, reviewerName } from '../lib/modules/github.mjs';
 import { manifest as jiraManifest, createJira, workItems as jiraItems, mentionItems as jiraMentionItems, listOf, fieldsOf, nameOf, commentInfo, excerpt, userId, mapLimit, JIRA_WAITING, jiraMentionsByTicket, mergeJira } from '../lib/modules/jira.mjs';
 
@@ -142,124 +142,11 @@ const { acli, jiraSearch, jiraComments, jiraSite, browseUrl, jiraDebug } = jiraM
 const fetchJiraWork = jiraModule.fetchWork, fetchJiraMentions = jiraModule.fetchMentions;
 export const issuePreview = (key) => jiraModule.issuePreview(key);
 
-// ---------------------------------------------------------------- Slack
+// ---------------------------------------------------------------- Slack and Calendar (lib/modules)
 
-async function slack(method, params = {}) {
-  const url = new URL(`${config.slack.api}/${method}`);
-  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
-  const res = await http(url, { headers: { Authorization: `Bearer ${config.slack.token}` } });
-  if (!res.ok) throw new Error(`Slack ${method}: ${res.error}${res.needed ? ` (needs scope ${res.needed})` : ''}`);
-  return res;
-}
-
-function slackText(text, me) {
-  const plain = (text || '')
-    .replaceAll(`<@${me}>`, '@you')
-    .replace(/<@[A-Z0-9]+(?:\|([^>]+))?>/g, (_, name) => `@${name || 'someone'}`)
-    .replace(/<#[A-Z0-9]+\|([^>]*)>/g, '#$1')
-    .replace(/<!(here|channel|everyone)[^>]*>/g, '@$1')
-    .replace(/<([^|>]+)\|([^>]+)>/g, '$2')
-    .replace(/<([^>]+)>/g, '$1')
-    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return plain.length > 220 ? `${plain.slice(0, 217)}...` : plain;
-}
-
-async function fetchSlack() {
-  if (!config.slack.token) return { disabled: true };
-  const auth = await slack('auth.test');
-  const me = auth.user_id;
-  // Slack's `after:` is exclusive, so go one day further back to cover the whole window.
-  const res = await slack('search.messages', {
-    query: `<@${me}> after:${daysAgoIso(config.days + 1)}`, sort: 'timestamp', sort_dir: 'desc', count: 50,
-  });
-  const cutoff = Date.now() - config.days * 864e5;
-  const mentions = (res.messages?.matches || [])
-    .filter((m) => m.user !== me && Number(m.ts) * 1000 >= cutoff)
-    .map((m) => ({
-      channel: m.channel?.is_im ? 'DM' : m.channel?.is_mpim ? 'Group DM' : `#${m.channel?.name || '?'}`,
-      by: m.username || 'someone',
-      at: new Date(Number(m.ts) * 1000).toISOString(),
-      url: m.permalink,
-      stamp: m.ts,
-      excerpt: slackText(m.text, me),
-    }));
-  return { user: auth.user, team: auth.team, mentions };
-}
-
-// Slack mentions as work items (see lib/items.mjs).
-function slackItems(sl) {
-  if (!sl || sl.error || sl.disabled) return [];
-  return (sl.mentions || []).map((m) => ({ group: 'needs', kind: 'mention', src: 'Slack', k: m.url, url: m.url, stamp: m.stamp, ref: m.channel,
-    title: `${m.by} in ${m.channel}`, step: m.excerpt, quote: m.excerpt, glyph: 'ment', label: ['Slack'], at: m.at, next: replyNext(m.url), data: m }));
-}
-
-// ---------------------------------------------------------------- Calendar
-
-async function icsText(url) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`calendar feed returned ${res.status} ${res.statusText}`);
-  const text = await res.text();
-  if (!text.includes('BEGIN:VCALENDAR')) {
-    throw new Error('the calendar link returned a web page, not an iCal feed; in Settings, paste the "Secret address in iCal format" (ends in basic.ics)');
-  }
-  return text;
-}
-
-// Calendars synced by GNOME Online Accounts / Evolution, matched by CALENDAR_EMAIL
-// or named in EVOLUTION_CALENDARS.
-async function evolutionTexts() {
-  const { email, evolution } = config.calendar;
-  const all = edsCalendars();
-  const picked = pickCalendars(all, { wanted: evolution, email });
-  if (!picked.length) return null;
-  const synced = picked.filter((c) => c.cacheDb);
-  if (!synced.length) throw new Error(`Evolution has ${picked.map((c) => c.name).join(', ')} but hasn't synced it yet; open GNOME Calendar once`);
-  // Your own calendars block your time. A shared one (say the family calendar) only blocks
-  // for events you put there or were invited to; the rest just show.
-  const own = new Set(ownCalendars(all, email).map((c) => c.uid));
-  return Promise.all(synced.map(async (c) => ({
-    text: await edsCalendarText(c.cacheDb), name: c.name, work: own.has(c.uid),
-    shared: !own.has(c.uid) && c.name.toLowerCase() !== c.account.toLowerCase(),
-  })));
-}
-
-// Reads the iCal link and GNOME Online Accounts side by side and merges them, so one
-// broken source doesn't hide the other. It only fails when every configured source fails.
-async function fetchCalendar() {
-  const { icsUrl, email } = config.calendar;
-  const tries = [];
-  const urls = (icsUrl || '').split(/\s+/).filter(Boolean);
-  urls.forEach((url, i) => tries.push([urls.length > 1 ? `iCal link ${i + 1}` : 'iCal link', icsText(url).then((text) => [{ text, name: 'Google Calendar', work: true }])]));
-  tries.push(['GNOME Online Accounts', evolutionTexts()]);
-  const results = await Promise.all(tries.map(([name, p]) => p.then((texts) => ({ name, texts }), (e) => ({ name, error: e.message }))));
-  const used = results.filter((r) => r.texts);
-  const errors = Object.fromEntries(results.filter((r) => r.error).map((r) => [r.name, r.error]));
-  if (!used.length) {
-    const msgs = Object.entries(errors);
-    if (!msgs.length) return { disabled: true };
-    return { error: msgs.map(([n, m]) => (msgs.length > 1 ? `${n}: ${m}` : m)).join('; '), errors };
-  }
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const seen = new Set();
-  // All your addresses: the work one and the accounts of the calendars you picked.
-  const me = [email, ...pickCalendars(edsCalendars(), { wanted: config.calendar.evolution, email }).map((c) => c.account),
-    ...(process.env.CALENDAR_MY_EMAILS || '').split(/[\s,]+/)].filter((m) => /@/.test(m || ''));
-  // Your name in a shared event's title also makes it yours (say "Dentist (Morten)").
-  const names = (process.env.CALENDAR_MY_NAMES || '').split(',').map((n) => n.trim().toLowerCase()).filter(Boolean);
-  const events = used.flatMap((r) => r.texts).flatMap((c) => eventsBetween(c.text, today.getTime(), today.getTime() + 2 * 864e5, me)
-    .map((e) => ({ ...e, calendar: c.name || 'Calendar', work: !!c.work, shared: !!c.shared,
-      fyi: !!c.shared && !e.withMe && !names.some((n) => e.title.toLowerCase().includes(n)) })))
-    // The same event on your own calendar and a shared one: keep your copy, which blocks time.
-    .sort((a, b) => a.fyi - b.fyi)
-    .filter((e) => !e.declined && !seen.has(`${e.uid}@${e.start}`) && !seen.has(`${e.title}@${e.start}`)
-      && seen.add(`${e.uid}@${e.start}`) && seen.add(`${e.title}@${e.start}`))
-    .map(({ declined, withMe, ...e }) => e)
-    .sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
-  const sources = used.map((r) => r.name);
-  return { source: sources.join(' + '), sources, ...(Object.keys(errors).length && { errors }), events };
-}
+const slackModule = createSlack({ config, http, daysAgoIso });
+const fetchSlack = slackModule.fetch;
+const fetchCalendar = createCalendar({ config }).fetch;
 
 // ---------------------------------------------------------------- Now / Next
 
@@ -394,9 +281,8 @@ for (const p of plugins.sources.values()) {
 const BUILTIN_MANIFESTS = [
   githubManifest,
   jiraManifest,
-  { name: 'slack', label: 'Slack', area: 'work', secrets: [{ key: 'SLACK_TOKEN', kind: 'token' }], hosts: ['slack.com'], clis: [], files: [] },
-  { name: 'calendar', label: 'Calendar', area: 'work', secrets: [{ key: 'GOOGLE_CALENDAR_ICS', kind: 'token', note: 'the secret iCal address' },
-    { kind: 'keyring', note: 'or GNOME Online Accounts, read from Evolution\'s local cache' }], hosts: ['calendar.google.com'], clis: [], files: ['~/.cache/evolution/calendar', '~/.config/evolution/sources'], dbus: true },
+  slackManifest,
+  calendarManifest,
   { name: 'copilot', label: 'Copilot', area: 'work', secrets: [{ kind: 'cli-login', note: 'none from Clearsky (its tokens are removed from Copilot\'s environment); Copilot keeps its own login in ~/.copilot or the keyring' }],
     hosts: ['*.githubcopilot.com', 'github.com'], clis: ['copilot'], files: ['~/.copilot', 'your Copilot folders'],
     note: 'Settings → Copilot → Sandbox limits it to your folders and listed hosts.' },
