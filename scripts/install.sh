@@ -103,7 +103,7 @@ Comment=What needs you today, at work and at home
 Exec=$(command -v node) $DIR/bin/clearsky.mjs app
 Icon=$DIR/web/icon-512.png
 Terminal=false
-Categories=Office;Utility;
+Categories=Office;
 StartupWMClass=Clearsky
 DESKTOP
   have update-desktop-database && update-desktop-database "$apps" >/dev/null 2>&1 || true
