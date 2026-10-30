@@ -125,6 +125,12 @@ PRs and tickets link to each other: a PR shows the Jira tickets in its title or 
 
 `clearsky restart` asks the running server to restart once no Copilot chat is working or waiting for your OK, so updating never cuts a turn off; idle chats carry on afterwards. To start Clearsky at login and keep it running, `contrib/clearsky.service` is a systemd user service (instructions inside); it sets `CLEARSKY_SUPERVISED=1`, so a restart hands over to systemd.
 
+### In Docker
+
+The same on Linux, macOS and Windows: put `HOME_DIR`, `UID`, `GID` (and `PORT`) in a `.env` next to `docker-compose.yml` (what each is, is at the top of that file), then `docker compose up -d --build` and open http://127.0.0.1:7777. The container sees only your `~/dev`, Clearsky's and Copilot's folders, your git settings and your JDKs, which also fences Copilot in.
+
+A container has no keyring, and acli can only keep its login in one, so Clearsky's container runs a keyring of its own, kept in `~/.config/clearsky/container/` (yours only). Log in once after the first start: `docker compose exec -it clearsky clearsky-login` logs in gh, acli and Copilot in turn (or name one: `clearsky-login acli`), each with a link and code for your browser. If acli's browser login can't reach back into the container, use an API token: `acli jira auth login --site <you>.atlassian.net --email <you> --token < token.txt`. Your machine's own keyring and logins aren't used or changed. What isn't available in the container: desktop notifications, the GNOME calendar route and the browser-driven school login.
+
 `npm test` includes a browser check of every view when Playwright is installed, and skips it otherwise.
 
 ## Notifications
