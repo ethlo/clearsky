@@ -21,7 +21,7 @@ import * as copilot from '../lib/copilot.mjs';
 import { AcpAgent, chatEvent } from '../lib/acp.mjs';
 import { sessionEvents, sessionUsage } from '../lib/copilot-events.mjs';
 import { branchesFor } from '../lib/branches.mjs';
-import { sandboxedCommand, stopSandbox, githubLogin, DEFAULT_DOMAINS, READ_DEFAULT, parseDomains } from '../lib/sandbox.mjs';
+import { sandboxedCommand, sandboxEnded, stopSandbox, githubLogin, DEFAULT_DOMAINS, READ_DEFAULT, parseDomains } from '../lib/sandbox.mjs';
 import { serveBroker, brokerSocket } from '../lib/broker.mjs';
 import { mavenSandbox, sandboxCa } from '../lib/maven.mjs';
 import { githubFilter } from '../lib/github-gate.mjs';
@@ -862,7 +862,9 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   // Copilot's built-in GitHub tools would change GitHub past the gate: off.
   const s = await sandboxedCommand(bin, [...args, '--disable-builtin-mcps', '--acp'], { ...sandboxOpts(cwd), domains, maven, github, ca: sandboxCa(keep) },
     { filterRequest: githubFilter(githubAsk) });
-  return Object.assign(new AcpAgent(s.bin, s.args, { env, acp: false }), { sandboxed: true, brokerKey: key,
+  const agent = new AcpAgent(s.bin, s.args, { env, acp: false });
+  agent.child.once('exit', sandboxEnded);
+  return Object.assign(agent, { sandboxed: true, brokerKey: key,
     github: github ? `${process.env.COPILOT_SANDBOX_TOKEN ? 'your sandbox token' : 'your gh login'}, added on the way out; changes ask you` : 'not signed in (gh auth login)',
     hosts: [...new Set([...domains, ...(maven?.hosts || []), ...(github?.read || [])])] });
 }
