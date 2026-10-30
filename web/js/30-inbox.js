@@ -252,7 +252,7 @@ let listView = 'inbox', listItems = [], selK = null, showWaiting = false;
 // Columns can be resized (drag a header edge) and hidden (Columns); that's kept in this browser.
 const WORK_COLS = {
   prs: [['id', 'PR', 110], ['t', 'Title'], ['x', 'Ticket', 110], ['b', 'Branch', 180], ['s', 'State', 150], ['u', 'Updated', 64]],
-  tickets: [['id', 'Ticket', 96], ['t', 'Title'], ['x', 'Pull requests', 200], ['b', 'Branch', 180], ['v', 'Fix version', 100], ['a', 'Assignee', 120], ['s', 'State', 120], ['u', 'Updated', 64]],
+  tickets: [['id', 'Ticket', 96], ['t', 'Title'], ['x', 'Pull requests', 200], ['b', 'Branch', 180], ['v', 'Fix version', 100], ['a', 'Assignee', 120], ['p', 'Priority', 90], ['s', 'State', 120], ['u', 'Updated', 64]],
 };
 const WCOLS_KEY = 'clearsky.work.cols';
 let wcolPrefs = {};
@@ -272,6 +272,42 @@ function applyWcols() {
 // Within each group, so what needs you stays on top.
 const natural = (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
 const TONE_RANK = { red: 0, amber: 1, blue: 2, green: 3 };
+const PRIORITY_RANK = { blocker: 0, highest: 0, critical: 1, high: 1, major: 2, medium: 2, low: 3, minor: 3, lowest: 4, trivial: 4 };
+const PRIORITY_TONE = (p) => ['red', 'red', 'amber', 'gray', 'gray'][PRIORITY_RANK[String(p).toLowerCase()]] || 'gray';
+
+// Quick filters over a table: one menu per field, its values (with counts) from the rows in view.
+// Fields combine; remembered per table.
+const FILTERS = {
+  tickets: [['fix', 'Fix version', (x) => (x.data?.fixVersions?.length ? x.data.fixVersions.map((v) => v.name) : x.data?.fixVersions ? ['(none)'] : [])],
+    ['assignee', 'Assignee', (x) => [x.data?.assignee || (x.kind === 'ticket' ? '(unassigned)' : '')]], ['priority', 'Priority', (x) => [x.data?.priority]],
+    ['state', 'State', (x) => [x.data?.status || x.label?.[0]]], ['type', 'Type', (x) => [x.data?.type]], ['project', 'Project', (x) => [x.data?.project || x.data?.repo]]],
+  prs: [['state', 'State', (x) => [x.data?.status?.label]], ['repo', 'Repo', (x) => [x.data?.repo]]],
+};
+const filterVals = (f, x) => f[2](x).filter(Boolean);
+const passesFilters = (v, x) => (FILTERS[v] || []).every((f) => { const want = wprefs(v).filter?.[f[0]]; return !want || filterVals(f, x).includes(want); });
+function filterBar(v, rows) {
+  const on = wprefs(v).filter || {};
+  return (FILTERS[v] || []).map((f) => {
+    const counts = new Map();
+    for (const x of rows) for (const val of filterVals(f, x)) counts.set(val, (counts.get(val) || 0) + 1);
+    if (!counts.size && !on[f[0]]) return '';
+    const opts = [...counts].sort((a, b) => natural(a[0], b[0]));
+    if (on[f[0]] && !counts.has(on[f[0]])) opts.push([on[f[0]], 0]);
+    return `<select class="qf${on[f[0]] ? ' on' : ''}" data-qf="${f[0]}" aria-label="Filter by ${f[1].toLowerCase()}"><option value="">${f[1]}: all</option>${
+      opts.map(([val, n]) => `<option value="${esc(val)}"${on[f[0]] === val ? ' selected' : ''}>${f[1]}: ${esc(val)} (${n})</option>`).join('')}</select>`;
+  }).join('') + (Object.values(on).some(Boolean) ? '<button class="qf-clear" data-qf-clear>Clear filters</button>' : '');
+}
+document.addEventListener('change', (e) => {
+  const s = e.target.closest('[data-qf]');
+  if (!s || !FILTERS[listView]) return;
+  const p = wprefs(listView);
+  p.filter = { ...(p.filter || {}), [s.dataset.qf]: s.value || undefined };
+  saveWcols(); renderList();
+});
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('[data-qf-clear]') || !FILTERS[listView]) return;
+  wprefs(listView).filter = {}; saveWcols(); renderList();
+});
 function sortKey(it, c) {
   const d = it.data || {};
   switch (c) {
@@ -281,6 +317,7 @@ function sortKey(it, c) {
     case 'b': return branchesOf(it, relatedItems(it, xrefAll))[0]?.branch || '';
     case 'v': return d.fixVersions?.length ? d.fixVersions.map((v) => v.name).join(', ') : null;
     case 'a': return d.assignee || null;
+    case 'p': return d.priority ? `${PRIORITY_RANK[d.priority.toLowerCase()] ?? 5} ${d.priority}` : null;
     case 's': return it.label ? `${TONE_RANK[it.label[1]] ?? 4} ${it.label[0]}` : null;
     case 'u': return it.at ? Date.parse(it.at) || 0 : null;
     default: return '';
@@ -304,9 +341,9 @@ document.addEventListener('click', (e) => {
   p.sort = p.sort?.c !== c ? { c, dir: c === 'u' ? 'desc' : 'asc' } : p.sort.dir === (c === 'u' ? 'desc' : 'asc') ? { c, dir: c === 'u' ? 'asc' : 'desc' } : null;
   saveWcols(); renderList();
 });
-function workHead(v) {
+function workHead(v, rows = []) {
   const cols = WORK_COLS[v], off = new Set(wprefs(v).hidden), s = wprefs(v).sort;
-  const menu = `<div class="wt-bar pick"><details class="cols"><summary>Columns</summary><div class="menu">${cols.filter(([c]) => c !== 't').map(([c, label]) =>
+  const menu = `<div class="wt-bar pick">${filterBar(v, rows)}<details class="cols"><summary>Columns</summary><div class="menu">${cols.filter(([c]) => c !== 't').map(([c, label]) =>
     `<label><input type="checkbox" data-wcol="${c}"${off.has(c) ? '' : ' checked'}> ${label}</label>`).join('')}
     <button class="reset" data-wcols-reset>Reset widths</button></div></details></div>`;
   const arrow = (c) => (s?.c === c ? (s.dir === 'desc' ? ' ▼' : ' ▲') : '');
@@ -370,6 +407,7 @@ function tableRow(it, i, rel, chips, acts, fresh) {
     b: `<span class="c c-b">${branchCell(branchesOf(it, rel))}</span>`,
     v: `<span class="c c-v${(it.data?.fixVersions || []).some((v) => v.released) && it.data?.statusCategory !== 'done' ? ' warn' : ''}"${it.data?.fixVersions ? ` title="${esc(fixText(it.data))}"` : ''}>${it.data?.fixVersions ? (it.data.fixVersions.length ? esc(it.data.fixVersions.map((v) => v.name).join(', ')) : '<span class="muted">none</span>') : ''}</span>`,
     a: `<span class="c c-a">${esc(it.data?.assignee || '')}</span>`,
+    p: `<span class="c c-p">${it.data?.priority ? `<span class="lbl ${PRIORITY_TONE(it.data.priority)}"><i></i>${esc(it.data.priority)}</span>` : ''}</span>`,
     s: `<span class="c c-s">${lt ? `<span class="lbl${tone ? ` ${tone}` : ''}">${tone ? '<i></i>' : ''}${esc(lt)}</span>` : ''}</span>`,
     u: `<span class="c c-u age">${esc(shortAgo(it.at))}</span>`,
   };
@@ -408,7 +446,8 @@ function matchesQ(x, q) {
 }
 function renderList() {
   const el = $('#list'), all = inboxItems(), q = (listQ[listView] || '').trim();
-  const live = all.filter((x) => !x.done && !x.snoozed && matchesQ(x, q));
+  const shown = all.filter((x) => !x.done && !x.snoozed && matchesQ(x, q));
+  const live = WORK_COLS[listView] ? shown.filter((x) => passesFilters(listView, x)) : shown;
   xrefAll = all;
   if ($('#list-q').value !== (listQ[listView] || '')) $('#list-q').value = listQ[listView] || '';
   const by = (f) => live.filter(f);
@@ -433,7 +472,8 @@ function renderList() {
     group('GitHub issues', 'todo', by((x) => x.kind === 'issue'), { hideEmpty: true });
   }
   listItems = [];
-  let html = errs + (WORK_COLS[listView] ? workHead(listView) : '');
+  const inView = { prs: (x) => x.kind === 'pr', tickets: (x) => x.kind === 'ticket' || x.kind === 'issue' }[listView];
+  let html = errs + (WORK_COLS[listView] ? workHead(listView, inView ? shown.filter(inView) : []) : '');
   applyWcols();
   if (q) for (const g of groups) { g.hideEmpty = true; }
   if (q && groups.every((g) => !g.items.length)) html += `<div class="empty">Nothing here matches “${esc(q)}”.</div>`;
