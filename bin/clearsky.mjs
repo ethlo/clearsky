@@ -30,6 +30,7 @@ import { attentionItems, diffAttention, desktopNotify, DbusNotifier } from '../l
 import { loadSources, makeContext, hook, asList } from '../lib/sources.mjs';
 import { pluginItems } from '../lib/items.mjs';
 import { manifest as slackManifest, createSlack, workItems as slackItems } from '../lib/modules/slack.mjs';
+import { findBrowser, BROWSERS } from '../lib/browser.mjs';
 import { manifest as calendarManifest, createCalendar } from '../lib/modules/calendar.mjs';
 import { manifest as githubManifest, createGitHub, workItems as githubItems, PR_FIELDS, ITEM_FIELDS, ciState, isBot, latestReviewsByUser, openThreads, humanReviewers, myPrStatus, reviewerName } from '../lib/modules/github.mjs';
 import { manifest as jiraManifest, createJira, workItems as jiraItems, mentionItems as jiraMentionItems, listOf, fieldsOf, nameOf, commentInfo, excerpt, userId, mapLimit, JIRA_WAITING, jiraMentionsByTicket, mergeJira } from '../lib/modules/jira.mjs';
@@ -1747,17 +1748,7 @@ async function restartCommand(args) {
 // `clearsky app`: Clearsky in a window of its own (Chromium's app mode: no tabs or address bar),
 // starting the server first when it isn't running. Your normal browser profile, so links to
 // GitHub and Jira open logged in.
-const BROWSERS = ['chromium', 'chromium-browser', 'google-chrome', 'google-chrome-stable', 'brave-browser', 'microsoft-edge'];
-export function findBrowser(env = process.env) {
-  if (env.CLEARSKY_BROWSER) return env.CLEARSKY_BROWSER;
-  for (const b of BROWSERS) for (const dir of (env.PATH || '').split(delimiter)) if (dir && existsSync(join(dir, b))) return join(dir, b);
-  // Where they install themselves on Linux (snap, flatpak), macOS and Windows.
-  const pf = [env.ProgramFiles, env['ProgramFiles(x86)'], env.LOCALAPPDATA].filter(Boolean);
-  const known = ['/snap/bin/chromium', '/var/lib/flatpak/exports/bin/org.chromium.Chromium',
-    ...['Google Chrome', 'Chromium', 'Microsoft Edge', 'Brave Browser'].map((a) => `/Applications/${a}.app/Contents/MacOS/${a}`),
-    ...pf.flatMap((d) => [join(d, 'Google', 'Chrome', 'Application', 'chrome.exe'), join(d, 'Microsoft', 'Edge', 'Application', 'msedge.exe')])];
-  return known.find((p) => existsSync(p)) || null;
-}
+export { findBrowser };
 async function appCommand() {
   const base = `http://127.0.0.1:${config.port}`;
   const up = () => fetch(`${base}/api/restart`).then((r) => r.ok, () => false);
