@@ -17,27 +17,26 @@
 <div class="app">
 <div class="drawer-scrim" id="scrim" hidden></div>
 <aside class="side" id="side" aria-label="Menu">
-  <div class="brand"><i></i>Clearsky</div>
   <nav class="nav" id="nav">
-    <a class="ni" href="#" data-nav="inbox"><span class="ico">▤</span><span class="lab">Inbox</span><b id="n-inbox"></b></a>
-    <a class="ni" href="#calendar" data-nav="calendar"><span class="ico">◷</span><span class="lab">Calendar</span><b id="n-calendar"></b></a>
-    <a class="ni" href="#standup" data-nav="standup"><span class="ico">☰</span><span class="lab">Stand-up</span></a>
-    <a class="ni" href="#notifications" data-nav="notifications"><span class="ico">🔔</span><span class="lab">Notifications</span></a>
+    <a class="ni" href="#" data-nav="inbox"><span class="ico" data-i="inbox"></span><span class="lab">Inbox</span><b id="n-inbox"></b></a>
+    <a class="ni" href="#calendar" data-nav="calendar"><span class="ico" data-i="calendar"></span><span class="lab">Calendar</span><b id="n-calendar"></b></a>
+    <a class="ni" href="#standup" data-nav="standup"><span class="ico" data-i="standup"></span><span class="lab">Stand-up</span></a>
+    <a class="ni" href="#notifications" data-nav="notifications"><span class="ico" data-i="bell"></span><span class="lab">Notifications</span></a>
   </nav>
-  <div class="sg">Copilot <button type="button" id="cp-new-side" title="New chat (Alt+N)" aria-label="New chat">＋</button></div>
+  <div class="sg">Copilot <button type="button" id="cp-new-side" title="New chat (Alt+N)" aria-label="New chat"><span data-i="plus" data-size="14"></span></button></div>
   <div id="side-cp"></div>
   <div class="sg">Work</div>
   <nav id="side-work">
-    <a class="ni" href="#reviews" data-nav="reviews"><span class="ico">◎</span><span class="lab">Reviews</span><b id="n-reviews"></b></a>
-    <a class="ni" href="#prs" data-nav="prs"><span class="ico">⑂</span><span class="lab">Your PRs</span><b id="n-prs"></b></a>
-    <a class="ni" href="#mentions" data-nav="mentions"><span class="ico">@</span><span class="lab">Mentions</span><b id="n-mentions"></b></a>
-    <a class="ni" href="#tickets" data-nav="tickets"><span class="ico">▣</span><span class="lab">Tickets</span><b id="n-tickets"></b></a>
+    <a class="ni" href="#reviews" data-nav="reviews"><span class="ico" data-i="review"></span><span class="lab">Reviews</span><b id="n-reviews"></b></a>
+    <a class="ni" href="#prs" data-nav="prs"><span class="ico" data-i="pr"></span><span class="lab">Your PRs</span><b id="n-prs"></b></a>
+    <a class="ni" href="#mentions" data-nav="mentions"><span class="ico" data-i="at"></span><span class="lab">Mentions</span><b id="n-mentions"></b></a>
+    <a class="ni" href="#tickets" data-nav="tickets"><span class="ico" data-i="ticket"></span><span class="lab">Tickets</span><b id="n-tickets"></b></a>
   </nav>
   <div class="sg" id="side-personal-h" hidden>Personal</div>
   <nav id="side-personal"></nav>
   <div class="side-foot">
     <div class="restart-note" id="restart-note" hidden></div>
-    <a class="ni" href="/settings"><span class="ico">⚙</span><span class="lab">Settings</span></a>
+    <a class="ni" href="/settings"><span class="ico" data-i="settings"></span><span class="lab">Settings</span></a>
     <div class="row1">
       <div class="status"><span class="dot" id="dot"></span><span class="txt" id="status">Loading…</span></div>
       <button class="rf" id="notify" title="Notifications" aria-label="Notifications" hidden></button>
@@ -51,8 +50,7 @@
 
 <main class="work">
   <div class="topbar">
-    <button class="icon-btn menu-btn" id="menu-btn" aria-label="Menu" aria-expanded="false" aria-controls="side">☰<span class="tab-n" id="menu-n" hidden></span></button>
-    <div class="brand"><i></i>Clearsky</div>
+    <button class="icon-btn menu-btn" id="menu-btn" aria-label="Menu" aria-expanded="false" aria-controls="side"><span data-i="menu"></span><span class="tab-n" id="menu-n" hidden></span></button>
   </div>
 
   <!-- The inbox, and the Reviews / Your PRs / Mentions / Tickets views of it. -->
@@ -137,7 +135,7 @@
         <div class="chat-hist-h">
           <input type="search" id="hist-q" placeholder="Search sessions…">
           <label title="Only sessions started in Clearsky's Copilot folder"><input type="checkbox" id="hist-here"> This folder</label>
-          <button class="icon-btn small" id="hist-refresh" title="Reload the list">↻</button>
+          <button class="icon-btn small" id="hist-refresh" title="Reload the list" aria-label="Reload the list"><span data-i="refresh" data-size="14"></span></button>
         </div>
         <div class="chat-hist-l" id="hist-list"></div>
       </div>

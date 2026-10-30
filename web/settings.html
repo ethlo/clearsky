@@ -9,77 +9,64 @@
 <title>Clearsky settings</title>
 <script>try { const t = localStorage.getItem('clearsky.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch {}</script>
 <style>
-  :root {
-    --bg: #f6f7f9; --card: #fff; --text: #1d2330; --muted: #677085; --line: #e3e6ec;
-    --bad: #c2362b; --good: #1f7a3d; --accent: #2f5bd3;
-  }
-  :root { color-scheme: light dark; }
-  :root[data-theme="light"] { color-scheme: light; }
-  /* Dark: follows the system unless you picked Light or Dark (saved per device). */
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) { --bg: #12151b; --card: #1a1e26; --text: #e6e9ef; --muted: #8d95a8; --line: #2a303b;
-      --bad: #ff7a6e; --good: #5bd08a; --accent: #8fa7ff; }
-  }
-  :root[data-theme="dark"] { color-scheme: dark; --bg: #12151b; --card: #1a1e26; --text: #e6e9ef; --muted: #8d95a8; --line: #2a303b;
-      --bad: #ff7a6e; --good: #5bd08a; --accent: #8fa7ff; }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text);
-    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  header { display: flex; align-items: baseline; gap: 12px; padding: 20px 24px 8px; flex-wrap: wrap; }
-  h1 { font-size: 20px; margin: 0; }
-  header a { color: var(--accent); }
-  .meta { color: var(--muted); font-size: 13px; }
-  main { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; padding: 8px 24px 32px; max-width: 1200px; }
-  @media (max-width: 520px) { main { grid-template-columns: 1fr; padding: 8px 12px 24px; } header { padding: 16px 12px 8px; } }
-  section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
-  h2 { font-size: 15px; margin: 0 0 4px; display: flex; gap: 8px; align-items: center; }
+/*__CSS__*/
+</style>
+<style>
+  /* Settings: the app's look (app.css), one card at a time under tabs. */
+  body { height: 100%; }
+  .set { display: flex; flex-direction: column; height: 100%; background: var(--surface); }
+  .set .vh .sub { margin-left: auto; }
+  .set-b { flex: 1; min-height: 0; overflow-y: auto; }
+  nav.tabs { display: flex; gap: 2px; padding: 0 20px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; flex: none; }
+  nav.tabs a { display: flex; gap: 6px; align-items: center; padding: 10px 10px; color: var(--text-2); white-space: nowrap; font-size: 13px; font-weight: 550;
+    border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  nav.tabs a:hover { color: var(--text); }
+  nav.tabs a.on { color: var(--text); border-bottom-color: var(--accent); }
+  nav.tabs .state { font-size: 11px; }
+  main { max-width: 760px; padding: 20px 24px 40px; }
+  main > section:not(.cur) { display: none; }
+  main > section > h2:first-child { display: none; } /* the tab names it */
+  @media (max-width: 520px) { main { padding: 16px 12px 24px; } nav.tabs { padding: 0 8px; } .set .vh { padding: 0 12px; } }
+  section h2 { font-size: 15px; font-weight: 600; margin: 0 0 6px; display: flex; gap: 8px; align-items: center; }
+  section h3 { font-size: 13.5px; font-weight: 600; margin: 14px 0 4px; }
   .state { font-size: 12px; font-weight: 600; border: 1px solid currentColor; border-radius: 99px; padding: 0 8px; }
-  .on { color: var(--good); } .off { color: var(--muted); } .bad { color: var(--bad); }
-  p { margin: 6px 0; color: var(--muted); }
-  ol { margin: 6px 0; padding-left: 20px; color: var(--muted); }
-  label { display: block; font-size: 12px; color: var(--muted); margin: 10px 0 3px; }
+  .state:empty { display: none; }
+  .on { color: var(--green); } .off { color: var(--muted); } .bad { color: var(--red); }
+  section p, section ol { margin: 6px 0; color: var(--text-2); }
+  section ol { padding-left: 20px; }
+  label { display: block; font-size: 12.5px; color: var(--text-2); font-weight: 500; margin: 14px 0 4px; }
   .cal-list { display: flex; flex-direction: column; gap: 4px; }
-  .cal-list label.cal { display: flex; align-items: baseline; gap: 8px; margin: 0; font-size: 13.5px; color: var(--text, inherit); }
+  .cal-list label.cal { display: flex; align-items: baseline; gap: 8px; margin: 0; font-size: 13.5px; font-weight: 400; color: var(--text); }
   .cal-list input { width: auto; flex: none; margin: 0; }
-  .cal-list span { text-align: left; }
   .cal-list small { color: var(--muted); font-size: 12px; }
-  .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+  .hint { color: var(--muted); font-size: 12.5px; margin: 6px 0 0; }
   .hint.warn { color: var(--amber); }
   .mods { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12.5px; }
   .mods th, .mods td { text-align: left; vertical-align: top; padding: 7px 8px 7px 0; border-top: 1px solid var(--line); }
   .mods th { font-weight: 600; white-space: nowrap; }
   .mods code { font-size: 11.5px; }
   .mods .k { color: var(--muted); }
-  input, select, textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line);
-    border-radius: 6px; padding: 6px 8px; }
-  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
-  button, .btn { font: inherit; color: #fff; background: var(--accent); border: 0; border-radius: 6px; padding: 6px 12px;
-    cursor: pointer; text-decoration: none; display: inline-block; }
-  button.secondary { color: var(--accent); background: none; border: 1px solid var(--line); }
+  input, select, textarea { width: 100%; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--line-strong);
+    border-radius: 7px; padding: 6px 9px; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+  section button, section .btn { font: inherit; font-size: 13px; font-weight: 500; color: var(--text); background: var(--surface); border: 1px solid var(--line-strong);
+    border-radius: 7px; height: 30px; padding: 0 12px; display: inline-flex; align-items: center; }
+  section button:hover, section .btn:hover { border-color: var(--text-2); color: var(--text); }
+  section button.save, section button:not(.secondary):first-child { background: var(--text); border-color: var(--text); color: var(--bg); }
+  section button.save:hover, section button:not(.secondary):first-child:hover { filter: brightness(1.15); color: var(--bg); }
   button:disabled { opacity: .6; cursor: default; }
-  .msg { font-size: 13px; }
+  .msg { font-size: 13px; color: var(--text-2); }
   .code { font: 600 20px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; }
-  a { color: var(--accent); }
-  /* One card at a time, picked from the tabs (kept in the address: settings#copilot). */
-  nav.tabs { display: flex; gap: 4px; padding: 4px 24px 0; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
-  nav.tabs a { display: flex; gap: 6px; align-items: center; padding: 8px 12px; color: var(--muted); text-decoration: none; white-space: nowrap;
-    border-bottom: 2px solid transparent; margin-bottom: -1px; font-weight: 600; }
-  nav.tabs a:hover { color: var(--text); }
-  nav.tabs a.on { color: var(--text); border-bottom-color: var(--accent); }
-  nav.tabs .state { font-size: 11px; }
-  main.tabbed { display: block; max-width: 820px; padding-top: 16px; }
-  main.tabbed > section:not(.on) { display: none; }
-  @media (max-width: 520px) { nav.tabs { padding: 4px 12px 0; } }
+  section a { color: var(--accent); }
+  section a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
-<header>
-  <h1>Settings</h1>
-  <a href="/">← Back to dashboard</a>
-  <span class="meta" id="file"></span>
-</header>
+<div class="set">
+<header class="vh"><button class="back" id="back">← Back · Esc</button><h1>Settings</h1><span class="sub" id="file"></span></header>
 <nav class="tabs" id="tabs" aria-label="Settings"></nav>
+<div class="set-b">
 <main>
   <section>
     <h2>GitHub <span class="state" id="gh-state"></span></h2>
@@ -210,6 +197,8 @@
     <div class="row"><button class="save" id="extra-save">Save</button><span class="msg"></span></div>
   </section>
 </main>
+</div>
+</div>
 
 <script>
 // Tabs: one per card, named by its heading (with its connection state), in the address.
@@ -217,18 +206,19 @@
   const main = document.querySelector('main'), nav = document.getElementById('tabs');
   const slug = (sec) => sec.id || (sec.id = sec.querySelector('h2').firstChild.textContent.trim().toLowerCase().replace(/\W+/g, '-'));
   const cards = () => [...main.children].filter((x) => x.tagName === 'SECTION' && !x.hidden);
-  main.classList.add('tabbed');
+  document.getElementById('back').onclick = () => { location.href = '/'; };
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && !/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName)) location.href = '/'; });
   function draw() {
     const list = cards(), want = location.hash.slice(1);
     const cur = list.find((x) => slug(x) === want) || list[0];
-    list.forEach((x) => x.classList.toggle('on', x === cur));
+    list.forEach((x) => x.classList.toggle('cur', x === cur));
     const html = list.map((x) => {
       const st = x.querySelector('h2 .state');
       return `<a href="#${slug(x)}"${x === cur ? ' class="on" aria-current="page"' : ''}>${x.querySelector('h2').firstChild.textContent.trim()}${st && st.textContent ? ` ${st.outerHTML.replace(/ id="[^"]*"/, '')}` : ''}</a>`;
     }).join('');
     if (nav.innerHTML !== html) nav.innerHTML = html;
   }
-  addEventListener('hashchange', () => { draw(); scrollTo(0, 0); });
+  addEventListener('hashchange', () => { draw(); document.querySelector('.set-b').scrollTop = 0; });
   new MutationObserver(draw).observe(main, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['hidden', 'class'] });
   draw();
 })();

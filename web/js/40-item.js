@@ -49,7 +49,7 @@ function standsHtml(it, rel) {
   const people = (p) => {
     const chips = [...(p.state === 'open' ? p.pendingReviewers || [] : []).map((n) => [n, 'asked', 'gray']), ...(p.changesRequested || []).map((n) => [n, 'changes requested', 'red']),
       ...(p.approvals || []).map((n) => [n, 'approved', 'green'])];
-    return chips.length ? chips.map(([n, st, tone]) => `<span class="badge b-${tone}">${esc(n.replace(/^team:/, '👥 '))} · ${st}</span>`).join('')
+    return chips.length ? chips.map(([n, st, tone]) => `<span class="badge b-${tone}">${esc(n.replace(/^team:/, ''))} · ${st}</span>`).join('')
       : p.state === 'open' && p.status?.label !== 'No reviewer yet' ? '<span class="badge b-amber">No reviewer assigned</span>' : '';
   };
   const rows = [
@@ -58,7 +58,7 @@ function standsHtml(it, rel) {
       ${t ? `<span class="muted">${t.mine ? 'assigned to you' : t.assignee ? `assigned to ${esc(t.assignee)}` : t.status ? 'unassigned' : ''}</span>` : ''}</div>`),
     ...[...prs.values()].map((p) => `<div class="stand"><span class="lbl-next">PR</span><a href="#" data-open-key="pr:${esc(p.repo)}#${p.number}">${esc(prName(p))}</a>
       <span class="badge b-${PR_TONE[p.status?.tone] || 'gray'}">${esc(p.status?.label || p.state)}</span>${p.author && !p.mine ? `<span class="muted">by ${esc(p.author)}</span>` : ''}
-      ${people(p)}${p.mine && p.state === 'open' && it.kind !== 'pr' ? `<button class="icon-btn small" data-rv-open="${esc(p.repo)}#${p.number}">👥 Request review</button>` : ''}</div>`),
+      ${people(p)}${p.mine && p.state === 'open' && it.kind !== 'pr' ? `<button class="icon-btn small" data-rv-open="${esc(p.repo)}#${p.number}">${icon('users', 14)} Request review</button>` : ''}</div>`),
   ];
   if (it.issue && !prs.size && ticketPrs.get(it.issue)?.prs) rows.push('<div class="stand"><span class="lbl-next">PR</span><span class="muted">None yet with this key in its title or branch</span></div>');
   return rows.length ? `<div class="stands">${rows.join('')}</div>` : '';
@@ -78,8 +78,8 @@ async function renderItem() {
     ${(() => { const n = nextHtml(it, nextStep(it, rel)); return n ? `<div class="next-row"><span class="lbl-next">Next</span>${n}</div>` : ''; })()}`;
   };
   const acts = () => `<div class="acts-row">${it.url ? `<a class="icon-btn primary" href="${esc(it.url)}" target="_blank" rel="noopener">${where} ↗</a>` : ''}
-    ${it.kind === 'pr' && !prClosed.has(it.pr) ? `<button class="icon-btn" data-rv-open="${esc(it.data.repo)}#${it.data.number}">👥 Request review</button>` : ''}
-    ${refFromUrl(it.url) ? `<button class="icon-btn" data-ask="${esc(it.url)}" data-title="${esc(it.title)}">✦ Copilot on this</button>` : ''}
+    ${it.kind === 'pr' && !prClosed.has(it.pr) ? `<button class="icon-btn" data-rv-open="${esc(it.data.repo)}#${it.data.number}">${icon('users', 14)} Request review</button>` : ''}
+    ${refFromUrl(it.url) ? `<button class="icon-btn" data-ask="${esc(it.url)}" data-title="${esc(it.title)}">${icon('spark', 14)} Copilot on this</button>` : ''}
     ${it.kind === 'linked' ? '' : `<button class="icon-btn" data-mute="${esc(it.k)}">${MUTE_ICON} Snooze</button>
     <button class="icon-btn" data-done="${esc(it.k)}" data-stamp="${esc(it.stamp ?? '')}" data-back-after>${DONE_ICON} Done</button>`}</div>`;
   const cps = sessions.length ? `<h3>Copilot on this</h3><div class="cps">${sessions.map(chip).join('')}</div>` : '';
@@ -190,7 +190,7 @@ function addSourcePanels(list) {
     if (document.querySelector(`[data-nav="src-${x.name}"]`)) continue;
     const a = document.createElement('a');
     a.className = 'ni'; a.href = `#src-${x.name}`; a.dataset.nav = `src-${x.name}`;
-    a.innerHTML = `<span class="ico">${x.area === 'personal' ? '⌂' : '◆'}</span><span class="lab">${esc(x.panel.title)}</span><b></b>`;
+    a.innerHTML = `<span class="ico">${icon(x.area === 'personal' ? 'home' : 'source')}</span><span class="lab">${esc(x.panel.title)}</span><b></b>`;
     $(x.area === 'personal' ? '#side-personal' : '#side-work').append(a);
   }
   $('#side-personal-h').hidden = !extraSources.some((x) => x.area === 'personal');
@@ -297,7 +297,7 @@ function tableView(x, list, limit = 12) {
     <span class="g" title="${esc(i.group || '')}">${esc(i.group || '')}</span>
     <span class="s">${i.badge ? `<span class="badge b-${i.tone || 'gray'}">${esc(i.badge)}</span>` : ''}<a href="${esc(i.url)}" target="_blank" rel="noopener"${i.detail && i.key ? ` data-read="${esc(i.src)}" data-key="${esc(i.key)}"` : ''}>${esc(i.title || '(no subject)')}</a>
       ${i.meta ? `<div class="p">${esc(i.meta)}</div>` : i.quote ? `<div class="p">${esc(i.quote)}</div>` : ''}</span>
-    <span class="att">${i.files ? `<span title="${i.files} file${i.files > 1 ? 's' : ''}" aria-label="Has attachments">📎</span>` : ''}</span>
+    <span class="att">${i.files ? `<span title="${i.files} file${i.files > 1 ? 's' : ''}" aria-label="Has attachments">${icon('clip', 13)}</span>` : ''}</span>
   </li>`;
   const cols = `<details class="cols"><summary>Columns</summary><div class="menu">${COLS.filter(([c]) => c !== 's').map(([c, label]) =>
     `<label><input type="checkbox" data-col="${c}"${colPrefs.hidden.includes(c) ? '' : ' checked'}> ${label}</label>`).join('')}

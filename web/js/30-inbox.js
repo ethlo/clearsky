@@ -20,7 +20,7 @@ function reviewerChips(p) {
   (p.changesRequested || []).forEach((n) => people.set(n, ['changes requested', 'red']));
   (p.approvals || []).forEach((n) => people.set(n, ['approved', 'green']));
   if (!people.size) return '';
-  return `<div class="rv-who">${[...people].map(([n, [st, tone]]) => `<span class="badge b-${tone}" title="${esc(n)}: ${esc(st)}">${esc(n.replace(/^team:/, '👥 '))} · ${esc(st)}</span>`).join('')}</div>`;
+  return `<div class="rv-who">${[...people].map(([n, [st, tone]]) => `<span class="badge b-${tone}" title="${esc(n)}: ${esc(st)}">${esc(n.replace(/^team:/, ''))} · ${esc(st)}</span>`).join('')}</div>`;
 }
 const prByKey = (k) => [...(state.github?.myPrs || []), ...(state.github?.reviewRequested || [])].find((p) => `pr:${p.repo}#${p.number}` === k);
 const snoozedUntil = (k) => { const u = mutedMap[k]; return u && Date.parse(u) > Date.now() ? u : null; };
@@ -152,7 +152,7 @@ function nextStep(it, rel = relatedItems(it, xrefAll.length ? xrefAll : inboxIte
 }
 function nextHtml(it, n = nextStep(it)) {
   if (!n) return '';
-  return n.wait ? `<span class="next wait">⏳ ${esc(n.label)}</span>`
+  return n.wait ? `<span class="next wait">${icon('wait', 13)} ${esc(n.label)}</span>`
     : `<button class="next" data-next="${esc(it.k)}" title="${n.run === 'merge' ? `Merge ${esc(n.repo)}#${esc(n.number)} on GitHub` : 'Next step'}">→ ${esc(n.label)}</button>${n.run === 'merge' && n.url ? `<a class="next-ext" href="${esc(n.url)}" target="_blank" rel="noopener" title="Open on GitHub" aria-label="Open on GitHub">↗</a>` : ''}`;
 }
 // Merging your PR from its next-step button: asks first, then says how it went in place.

@@ -144,8 +144,8 @@ function msgCard(m, file, title, cls = '') {
     ${m.title && m.title !== title ? `<div class="sub">${esc(m.title)}</div>` : ''}
     <div class="txt">${linkText(m.text || '')}</div>
     ${m.attachments?.length ? `<div class="files">${m.attachments.map((a) => a.id
-      ? `<a href="${file(a)}" target="_blank" rel="noopener">📎 ${esc(a.name)} <span class="size">${bytes(a.bytes)}</span></a>`
-      : `<span title="Open it in the portal">📎 ${esc(a.name)}</span>`).join('')}</div>` : ''}
+      ? `<a href="${file(a)}" target="_blank" rel="noopener">${icon('clip', 13)} ${esc(a.name)} <span class="size">${bytes(a.bytes)}</span></a>`
+      : `<span title="Open it in the portal">${icon('clip', 13)} ${esc(a.name)}</span>`).join('')}</div>` : ''}
   </div>`;
 }
 // A thread: the newest message first, open; the earlier ones folded under it, newest first,

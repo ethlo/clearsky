@@ -153,10 +153,10 @@ function drawCtx() {
     const shut = prClosed.get(label);
     const st = info.status ? info : k.startsWith('issue:') ? ctxTicketStatus(label) || {} : {};
     const mine = !shut && k.startsWith('pr:') && (state.github?.myPrs || []).some((p) => `pr:${p.repo}#${p.number}` === k);
-    return `<div class="ctx-item">📎 <a href="${esc(url || '#')}" data-open-key="${esc(k)}" title="Open here">${esc(label)}</a>${url ? `<a class="ext" href="${esc(url)}" target="_blank" rel="noopener" title="Open on ${k.startsWith('issue:') ? 'Jira' : 'GitHub'}" aria-label="Open on ${k.startsWith('issue:') ? 'Jira' : 'GitHub'}">↗</a>` : ''}
+    return `<div class="ctx-item">${icon('clip', 13)} <a href="${esc(url || '#')}" data-open-key="${esc(k)}" title="Open here">${esc(label)}</a>${url ? `<a class="ext" href="${esc(url)}" target="_blank" rel="noopener" title="Open on ${k.startsWith('issue:') ? 'Jira' : 'GitHub'}" aria-label="Open on ${k.startsWith('issue:') ? 'Jira' : 'GitHub'}">↗</a>` : ''}
       ${shut ? `<span class="badge b-${shut === 'Merged' ? 'green' : 'gray'}">${shut}</span>` : st.status ? `<span class="badge b-${st.tone || 'gray'}">${esc(st.status)}</span>` : ''}<span>${esc(info.title || '')}</span>
       ${k.startsWith('pr:') && !shut ? reviewerChips(prByKey(k)) : ''}
-      ${mine ? `<button class="chip" data-rv-open="${esc(label)}">👥 Request review</button><div class="rv-slot"></div>` : ''}</div>`;
+      ${mine ? `<button class="chip" data-rv-open="${esc(label)}">${icon('users', 14)} Request review</button><div class="rv-slot"></div>` : ''}</div>`;
   }).join('');
   el.hidden = false;
   // The next step on this work: the PR's if there is one, else the ticket's.
@@ -173,7 +173,7 @@ function drawCtx() {
     ${items}
     <div class="ctx-line ctx-work">${status ? `<span class="ctx-st s-${esc(status)}" title="This chat"><i></i>chat ${esc(STATUS_TEXT[status] || status)}</span>` : ''}</div>
     ${next ? `<div class="ctx-line ctx-next"><span class="lbl-next">Next</span>${next}</div>` : ''}
-    ${chat.cwd ? `<div class="ctx-dir" title="${esc(chat.cwd)}">📁 ${esc(chat.cwd.replace(/^\/home\/[^/]+/, '~'))}</div>` : ''}`;
+    ${chat.cwd ? `<div class="ctx-dir" title="${esc(chat.cwd)}">${icon('folder', 13)} ${esc(chat.cwd.replace(/^\/home\/[^/]+/, '~'))}</div>` : ''}`;
 }
 
 function chatSub() {
@@ -259,14 +259,14 @@ async function loadCopilotInfo() {
 function renderAnswer(segs) {
   return segs.map((g) => {
     if (g.type === 'text') return md(g.text);
-    if (g.type === 'tool') return `<div class="tool s-${esc(g.status || 'pending')}"><span>⚙</span>${esc(g.title || 'Tool')}<i>${esc((g.status || '').replace('_', ' '))}</i></div>`;
+    if (g.type === 'tool') return `<div class="tool s-${esc(g.status || 'pending')}"><span>${icon('tool', 13)}</span>${esc(g.title || 'Tool')}<i>${esc((g.status || '').replace('_', ' '))}</i></div>`;
     if (g.type === 'permission') {
       return `<div class="perm"><div class="perm-t">${esc(g.title)}</div>${g.detail ? `<code>${esc(g.detail)}</code>` : ''}
         <div class="perm-b">${g.answered ? `<span class="perm-done">${esc(g.answered)}</span>`
           : g.options.map((o) => `<button class="${/^allow/.test(o.kind) ? 'ok' : 'no'}" data-perm="${esc(g.id)}" data-option="${esc(o.id)}" data-name="${esc(o.name)}">${esc(o.name)}</button>`).join('')}</div></div>`;
     }
     if (g.type === 'error') return `<div class="err">${esc(g.message)}</div>`;
-    if (g.type === 'note') return `<div class="tool"><span>📁</span>${esc(g.text)}</div>`;
+    if (g.type === 'note') return `<div class="tool"><span>${icon('folder', 13)}</span>${esc(g.text)}</div>`;
     return '';
   }).join('');
 }
@@ -400,7 +400,7 @@ function openRefPick() {
 async function send(text) {
   if (!text.trim() || chat.stop) return;
   const refs = chat.refs.map(({ kind, key, repo, number }) => ({ kind, key, repo, number }));
-  addMsg('me', `${refs.length ? `<span class="refs-sent">📎 ${chat.refs.map((r) => esc(refLabel(r))).join(', ')}</span>` : ''}${esc(text)}`);
+  addMsg('me', `${refs.length ? `<span class="refs-sent">${icon('clip', 13)} ${chat.refs.map((r) => esc(refLabel(r))).join(', ')}</span>` : ''}${esc(text)}`);
   chat.refs = [];
   chat.items = [...new Set([...chat.items, ...refs.map(refKeyOf)])];
   if (!chat.turns && !chat.title) chat.title = text.trim().split('\n')[0].slice(0, 120);

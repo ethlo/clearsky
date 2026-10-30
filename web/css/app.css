@@ -1,8 +1,8 @@
 /* Clearsky's page styles. The server inlines this file into index.html. */
 [hidden] { display: none !important; }
 :root {
-  --bg: #f7f8fa; --surface: #ffffff; --surface-2: #f2f4f7; --text: #111827; --text-2: #4b5563; --muted: #6b7280;
-  --line: #e5e7eb; --line-strong: #d1d5db; --accent: #2563eb; --accent-soft: #eff4ff;
+  --bg: #f4f5f7; --surface: #ffffff; --surface-2: #eef0f3; --text: #0b1220; --text-2: #374151; --muted: #535b69;
+  --line: #dcdfe5; --line-strong: #c3c8d1; --accent: #2563eb; --accent-soft: #eff4ff;
   --red: #b42318; --red-soft: #fef3f2; --amber: #b54708; --amber-soft: #fffaeb;
   --green: #067647; --green-soft: #ecfdf3; --violet: #6941c6; --blue: #175cd3; --blue-soft: #eff8ff; --gray-soft: #f2f4f7;
   --shadow: 0 1px 2px rgba(16, 24, 40, .05); --shadow-lg: 0 12px 32px -8px rgba(16, 24, 40, .18), 0 4px 8px -4px rgba(16, 24, 40, .08);
@@ -13,16 +13,16 @@
 /* Dark: follows the system unless you picked Light or Dark (saved per device). */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0c0e12; --surface: #14171c; --surface-2: #1b1f26; --text: #f2f4f7; --text-2: #c5cad3; --muted: #8a93a3;
-    --line: #252a33; --line-strong: #333a45; --accent: #6b9bff; --accent-soft: #17223a;
+    --bg: #0c0e12; --surface: #14171c; --surface-2: #1b1f26; --text: #f5f7fa; --text-2: #d3d8e0; --muted: #a2abba;
+    --line: #2d333d; --line-strong: #404856; --accent: #6b9bff; --accent-soft: #17223a;
     --red: #ff8a80; --red-soft: #2a1715; --amber: #fdb022; --amber-soft: #2a2010;
     --green: #47cd89; --green-soft: #10251a; --violet: #b692f6; --blue: #84adff; --blue-soft: #14213a; --gray-soft: #1f242c;
     --shadow: none; --shadow-lg: 0 12px 32px -8px rgba(0, 0, 0, .6);
   }
 }
 :root[data-theme="dark"] { color-scheme: dark;
-    --bg: #0c0e12; --surface: #14171c; --surface-2: #1b1f26; --text: #f2f4f7; --text-2: #c5cad3; --muted: #8a93a3;
-    --line: #252a33; --line-strong: #333a45; --accent: #6b9bff; --accent-soft: #17223a;
+    --bg: #0c0e12; --surface: #14171c; --surface-2: #1b1f26; --text: #f5f7fa; --text-2: #d3d8e0; --muted: #a2abba;
+    --line: #2d333d; --line-strong: #404856; --accent: #6b9bff; --accent-soft: #17223a;
     --red: #ff8a80; --red-soft: #2a1715; --amber: #fdb022; --amber-soft: #2a2010;
     --green: #47cd89; --green-soft: #10251a; --violet: #b692f6; --blue: #84adff; --blue-soft: #14213a; --gray-soft: #1f242c;
     --shadow: none; --shadow-lg: 0 12px 32px -8px rgba(0, 0, 0, .6);
@@ -47,9 +47,6 @@ html, body { height: 100%; overflow: hidden; } /* the work area scrolls, not the
 /* the menu */
 .side { background: var(--surface-2); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; overflow-y: auto;
   padding: 12px 8px 10px; font-size: 13.5px; }
-.brand { display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 15px; letter-spacing: -.01em; padding: 2px 8px 12px; }
-.brand i { width: 20px; height: 20px; border-radius: 6px; display: inline-block; flex: none;
-  background: linear-gradient(135deg, #60a5fa, #2563eb 60%, #1e40af); box-shadow: inset 0 -6px 8px rgba(255,255,255,.25); }
 .side .sg { display: flex; align-items: center; gap: 6px; margin: 14px 8px 4px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .side .sg button { margin-left: auto; border: 0; background: none; color: var(--muted); padding: 0 4px; border-radius: 4px; font-size: 15px; line-height: 1; }
 .side .sg button:hover { color: var(--accent); background: var(--surface); }
@@ -57,7 +54,10 @@ html, body { height: 100%; overflow: hidden; } /* the work area scrolls, not the
   font: inherit; width: 100%; text-align: left; }
 .ni:hover { background: color-mix(in srgb, var(--surface) 70%, transparent); color: var(--text); }
 .ni.on { background: var(--surface); color: var(--text); font-weight: 550; box-shadow: 0 0 0 1px var(--line), var(--shadow); }
-.ni .ico { width: 16px; text-align: center; color: var(--muted); flex: none; }
+.ni .ico { width: 16px; height: 16px; display: grid; place-items: center; color: var(--muted); flex: none; }
+.ni.on .ico, .ni:hover .ico { color: var(--text-2); }
+svg.i { display: inline-block; vertical-align: -0.15em; flex: none; }
+.ni .ico svg.i, [data-i] > svg.i { display: block; }
 .ni .lab { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ni b { font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12.5px; }
 .ni b.hot { color: var(--accent); font-weight: 600; }
@@ -105,7 +105,6 @@ html, body { height: 100%; overflow: hidden; } /* the work area scrolls, not the
   .side { position: fixed; z-index: 46; top: 0; left: 0; bottom: 0; width: min(280px, 85vw); box-shadow: var(--shadow-lg); }
   .side:not(.open) { display: none; }
   .topbar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
-  .topbar .brand { padding: 0; }
   .page { padding: 14px 14px 32px; }
 }
 .menu-btn { width: 32px; height: 32px; padding: 0; justify-content: center; position: relative; }

@@ -1388,7 +1388,8 @@ function serve() {
   // restarts so an open page keeps working.
   const csrf = localToken(join(dirname(userEnvFile), 'csrf'));
   const page = buildPage(csrf);
-  const settingsPage = readFileSync(join(here, '..', 'web', 'settings.html'), 'utf8').replace('__CSRF__', csrf);
+  const settingsPage = readFileSync(join(here, '..', 'web', 'settings.html'), 'utf8').replace('__CSRF__', csrf)
+    .replace('/*__CSS__*/', () => readFileSync(join(here, '..', 'web', 'css', 'app.css'), 'utf8'));
   // A container publishes its port to another one on the host (CLEARSKY_PUBLIC_PORT), and the
   // browser then names that port.
   const ports = [...new Set([config.port, Number(process.env.CLEARSKY_PUBLIC_PORT) || config.port])];

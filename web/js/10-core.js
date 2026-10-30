@@ -5,6 +5,33 @@ const REFRESH_MS = 5 * 60 * 1000;
 let SOURCES = ['github', 'jira', 'jiraMentions', 'slack', 'calendar'];
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// One icon set (24-unit line icons, drawn in the text colour): icon('inbox').
+const ICONS = {
+  inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  standup: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  review: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  pr: '<circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7M6 9v12"/>',
+  at: '<circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/>',
+  ticket: '<path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2z"/><path d="M13 5v2M13 17v2M13 11v2"/>',
+  settings: '<path d="M20 7h-9M14 17H4"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>',
+  home: '<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>',
+  source: '<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+  clip: '<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
+  folder: '<path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z"/>',
+  tool: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+  wait: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+  spark: '<path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2z"/>',
+  back: '<path d="M19 12H5M12 19l-7-7 7-7"/>',
+  refresh: '<path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>',
+};
+const icon = (name, size = 16) => `<svg class="i" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ''}</svg>`;
+document.querySelectorAll('[data-i]').forEach((el) => { el.innerHTML = icon(el.dataset.i, Number(el.dataset.size) || 16); });
 // 45 min, 1 h, 2 h 15 min
 const dur = (min) => (min < 60 ? `${min} min` : `${Math.floor(min / 60)} h${min % 60 ? ` ${min % 60} min` : ''}`);
 // 24-hour clock unless Settings says 12.
@@ -152,17 +179,21 @@ function browserNotify() {
   }
   try { localStorage.setItem(NOTIFIED_KEY, String(Math.max(upTo, ...attention.items.map((it) => Date.parse(it.at) || 0)))); } catch {}
 }
-const BELL = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>';
+const BELL = icon('bell', 15);
 function notifyButton() {
   const b = $('#notify'), n = attention.notifier;
   if (!n) return;
-  b.hidden = false;
   b.innerHTML = BELL;
   const browserOff = n === 'browser' && 'Notification' in window && Notification.permission !== 'granted';
+  // The bell only shows when there's something to do (let this browser notify you); the state
+  // is on Notifications in the menu.
+  b.hidden = !browserOff || Notification.permission === 'denied';
   b.classList.toggle('on', n === 'desktop' || (n === 'browser' && !browserOff));
+  const nav = document.querySelector('[data-nav="notifications"]');
   b.title = n === 'desktop' ? 'Desktop notifications are on (workdays, working hours). Set CLEARSKY_NOTIFY=off to stop them.'
     : n === 'off' ? 'Notifications are off (CLEARSKY_NOTIFY=off)'
       : browserOff ? 'Click to get notified in this browser when something needs you' : 'Browser notifications are on while this page is open';
+  if (nav) nav.title = b.title;
 }
 $('#notify').onclick = async () => {
   if (attention.notifier === 'browser' && 'Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
@@ -274,7 +305,7 @@ function rows(id, items, render, limit = 8) {
 // Which sources feed each panel, for its refresh button.
 const PANEL_SOURCES = { plan: ['calendar'], 'c-review': ['github'], 'c-prs': ['github'], 'c-waiting': ['github'],
   'c-mentions': ['github', 'jiraMentions', 'slack'], 'c-left': ['jira', 'github'] };
-const REFRESH_ICON = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.61-3.89" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M12.5 1.8v2.9H9.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const REFRESH_ICON = icon('refresh', 14);
 
 function refreshButton(id) {
   const names = PANEL_SOURCES[id];
