@@ -70,7 +70,8 @@ fi
 # npm's global bin follows the active Node (with nvm, only while 22 is in use): a small
 # launcher in ~/.local/bin runs this Node whatever the shell has picked.
 mkdir -p "$HOME/.local/bin"
-printf '#!/bin/sh\nexec "%s" "%s/bin/clearsky.mjs" "$@"\n' "$(command -v node)" "$DIR" > "$HOME/.local/bin/clearsky"
+# Node's folder goes on PATH too: Copilot and srt start with `#!/usr/bin/env node`.
+printf '#!/bin/sh\nPATH="%s:$PATH" exec "%s" "%s/bin/clearsky.mjs" "$@"\n' "$(dirname "$(command -v node)")" "$(command -v node)" "$DIR" > "$HOME/.local/bin/clearsky"
 chmod 755 "$HOME/.local/bin/clearsky"
 case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) warn "Add ~/.local/bin to your PATH to run clearsky from anywhere";; esac
 
