@@ -7,7 +7,7 @@ import { srtSettings, sandboxed, parseDomains, checkDomains, DEFAULT_DOMAINS } f
 
 test('the sandbox lets Copilot write only in its folders and hides secrets', () => {
   const s = srtSettings({ cwd: '/home/me/dev/acme/abc', folders: ['~/dev/acme', '/home/me/dev/acme'], home: '/home/me' });
-  assert.deepEqual(s.filesystem.allowWrite, ['/home/me/dev/acme/abc', '/home/me/dev/acme', '/home/me/.copilot', '/tmp']);
+  assert.deepEqual(s.filesystem.allowWrite, ['/home/me/dev/acme/abc', '/home/me/dev/acme', '/home/me/.copilot', '/home/me/.cache/copilot', '/tmp']);
   assert.ok(s.filesystem.denyRead.includes('/home/me/.ssh'));
   assert.ok(s.filesystem.denyRead.includes('/home/me/.config/clearsky'));
   assert.deepEqual(s.network.allowedDomains, DEFAULT_DOMAINS);
