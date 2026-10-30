@@ -75,6 +75,7 @@ function drawTabs() {
   $('#side-cp').innerHTML = tabs.map((t, i) => `<a class="ni cp${onChat && t.id === chat.session && !isNew ? ' on' : ''}" href="#copilot"
       data-tab="${esc(t.id)}" data-cwd="${esc(t.cwd || '')}" title="${esc(t.title)}${STATUS_TEXT[t.status] ? ` · ${STATUS_TEXT[t.status]}` : ''}${i < 9 ? ` (Alt+${i + 1})` : ''}">
       <span class="live s-${esc(t.status)}"></span><span class="lab">${esc(t.title)}<small>${esc([STATUS_TEXT[t.status] || (t.live ? 'open' : ''), folder(t.cwd)].filter(Boolean).join(' · '))}</small></span>
+      ${t.status === 'working' || t.status === 'needs-you' ? '' : `<span class="x" data-nudge-tab="${esc(t.id)}" title="Nudge: send Copilot “Try again.”" aria-label="Nudge">${icon('refresh', 12)}</span>`}
       ${t.live ? '' : `<span class="x" data-forget="${esc(t.id)}" title="Remove from this list" aria-label="Remove">✕</span>`}</a>`).join('')
     + (onChat && isNew ? '<a class="ni cp on" href="#copilot"><span class="live"></span><span class="lab">New chat</span></a>' : '');
 }
@@ -84,6 +85,12 @@ $('#side-cp').addEventListener('click', (e) => {
   const t = e.target.closest('[data-tab]');
   if (!t) return;
   e.preventDefault();
+  if (e.target.closest('[data-nudge-tab]')) {
+    e.stopPropagation();
+    openChat(true, true);
+    (async () => { if (t.dataset.tab !== chat.session || !chat.turns) await openSession(t.dataset.tab, t.dataset.cwd); if (!chat.stop) send('Try again.'); })();
+    return;
+  }
   openChat(true, true);
   if (t.dataset.tab !== chat.session || !chat.turns) openSession(t.dataset.tab, t.dataset.cwd);
 });
@@ -186,15 +193,34 @@ function chatSub() {
 const jiraBaseGuess = () => standupData?.jiraBase || (state.jira?.assigned?.[0]?.url || '').replace(/\/browse\/.*$/, '') || '';
 
 // Just enough Markdown for chat answers: code blocks, inline code, bold, and links for
-// URLs, Jira keys and PRs (which get hover cards).
+// URLs, Jira keys and PRs (which get hover cards). A ```choices block is a question with
+// buttons (Copilot is asked to use one when you should pick: see CHOICES_HINT on the server).
 function md(text) {
-  return text.split(/```[\w-]*\n?/).map((part, i) => {
-    if (i % 2) return `<pre><code>${esc(part.replace(/\n$/, ''))}</code></pre>`;
-    let h = linkify(i ? part.replace(/^\n/, '') : part, jiraBaseGuess());
-    h = h.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, (m, pre, url) => `${pre}<a href="${url}" target="_blank" rel="noopener">${url}</a>`);
-    h = h.replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>').replace(/^#{1,4} (.+)$/gm, '<b>$1</b>');
-    return `<span class="txt">${h}</span>`;
-  }).join('');
+  const parts = text.split(/```([\w-]*)\n?/);
+  let out = '';
+  for (let i = 0; i < parts.length; i += 3) {
+    out += mdText(parts[i], i > 0);
+    if (i + 2 < parts.length) out += parts[i + 1] === 'choices' ? choicesCard(parts[i + 2]) : `<pre><code>${esc(parts[i + 2].replace(/\n$/, ''))}</code></pre>`;
+  }
+  return out;
+}
+function mdText(part, afterBlock) {
+  let h = linkify(afterBlock ? part.replace(/^\n/, '') : part, jiraBaseGuess());
+  h = h.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, (m, pre, url) => `${pre}<a href="${url}" target="_blank" rel="noopener">${url}</a>`);
+  h = h.replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>').replace(/^#{1,4} (.+)$/gm, '<b>$1</b>');
+  return h ? `<span class="txt">${h}</span>` : '';
+}
+// "Question\n- Option | what happens\n- Option (recommended) | …"
+function choicesCard(body) {
+  const lines = body.split('\n').map((l) => l.trim()).filter(Boolean);
+  const q = lines.filter((l) => !/^[-*]\s/.test(l)).join(' ');
+  const opts = lines.filter((l) => /^[-*]\s/.test(l)).map((l) => {
+    const [label, ...why] = l.replace(/^[-*]\s+/, '').split(/\s+\|\s+/);
+    const rec = /\(recommended\)/i.test(label);
+    return { label: label.replace(/\s*\(recommended\)/i, '').trim(), why: why.join(' | '), rec };
+  });
+  return `<div class="choices">${q ? `<div class="choices-q">${esc(q)}</div>` : ''}${opts.map((o) => `<button class="choice${o.rec ? ' rec' : ''}" data-choice="${esc(o.label)}">
+    <b>${esc(o.label)}${o.rec ? ' <i>recommended</i>' : ''}</b>${o.why ? `<span>${esc(o.why)}</span>` : ''}</button>`).join('')}</div>`;
 }
 
 function addMsg(cls, html) {
@@ -257,6 +283,9 @@ async function loadCopilotInfo() {
 
 // One answer is a list of segments: text, tool steps and approval questions, in order.
 function renderAnswer(segs) {
+  // Stopped on an error or a failed step: a nudge sends "Try again" (shown on the last answer only).
+  const end = segs.at(-1);
+  const stuck = end && (end.type === 'error' || (end.type === 'tool' && end.status === 'failed'));
   return segs.map((g) => {
     if (g.type === 'text') return md(g.text);
     if (g.type === 'tool') return `<div class="tool s-${esc(g.status || 'pending')}"><span>${icon('tool', 13)}</span>${esc(g.title || 'Tool')}<i>${esc((g.status || '').replace('_', ' '))}</i></div>`;
@@ -268,7 +297,7 @@ function renderAnswer(segs) {
     if (g.type === 'error') return `<div class="err">${esc(g.message)}</div>`;
     if (g.type === 'note') return `<div class="tool"><span>${icon('folder', 13)}</span>${esc(g.text)}</div>`;
     return '';
-  }).join('');
+  }).join('') + (stuck ? `<button class="nudge" data-nudge title="Send Copilot “Try again.”">${icon('refresh', 13)} Nudge</button>` : '');
 }
 
 // Reopen a Copilot session (from here, the terminal or an editor) with its conversation so far.
@@ -517,6 +546,13 @@ async function attachLive(id) {
 
 // Approve or deny a step Copilot asked about (Ask mode).
 $('#chat-log').addEventListener('click', async (e) => {
+  const ch = e.target.closest('[data-choice]');
+  if (ch && !chat.stop) {
+    ch.closest('.choices').querySelectorAll('button').forEach((x) => { x.disabled = true; x.classList.toggle('picked', x === ch); });
+    send(ch.dataset.choice);
+    return;
+  }
+  if (e.target.closest('[data-nudge]') && !chat.stop) { send('Try again.'); return; }
   const b = e.target.closest('[data-perm]');
   if (!b) return;
   const msg = b.closest('.msg'), seg = msg?.segs?.find((g) => g.type === 'permission' && g.id === b.dataset.perm);

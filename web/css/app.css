@@ -469,6 +469,21 @@ a.ref:hover { border-bottom-style: solid; }
 .tool i { margin-left: auto; font-style: normal; color: var(--muted); font-size: 11.5px; white-space: nowrap; }
 .tool.s-failed i { color: var(--red); }
 .tool.s-completed i { color: var(--green); }
+.choices { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; max-width: 560px; }
+.choices-q { font-weight: 600; font-size: 13.5px; margin-bottom: 2px; }
+.choice { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; border: 1px solid var(--line-strong); background: var(--surface);
+  color: var(--text); border-radius: 8px; padding: 8px 12px; font-size: 13px; }
+.choice:hover:not(:disabled) { border-color: var(--accent); }
+.choice b { font-weight: 600; }
+.choice b i { font-style: normal; font-weight: 500; font-size: 11.5px; color: var(--accent); margin-left: 6px; }
+.choice span { color: var(--text-2); font-size: 12.5px; }
+.choice.rec { border-color: color-mix(in srgb, var(--accent) 55%, var(--line-strong)); }
+.choice:disabled { opacity: .55; cursor: default; }
+.choice.picked { opacity: 1; border-color: var(--accent); background: var(--accent-soft); }
+.nudge { display: inline-flex; align-items: center; gap: 5px; margin-top: 8px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--text-2);
+  border-radius: 7px; height: 26px; padding: 0 10px; font-size: 12.5px; }
+.nudge:hover { color: var(--text); border-color: var(--text-2); }
+#chat-log .msg.cp:not(:last-child) .nudge { display: none; }
 .perm { border: 1px solid var(--amber); background: var(--amber-soft); border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
 .perm-t { font-weight: 600; font-size: 13px; }
 .perm code { display: block; margin-top: 6px; white-space: pre-wrap; word-break: break-all; }
