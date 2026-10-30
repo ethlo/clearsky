@@ -762,9 +762,14 @@ async function copilotInfo(force) {
 }
 
 // Copilot signs in on its own; don't hand it Clearsky's tokens.
+// copilot and srt start with `#!/usr/bin/env node`, and the app menu's PATH has no nvm Node:
+// put this Node and copilot's own folder (often another nvm version) first.
 function copilotEnv() {
   const env = { ...process.env };
   for (const k of ['GITHUB_TOKEN', 'GH_TOKEN', 'SLACK_TOKEN', 'GOOGLE_CALENDAR_ICS', 'CALENDAR_ICS_URL']) delete env[k];
+  const bin = copilot.findCopilot(process.env.COPILOT_BIN);
+  const dirs = [bin?.includes('/') && dirname(bin), dirname(process.execPath)].filter(Boolean);
+  env.PATH = [...new Set([...dirs, ...(env.PATH || '').split(delimiter).filter(Boolean)])].join(delimiter);
   return env;
 }
 
