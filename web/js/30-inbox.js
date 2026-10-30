@@ -363,7 +363,7 @@ function matchesQ(x, q) {
   if (!q) return true;
   const d = x.data || {};
   const hay = [x.ref, x.issue, x.pr, x.title, x.step, x.src, ...(x.label || []), x.next?.label, d.repo, d.branch, d.status?.label || d.status, d.status?.detail, d.author,
-    d.type, d.priority, ...(d.pendingReviewers || []), ...(d.approvals || [])].filter(Boolean).join(' ').toLowerCase();
+    d.type, d.priority, d.assignee, ...(d.fixVersions || []), ...(d.pendingReviewers || []), ...(d.approvals || [])].filter(Boolean).join(' ').toLowerCase();
   return q.toLowerCase().split(/\s+/).filter(Boolean).every((w) => hay.includes(w));
 }
 function renderList() {
