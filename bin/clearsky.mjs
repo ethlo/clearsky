@@ -1652,7 +1652,8 @@ function serve() {
     setTimeout(() => server.listen(config.port, config.bind), 500);
   });
   server.once('listening', () => {
-    console.log(`clearsky: http://127.0.0.1:${config.port}  (settings and logins: http://127.0.0.1:${config.port}/settings)`);
+    const shown = Number(process.env.CLEARSKY_PUBLIC_PORT) || config.port; // the port on your machine, in a container
+    console.log(`clearsky: http://127.0.0.1:${shown}  (settings and logins: http://127.0.0.1:${shown}/settings)`);
     if (process.env.CLEARSKY_POLL_MINUTES !== '0') startPolling();
   });
   server.listen(config.port, config.bind);
