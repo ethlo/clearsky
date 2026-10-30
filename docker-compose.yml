@@ -20,7 +20,8 @@ services:
     # Your home inside is a scratch folder (tools keep caches there), with your folders
     # mounted on top of it.
     tmpfs:
-      - ${HOME_DIR}:uid=${UID:-1000},gid=${GID:-1000},mode=0700
+      - ${HOME_DIR}:uid=${UID:-1000},gid=${GID:-1000},mode=0700,exec
       # Also ~/.config and ~/.cache, else Docker makes them (for mounts inside) owned by root.
+      # exec: Copilot unpacks itself into ~/.cache and runs from there (tmpfs is noexec by default).
       - ${HOME_DIR}/.config:uid=${UID:-1000},gid=${GID:-1000},mode=0700
-      - ${HOME_DIR}/.cache:uid=${UID:-1000},gid=${GID:-1000},mode=0700
+      - ${HOME_DIR}/.cache:uid=${UID:-1000},gid=${GID:-1000},mode=0700,exec

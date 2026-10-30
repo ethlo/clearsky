@@ -1756,7 +1756,7 @@ async function dockerCommand([sub = 'up', ...rest]) {
     });
     const left = [];
     const gh = await execFileP('gh', ['auth', 'token'], { timeout: 10_000 }).then((r) => r.stdout.trim()).catch(() => '');
-    if (gh && await inside('gh auth login --with-token && gh auth setup-git', `${gh}\n`)) console.log('gh: logged in with this machine\'s login');
+    if (gh && await inside('gh auth login --with-token', `${gh}\n`)) console.log('gh: logged in with this machine\'s login');
     else left.push('gh');
     if (gh && await inside('copilot login --with-token', `${gh}\n`)) console.log('Copilot: logged in with gh\'s login');
     else left.push('copilot');
