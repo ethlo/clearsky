@@ -21,6 +21,8 @@ services:
       - ${HOME_DIR}/.config/gh:${HOME_DIR}/.config/gh
       - ${HOME_DIR}/.config/acli:${HOME_DIR}/.config/acli
       - ${HOME_DIR}/.gitconfig:${HOME_DIR}/.gitconfig:ro
-      # Builds: JDKs from SDKMAN and the Maven cache, if you use them.
-      - ${HOME_DIR}/.sdkman:${HOME_DIR}/.sdkman:ro
+      # Builds: your JDKs and the Maven cache. Mount only folders that exist (Docker would
+      # create a missing one, owned by root); add ~/.sdkman or ~/.gradle if you use them.
+      - ${HOME_DIR}/.jdks:${HOME_DIR}/.jdks:ro
+      - /usr/lib/jvm:/usr/lib/jvm:ro
       - ${HOME_DIR}/.m2:${HOME_DIR}/.m2

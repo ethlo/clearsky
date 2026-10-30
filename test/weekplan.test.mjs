@@ -79,10 +79,11 @@ test('school events: each file read once, kept privately, sent twice shown once,
   const msgs = [
     { key: 'flyt:group:1:a:m2', title: 'Ukeplan uke 45', at: '2026-10-30T12:00:00', docs: [{ id: '7', name: 'Ukeplan.docx' }, { id: '8', name: 'bilde.jpg', type: 'image/jpeg' }] },
     { key: 'flyt:group:1:b:m1', title: 'Ukeplan uke 45', at: '2026-10-30T11:00:00', docs: [{ id: '9', name: 'Ukeplan.docx' }] },
+    { key: 'flyt:group:1:d:m4', title: 'Referat fra foreldremøtet', at: '2026-10-30T10:00:00', docs: [{ id: '5', name: 'Klasseliste_foresatte.pdf' }] },
     { key: 'flyt:group:1:a:m0', title: 'Gammel plan', at: '2026-09-01T11:00:00', docs: [{ id: '3', name: 'Ukeplan.docx' }] },
   ];
   const evs = await schoolEvents(msgs, { readFile, file, now });
-  assert.equal(reads, 2); // not the picture, not the old plan
+  assert.equal(reads, 2); // not the picture, the class list or the old plan
   assert.equal(evs.filter((e) => /Turdag/.test(e.title)).length, 1);
   const trip = evs.find((e) => /Turdag/.test(e.title));
   assert.equal(new Date(trip.start).getHours(), 9);
