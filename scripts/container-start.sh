@@ -27,5 +27,7 @@ gnome-keyring-daemon --start --components=secrets > /dev/null
 # For `docker compose exec`, which starts outside this session: where to find the keyring.
 (umask 077; echo "DBUS_SESSION_BUS_ADDRESS='$DBUS_SESSION_BUS_ADDRESS'; XDG_RUNTIME_DIR='$XDG_RUNTIME_DIR'; export DBUS_SESSION_BUS_ADDRESS XDG_RUNTIME_DIR" > "$HOME/.session-bus")
 
+# `--run <command>`: a one-off command with the keyring (clearsky docker login uses it).
+if [ "${1:-}" = --run ]; then exec sh -c "$2"; fi
 [ $# -gt 0 ] || set -- serve
 exec node /opt/clearsky/bin/clearsky.mjs "$@"

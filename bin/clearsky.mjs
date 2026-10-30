@@ -1717,23 +1717,6 @@ async function appCommand() {
 
 // `clearsky docker …`: Clearsky's container, with the folders from Settings → Copilot mounted
 // (see lib/docker.mjs). Runs on your machine, not in the container.
-// A line typed without echo (a token), from the terminal.
-function hiddenInput(prompt) {
-  return new Promise((done) => {
-    const { stdin, stdout } = process;
-    stdout.write(prompt);
-    stdin.setRawMode(true); stdin.resume(); stdin.setEncoding('utf8');
-    let s = '';
-    const on = (ch) => {
-      for (const c of ch) {
-        if (c === '\r' || c === '\n' || c === '\u0004') { stdin.setRawMode(false); stdin.pause(); stdin.off('data', on); stdout.write('\n'); return done(s.trim()); }
-        if (c === '\u0003') { stdin.setRawMode(false); stdout.write('\n'); process.exit(130); }
-        if (c === '\u007f') s = s.slice(0, -1); else s += c;
-      }
-    };
-    stdin.on('data', on);
-  });
-}
 async function dockerCommand([sub = 'up', ...rest]) {
   const { dockerMounts, writeMountsFile } = await import('../lib/docker.mjs');
   if (process.env.CLEARSKY_IN_CONTAINER === '1') { console.error('Run this on your machine, not in the container.'); process.exitCode = 1; return; }
@@ -1760,17 +1743,30 @@ async function dockerCommand([sub = 'up', ...rest]) {
     else left.push('gh');
     if (gh && await inside('copilot login --with-token', `${gh}\n`)) console.log('Copilot: logged in with gh\'s login');
     else left.push('copilot');
-    const status = await execFileP(process.env.ACLI_BIN || 'acli', ['jira', 'auth', 'status'], { timeout: 15_000 }).then((r) => `${r.stdout}${r.stderr}`).catch((e) => `${e.stdout || ''}`);
-    const site = status.match(/[\w-]+\.atlassian\.net/)?.[0], email = status.match(/[\w.+-]+@[\w-]+(\.[\w-]+)+/)?.[0];
-    if (site && email && process.stdin.isTTY) {
-      console.log(`Jira: acli's login can't be copied, but an API token works. Make one (signed in already) at\n  https://id.atlassian.com/manage-profile/security/api-tokens\nand paste it here (not shown; Enter to skip).`);
-      const token = await hiddenInput('API token: ');
-      if (token && await inside(`acli jira auth login --site ${site} --email ${email} --token`, `${token}\n`)) console.log(`acli: logged in to ${site} as ${email}`);
-      else left.push('acli');
+    // acli's web login calls back to a port on 127.0.0.1, which your browser can only reach
+    // when acli shares this machine's network: a one-off container that does, with the same
+    // folders and keyring (Clearsky's container stops meanwhile, so one keyring is in use).
+    const acliOk = await inside('acli jira auth status >/dev/null 2>&1');
+    if (acliOk) console.log('acli: logged in already');
+    else if (process.stdin.isTTY) {
+      console.log('acli: logging in through your browser (Clearsky pauses for it)…');
+      const compose = (...a) => new Promise((done) => spawn('docker', ['compose', ...files, ...a], { stdio: 'inherit', env: env0, cwd: repo }).on('exit', done).on('error', done));
+      await compose('stop', 'clearsky');
+      const home = homedir(), ids = `${env0.UID}:${env0.GID}`;
+      const tmp = (p, exec) => ['--tmpfs', `${p}:uid=${env0.UID},gid=${env0.GID},mode=0700${exec ? ',exec' : ''}`];
+      const args = ['run', '--rm', '-it', '--network', 'host', '--user', ids, '-e', `HOME=${home}`,
+        ...tmp(home, true), ...tmp(join(home, '.config')), ...tmp(join(home, '.cache'), true),
+        ...mounts.flatMap((m) => ['-v', `${m.path}:${m.path}${m.ro ? ':ro' : ''}`]),
+        'clearsky:local', '--run', 'acli jira auth login --web'];
+      const ok = await new Promise((done) => spawn('docker', args, { stdio: 'inherit' }).on('exit', (c) => done(c === 0)).on('error', () => done(false)));
+      await compose('up', '-d');
+      if (!ok) left.push('acli');
     } else left.push('acli');
     if (!left.length) return;
-    console.log(`Now in the browser: ${left.join(', ')}`);
-    for (const t of left) await new Promise((done) => spawn('docker', ['compose', ...files, 'exec', '-it', 'clearsky', 'clearsky-login', t], { stdio: 'inherit', env: env0, cwd: repo }).on('exit', done).on('error', done));
+    if (left.includes('acli')) console.log('acli: not logged in; run `clearsky docker login` again in a terminal to log in through the browser.');
+    if (!left.some((x) => x !== 'acli')) return;
+    console.log(`Now in the browser: ${left.filter((x) => x !== 'acli').join(', ')}`);
+    for (const t of left.filter((x) => x !== 'acli')) await new Promise((done) => spawn('docker', ['compose', ...files, 'exec', '-it', 'clearsky', 'clearsky-login', t], { stdio: 'inherit', env: env0, cwd: repo }).on('exit', done).on('error', done));
     return;
   }
   if (sub === 'up') console.log(`Mounting ${mounts.length} folders (clearsky docker mounts lists them).`);

@@ -27,7 +27,11 @@ COPY package.json package-lock.json ./
 # srt isn't needed in here: the container is the sandbox.
 RUN npm ci --omit=dev --omit=optional --no-fund --no-audit
 COPY . .
-RUN ln -s /opt/clearsky/scripts/container-login.sh /usr/local/bin/clearsky-login
+RUN ln -s /opt/clearsky/scripts/container-login.sh /usr/local/bin/clearsky-login \
+    # No browser in here: a login that opens one prints its link for you to open instead.
+    && printf '#!/bin/sh\necho "Open this link in your browser:" >&2\necho "  $1" >&2\n' > /usr/local/bin/xdg-open \
+    && chmod 755 /usr/local/bin/xdg-open && ln -s xdg-open /usr/local/bin/x-www-browser && ln -s xdg-open /usr/local/bin/www-browser
+ENV BROWSER=/usr/local/bin/xdg-open
 
 ENV CLEARSKY_BIND=0.0.0.0 \
     CLEARSKY_SUPERVISED=1 \
