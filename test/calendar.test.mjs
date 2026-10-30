@@ -8,6 +8,9 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 
+// Never your own settings: bin/clearsky.mjs reads them from the home folder.
+process.env.HOME = mkdtempSync(join(tmpdir(), 'clearsky-home-'));
+
 const ics = (uid, title, hour) => `BEGIN:VEVENT\r\nUID:${uid}\r\nDTSTART:${today(hour)}\r\nDTEND:${today(hour + 1)}\r\nSUMMARY:${title}\r\nEND:VEVENT`;
 const today = (h) => { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}T${String(h).padStart(2, '0')}0000`; };
 

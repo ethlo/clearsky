@@ -1,4 +1,6 @@
 import { test } from 'node:test';
+// Message ids fall back to when it was sent, read in this machine's zone: pin it.
+process.env.TZ = 'UTC';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { mkdtempSync, statSync, existsSync } from 'node:fs';

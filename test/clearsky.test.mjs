@@ -6,6 +6,9 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
+// Never your own settings, state or extra sources: bin/clearsky.mjs reads them from the home folder.
+process.env.HOME = mkdtempSync(join(tmpdir(), 'clearsky-home-'));
+process.env.CLEARSKY_POLL_MINUTES = '0';
 const acliLog = join(mkdtempSync(join(tmpdir(), 'clearsky-')), 'acli.log');
 // Copilot's session folders: one work session (acme), one personal (no work repository).
 const copilotHome = mkdtempSync(join(tmpdir(), 'clearsky-copilot-'));
