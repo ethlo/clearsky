@@ -570,3 +570,11 @@ a.ref:hover { border-bottom-style: solid; }
 }
 @media (min-width: 641px) { .inbox .f .gm { display: none; } }
 
+
+/* Where the work stands, on an item's page: the ticket and each PR, with their reviewers. */
+.stands { display: flex; flex-direction: column; gap: 6px; margin: 12px 0 2px; }
+.stand { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; font-size: 13px; }
+.stand .lbl-next { width: 48px; flex: none; }
+.stand > a { font-weight: 600; color: var(--text); text-decoration: none; }
+.stand > a:hover { text-decoration: underline; }
+.stand .icon-btn.small { margin-left: 4px; }

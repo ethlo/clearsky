@@ -21,38 +21,94 @@ function whyLine(it) {
   if (it.kind === 'ticket') return `Assigned to you · ${esc([d.status, d.type, d.priority && `${d.priority} priority`, d.due && `due ${d.due}`].filter(Boolean).join(' · '))}.`;
   return esc(it.step || '');
 }
+const PR_TONE = { bad: 'red', warn: 'amber', good: 'green' };
+// PRs found merged or closed since the lists were loaded (their page, the chat header): no
+// reviewer picker and no next step for them.
+const prClosed = new Map();
+function notePrState(key, d) {
+  if (d?.state === 'MERGED' || d?.state === 'CLOSED') prClosed.set(key, d.state === 'MERGED' ? 'Merged' : 'Closed'); else if (d?.state) prClosed.delete(key);
+}
+const ticketTone = (t) => (t.statusCategory === 'done' ? 'green' : t.statusCategory === 'indeterminate' ? 'blue' : 'gray');
+// Where the work stands, in one place: the ticket's status and each PR's, with who reviews it.
+function standsHtml(it, rel) {
+  const tickets = new Map(), prs = new Map();
+  const addTicket = (key, t) => { if (key && !tickets.has(key)) tickets.set(key, t || ticketInfo.get(key) || null); };
+  const addPr = (p) => {
+    const k = p?.repo && `${p.repo}#${p.number}`;
+    if (!k || prs.has(k)) return;
+    const shut = prClosed.get(k);
+    prs.set(k, shut ? { ...p, state: shut.toLowerCase(), status: { label: shut, tone: shut === 'Merged' ? 'good' : 'neutral' } } : p);
+  };
+  if (it.issue) addTicket(it.issue, it.kind === 'ticket' ? { ...it.data, mine: true } : ticketInfo.get(it.issue));
+  if (it.pr) addPr({ ...it.data, state: 'open', mine: it.kind === 'pr' });
+  for (const x of rel) {
+    if (x.issue) addTicket(x.issue, x.kind === 'ticket' ? { ...x.data, mine: true } : ticketInfo.get(x.issue));
+    else if (x.pr) addPr({ ...x.data, state: 'open', mine: x.kind === 'pr' });
+  }
+  if (it.issue) (ticketPrs.get(it.issue)?.prs || []).forEach(addPr);
+  const people = (p) => {
+    const chips = [...(p.pendingReviewers || []).map((n) => [n, 'asked', 'gray']), ...(p.changesRequested || []).map((n) => [n, 'changes requested', 'red']),
+      ...(p.approvals || []).map((n) => [n, 'approved', 'green'])];
+    return chips.length ? chips.map(([n, st, tone]) => `<span class="badge b-${tone}">${esc(n.replace(/^team:/, '👥 '))} · ${st}</span>`).join('')
+      : p.state === 'open' && p.status?.label !== 'No reviewer yet' ? '<span class="badge b-amber">No reviewer assigned</span>' : '';
+  };
+  const rows = [
+    ...[...tickets].map(([key, t]) => `<div class="stand"><span class="lbl-next">Ticket</span><a href="#" data-open-key="issue:${esc(key)}">${esc(key)}</a>
+      ${t?.status ? `<span class="badge b-${ticketTone(t)}">${esc(t.status)}</span>` : '<span class="muted">…</span>'}
+      ${t ? `<span class="muted">${t.mine ? 'assigned to you' : t.assignee ? `assigned to ${esc(t.assignee)}` : t.status ? 'unassigned' : ''}</span>` : ''}</div>`),
+    ...[...prs.values()].map((p) => `<div class="stand"><span class="lbl-next">PR</span><a href="#" data-open-key="pr:${esc(p.repo)}#${p.number}">${esc(prName(p))}</a>
+      <span class="badge b-${PR_TONE[p.status?.tone] || 'gray'}">${esc(p.status?.label || p.state)}</span>${p.author && !p.mine ? `<span class="muted">by ${esc(p.author)}</span>` : ''}
+      ${people(p)}${p.mine && p.state === 'open' && it.kind !== 'pr' ? `<button class="icon-btn small" data-rv-open="${esc(p.repo)}#${p.number}">👥 Request review</button>` : ''}</div>`),
+  ];
+  if (it.issue && !prs.size && ticketPrs.get(it.issue)?.prs) rows.push('<div class="stand"><span class="lbl-next">PR</span><span class="muted">None yet with this key in its title or branch</span></div>');
+  return rows.length ? `<div class="stands">${rows.join('')}</div>` : '';
+}
 async function renderItem() {
   const it = curItem, el = $('#item');
   if (!it) return;
   const where = { GitHub: 'Open on GitHub', Jira: 'Open in Jira', Slack: 'Open in Slack' }[it.src] || 'Open';
   const sessions = cpLinks.links[itemKey(it.url || '')] || [];
   $('#it-crumb').textContent = `${it.src || ''}${it.ref ? ` · ${it.ref}` : ''}`;
-  const head = `<div class="src"><span class="st ${esc(it.glyph)}"></span>${esc(it.ref || '')}</div>
-    <h2>${esc(it.title)}</h2><div class="why">${whyLine(it)}</div>${it.pr ? reviewerChips(it.data) : ''}${lastActLine(it)}
-    ${(() => { const n = nextHtml(it); return n ? `<div class="next-row"><span class="lbl-next">Next</span>${n}</div>` : ''; })()}`;
-  const acts = `<div class="acts-row">${it.url ? `<a class="icon-btn primary" href="${esc(it.url)}" target="_blank" rel="noopener">${where} ↗</a>` : ''}
-    ${it.kind === 'pr' ? `<button class="icon-btn" data-rv-open="${esc(it.data.repo)}#${it.data.number}">👥 Request review</button>` : ''}
+  const rel = it.kind === 'session' ? [] : relatedItems(it, inboxItems());
+  const head = () => {
+    const t = it.issue && ticketInfo.get(it.issue);
+    const title = it.title === it.issue && t?.summary ? t.summary : it.title;
+    return `<div class="src"><span class="st ${esc(it.glyph)}"></span>${esc(it.ref || '')}</div>
+    <h2>${esc(title)}</h2><div class="why">${it.kind === 'linked' ? 'Not in your lists.' : whyLine(it)}</div>${standsHtml(it, rel)}${lastActLine(it)}
+    ${(() => { const n = nextHtml(it, nextStep(it, rel)); return n ? `<div class="next-row"><span class="lbl-next">Next</span>${n}</div>` : ''; })()}`;
+  };
+  const acts = () => `<div class="acts-row">${it.url ? `<a class="icon-btn primary" href="${esc(it.url)}" target="_blank" rel="noopener">${where} ↗</a>` : ''}
+    ${it.kind === 'pr' && !prClosed.has(it.pr) ? `<button class="icon-btn" data-rv-open="${esc(it.data.repo)}#${it.data.number}">👥 Request review</button>` : ''}
     ${refFromUrl(it.url) ? `<button class="icon-btn" data-ask="${esc(it.url)}" data-title="${esc(it.title)}">✦ Copilot on this</button>` : ''}
     ${it.kind === 'linked' ? '' : `<button class="icon-btn" data-mute="${esc(it.k)}">${MUTE_ICON} Snooze</button>
     <button class="icon-btn" data-done="${esc(it.k)}" data-stamp="${esc(it.stamp ?? '')}" data-back-after>${DONE_ICON} Done</button>`}</div>`;
-  const rel = it.kind === 'session' ? [] : relatedItems(it, inboxItems());
-  const related = rel.length ? `<h3>${it.pr ? 'Tickets' : 'Pull requests'}</h3><div class="xrefs">${rel.map((x) => xrefChip(x, true)).join('')}</div>` : '';
   const cps = sessions.length ? `<h3>Copilot on this</h3><div class="cps">${sessions.map(chip).join('')}</div>` : '';
   const quote = it.quote ? `<h3>${it.src === 'Slack' ? 'Message' : 'Latest mention'}</h3><div class="quote">${esc(it.quote)}</div>` : '';
   const ref = it.pr ? { pr: it.pr } : it.issue ? { issue: it.issue } : null;
-  const draw = (facts, body) => { if (curItem === it) el.innerHTML = head + (facts ? `<div class="facts">${facts}</div>` : '') + acts + '<div class="rv-slot"></div>' + related + quote + cps + body; };
-  draw('', ref ? `<h3>Details</h3>${skeleton(2)}` : '');
+  let facts = '', body = ref ? `<h3>Details</h3>${skeleton(2)}` : '';
+  const draw = () => {
+    if (curItem !== it || (el.dataset.k === it.k && $('#item .rv-pick'))) return; // don't redraw under an open review picker
+    el.dataset.k = it.k;
+    el.innerHTML = head() + (facts ? `<div class="facts">${facts}</div>` : '') + acts() + '<div class="rv-slot"></div>' + quote + cps + body;
+  };
+  draw();
+  // Tickets this PR is about, and PRs for this ticket, that aren't in your lists: ask Jira and GitHub.
+  const unknown = [...(it.issue && it.kind !== 'ticket' ? [it.issue] : []), ...rel.filter((x) => x.issue && x.kind !== 'ticket').map((x) => x.issue)];
+  unknown.filter((k) => !ticketInfo.has(k)).forEach((k) => preview({ dataset: { issue: k } }).then((d) => { if (!d.error) { ticketInfo.set(k, d); draw(); } }));
+  if (it.issue && !rel.some((x) => x.pr)) loadTicketPrs(it.issue).then(draw);
   if (!ref) return;
   const d = await preview({ dataset: ref });
-  if (d.error) return draw('', `<div class="err" style="margin:0">${esc(d.error)}</div>`);
+  if (d.error) { body = `<div class="err" style="margin:0">${esc(d.error)}</div>`; return draw(); }
   if (ref.pr) {
+    notePrState(ref.pr, d);
     const [label, tone] = prState(d);
-    draw(`<span class="${{ green: 'good', red: 'bad' }[tone] || ''}">${label}</span><span>${esc(d.author)}</span><span>+${d.size.additions} −${d.size.deletions} in ${d.size.files} files</span><span>updated ${esc(ago(d.updatedAt))}</span>`,
-      d.description ? `<h3>Description</h3><div class="desc">${esc(d.description)}</div>` : '');
+    facts = `<span class="${{ green: 'good', red: 'bad' }[tone] || ''}">${label}</span><span>${esc(d.author)}</span><span>+${d.size.additions} −${d.size.deletions} in ${d.size.files} files</span><span>updated ${esc(ago(d.updatedAt))}</span>`;
   } else {
-    draw(`<span>${esc(d.status || '')}</span>${d.type ? `<span>${esc(d.type)}</span>` : ''}${d.priority ? `<span>${esc(d.priority)} priority</span>` : ''}<span>${d.assignee ? `Assignee: ${esc(d.assignee)}` : 'Unassigned'}</span>${d.reporter ? `<span>Reporter: ${esc(d.reporter)}</span>` : ''}`,
-      d.description ? `<h3>Description</h3><div class="desc">${esc(d.description)}</div>` : '');
+    ticketInfo.set(ref.issue, { ...ticketInfo.get(ref.issue), ...d });
+    facts = `${d.type ? `<span>${esc(d.type)}</span>` : ''}${d.priority ? `<span>${esc(d.priority)} priority</span>` : ''}${d.reporter ? `<span>Reporter: ${esc(d.reporter)}</span>` : ''}`;
   }
+  body = d.description ? `<h3>Description</h3><div class="desc">${esc(d.description)}</div>` : '';
+  draw();
 }
 // Ask people to review your PR: a list of everyone who can, GitHub's suggestions first, with
 // who is already asked or has reviewed marked, so nobody is asked twice by accident.

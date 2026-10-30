@@ -100,21 +100,50 @@ document.addEventListener('click', (e) => {
 //   { label, run: 'item', k }                   go to the item that holds the next step
 //   { label, wait: true }                       nothing for you to do; who or what it waits on
 const hasSkill = (n) => (chat.info?.skills || []).some((s) => s.name === n);
+// What GitHub and Jira say about a ticket whose PR isn't in your lists: the PRs that carry its
+// key (/api/issue/KEY/prs) and the ticket itself. Fetched by the item page and the chat header.
+const ticketPrs = new Map(), ticketInfo = new Map();
+function loadTicketPrs(key) {
+  const hit = ticketPrs.get(key);
+  if (hit && Date.now() - hit.at < 120_000) return hit.promise;
+  const promise = getJson(`/api/issue/${encodeURIComponent(key)}/prs`).then((d) => { ticketPrs.set(key, { at: Date.now(), promise, prs: d.prs || [] }); return d.prs || []; })
+    .catch(() => []);
+  ticketPrs.set(key, { at: Date.now(), promise, prs: hit?.prs });
+  return promise;
+}
+const WAITING_STATUS = /review|\bqa\b|verif|test|blocked|waiting|on hold|pending/i;
+const prName = (p) => `${shortRepo(p.repo)} #${p.number}`;
 // The server says what's next on each item (lib/items.mjs); here it gets what only the page
 // knows: a ticket's PR, whether a Copilot chat already works on it, and which skills you have.
 function nextStep(it, rel = relatedItems(it, xrefAll.length ? xrefAll : inboxItems())) {
+  if (it.pr && prClosed.has(it.pr)) return { label: `${prClosed.get(it.pr)}: nothing left on this PR`, wait: true };
   if (it.kind !== 'mention' && (it.issue || it.kind === 'issue' || it.kind === 'linked')) {
     // A ticket with a PR: the PR's next step is the ticket's.
     const pr = rel.find((x) => x.kind === 'pr' || x.kind === 'review');
     if (pr) { const n = nextStep(pr, []); return !n ? null : n.wait ? { ...n, label: `${pr.ref}: ${n.label.toLowerCase()}` } : { label: `${n.label} (${pr.ref})`, run: 'item', k: pr.k }; }
+    // A PR found by the ticket's key, when none is in your lists.
+    const found = it.issue && ticketPrs.get(it.issue)?.prs;
+    const open = found?.find((p) => p.state === 'open');
+    if (open) {
+      const n = open.next;
+      if (n.wait) return { ...n, label: `${prName(open)}: ${n.label[0].toLowerCase()}${n.label.slice(1)}` };
+      return { ...n, label: `${n.label} (${prName(open)})`, ...(n.run === 'review' && { repo: open.repo, number: open.number }), ...(n.skill && { skill: hasSkill('continue-work') ? 'continue-work' : '' }) };
+    }
+    // No open PR: where the ticket stands says it.
+    const t = ticketInfo.get(it.issue) || (it.kind === 'ticket' ? it.data : null);
+    const merged = found?.find((p) => p.state === 'merged');
+    if (t?.statusCategory === 'done') return { label: `${t.status}: nothing left to do`, wait: true };
+    if (t?.status && WAITING_STATUS.test(t.status)) return { label: `Waiting: ${t.status}${merged ? ` (${prName(merged)} merged)` : ''}`, wait: true };
+    if (it.kind === 'linked' && t?.assignee) return { label: `Assigned to ${t.assignee}`, wait: true };
   }
   const n = it.next || (it.kind === 'linked' ? { label: 'Start it', run: 'start' } : null);
   if (!n || n.wait || n.run !== 'start' && n.skill !== 'continue') return n;
   const cont = hasSkill('continue-work') ? 'continue-work' : '';
   if (n.run !== 'start') return { ...n, skill: cont };
-  const going = it.glyph === 'prog' || (cpLinks.links[itemKey(it.url || '')] || []).length;
-  return going ? { label: 'Continue it', run: 'copilot', skill: cont || (hasSkill('feature-delivery') ? 'feature-delivery' : ''), prompt: '' }
-    : { label: 'Start it', run: 'copilot', skill: hasSkill('feature-delivery') ? 'feature-delivery' : cont, prompt: '' };
+  const chats = cpLinks.links[itemKey(it.url || '')] || [], did = cpLinks.actions?.[itemKey(it.url || '')]?.text;
+  const feature = hasSkill('feature-delivery') ? 'feature-delivery' : cont;
+  if (chats.length) return { label: `Continue the Copilot chat${did ? `: it ${did}` : ''}`, run: 'copilot', skill: cont || feature, prompt: '' };
+  return { label: it.glyph === 'prog' ? 'Pick it up in Copilot: branch, code and PR' : 'Start it in Copilot: branch, code and PR', run: 'copilot', skill: feature, prompt: '' };
 }
 function nextHtml(it, n = nextStep(it)) {
   if (!n) return '';
@@ -128,10 +157,10 @@ function runNext(it, btn) {
   if (n.run === 'url') return window.open(n.url, '_blank', 'noopener');
   if (n.run === 'item') { const x = (xrefAll.length ? xrefAll : inboxItems()).find((y) => y.k === n.k); return x && openItem(x); }
   if (n.run === 'review') {
-    const d = it.data || {};
+    const d = n.repo ? { repo: n.repo, number: n.number } : it.data || {};
     const inChat = !$('#chat').hidden && $(`#chat-ctx [data-rv-open="${d.repo}#${d.number}"]`);
     if (inChat) return inChat.click();
-    if ($('#v-item').hidden || curItem?.k !== it.k) { openItem(it); setTimeout(() => $(`#item [data-rv-open]`)?.click(), 50); return; }
+    if ($('#v-item').hidden || curItem?.k !== it.k) { openItem(it); setTimeout(() => $(`#item [data-rv-open="${d.repo}#${d.number}"]`)?.click(), 600); return; }
     return $(`#item [data-rv-open="${d.repo}#${d.number}"]`)?.click();
   }
   if (n.run === 'copilot') {

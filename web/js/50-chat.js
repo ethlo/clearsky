@@ -114,6 +114,7 @@ function itemIndex() {
 // Jira status of a ticket that isn't in your lists, fetched for the chat header and kept a
 // couple of minutes, so a refresh (or reopening the chat) shows where it is now.
 const ctxTickets = new Map();
+const ctxPrs = new Set();
 function ctxTicketStatus(key) {
   const hit = ctxTickets.get(key);
   if (hit && Date.now() - hit.at < 120_000) return hit.data;
@@ -147,10 +148,13 @@ function drawCtx() {
     const label = k.replace(/^(pr|gh|issue):/, '');
     const url = info.url || (k.startsWith('pr:') ? `https://github.com/${label.replace('#', '/pull/')}` : k.startsWith('gh:') ? `https://github.com/${label.replace('#', '/issues/')}`
       : jiraBaseGuess() ? `${jiraBaseGuess()}/browse/${label}` : '');
-    const mine = k.startsWith('pr:') && (state.github?.myPrs || []).some((p) => `pr:${p.repo}#${p.number}` === k);
+    // Whether it's still open: a PR merged since the lists loaded can't take reviewers.
+    if (k.startsWith('pr:') && !ctxPrs.has(label)) { ctxPrs.add(label); preview({ dataset: { pr: label } }).then((d) => { notePrState(label, d); if (prClosed.has(label)) drawCtx(); }); }
+    const shut = prClosed.get(label);
+    const mine = !shut && k.startsWith('pr:') && (state.github?.myPrs || []).some((p) => `pr:${p.repo}#${p.number}` === k);
     return `<div class="ctx-item">📎 <a href="${esc(url || '#')}" data-open-key="${esc(k)}" title="Open here">${esc(label)}</a>${url ? `<a class="ext" href="${esc(url)}" target="_blank" rel="noopener" title="Open on ${k.startsWith('issue:') ? 'Jira' : 'GitHub'}" aria-label="Open on ${k.startsWith('issue:') ? 'Jira' : 'GitHub'}">↗</a>` : ''}
-      ${info.status ? `<span class="badge b-${info.tone || 'gray'}">${esc(info.status)}</span>` : ''}<span>${esc(info.title || '')}</span>
-      ${k.startsWith('pr:') ? reviewerChips(prByKey(k)) : ''}
+      ${shut ? `<span class="badge b-${shut === 'Merged' ? 'green' : 'gray'}">${shut}</span>` : info.status ? `<span class="badge b-${info.tone || 'gray'}">${esc(info.status)}</span>` : ''}<span>${esc(info.title || '')}</span>
+      ${k.startsWith('pr:') && !shut ? reviewerChips(prByKey(k)) : ''}
       ${mine ? `<button class="chip" data-rv-open="${esc(label)}">👥 Request review</button><div class="rv-slot"></div>` : ''}</div>`;
   }).join('');
   el.hidden = false;
@@ -161,6 +165,8 @@ function drawCtx() {
       const st = info.status ? info : ctxTicketStatus(k.slice(6));
       return st?.status ? `<a class="badge b-${st.tone || 'gray'}" href="#" data-open-key="${esc(k)}" title="Open ${esc(k.slice(6))} here">${esc(k.slice(6))} · ${esc(st.status)}</a>` : '';
     }
+    const shut = k.startsWith('pr:') && prClosed.get(k.slice(3));
+    if (shut) return `<a class="badge b-${shut === 'Merged' ? 'green' : 'gray'}" href="#" data-open-key="${esc(k)}">${esc(k.replace(/^(pr|gh):[\w.-]+\//, '').replace('#', ' #'))} · ${shut}</a>`;
     return info.status ? `<a class="badge b-${info.tone || 'gray'}" href="#" data-open-key="${esc(k)}" title="Open ${esc(k.slice(3))} here">${esc(k.replace(/^(pr|gh):[\w.-]+\//, '').replace('#', ' #'))} · ${esc(info.status)}</a>` : '';
   }).filter(Boolean).join('');
   // The next step on this work: the PR's if there is one, else the ticket's.

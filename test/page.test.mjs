@@ -62,7 +62,10 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
   assert.match(await ticketLink.innerText(), /api #1 · no reviewer yet/i);
   await ticketLink.click();
   await page.waitForSelector('#v-item:not([hidden]) h2:text("SSP-5: Fix capture")');
-  assert.match(await page.locator('#item .xrefs').innerText(), /OPS-1/);
+  assert.match(await page.locator('#item .stands').innerText(), /OPS-1/);
+  // Where it stands: the ticket's status, the PR's, and that nobody reviews it yet.
+  assert.match(await page.locator('#item .stands').innerText(), /TICKET\s+OPS-1\s+In Progress[\s\S]*PR\s+api #1\s+No reviewer yet/i);
+  if (process.env.SHOT) await page.screenshot({ path: `${process.env.SHOT}/stands.png` });
   await page.goto(`${base}/#inbox`);
   await page.waitForSelector('#list li.r');
 
@@ -79,8 +82,8 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
 
   // A PR page shows who reviews it and where each stands.
   await page.locator('#list li.r', { hasText: 'Their change' }).first().locator('.t > a').first().click();
-  await page.waitForSelector('#v-item:not([hidden]) .rv-who');
-  assert.match(await page.locator('#item .rv-who').innerText(), /bob · approved/);
+  await page.waitForSelector('#v-item:not([hidden]) h2:text("OPS-77: Their change")');
+  assert.match(await page.locator('#item .stands').innerText(), /bob · approved/);
   await page.goto(`${base}/#inbox`);
   await page.waitForSelector('#list li.r');
 

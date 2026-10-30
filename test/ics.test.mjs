@@ -102,3 +102,9 @@ test('COUNT stops a series', () => {
   const aug = eventsBetween(ics, day('2027-08-01T00:00:00Z'), day('2027-09-01T00:00:00Z'));
   assert.equal(aug.filter((e) => e.uid === 'monthly').length, 1);
 });
+
+test('an HTML invite description shows as text', async () => {
+  const { htmlToText } = await import('../lib/ics.mjs');
+  assert.equal(htmlToText('<p>Hi&nbsp;all</p><ul><li>One</li><li>Two &amp; three</li></ul>'), 'Hi all\n\n• One\n• Two & three');
+  assert.equal(htmlToText('Plain <3 text'), 'Plain <3 text');
+});

@@ -1537,6 +1537,8 @@ function serve() {
       }
       const issueKey = url.pathname.match(/^\/api\/issue\/([A-Z][A-Z0-9_]+-\d+)$/)?.[1];
       if (issueKey) return json(res, 200, await issuePreview(issueKey));
+      const prsFor = url.pathname.match(/^\/api\/issue\/([A-Z][A-Z0-9_]+-\d+)\/prs$/)?.[1];
+      if (prsFor) return json(res, 200, await ghModule.ticketPrs(prsFor));
       if (url.pathname === '/api/pr') {
         const repo = url.searchParams.get('repo') || '', number = url.searchParams.get('number') || '';
         if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !/^\d+$/.test(number)) return json(res, 400, { error: 'bad PR reference' });
