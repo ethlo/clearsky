@@ -802,6 +802,9 @@ const SANDBOX_GIT = [['url.https://github.com/.insteadOf', 'git@github.com:'], [
   ['credential.https://github.com.helper', ''], ['credential.https://github.com.helper', '!gh auth git-credential']];
 function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBOX === 'srt' } = {}) {
   if (!sandbox) return new AcpAgent(bin, args, { env: copilotEnv() });
+  // In Clearsky's container, the container is the sandbox: Copilot sees only what's mounted
+  // (git already goes over https there). The network isn't limited to COPILOT_DOMAINS, though.
+  if (process.env.CLEARSKY_IN_CONTAINER === '1') return Object.assign(new AcpAgent(bin, args, { env: copilotEnv() }), { sandboxed: true });
   const domains = process.env.COPILOT_DOMAINS ? parseDomains(process.env.COPILOT_DOMAINS) : DEFAULT_DOMAINS;
   const s = sandboxed(bin, args, { srt: srtBin(), dir: join(dirname(stateFile), 'sandbox'), cwd, folders: copilotFolders(), home: homedir(), domains });
   const env = copilotEnv();
@@ -1700,7 +1703,7 @@ async function appCommand() {
 if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
   const args = process.argv.slice(2);
   if (args.includes('-h') || args.includes('--help')) {
-    console.log('usage: clearsky [--json] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky app [--port N] | clearsky jira-debug');
+    console.log('usage: clearsky [--json] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky app [--port N] | clearsky school-handover | clearsky jira-debug');
   } else if (args[0] === 'standup') {
     const s = await standup();
     console.log(args.includes('--json') ? JSON.stringify(s, null, 2) : s.text);
@@ -1712,6 +1715,10 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.a
     const p = args.indexOf('--port');
     if (p > -1) config.port = Number(args[p + 1]);
     await appCommand();
+  } else if (args[0] === 'school-handover') {
+    const { handOverLogin } = await import('../lib/flyt.mjs');
+    const where = await handOverLogin();
+    console.log(where ? `School login moved to ${where}; Clearsky's container takes it from there.` : 'No school login here to hand over.');
   } else if (args[0] === 'jira-debug') {
     await jiraDebug();
   } else if (args[0] === 'serve') {

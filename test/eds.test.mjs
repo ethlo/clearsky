@@ -60,3 +60,12 @@ test('finds calendars that only the running registry knows about (added through 
   assert.deepEqual(pickCalendars(all, { email: 'me@work.test' }).map((c) => c.uid), ['cal-goa']);
   assert.deepEqual(registrySources(() => { throw new Error('no bus'); }), []);
 });
+
+test('registry sources are remembered for when the registry is out of reach (the container)', async () => {
+  const { rememberedSources } = await import('../lib/eds.mjs');
+  const file = join(mkdtempSync(join(tmpdir(), 'eds-snap-')), 'eds-sources.json');
+  const reg = [{ uid: 'goa-cal', ini: { Calendar: {} } }];
+  assert.deepEqual(rememberedSources([], file), []);
+  assert.deepEqual(rememberedSources(reg, file), reg);
+  assert.deepEqual(rememberedSources([], file), reg);
+});

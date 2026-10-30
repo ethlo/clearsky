@@ -268,3 +268,17 @@ test('the browser login waits for the portal to set its cookies, then closes the
     assert.ok(Date.parse(s.expires) > Date.now());
   } finally { portal.close(); }
 });
+
+test('a school login handed over in the file moves into the container keyring, once', async () => {
+  const { defaultStore, handOverLogin } = await import('../lib/flyt.mjs');
+  const mem = (v = null) => ({ v, where: 'mem', async get() { return this.v; }, async set(x) { this.v = x; }, async clear() { this.v = null; } });
+  const hostRing = mem({ access: 'a' }), file = mem();
+  assert.equal(await handOverLogin({ ring: hostRing, file }), 'mem');
+  assert.deepEqual([hostRing.v, file.v], [null, { access: 'a' }]);
+  const ring = mem();
+  assert.equal(await defaultStore({ ring, file }), ring);
+  assert.deepEqual([ring.v, file.v], [{ access: 'a' }, null]);
+  // No keyring at all: the file it is.
+  const broken = { async get() { throw new Error('no secret-tool'); } };
+  assert.equal(await defaultStore({ ring: broken, file }), file);
+});
