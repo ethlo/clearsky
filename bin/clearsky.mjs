@@ -1717,6 +1717,23 @@ async function appCommand() {
 
 // `clearsky docker …`: Clearsky's container, with the folders from Settings → Copilot mounted
 // (see lib/docker.mjs). Runs on your machine, not in the container.
+// A line typed without echo (a token), from the terminal.
+function hiddenInput(prompt) {
+  return new Promise((done) => {
+    const { stdin, stdout } = process;
+    stdout.write(prompt);
+    stdin.setRawMode(true); stdin.resume(); stdin.setEncoding('utf8');
+    let s = '';
+    const on = (ch) => {
+      for (const c of ch) {
+        if (c === '\r' || c === '\n' || c === '\u0004') { stdin.setRawMode(false); stdin.pause(); stdin.off('data', on); stdout.write('\n'); return done(s.trim()); }
+        if (c === '\u0003') { stdin.setRawMode(false); stdout.write('\n'); process.exit(130); }
+        if (c === '\u007f') s = s.slice(0, -1); else s += c;
+      }
+    };
+    stdin.on('data', on);
+  });
+}
 async function dockerCommand([sub = 'up', ...rest]) {
   const { dockerMounts, writeMountsFile } = await import('../lib/docker.mjs');
   if (process.env.CLEARSKY_IN_CONTAINER === '1') { console.error('Run this on your machine, not in the container.'); process.exitCode = 1; return; }
@@ -1728,9 +1745,36 @@ async function dockerCommand([sub = 'up', ...rest]) {
   const files = [join(repo, 'docker-compose.yml'), file, join(repo, 'docker-compose.override.yml')].filter((f) => existsSync(f)).flatMap((f) => ['-f', f]);
   const compose = { up: ['up', '-d', '--build', ...rest], down: ['down', ...rest], logs: ['logs', '--tail', '50', ...rest], login: ['exec', '-it', 'clearsky', 'clearsky-login', ...rest] }[sub];
   if (!compose) { console.error('usage: clearsky docker [up|down|logs|login|mounts]'); process.exitCode = 1; return; }
+  const env0 = { ...process.env, HOME_DIR: homedir(), UID: String(process.getuid?.() ?? 1000), GID: String(process.getgid?.() ?? 1000), PORT: String(config.port) };
+  // Logging in: bring over the logins this machine already has (gh, and Copilot with gh's
+  // token; acli with an API token, as its own login can't be copied), the rest in the browser.
+  if (sub === 'login' && !rest.length) {
+    const inside = (cmd, input) => new Promise((done) => {
+      const p = spawn('docker', ['compose', ...files, 'exec', '-T', 'clearsky', 'sh', '-c', `. ~/.session-bus; ${cmd}`], { stdio: ['pipe', 'inherit', 'inherit'], env: env0, cwd: repo });
+      p.on('exit', (c) => done(c === 0)).on('error', () => done(false));
+      p.stdin.end(input || '');
+    });
+    const left = [];
+    const gh = await execFileP('gh', ['auth', 'token'], { timeout: 10_000 }).then((r) => r.stdout.trim()).catch(() => '');
+    if (gh && await inside('gh auth login --with-token && gh auth setup-git', `${gh}\n`)) console.log('gh: logged in with this machine\'s login');
+    else left.push('gh');
+    if (gh && await inside('copilot login --with-token', `${gh}\n`)) console.log('Copilot: logged in with gh\'s login');
+    else left.push('copilot');
+    const status = await execFileP(process.env.ACLI_BIN || 'acli', ['jira', 'auth', 'status'], { timeout: 15_000 }).then((r) => `${r.stdout}${r.stderr}`).catch((e) => `${e.stdout || ''}`);
+    const site = status.match(/[\w-]+\.atlassian\.net/)?.[0], email = status.match(/[\w.+-]+@[\w-]+(\.[\w-]+)+/)?.[0];
+    if (site && email && process.stdin.isTTY) {
+      console.log(`Jira: acli's login can't be copied, but an API token works. Make one (signed in already) at\n  https://id.atlassian.com/manage-profile/security/api-tokens\nand paste it here (not shown; Enter to skip).`);
+      const token = await hiddenInput('API token: ');
+      if (token && await inside(`acli jira auth login --site ${site} --email ${email} --token`, `${token}\n`)) console.log(`acli: logged in to ${site} as ${email}`);
+      else left.push('acli');
+    } else left.push('acli');
+    if (!left.length) return;
+    console.log(`Now in the browser: ${left.join(', ')}`);
+    for (const t of left) await new Promise((done) => spawn('docker', ['compose', ...files, 'exec', '-it', 'clearsky', 'clearsky-login', t], { stdio: 'inherit', env: env0, cwd: repo }).on('exit', done).on('error', done));
+    return;
+  }
   if (sub === 'up') console.log(`Mounting ${mounts.length} folders (clearsky docker mounts lists them).`);
-  const env = { ...process.env, HOME_DIR: homedir(), UID: String(process.getuid?.() ?? 1000), GID: String(process.getgid?.() ?? 1000), PORT: String(config.port) };
-  const code = await new Promise((done) => spawn('docker', ['compose', ...files, ...compose], { stdio: 'inherit', env, cwd: repo }).on('exit', done).on('error', (e) => { console.error(e.message); done(1); }));
+  const code = await new Promise((done) => spawn('docker', ['compose', ...files, ...compose], { stdio: 'inherit', env: env0, cwd: repo }).on('exit', done).on('error', (e) => { console.error(e.message); done(1); }));
   process.exitCode = code || 0;
 }
 
