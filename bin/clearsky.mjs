@@ -22,7 +22,7 @@ import { sessionEvents } from '../lib/copilot-events.mjs';
 import { branchesFor } from '../lib/branches.mjs';
 import { sandboxed, DEFAULT_DOMAINS, parseDomains } from '../lib/sandbox.mjs';
 import { isReadOnly, editInside } from '../lib/readonly.mjs';
-import { assistedReason } from '../lib/assisted.mjs';
+import { assistedReason, outwardReason } from '../lib/assisted.mjs';
 import { attentionItems, diffAttention, desktopNotify, DbusNotifier } from '../lib/notify.mjs';
 import { loadSources, makeContext, hook, asList } from '../lib/sources.mjs';
 import { pluginItems } from '../lib/items.mjs';
@@ -759,11 +759,24 @@ function stopCopilot(chat) {
 }
 
 // Start Copilot, inside the sandbox when Settings → Copilot says so (COPILOT_SANDBOX=srt).
-function startAgent(bin, args, cwd) {
-  if (process.env.COPILOT_SANDBOX !== 'srt') return new AcpAgent(bin, args, { env: copilotEnv() });
+// srt: Settings, else the one installed with Clearsky (npm optional dependency), else PATH.
+export function srtBin() {
+  if (process.env.SRT_BIN) return process.env.SRT_BIN;
+  const own = join(here, '..', 'node_modules', '.bin', 'srt');
+  return existsSync(own) ? own : 'srt';
+}
+// Inside the sandbox ssh can't get out, so git talks to GitHub over https with gh's login.
+const SANDBOX_GIT = [['url.https://github.com/.insteadOf', 'git@github.com:'], ['url.https://github.com/.insteadOf', 'ssh://git@github.com/'],
+  ['credential.https://github.com.helper', ''], ['credential.https://github.com.helper', '!gh auth git-credential']];
+function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBOX === 'srt' } = {}) {
+  if (!sandbox) return new AcpAgent(bin, args, { env: copilotEnv() });
   const domains = process.env.COPILOT_DOMAINS ? parseDomains(process.env.COPILOT_DOMAINS) : DEFAULT_DOMAINS;
-  const s = sandboxed(bin, args, { srt: process.env.SRT_BIN || 'srt', dir: join(dirname(stateFile), 'sandbox'), cwd, folders: copilotFolders(), home: homedir(), domains });
-  return new AcpAgent(s.bin, s.args, { env: copilotEnv() });
+  const s = sandboxed(bin, args, { srt: srtBin(), dir: join(dirname(stateFile), 'sandbox'), cwd, folders: copilotFolders(), home: homedir(), domains });
+  const env = copilotEnv();
+  const n = Number(env.GIT_CONFIG_COUNT) || 0;
+  SANDBOX_GIT.forEach(([k, v], i) => { env[`GIT_CONFIG_KEY_${n + i}`] = k; env[`GIT_CONFIG_VALUE_${n + i}`] = v; });
+  env.GIT_CONFIG_COUNT = String(n + SANDBOX_GIT.length);
+  return Object.assign(new AcpAgent(s.bin, s.args, { env }), { sandboxed: true });
 }
 
 // A short-lived Copilot process, for listing or reading sessions.
@@ -1049,16 +1062,20 @@ function toolDetail(call = {}) {
 // Folders Copilot chats may use without asking: Settings, else your code folders (~/dev).
 // Command starts Assisted always asks about, on top of its own (Settings → Copilot).
 const assistedAsk = () => list(process.env.COPILOT_ASSISTED_ASK);
+// And command starts they run without asking, like a Jira transition.
+const assistedAllow = () => list(process.env.COPILOT_ASSISTED_ALLOW);
 const copilotFolders = () => (process.env.COPILOT_FOLDERS ? list(process.env.COPILOT_FOLDERS) : codeDirs());
 
 async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin }) {
   // Changing the folders in Settings starts the chat's Copilot again (resuming it) on its next turn.
   const args = [...copilot.optionArgs(options), ...copilot.folderArgs(copilotFolders())];
-  const sig = JSON.stringify([args, process.env.COPILOT_SANDBOX, process.env.COPILOT_DOMAINS]);
+  // Sandboxed mode always runs in srt; the others when Settings → Copilot → Sandbox says so.
+  const sandbox = !!copilot.PERMISSIONS[options.permission]?.sandbox || process.env.COPILOT_SANDBOX === 'srt';
+  const sig = JSON.stringify([args, sandbox, process.env.COPILOT_DOMAINS, process.env.COPILOT_FOLDERS]);
   let c = acpChats.get(chat);
   if (c && (c.sig !== sig || c.agent.closed)) { resumeId = c.agent.sessionId; c.agent.close(); acpChats.delete(chat); c = null; }
   if (!c) {
-    const agent = startAgent(bin, args, cwd);
+    const agent = startAgent(bin, args, cwd, { sandbox });
     c = { agent, sig, cwd, waiting: new Map(), pending: new Map(), emit: () => {}, lastUsed: Date.now() };
     const id = await agent.start(cwd, resumeId);
     acpChats.set(id, c);
@@ -1091,10 +1108,17 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin })
     const assisted = options.permission === 'assisted';
     const command = p.toolCall?.rawInput?.command;
     if (once && !assisted && process.env.COPILOT_READONLY !== 'off' && isReadOnly(command, where)) return resolve({ outcome: 'selected', optionId: once.optionId, rule: 'read-only' });
-    const why = assisted && typeof command === 'string' ? assistedReason(command, { ...where, ask: assistedAsk() }) : undefined;
+    // Sandboxed: srt holds the fence, so every step inside it runs and only outward commands ask.
+    // A chat whose Copilot isn't in srt (it couldn't start there) gets Assisted's judge instead.
+    const fenced = options.permission === 'sandboxed' && c.agent.sandboxed;
+    if (once && fenced && typeof command !== 'string') return resolve({ outcome: 'selected', optionId: once.optionId, rule: 'sandboxed' });
+    const why = !(assisted || options.permission === 'sandboxed') || typeof command !== 'string' ? undefined
+      : fenced ? outwardReason(command, { ask: assistedAsk(), allow: assistedAllow() })
+        : assistedReason(command, { ...where, ask: assistedAsk(), allow: assistedAllow() });
+    if (once && fenced && why === null) return resolve({ outcome: 'selected', optionId: once.optionId, rule: 'sandboxed-command' });
     if (once && assisted && why === null) return resolve({ outcome: 'selected', optionId: once.optionId, rule: 'assisted-command' });
     if (why) p.why = why;
-    if (once && assisted && p.toolCall?.kind === 'edit' && editInside(p.toolCall, where)) return resolve({ outcome: 'selected', optionId: once.optionId, rule: 'assisted-edit' });
+    if (once && (assisted || options.permission === 'sandboxed') && p.toolCall?.kind === 'edit' && editInside(p.toolCall, where)) return resolve({ outcome: 'selected', optionId: once.optionId, rule: 'assisted-edit' });
     const id = randomBytes(6).toString('hex');
     const ev = { type: 'permission', id, title: p.toolCall?.title || 'Copilot wants to use a tool', kind: p.toolCall?.kind,
       detail: toolDetail(p.toolCall), options: (p.options || []).map((o) => ({ id: o.optionId, name: o.name, kind: o.kind })) };

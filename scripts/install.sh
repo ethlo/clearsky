@@ -56,9 +56,12 @@ else
 fi
 
 # ---- clearsky and srt on your PATH (npm links the checkout, so updates need no reinstall).
+# Its own dependencies (the sandbox runtime, srt, is the only one) go next to the code.
+say "Installing what Clearsky needs"
+if [ "$SANDBOX" = 1 ]; then (cd "$DIR" && npm install --no-fund --no-audit --omit=dev); else (cd "$DIR" && npm install --no-fund --no-audit --omit=dev --omit=optional); fi
 say "Installing clearsky with npm"
 if [ "$SANDBOX" = 1 ]; then
-  npm install -g --no-fund --no-audit "$DIR" @anthropic-ai/sandbox-runtime
+  npm install -g --no-fund --no-audit "$DIR" @anthropic-ai/sandbox-runtime  # srt on your PATH too
 else
   npm install -g --no-fund --no-audit "$DIR"
 fi

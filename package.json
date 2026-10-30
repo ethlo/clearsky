@@ -10,5 +10,6 @@
     "docs": "node scripts/render-docs.mjs"
   },
   "engines": { "node": ">=22" },
+  "optionalDependencies": { "@anthropic-ai/sandbox-runtime": "0.0.79" },
   "license": "MIT"
 }

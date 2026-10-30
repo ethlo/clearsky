@@ -165,16 +165,19 @@
     <label for="COPILOT_READONLY">Commands that only read</label>
     <select id="COPILOT_READONLY" data-key="COPILOT_READONLY"><option value="on">Run without asking</option><option value="off">Ask like any other</option></select>
     <p class="hint">In Ask and Assisted, commands like <code>cat</code>, <code>ls</code>, <code>grep</code>, <code>find</code>, <code>sed -n</code>, <code>head</code> and <code>git status/log/diff/show</code> run on their own when every part of the command only reads, and only inside the chat's folder and the folders above. Builds, tests, edits, <code>git push</code>, writing to files and anything Clearsky can't tell is safe still ask.</p>
+    <label for="COPILOT_ASSISTED_ALLOW">Assisted and Sandboxed run without asking</label>
+    <textarea id="COPILOT_ASSISTED_ALLOW" data-key="COPILOT_ASSISTED_ALLOW" rows="2" spellcheck="false" placeholder="e.g. acli jira workitem transition, gh pr create"></textarea>
+    <p class="hint">Command starts (comma-separated) that would otherwise ask, like moving a Jira ticket. Paths outside your folders still ask in Assisted.</p>
     <label for="COPILOT_ASSISTED_ASK">Assisted also asks before</label>
     <textarea id="COPILOT_ASSISTED_ASK" data-key="COPILOT_ASSISTED_ASK" rows="2" spellcheck="false" placeholder="e.g. mvn verify, python3 scripts/migrate.py"></textarea>
-    <p class="hint">Assisted runs everything in the chat's folder and the folders above (builds, tests, scripts like python3, git add/commit/fetch, gh and acli lookups, edits) and asks only before risky steps: <code>git push</code>, reset, rebase, merge and forced or deleting git commands, <code>rm</code> (except under /tmp), installs (npm install, pip, npx), deploys and publishes, Jira and GitHub changes (acli create/edit/transition/comment, gh pr create/merge/comment, gh api writes), sudo, ssh, curl uploads, docker run/exec, scripts run by path, and anything outside your folders and /tmp. Add command starts here (comma-separated) to always be asked about them too.</p>
+    <p class="hint">Assisted runs everything in the chat's folder, the folders above and worktrees next to your clones (builds, tests, scripts like python3, local git including reset, rebase, apply and worktrees, gh and acli lookups, edits) and asks only before risky steps: <code>git push</code>, <code>git clean</code>, deleting unmerged branches or tags, <code>rm</code> (except under /tmp), installs (npm install, pip, npx), deploys and publishes, Jira and GitHub changes (acli create/edit/transition/comment, gh pr create/merge/comment, gh api writes), sudo, ssh, curl uploads, docker run/exec, scripts run by path, and anything outside your folders and /tmp. Add command starts here (comma-separated) to always be asked about them too.</p>
     <label for="COPILOT_SANDBOX">Sandbox</label>
     <select id="COPILOT_SANDBOX" data-key="COPILOT_SANDBOX"><option value="off">Off</option><option value="srt">Anthropic sandbox runtime (srt)</option></select>
-    <p class="hint">With the sandbox on, Copilot and everything it runs can write only in the chat's folder, the folders above, <code>~/.copilot</code> and <code>/tmp</code>, can't read <code>~/.ssh</code>, <code>~/.aws</code>, browser profiles or Clearsky's own settings, and can reach only the hosts below. That holds in every access mode, Full included. Needs <code>srt</code> installed (<code>npm install -g @anthropic-ai/sandbox-runtime</code>, plus <code>bubblewrap</code> and <code>socat</code> on Linux). Hosts are checked by name only: an allowed host can be written to as well as read. <code>git push</code> over ssh won't work inside it.</p>
+    <p class="hint">With the sandbox on, Copilot and everything it runs can write only in the chat's folder, the folders above, <code>~/.copilot</code> and <code>/tmp</code>, can't read <code>~/.ssh</code>, <code>~/.aws</code>, browser profiles or Clearsky's own settings, and can reach only the hosts below. That holds in every access mode, Full included. The <b>Sandboxed</b> access mode always runs in it, and then runs every step inside without asking; only pushes, Jira and GitHub changes, uploads, deploys and cloud tools ask. srt comes with Clearsky (Linux also needs <code>bubblewrap</code>, <code>socat</code> and <code>ripgrep</code>). Hosts are checked by name only: an allowed host can be written to as well as read. Inside it, git reaches GitHub over https with your <code>gh</code> login instead of ssh.</p>
     <label for="COPILOT_DOMAINS">Hosts a sandboxed Copilot may reach</label>
     <textarea id="COPILOT_DOMAINS" data-key="COPILOT_DOMAINS" rows="2" spellcheck="false"></textarea>
     <p class="hint">Comma-separated, wildcards like <code>*.atlassian.net</code> allowed. Empty means Copilot, GitHub and your Jira site. Add package registries (say <code>repo.maven.apache.org</code>, <code>registry.npmjs.org</code>) if builds need them.</p>
-    <div class="row"><button class="save" data-keys="COPILOT_MODEL,COPILOT_EFFORT,COPILOT_PERMISSION,COPILOT_CWD,COPILOT_FOLDERS,COPILOT_READONLY,COPILOT_ASSISTED_ASK,COPILOT_SANDBOX,COPILOT_DOMAINS">Save</button><span class="msg"></span></div>
+    <div class="row"><button class="save" data-keys="COPILOT_MODEL,COPILOT_EFFORT,COPILOT_PERMISSION,COPILOT_CWD,COPILOT_FOLDERS,COPILOT_READONLY,COPILOT_ASSISTED_ALLOW,COPILOT_ASSISTED_ASK,COPILOT_SANDBOX,COPILOT_DOMAINS">Save</button><span class="msg"></span></div>
   </section>
 
   <section>
@@ -277,6 +280,7 @@ function render(s) {
   $('#COPILOT_MODEL').value = cp.model || '';
   $('#COPILOT_READONLY').value = cp.readonly || 'on';
   $('#COPILOT_ASSISTED_ASK').value = cp.assisted || '';
+  $('#COPILOT_ASSISTED_ALLOW').value = cp.assistedAllow || '';
   $('#COPILOT_SANDBOX').value = cp.sandbox || 'off';
   $('#COPILOT_DOMAINS').value = cp.domains || '';
   $('#COPILOT_DOMAINS').placeholder = cp.defaultDomains || '';

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { assistedReason, parseShell } from '../lib/assisted.mjs';
+import { assistedReason, outwardReason, parseShell } from '../lib/assisted.mjs';
 
 const at = { cwd: '/home/m/dev/kezzler/ssp', folders: ['~/dev/kezzler'], home: '/home/m' };
 const runs = (c, o = at) => assert.equal(assistedReason(c, o), null, c);
@@ -29,14 +29,35 @@ test('Assisted runs routine work in your folders', () => {
 });
 
 test('Assisted still asks before risky steps or leaving your folders', () => {
-  for (const c of ['git push -u origin SSP-1', 'cd ~/dev/kezzler/ssp && git reset --hard origin/main', 'git branch -D old', 'git checkout -- .',
-    'git stash drop', 'rm -rf target', 'rm -rf /tmp/../home/m', 'npm install left-pad', 'pip install x', 'npx something', 'mvn deploy',
+  for (const c of ['git push -u origin SSP-1', 'git branch -D old', 'git clean -fdx', 'git tag -d v1',
+    'git stash clear', 'rm -rf target', 'git worktree add /opt/wt main', 'rm -rf /tmp/../home/m', 'npm install left-pad', 'pip install x', 'npx something', 'mvn deploy',
     'gh pr create --fill', 'gh pr merge 3', 'gh pr comment 3 -b hi', 'gh api -X POST repos/a/b/pulls/1/requested_reviewers -f "reviewers[]=x"',
     'gh api repos/a/b/issues/1/comments -f body=x', 'acli jira workitem transition --key SSP-1 --status Done', 'acli jira workitem comment create --key SSP-1 --body x',
     'sudo ls', 'ssh host', 'curl -X POST https://x', 'curl -o ~/.bashrc https://x', 'docker run alpine', 'bash -c "ls"', 'eval "$X"',
     'cat ~/.ssh/id_rsa', 'cd /etc && cat passwd', 'echo x > ~/.profile', 'cp a /home/m/other/', 'git -C ~/dev/kezzler/ssp push',
     'echo $(rm -rf x)', './deploy.sh', 'sleep 100 &', 'cat <<EOF\nx', 'find . -delete', 'cp a ~/.m2/settings.xml']) asks(c);
   asks('mvn verify', { ...at, ask: ['mvn verify'] });
+});
+
+test('Assisted runs local git and worktrees next to your clones, and what you allow', () => {
+  // The shapes that asked in a real chat.
+  runs('cd /home/m/dev/kezzler/epcis-server && git fetch -q origin && git branch -a --list "*374*"; gh pr list --head EPCIS-374 --state all --json number; git worktree add -q -b EPCIS-374 ../epcis-server-374 origin/main && cd ../epcis-server-374 && git log --oneline -1',
+    { ...at, cwd: '/home/m/dev/kezzler/epcis-server', folders: ['~/dev/kezzler/epcis-server'] });
+  runs('cd /home/m/dev/kezzler/ssp && git --no-pager diff > /tmp/wip.patch && git checkout -q -- . && git reset -q --hard origin/SSP-2 && git branch --set-upstream-to=origin/SSP-2 -q 2>/dev/null; git apply --3way /tmp/wip.patch; git status -s');
+  runs('git rebase origin/main && git stash drop && git worktree remove ../ssp-old', { ...at, cwd: '/home/m/dev/kezzler/ssp', folders: ['~/dev/kezzler/ssp'] });
+  asks('acli jira workitem transition --key SSP-1 --status Done');
+  runs('acli jira workitem transition --key SSP-1 --status Done', { ...at, allow: ['acli jira workitem transition'] });
+  asks('cd ../ssp.bak', { ...at, cwd: '/home/m/dev/kezzler/ssp', folders: ['~/dev/kezzler/ssp'] });
+});
+
+test('Sandboxed asks only about what reaches out', () => {
+  const out = (c, o) => outwardReason(c, o);
+  for (const c of ['rm -rf target && git reset --hard origin/main', 'python3 - <<EOF\nprint(1)\nEOF', './scripts/build.sh', 'cat ~/.bashrc', 'curl -s https://x',
+    'git commit -am x && git rebase main', 'npm install', 'gh pr view 3', 'acli jira workitem view SSP-1']) assert.equal(out(c), null, c);
+  for (const c of ['git push', 'cd x && git -C y push -f', 'bash -c "git push"', 'gh pr create --fill', 'gh api -X POST x', 'acli jira workitem transition --key A-1 --status Done',
+    'curl -X POST https://x', 'mvn deploy', 'npm publish', 'kubectl apply -f x', 'docker push x', 'ssh host', 'eval "$X"', 'echo "unclosed']) assert.ok(out(c), c);
+  assert.equal(out('acli jira workitem transition --key A-1 --status Done', { allow: ['acli jira workitem transition'] }), null);
+  assert.ok(out('mvn verify', { ask: ['mvn verify'] }));
 });
 
 test('reads the shell well enough', () => {
