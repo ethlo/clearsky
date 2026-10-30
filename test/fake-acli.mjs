@@ -21,7 +21,7 @@ if (args[1] === 'auth' && args[2] === 'status') {
     process.exit(1);
   }
   if (jql.startsWith('assignee = currentUser() ORDER')) {
-    print([{ key: 'OPS-1', self: self('OPS-1'), fields: { assignee: { accountId: 'abc123', displayName: 'Morten' } } }]);
+    print([{ key: 'OPS-1', self: self('OPS-1'), fields: { assignee: { accountId: 'abc123', displayName: 'Alex' } } }]);
   } else if (jql.startsWith('assignee')) {
     print([{ key: 'OPS-1', self: self('OPS-1'), fields: { summary: 'Rotate certs',
       status: { name: 'In Progress', statusCategory: { key: 'indeterminate' } }, priority: { name: 'High' },
@@ -40,12 +40,12 @@ if (args[1] === 'auth' && args[2] === 'status') {
   print({ key: args[3], fields: { comment: { comments: [
     { id: '10', author: { accountId: 'zzz', displayName: 'Anna' }, created: hoursAgo(2), body: { type: 'doc', content: [
       { type: 'paragraph', content: [
-        { type: 'text', text: 'Hi ' }, { type: 'mention', attrs: { id: 'abc123', text: '@Morten' } },
+        { type: 'text', text: 'Hi ' }, { type: 'mention', attrs: { id: 'abc123', text: '@Alex' } },
         { type: 'text', text: ', can you ' }, { type: 'text', text: 'check', marks: [{ type: 'strong' }] }, { type: 'text', text: ' this?' },
       ] },
     ] } },
     { id: '11', author: { accountId: 'zzz', displayName: 'Anna' }, created: hoursAgo(1), body: 'No mention here' },
-    { id: '12', author: { accountId: 'abc123', displayName: 'Morten' }, created: hoursAgo(1), body: 'me: [~accountid:abc123]' },
+    { id: '12', author: { accountId: 'abc123', displayName: 'Alex' }, created: hoursAgo(1), body: 'me: [~accountid:abc123]' },
     { id: '13', author: { accountId: 'yyy', displayName: 'Bob' }, created: hoursAgo(24 * 30), body: 'old [~accountid:abc123]' },
   ] } } });
 } else {

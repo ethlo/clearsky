@@ -10,11 +10,11 @@ The service stays on the laptop because that is where the logins live: `gh`, `ac
 
 ## Recommendation in short
 
-1. **Container:** rootless Podman (or Docker with `--user`), with a read-only root filesystem and no capabilities. It runs as Morten's own uid, so files it writes stay his.
+1. **Container:** rootless Podman (or Docker with `--user`), with a read-only root filesystem and no capabilities. It runs as your own uid, so files it writes stay yours.
 2. **Mounts:** only what each feature needs, and read-only wherever possible (table below). The biggest grants are the code folder and `~/.copilot`, because Copilot works in the repos.
 3. **Host-only pieces:** a few things don't belong in the container: the BankID login window, the GNOME calendar list (D-Bus) and desktop banners. Each gets a small host-side stand-in instead of the session bus.
 4. **Phone access, later:** a Cloudflare Tunnel with Cloudflare Access in front (your email only). Clearsky also checks the Access token itself, and from the phone Copilot is limited to Ask mode.
-5. **Employer check first:** the tunnel sends work data through Cloudflare. Ask Kezzler before turning it on.
+5. **Employer check first:** the tunnel sends work data through Cloudflare. Ask your employer before turning it on.
 
 ## What the container needs
 
@@ -50,7 +50,7 @@ podman run -d --name clearsky --userns=keep-id --read-only --cap-drop=all --secu
   clearsky
 ```
 
-The container sees paths under `/home/me` while the host has `/home/morten`. Copilot keys sessions by `cwd`, so sessions started in the container wouldn't match the same repo opened in a host terminal. **Mount everything at the same absolute paths as on the host** (`-v ~/dev:$HOME/dev`, with `HOME=$HOME`) so session history stays shared.
+The container sees paths under `/home/me` while the host has `/home/you`. Copilot keys sessions by `cwd`, so sessions started in the container wouldn't match the same repo opened in a host terminal. **Mount everything at the same absolute paths as on the host** (`-v ~/dev:$HOME/dev`, with `HOME=$HOME`) so session history stays shared.
 
 ## What doesn't fit a container
 
@@ -61,14 +61,14 @@ The container sees paths under `/home/me` while the host has `/home/morten`. Cop
 
 ## Phone access through a Cloudflare Tunnel (later)
 
-With a Cloudflare Tunnel, the laptop makes an outbound connection to Cloudflare and no inbound port is opened. The tunnel's hostname lives on Morten's own domain in Cloudflare DNS, so the tunnel itself doesn't need dyndns. dyndns is only needed if something else must reach the laptop directly.
+With a Cloudflare Tunnel, the laptop makes an outbound connection to Cloudflare and no inbound port is opened. The tunnel's hostname lives on your own domain in Cloudflare DNS, so the tunnel itself doesn't need dyndns. dyndns is only needed if something else must reach the laptop directly.
 
 ![The phone goes through Cloudflare Access and the tunnel to Clearsky on the laptop, which checks the token again](remote-access.svg)
 
 Auth, in layers:
 
 1. **Cloudflare Access** on the hostname.
-   - Allow only Morten's email: a one-time PIN, or Google or GitHub as the identity provider, with a short session (say 12 hours).
+   - Allow only your email: a one-time PIN, or Google or GitHub as the identity provider, with a short session (say 12 hours).
    - Require a device posture check if the plan allows it.
    - This keeps everyone else out before anything reaches the laptop.
 2. **Clearsky checks the Access token itself.**

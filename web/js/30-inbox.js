@@ -69,7 +69,7 @@ function unlistedTicket(key) {
   const url = site ? `${new URL(site).origin}/browse/${key}` : '';
   return { group: 'linked', kind: 'linked', k: `linked:${key}`, issue: key, ref: key, url, title: key, src: 'Jira', glyph: 'todo', label: ['not in your lists'], step: 'Not in your lists: assigned to someone else, or closed.', data: {} };
 }
-// The item behind a key like pr:owner/repo#12 or issue:SSP-1: the one in your lists, or
+// The item behind a key like pr:owner/repo#12 or issue:ABC-1: the one in your lists, or
 // one made up from the key so it still opens here (with what GitHub or Jira says about it).
 function itemForKey(k) {
   const all = xrefAll.length ? xrefAll : inboxItems();

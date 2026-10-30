@@ -1,8 +1,8 @@
 #!/bin/sh
 # Install or update Clearsky with one command:
 #
-#   curl -fsSL https://raw.githubusercontent.com/ethlo/clearsky/main/scripts/install.sh | sh
 #   sh scripts/install.sh                 # from a checkout: installs that checkout
+#   CLEARSKY_REPO=<git url> sh install.sh # or clone it first
 #   sh scripts/install.sh --service       # also start it at login (systemd user service)
 #
 # It adds Clearsky to your app menu (its own window), puts `clearsky` and Anthropic's sandbox runtime (`srt`, for Settings → Copilot → Sandbox)
@@ -11,7 +11,7 @@
 # Running it again updates everything.
 #
 # CLEARSKY_DIR     where to clone it when not run from a checkout (~/.local/share/clearsky)
-# CLEARSKY_REPO    the git repository (https://github.com/ethlo/clearsky.git)
+# CLEARSKY_REPO    the git repository to clone, when not run from a checkout
 # CLEARSKY_BRANCH  the branch to install (main)
 set -eu
 
@@ -51,7 +51,8 @@ else
     git -C "$DIR" pull --ff-only
   else
     say "Cloning Clearsky into $DIR"
-    git clone --branch "${CLEARSKY_BRANCH:-main}" "${CLEARSKY_REPO:-https://github.com/ethlo/clearsky.git}" "$DIR"
+    [ -n "${CLEARSKY_REPO:-}" ] || { echo "Set CLEARSKY_REPO to the git repository to install from, or run this from a checkout." >&2; exit 1; }
+    git clone --branch "${CLEARSKY_BRANCH:-main}" "$CLEARSKY_REPO" "$DIR"
   fi
 fi
 

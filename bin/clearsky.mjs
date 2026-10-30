@@ -884,7 +884,7 @@ function withStatus(list) {
   });
 }
 
-// Which Copilot sessions belong to which PR or ticket ("pr:org/repo#12", "issue:SSP-1"): the
+// Which Copilot sessions belong to which PR or ticket ("pr:org/repo#12", "issue:ABC-1"): the
 // items you attached in Clearsky, the branch a terminal session worked on (matched to its
 // PR, and the ticket key in its name), and ticket keys in the session's title.
 export function linkSessions(sessions, { prs = [], refs = {}, workspace = () => ({}) } = {}) {
@@ -933,8 +933,8 @@ function ticketPr(ref) {
   return [...(gh.myPrs || []), ...(gh.reviewRequested || [])].find((p) => new RegExp(`\\b${ref.key}\\b`, 'i').test(`${p.title} ${p.branch || ''}`)) || null;
 }
 
-// The name a chat started on an item gets: "SSP-6519 · Fix capture timeout", or for a PR
-// without a ticket key "ssp#1187 · Fix capture timeout". Continuing work then finds it again.
+// The name a chat started on an item gets: "ABC-6519 · Fix capture timeout", or for a PR
+// without a ticket key "abc#1187 · Fix capture timeout". Continuing work then finds it again.
 export function itemSessionName(ref, cache = (n) => sourceCache.get(n)?.data || {}) {
   const gh = cache('github'), jira = cache('jira'), jm = cache('jiraMentions');
   if (ref.kind === 'pr') {

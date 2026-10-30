@@ -10,15 +10,15 @@ test('dismissed and muted items are kept in a private state file', () => {
   assert.deepEqual(dismissed(file), {});
 
   setDismissed(file, { key: 'https://x/1', stamp: '2026-10-29T10:00:00Z' });
-  setDismissed(file, { key: 'jira-mention:SSP-1', stamp: 1042 });
+  setDismissed(file, { key: 'jira-mention:ABC-1', stamp: 1042 });
   const d = dismissed(file);
   assert.ok(isDismissed(d, 'https://x/1', '2026-10-29T10:00:00Z'));
   assert.ok(!isDismissed(d, 'https://x/1', '2026-10-29T11:00:00Z'), 'new activity brings it back');
-  assert.ok(isDismissed(d, 'jira-mention:SSP-1', '1042'));
+  assert.ok(isDismissed(d, 'jira-mention:ABC-1', '1042'));
   assert.equal(statSync(file).mode & 0o777, 0o600);
 
   setDismissed(file, { key: 'https://x/1', stamp: null });
-  assert.deepEqual(Object.keys(dismissed(file)), ['jira-mention:SSP-1']);
+  assert.deepEqual(Object.keys(dismissed(file)), ['jira-mention:ABC-1']);
   setDismissed(file, { clear: true });
   assert.deepEqual(dismissed(file), {});
   assert.throws(() => setDismissed(file, { stamp: 'x' }), /bad key/);

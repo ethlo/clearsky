@@ -4,7 +4,7 @@ Written 2026-10-29. This covers the shape of the system. The README covers setup
 
 ## Goal
 
-Clearsky is one local page that shows what needs Morten's attention at work, and next to it a few personal things:
+Clearsky is one local page that shows what needs your attention at work, and next to it a few personal things:
 
 - **Work:** GitHub reviews and PRs, Jira tickets and mentions, Slack mentions.
 - **Personal:** school messages.
@@ -42,7 +42,7 @@ GitHub (through `gh`), Jira (through `acli`, never direct REST tokens), Slack an
 
 The source's `area` decides its tab. Only the calendar mixes work and personal.
 
-Files in `~/.config/clearsky/sources` load only if Morten owns them and nobody else can write to them. A source that throws only breaks its own panel.
+Files in `~/.config/clearsky/sources` load only if you own them and nobody else can write to them. A source that throws only breaks its own panel.
 
 ## Now / Next and the day
 

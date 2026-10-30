@@ -131,9 +131,9 @@ test('the chat panel talks to the local Copilot CLI with the chosen options', as
   }
 
   // Renaming a session: your name wins over Copilot's title.
-  assert.equal((await ask0(`${base}/api/copilot/rename`, { id: 'acp-session-1', title: 'Bluebear review' })).status, 200);
+  assert.equal((await ask0(`${base}/api/copilot/rename`, { id: 'acp-session-1', title: 'Storage review' })).status, 200);
   assert.equal((await ask0(`${base}/api/copilot/rename`, { id: '../x', title: 'y' })).status, 400);
-  assert.equal((await (await fetch(`${base}/api/copilot/sessions`)).json()).sessions.find((x) => x.id === 'acp-session-1').title, 'Bluebear review');
+  assert.equal((await (await fetch(`${base}/api/copilot/sessions`)).json()).sessions.find((x) => x.id === 'acp-session-1').title, 'Storage review');
 
   // Copilot's slash commands (built-ins and skills) are offered in the panel.
   assert.deepEqual((await (await fetch(`${base}/api/copilot`)).json()).commands.map((c) => c.name), ['standup', 'review']);
@@ -157,8 +157,8 @@ test('the chat panel talks to the local Copilot CLI with the chosen options', as
 
   // Attached PRs and tickets go in front of the message.
   const withRef = info0(await events(await ask({ message: 'Summarise', session: 'sess-ref-1', resume: true, permission: 'read',
-    refs: [{ kind: 'issue', key: 'SSP-1234' }, { kind: 'pr', repo: 'bad repo', number: 1 }] })));
-  assert.match(withRef.prompt, /^I am asking about these items:\n\n## SSP-1234[\s\S]*\n---\nMy message:\nSummarise$/);
+    refs: [{ kind: 'issue', key: 'ABC-1234' }, { kind: 'pr', repo: 'bad repo', number: 1 }] })));
+  assert.match(withRef.prompt, /^I am asking about these items:\n\n## ABC-1234[\s\S]*\n---\nMy message:\nSummarise$/);
   assert.ok(!/bad repo/.test(withRef.prompt), 'invalid references are dropped');
 });
 
@@ -166,9 +166,9 @@ test('lets Copilot use your code folders without asking', async () => {
   const { folderArgs } = await import('../lib/copilot.mjs');
   const { validate } = await import('../lib/settings.mjs');
   const home = mkdtempSync(join(tmpdir(), 'clearsky-home-'));
-  mkdirSync(join(home, 'dev', 'kezzler'), { recursive: true });
-  assert.deepEqual(folderArgs(['~/dev/kezzler', '~/dev/gone', '/nope'], home), ['--add-dir', join(home, 'dev', 'kezzler')]);
-  assert.equal(validate({ COPILOT_FOLDERS: '~/dev/kezzler, /home/m/dev/ethlo' }).COPILOT_FOLDERS, '~/dev/kezzler, /home/m/dev/ethlo');
-  assert.throws(() => validate({ COPILOT_FOLDERS: 'dev/kezzler' }), /full paths/);
+  mkdirSync(join(home, 'dev', 'acme'), { recursive: true });
+  assert.deepEqual(folderArgs(['~/dev/acme', '~/dev/gone', '/nope'], home), ['--add-dir', join(home, 'dev', 'acme')]);
+  assert.equal(validate({ COPILOT_FOLDERS: '~/dev/acme, /home/m/dev/mine' }).COPILOT_FOLDERS, '~/dev/acme, /home/m/dev/mine');
+  assert.throws(() => validate({ COPILOT_FOLDERS: 'dev/acme' }), /full paths/);
   assert.throws(() => validate({ COPILOT_FOLDERS: '~/dev/../..' }), /full paths/);
 });

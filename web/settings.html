@@ -78,7 +78,7 @@
       <span class="msg" id="gh-msg"></span>
     </div>
     <label for="GITHUB_ORGS">Work organizations (comma-separated; empty means all)</label>
-    <input id="GITHUB_ORGS" data-key="GITHUB_ORGS" placeholder="kezzler-eng">
+    <input id="GITHUB_ORGS" data-key="GITHUB_ORGS" placeholder="acme">
     <label for="GITHUB_TOKEN">Or a personal access token instead of the gh login (optional)</label>
     <input id="GITHUB_TOKEN" data-key="GITHUB_TOKEN" type="password" autocomplete="off" placeholder="leave empty to keep">
     <div class="row"><button class="save" data-keys="GITHUB_ORGS,GITHUB_TOKEN">Save</button><span class="msg"></span></div>
@@ -107,7 +107,7 @@
         On a shared calendar (one not named after your address, like "Family"), events only take your time when you're invited,
         or when one of these names is in the title; the rest just show in the agenda.</p>
       <label for="CALENDAR_MY_NAMES">Your names in shared calendar titles</label>
-      <input id="CALENDAR_MY_NAMES" data-key="CALENDAR_MY_NAMES" placeholder="Morten, Dad">
+      <input id="CALENDAR_MY_NAMES" data-key="CALENDAR_MY_NAMES" placeholder="Alex, Dad">
     </div>
     <input type="hidden" id="EVOLUTION_CALENDARS" data-key="EVOLUTION_CALENDARS">
     <div class="row"><button class="save" data-keys="CALENDAR_EMAIL,EVOLUTION_CALENDARS,CALENDAR_MY_NAMES">Save</button><span class="msg"></span></div>
@@ -165,7 +165,7 @@
     <p class="hint">Where a chat runs when it isn't about a PR or ticket. Chats about a PR or ticket run in that repo's clone, or the worktree with the PR's branch. Clearsky's own skills (stand-up, triage) are available only from the Clearsky folder.</p>
     <label for="COPILOT_FOLDERS">Folders Copilot may use without asking</label>
     <input id="COPILOT_FOLDERS" data-key="COPILOT_FOLDERS" placeholder="~/dev" spellcheck="false">
-    <p class="hint">Comma-separated, like <code>~/dev/kezzler, ~/dev/ethlo</code>. Copilot can read and change files there, including worktrees next to your clones, without the "Access paths outside trusted directories" question. Commands and edits still follow the access mode. Empty means <code>~/dev</code>. Running chats pick changes up on their next message.</p>
+    <p class="hint">Comma-separated, like <code>~/dev/work, ~/dev/mine</code>. Copilot can read and change files there, including worktrees next to your clones, without the "Access paths outside trusted directories" question. Commands and edits still follow the access mode. Empty means <code>~/dev</code>. Running chats pick changes up on their next message.</p>
     <p class="hint warn" id="copilot-unmounted" hidden></p>
     <label for="COPILOT_READONLY">Commands that only read</label>
     <select id="COPILOT_READONLY" data-key="COPILOT_READONLY"><option value="on">Run without asking</option><option value="off">Ask like any other</option></select>

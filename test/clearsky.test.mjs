@@ -12,7 +12,7 @@ const copilotHome = mkdtempSync(join(tmpdir(), 'clearsky-copilot-'));
 mkdirSync(join(copilotHome, 'session-state', 'acp-session-1'), { recursive: true });
 writeFileSync(join(copilotHome, 'session-state', 'acp-session-1', 'workspace.yaml'), 'id: acp-session-1\nrepository: acme/api\nbranch: feature/ops-9-pager\n');
 mkdirSync(join(copilotHome, 'session-state', 'personal-1'), { recursive: true });
-writeFileSync(join(copilotHome, 'session-state', 'personal-1', 'workspace.yaml'), 'repository: ethlo/hack\nbranch: main\n');
+writeFileSync(join(copilotHome, 'session-state', 'personal-1', 'workspace.yaml'), 'repository: me/hack\nbranch: main\n');
 
 const now = new Date().toISOString();
 const hoursAgo = (h) => new Date(Date.now() - h * 36e5).toISOString();
@@ -71,14 +71,14 @@ before(async () => {
         assigned: { nodes: [] },
       } });
     }
-    if (req.url === '/slack/auth.test') return send({ ok: true, user_id: 'U1', user: 'morten', team: 'Acme' });
+    if (req.url === '/slack/auth.test') return send({ ok: true, user_id: 'U1', user: 'alex', team: 'Acme' });
     if (req.url.startsWith('/slack/search.messages')) {
       const ts = (h) => String((Date.now() - h * 36e5) / 1000);
       return send({ ok: true, messages: { matches: [
         { ts: ts(1), user: 'U2', username: 'anna', text: '<@U1> can you look at <#C9|deploys>? cc <@U3|bob> <https://x.test|link>',
           channel: { name: 'payments', is_im: false }, permalink: 'https://acme.slack.com/archives/C1/p1' },
         { ts: ts(2), user: 'U2', username: 'anna', text: 'ping <@U1>', channel: { is_im: true }, permalink: 'https://acme.slack.com/archives/D1/p2' },
-        { ts: ts(3), user: 'U1', username: 'morten', text: 'note to self <@U1>', channel: { name: 'x' }, permalink: '#' },
+        { ts: ts(3), user: 'U1', username: 'alex', text: 'note to self <@U1>', channel: { name: 'x' }, permalink: '#' },
         { ts: ts(24 * 20), user: 'U2', username: 'anna', text: 'old <@U1>', channel: { name: 'x' }, permalink: '#' },
       ] } });
     }
@@ -259,13 +259,13 @@ test('picks the worktree that has the PR branch checked out', async () => {
   const { worktreeFor } = await import('../bin/clearsky.mjs');
   const { execFileSync } = await import('node:child_process');
   const root = mkdtempSync(join(tmpdir(), 'clearsky-wt-'));
-  const clone = join(root, 'ssp');
+  const clone = join(root, 'abc');
   const git = (...a) => execFileSync('git', ['-C', clone, ...a], { stdio: 'ignore' });
   mkdirSync(clone);
   git('init', '-q', '-b', 'main');
   git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'x');
-  git('worktree', 'add', '-q', '-b', 'SSP-1', join(root, 'ssp-1'));
-  assert.equal(worktreeFor(clone, 'SSP-1'), join(root, 'ssp-1'));
+  git('worktree', 'add', '-q', '-b', 'ABC-1', join(root, 'abc-1'));
+  assert.equal(worktreeFor(clone, 'ABC-1'), join(root, 'abc-1'));
   assert.equal(worktreeFor(clone, 'other'), null);
   assert.equal(worktreeFor(clone, null), null);
 });
@@ -295,24 +295,24 @@ test('links Copilot sessions to the PRs and tickets they work on', async () => {
   assert.deepEqual(later['pr:acme/api#8'].map((x) => x.id), ['b1']);
 
   // A ticket's sessions show on its PR and the other way round.
-  const cross = linkSessions([{ id: 't1', title: 'SSP-5 · Fix capture', updatedAt: '2026-10-29T08:00:00Z' }],
-    { prs: [{ repo: 'acme/ssp', number: 3, title: 'SSP-5: Fix capture', branch: 'x' }] });
-  assert.deepEqual(cross['pr:acme/ssp#3'].map((x) => x.id), ['t1']);
+  const cross = linkSessions([{ id: 't1', title: 'ABC-5 · Fix capture', updatedAt: '2026-10-29T08:00:00Z' }],
+    { prs: [{ repo: 'acme/abc', number: 3, title: 'ABC-5: Fix capture', branch: 'x' }] });
+  assert.deepEqual(cross['pr:acme/abc#3'].map((x) => x.id), ['t1']);
   // …and with the GitHub issues it closes.
-  const closes = linkSessions([{ id: 'g1', title: 'Look at https://github.com/acme/ssp/issues/12', updatedAt: '2026-10-29T08:00:00Z' }],
-    { prs: [{ repo: 'acme/ssp', number: 3, title: 'Fix', issues: ['acme/ssp#12'] }] });
-  assert.deepEqual(closes['pr:acme/ssp#3'].map((x) => x.id), ['g1']);
-  assert.deepEqual(closes['gh:acme/ssp#12'].map((x) => x.id), ['g1']);
+  const closes = linkSessions([{ id: 'g1', title: 'Look at https://github.com/acme/abc/issues/12', updatedAt: '2026-10-29T08:00:00Z' }],
+    { prs: [{ repo: 'acme/abc', number: 3, title: 'Fix', issues: ['acme/abc#12'] }] });
+  assert.deepEqual(closes['pr:acme/abc#3'].map((x) => x.id), ['g1']);
+  assert.deepEqual(closes['gh:acme/abc#12'].map((x) => x.id), ['g1']);
 });
 
 test('a chat started on an item is named after it', async () => {
   const { itemSessionName } = await import('../bin/clearsky.mjs');
-  const data = { github: { myPrs: [{ repo: 'acme/ssp', number: 3, title: '[SSP-5] Fix capture', branch: 'feature/SSP-5-capture' }] },
-    jira: { assigned: [{ key: 'SSP-6', summary: 'Rotate certs' }] } };
+  const data = { github: { myPrs: [{ repo: 'acme/abc', number: 3, title: '[ABC-5] Fix capture', branch: 'feature/ABC-5-capture' }] },
+    jira: { assigned: [{ key: 'ABC-6', summary: 'Rotate certs' }] } };
   const cache = (n) => data[n] || {};
-  assert.equal(itemSessionName({ kind: 'issue', key: 'SSP-6' }, cache), 'SSP-6 · Rotate certs');
-  assert.equal(itemSessionName({ kind: 'issue', key: 'SSP-9' }, cache), 'SSP-9');
-  assert.equal(itemSessionName({ kind: 'pr', repo: 'acme/ssp', number: 3 }, cache), 'SSP-5 · ssp#3 · Fix capture');
+  assert.equal(itemSessionName({ kind: 'issue', key: 'ABC-6' }, cache), 'ABC-6 · Rotate certs');
+  assert.equal(itemSessionName({ kind: 'issue', key: 'ABC-9' }, cache), 'ABC-9');
+  assert.equal(itemSessionName({ kind: 'pr', repo: 'acme/abc', number: 3 }, cache), 'ABC-5 · abc#3 · Fix capture');
   assert.equal(itemSessionName({ kind: 'pr', repo: 'acme/web', number: 4 }, cache), 'web#4');
 });
 

@@ -16,18 +16,18 @@ test('a source reaches only the hosts in its manifest, and sees only its own set
 });
 
 test('modules turn their data into work items with the next step', () => {
-  const pr = { repo: 'acme/api', number: 1, title: 'SSP-5: Fix', url: 'u1', branch: 'feature/ops-1-x', issues: ['acme/api#9'], updatedAt: 'now', stamp: 's',
+  const pr = { repo: 'acme/api', number: 1, title: 'ABC-5: Fix', url: 'u1', branch: 'feature/ops-1-x', issues: ['acme/api#9'], updatedAt: 'now', stamp: 's',
     status: { label: 'No reviewer yet', owner: 'me', tone: 'warn' }, approvals: [], changesRequested: [], pendingReviewers: [], botSuggestions: 0 };
   const [it] = githubItems({ myPrs: [pr] });
   assert.equal(it.kind, 'pr');
-  assert.deepEqual(it.links, ['issue:SSP-5', 'issue:OPS-1', 'gh:acme/api#9']);
+  assert.deepEqual(it.links, ['issue:ABC-5', 'issue:OPS-1', 'gh:acme/api#9']);
   assert.deepEqual(it.next, { label: 'Request review', run: 'review' });
   assert.equal(prNext({ ...pr, status: { label: '2 unresolved threads' } }).skill, 'continue');
-  const [t, w] = jiraItems({ assigned: [{ key: 'SSP-5', summary: 'x', url: 'j', status: 'In Progress', statusCategory: 'indeterminate' },
-    { key: 'SSP-6', summary: 'y', url: 'k', status: 'In Review', statusCategory: 'indeterminate', waiting: true }] });
+  const [t, w] = jiraItems({ assigned: [{ key: 'ABC-5', summary: 'x', url: 'j', status: 'In Progress', statusCategory: 'indeterminate' },
+    { key: 'ABC-6', summary: 'y', url: 'k', status: 'In Review', statusCategory: 'indeterminate', waiting: true }] });
   assert.equal(t.next.run, 'start');
   assert.deepEqual(w.next, { label: 'Waiting: In Review', wait: true });
-  assert.deepEqual(ticketKeys('UTF-8 and SSP-5', 'ops-2-y'), ['UTF-8', 'SSP-5', 'OPS-2']);
+  assert.deepEqual(ticketKeys('UTF-8 and ABC-5', 'ops-2-y'), ['UTF-8', 'ABC-5', 'OPS-2']);
 });
 
 test('"Merge it" merges your PR the way the repo allows, and says why GitHub refused', async () => {

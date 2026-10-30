@@ -38,7 +38,7 @@
 <nav class="toc"><b>Contents</b><ol><li><a href="#goal">Goal</a></li><li><a href="#parts">Parts</a></li><li><a href="#sources">Sources</a></li><li><a href="#now-next-and-the-day">Now / Next and the day</a></li><li><a href="#copilot">Copilot</a></li><li><a href="#security">Security</a></li><li><a href="#deliberate-limits">Deliberate limits</a></li></ol></nav>
 <p>Written 2026-10-29. This covers the shape of the system. The README covers setup and use.</p>
 <h2 id="goal">Goal</h2>
-<p>Clearsky is one local page that shows what needs Morten's attention at work, and next to it a few personal things:</p>
+<p>Clearsky is one local page that shows what needs your attention at work, and next to it a few personal things:</p>
 <ul><li><strong>Work:</strong> GitHub reviews and PRs, Jira tickets and mentions, Slack mentions.</li><li><strong>Personal:</strong> school messages.</li><li><strong>Both:</strong> the calendar, shown as today's schedule.</li></ul>
 <p>It runs on the laptop, uses the logins already there, has no dependencies beyond Node 22, and sends nothing anywhere except to the services it reads.</p>
 <p><img src="architecture.svg" alt="Browser, local server, sources, and Copilot, all on the laptop"></p>
@@ -48,7 +48,7 @@
 <p>GitHub (through <code>gh</code>), Jira (through <code>acli</code>, never direct REST tokens), Slack and the calendar are built in. Everything else is a source module with <code>name</code>, <code>label</code>, <code>area</code> (<code>work</code> or <code>personal</code>), <code>settings</code>, <code>fetch(ctx)</code> and optional hooks:</p>
 <ul><li><code>items</code>: rows for its panel;</li><li><code>attention</code>: what should notify you when it's new;</li><li><code>events</code>: calendar entries; <code>fyi: true</code> events show but don't take your time;</li><li><code>standup</code>: lines for Yesterday and Today;</li><li><code>detail</code> and <code>attachment</code>: read an item in full inside Clearsky;</li><li><code>login</code>: a login started from Settings.</li></ul>
 <p>The source's <code>area</code> decides its tab. Only the calendar mixes work and personal.</p>
-<p>Files in <code>~/.config/clearsky/sources</code> load only if Morten owns them and nobody else can write to them. A source that throws only breaks its own panel.</p>
+<p>Files in <code>~/.config/clearsky/sources</code> load only if you own them and nobody else can write to them. A source that throws only breaks its own panel.</p>
 <h2 id="now-next-and-the-day">Now / Next and the day</h2>
 <p><code>planNow()</code> turns the calendar plus the work items into:</p>
 <ul><li>the current or next meeting;</li><li>the free slot until then (back-to-back meetings count as one block, and the daily stand-up counts even without a calendar entry);</li><li>up to three tasks that fit the slot, most urgent first.</li></ul>

@@ -2,16 +2,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { isReadOnly } from '../lib/readonly.mjs';
 
-const at = { cwd: '/home/m/dev/kezzler/ssp', folders: ['~/dev/kezzler'], home: '/home/m' };
+const at = { cwd: '/home/m/dev/acme/abc', folders: ['~/dev/acme'], home: '/home/m' };
 const ok = (c) => assert.ok(isReadOnly(c, at), c);
 const no = (c) => assert.ok(!isReadOnly(c, at), c);
 
 test('reading commands in your folders run without asking', () => {
   ok('git status');
-  ok('cd ~/dev/kezzler; grep -rl --include=*.java "class Epcis1DocumentXmlRepresentationConverter\\|class EpcisDocumentService\\b" . 2>/dev/null | grep -v /target/ | head; grep -rn "gs1.epcis\\|epcis" ssp-6522/pom.xml | head');
-  ok('cd ~/dev/kezzler/ssp-6522/gs1/src/main/java/com/kezzler/gs1/epcis; cat Epcis1DocumentXmlRepresentationConverter.java; ls; grep -n "getEventList\\|EventList()" -r . | head -30');
-  ok('cd ~/dev/kezzler/ssp-6522; sed -n 60,100p gs1/src/A.java; sed -n 60,130p rest-api/B.java; cat gs1/C.java | head -40; grep -rn "EventList.*minOccurs" --include=*.xsd . | grep -v target | head');
-  ok('git -C ~/dev/kezzler/ssp log --oneline -5 && git diff main...HEAD --stat');
+  ok('cd ~/dev/acme; grep -rl --include=*.java "class Ord1DocumentXmlRepresentationConverter\\|class OrdDocumentService\\b" . 2>/dev/null | grep -v /target/ | head; grep -rn "gs1.ord\\|ord" abc-6522/pom.xml | head');
+  ok('cd ~/dev/acme/abc-6522/gs1/src/main/java/com/acme/gs1/ord; cat Ord1DocumentXmlRepresentationConverter.java; ls; grep -n "getEventList\\|EventList()" -r . | head -30');
+  ok('cd ~/dev/acme/abc-6522; sed -n 60,100p gs1/src/A.java; sed -n 60,130p rest-api/B.java; cat gs1/C.java | head -40; grep -rn "EventList.*minOccurs" --include=*.xsd . | grep -v target | head');
+  ok('git -C ~/dev/acme/abc log --oneline -5 && git diff main...HEAD --stat');
   ok('git branch --show-current');
   ok('find . -name "*.xml" -not -path "*/target/*" | head');
   ok('ls -la 2>&1');

@@ -9,7 +9,7 @@ The item is the PR or Jira ticket I attached or named. With none, use the curren
 
 ## 1. Find the work
 
-- For a PR, find the local checkout of its repository: the current folder if it is that repo, otherwise look under `~/dev/` (for example `~/dev/kezzler/<repo>`). If there is none, ask me where it is, or whether to work from GitHub only.
+- For a PR, find the local checkout of its repository: the current folder if it is that repo, otherwise look under `~/dev/` (for example `~/dev/acme/<repo>`). If there is none, ask me where it is, or whether to work from GitHub only.
 - In the checkout, fetch and switch to the PR's branch (`gh pr checkout <number>`). If I have uncommitted changes there, stop and ask.
 - For a ticket, read it with `acli jira workitem view <KEY> --json` and find its PR: search `gh pr list --search <KEY>` in the likely repos, or the branch named after the key.
 

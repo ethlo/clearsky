@@ -72,13 +72,13 @@ test("a shared family calendar shows others' events without taking your time", a
   // Google puts you as ATTENDEE inside the reminder (VALARM); that doesn't make it yours.
   db.prepare('INSERT INTO ECacheObjects VALUES (?, ?)').run('f1', ics('f1', 'Football practice', 9)
     .replace('END:VEVENT', 'BEGIN:VALARM\r\nACTION:EMAIL\r\nATTENDEE:mailto:me@home.test\r\nEND:VALARM\r\nEND:VEVENT'));
-  db.prepare('INSERT INTO ECacheObjects VALUES (?, ?)').run('f2', ics('f2', 'Dentist (Morten)', 10));
+  db.prepare('INSERT INTO ECacheObjects VALUES (?, ?)').run('f2', ics('f2', 'Dentist (Alex)', 10));
   db.prepare('INSERT INTO ECacheObjects VALUES (?, ?)').run('f3', ics('f3', 'Parents meeting', 17)
     .replace('END:VEVENT', 'ORGANIZER:mailto:me@home.test\r\nEND:VEVENT'));
   db.close();
-  const cal = await calendar({ HOME: home, CALENDAR_EMAIL: 'me@work.test', EVOLUTION_CALENDARS: 'cal-family', CALENDAR_MY_NAMES: 'Morten' });
+  const cal = await calendar({ HOME: home, CALENDAR_EMAIL: 'me@work.test', EVOLUTION_CALENDARS: 'cal-family', CALENDAR_MY_NAMES: 'Alex' });
   const fyi = Object.fromEntries(cal.events.map((e) => [e.title, e.fyi]));
-  assert.deepEqual(fyi, { 'Football practice': true, 'Dentist (Morten)': false, Planning: false, Retro: false, 'Parents meeting': false });
+  assert.deepEqual(fyi, { 'Football practice': true, 'Dentist (Alex)': false, Planning: false, Retro: false, 'Parents meeting': false });
   assert.equal(cal.events.find((e) => e.title === 'Football practice').calendar, 'Family');
 
   const { planNow } = await import('../bin/clearsky.mjs');

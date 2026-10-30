@@ -340,7 +340,7 @@ function refCandidates() {
   (j.assigned || []).forEach((i) => add({ kind: 'issue', key: i.key }, i.summary, i.status || 'Jira'));
   return [...out.values()];
 }
-// Also take a typed reference: SSP-1234, org/repo#12, or a PR or Jira link.
+// Also take a typed reference: ABC-1234, org/repo#12, or a PR or Jira link.
 function parseRef(q) {
   q = q.trim();
   let m = q.match(/github\.com\/([\w.-]+\/[\w.-]+)\/issues\/(\d+)/);
@@ -370,7 +370,7 @@ function openRefPick() {
   if ($('#cp-refs .ref-pick:not(.slash)')) return closeRefPick();
   const box = document.createElement('div');
   box.className = 'ref-pick';
-  box.innerHTML = '<input placeholder="Find a PR or ticket, or paste SSP-1234 / a link" spellcheck="false"><ul></ul>';
+  box.innerHTML = '<input placeholder="Find a PR or ticket, or paste ABC-1234 / a link" spellcheck="false"><ul></ul>';
   $('#cp-refs').append(box);
   const input = box.querySelector('input'), ul = box.querySelector('ul');
   const all = refCandidates();
@@ -382,7 +382,7 @@ function openRefPick() {
     if (typed && !shown.some((r) => refLabel(r) === refLabel(typed))) shown.unshift({ ...typed, title: '', where: 'add' });
     on = Math.min(on, Math.max(shown.length - 1, 0));
     ul.innerHTML = shown.map((r, i) => `<li data-i="${i}" class="${i === on ? 'on' : ''}"><code>${esc(refLabel(r))}</code>${esc(r.title || '')}<small>${esc(r.where || '')}</small></li>`).join('')
-      || '<li class="none">Nothing on your dashboard matches. Type a key like SSP-1234 or org/repo#12.</li>';
+      || '<li class="none">Nothing on your dashboard matches. Type a key like ABC-1234 or org/repo#12.</li>';
   };
   const pick = (i) => { const r = shown[i]; if (!r) return; addRef({ ...r }); closeRefPick(); $('#chat-text').focus(); };
   input.addEventListener('input', () => { on = 0; draw(); });

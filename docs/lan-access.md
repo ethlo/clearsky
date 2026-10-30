@@ -20,7 +20,7 @@ Things that stay as they are:
    - Copilot runs in **Ask** mode only, so every step needs your OK on the phone. Full and Assisted are refused.
    - Settings, logins and source configuration can't be changed from the phone.
    - Reading, Done, Snooze, Mark read, and answering Allow/Deny all work.
-5. **Check the work phone's rules first.** A managed work phone may not allow installing a certificate authority, and Kezzler may have a view on work data on a personal network. The fallback for the first point is accepting the browser's certificate warning once per phone.
+5. **Check the work phone's rules first.** A managed work phone may not allow installing a certificate authority, and your employer may have a view on work data on a personal network. The fallback for the first point is accepting the browser's certificate warning once per phone.
 
 ![The phone pairs once with a QR code from the laptop, then talks HTTPS to Clearsky on the home network](lan-access.svg)
 
@@ -29,20 +29,20 @@ Things that stay as they are:
 ### Listening on the network
 
 - With Phone access on, a second server listens on `0.0.0.0:7778` with HTTPS only. The loopback server on 7777 stays plain HTTP and doesn't change.
-- The network server accepts only these `Host` headers: the laptop's hostname (`thinkaboutit.local`), its current LAN addresses, and nothing else. This keeps DNS rebinding blocked, as today.
+- The network server accepts only these `Host` headers: the laptop's hostname (`mylaptop.local`), its current LAN addresses, and nothing else. This keeps DNS rebinding blocked, as today.
 - It doesn't answer at all to addresses outside private ranges (`10/8`, `172.16/12`, `192.168/16`, `fe80::/10`). That's a second guard if the laptop ends up on a network with public addresses.
 - Turning Phone access off closes the port right away and ends every phone session.
 
 ### The certificate
 
 - On first use, Clearsky creates a local certificate authority with `openssl`. Its key stays in `~/.config/clearsky/tls/`, mode 600.
-- It then signs a server certificate for `thinkaboutit.local` and the current LAN addresses, valid for a year, and renews it when the address changes.
+- It then signs a server certificate for `mylaptop.local` and the current LAN addresses, valid for a year, and renews it when the address changes.
 - Settings shows the authority as a QR code and a download link, to install on the phone once.
 - The authority can only be used for Clearsky's own names. It is never added to the laptop's trust store.
 
 ### Pairing
 
-1. On the laptop, Settings → Phone access → **Pair a phone** shows a QR code holding `https://thinkaboutit.local:7778/pair#<code>`. The code is 128 random bits, works once, and expires after 5 minutes.
+1. On the laptop, Settings → Phone access → **Pair a phone** shows a QR code holding `https://mylaptop.local:7778/pair#<code>`. The code is 128 random bits, works once, and expires after 5 minutes.
 2. The phone opens the link. Clearsky checks the code and sets a session cookie: `HttpOnly`, `Secure`, `SameSite=Strict`, 30 days.
 3. The cookie holds a random token. The server stores only its hash, with the device name the phone reports and when it was last used.
 4. Settings lists paired phones with their last use, and **Remove** ends that phone's session at once.

@@ -15,8 +15,8 @@ try { ({ chromium } = createRequire(import.meta.url)('playwright')); } catch { /
 
 const ago = (h) => new Date(Date.now() - h * 36e5).toISOString();
 const pr = (o) => ({
-  number: 1, title: 'SSP-5: Fix capture', url: 'https://github.com/acme/api/pull/1', state: 'OPEN', isDraft: false, createdAt: ago(48), updatedAt: ago(1),
-  reviewDecision: null, mergeable: 'MERGEABLE', headRefName: 'feature/SSP-5', additions: 3, deletions: 1, changedFiles: 1,
+  number: 1, title: 'ABC-5: Fix capture', url: 'https://github.com/acme/api/pull/1', state: 'OPEN', isDraft: false, createdAt: ago(48), updatedAt: ago(1),
+  reviewDecision: null, mergeable: 'MERGEABLE', headRefName: 'feature/ABC-5', additions: 3, deletions: 1, changedFiles: 1,
   repository: { nameWithOwner: 'acme/api' }, author: { login: 'me' }, reviews: { nodes: [] }, reviewRequests: { nodes: [] }, reviewThreads: { nodes: [] },
   commits: { nodes: [{ commit: { committedDate: ago(2), statusCheckRollup: { state: 'SUCCESS' } } }] }, closingIssuesReferences: { nodes: [] }, timelineItems: { nodes: [] }, ...o,
 });
@@ -57,11 +57,11 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
   assert.match(await page.locator("#list").innerText(), /no reviewer yet/i);
 
   // Your PR and the ticket in its branch link to each other, and the link opens the other here.
-  assert.match(await page.locator('#list li.r', { hasText: 'SSP-5' }).first().locator('.xref').innerText(), /OPS-1/);
+  assert.match(await page.locator('#list li.r', { hasText: 'ABC-5' }).first().locator('.xref').innerText(), /OPS-1/);
   const ticketLink = page.locator('#list li.r', { hasText: 'Rotate certs' }).locator('.xref');
   assert.match(await ticketLink.innerText(), /api #1 · no reviewer yet/i);
   await ticketLink.click();
-  await page.waitForSelector('#v-item:not([hidden]) h2:text("SSP-5: Fix capture")');
+  await page.waitForSelector('#v-item:not([hidden]) h2:text("ABC-5: Fix capture")');
   assert.match(await page.locator('#item .stands').innerText(), /OPS-1/);
   // Where it stands: the ticket's status, the PR's, and that nobody reviews it yet.
   assert.match(await page.locator('#item .stands').innerText(), /TICKET\s+OPS-1\s+In Progress[\s\S]*PR\s+api #1\s+No reviewer yet/i);
@@ -71,8 +71,8 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
 
   // The next step: your PR without reviewers asks for one, in the row and on its page, and the
   // button opens the reviewer picker there.
-  assert.match(await page.locator('#list li.r', { hasText: 'SSP-5' }).first().locator('.next').innerText(), /Request review/);
-  await page.locator('#list li.r', { hasText: 'SSP-5' }).first().locator('.next').click();
+  assert.match(await page.locator('#list li.r', { hasText: 'ABC-5' }).first().locator('.next').innerText(), /Request review/);
+  await page.locator('#list li.r', { hasText: 'ABC-5' }).first().locator('.next').click();
   await page.waitForSelector('#v-item:not([hidden]) .next-row');
   assert.match(await page.locator('#item .next-row').innerText(), /Request review/);
   await page.waitForSelector('.rv-pick li[data-q]');
@@ -106,7 +106,7 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
   // Your PRs and Tickets as tables, with the branch.
   await page.goto(`${base}/#prs`);
   await page.waitForSelector('#list .wt-head');
-  assert.match(await page.locator('#list li.r.tbl', { hasText: 'SSP-5' }).innerText(), /feature\/ops-1-certs[\s\S]*no reviewer yet/i);
+  assert.match(await page.locator('#list li.r.tbl', { hasText: 'ABC-5' }).innerText(), /feature\/ops-1-certs[\s\S]*no reviewer yet/i);
   if (process.env.SHOT) await page.screenshot({ path: `${process.env.SHOT}/prs.png` });
   await page.goto(`${base}/#tickets`);
   await page.waitForSelector('#list li.r.tbl');
@@ -122,7 +122,7 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
   await page.waitForSelector('#list li.r');
 
   // An item page, and the review picker on it.
-  await page.locator('#list li.r', { hasText: 'SSP-5' }).first().click();
+  await page.locator('#list li.r', { hasText: 'ABC-5' }).first().click();
   await page.waitForSelector('#v-item:not([hidden]) [data-rv-open]');
   await page.click('[data-rv-open]');
   await page.waitForSelector('.rv-pick li[data-q]');

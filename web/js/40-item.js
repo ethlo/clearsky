@@ -378,7 +378,7 @@ function renderToday() {
 
 let standupData = null;
 
-// Turn "SSP-1234" and "org/repo#12" in plain text into links with hover cards.
+// Turn "ABC-1234" and "org/repo#12" in plain text into links with hover cards.
 function linkify(text, jiraBase) {
   return esc(text).replace(/\b([\w.-]+\/[\w.-]+)#(\d+)\b|\b([A-Z][A-Z0-9_]+-\d+)\b/g, (m, repo, num, key) => {
     if (repo) return `<a class="ref" href="https://github.com/${repo}/pull/${num}" target="_blank" rel="noopener" data-pr="${repo}#${num}">${m}</a>`;
