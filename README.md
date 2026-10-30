@@ -18,12 +18,15 @@ It is a single Node script with no dependencies. It runs on your machine, talks 
 
 Requires Node 22+ and the [Atlassian CLI](https://developer.atlassian.com/cloud/acli/guides/install-acli/) (`acli`), logged in with `acli jira auth login --web`.
 
+One command installs or updates everything:
+
 ```sh
-git clone <this repo> && cd clearsky
-npm link                       # puts `clearsky` on your PATH
-mkdir -p ~/.config/clearsky
-cp .env.example ~/.config/clearsky/.env   # then fill it in
+curl -fsSL https://raw.githubusercontent.com/ethlo/clearsky/main/scripts/install.sh | sh
+# or, from a checkout:
+sh scripts/install.sh            # add --service to start it at login (systemd user service)
 ```
+
+It puts `clearsky` and Anthropic's sandbox runtime (`srt`, for Settings → Copilot → Sandbox) on your PATH with npm, uses nvm's Node 22 when that's how Node is installed, and makes `~/.config/clearsky` (readable only by you). It never uses sudo: system packages the sandbox needs (bubblewrap, socat, ripgrep) and missing CLIs (gh, acli, copilot) are listed with the command to install them. `--no-sandbox` leaves srt out. Then open http://127.0.0.1:7777/settings.
 
 Tokens:
 
