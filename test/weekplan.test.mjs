@@ -96,6 +96,10 @@ test('school events: each file read once, kept privately, sent twice shown once,
   assert.equal(reads, 2); // from the file
   const failing = await schoolEvents([{ ...msgs[0], key: 'flyt:group:1:c:m3' }], { readFile: async () => { throw new Error('gone'); }, file, now });
   assert.deepEqual(failing, []);
+  // A short list (the portal having a bad minute) doesn't forget the plans read before.
+  assert.equal(Object.keys(JSON.parse(readFileSync(file, 'utf8'))).length, 3);
+  assert.equal((await schoolEvents([], { readFile, file, now })).length, 0);
+  assert.equal(Object.keys(JSON.parse(readFileSync(file, 'utf8'))).length, 3);
   assert.ok(existsSync(file));
 });
 
