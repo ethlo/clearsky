@@ -806,6 +806,8 @@ $('#cp-close').onclick = async () => {
   if (chat.stop) chat.stop();
   await post('/api/copilot/close', { chat: id }).catch(() => {});
   recentChats = recentChats.filter((r) => r.id !== id); saveRecent();
+  cpLinks.live = (cpLinks.live || []).filter((x) => x.id !== id);
   newChat();
   location.hash = '';
+  setTimeout(loadLinks, 1500); // once its Copilot has exited
 };

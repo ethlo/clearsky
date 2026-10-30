@@ -925,6 +925,13 @@ async function withAgent(bin, fn) {
 // Sessions open in a running Copilot (terminal, editor): the process keeps an
 // inuse.<pid>.hold file in the session's folder while it has the session open.
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
+// A sandboxed Copilot writes its pid as seen inside the sandbox (17, say), which out here is some
+// other process, often a kernel thread that never ends. So on Linux the pid must be a Copilot.
+function isCopilot(pid) {
+  if (!alive(pid)) return false;
+  if (process.platform !== 'linux') return true;
+  try { return /copilot/i.test(readFileSync(`/proc/${pid}/cmdline`, 'utf8')); } catch { return false; }
+}
 function openCopilotSessions() {
   const dir = join(copilotHome(), 'session-state');
   let state = {};
@@ -935,7 +942,7 @@ function openCopilotSessions() {
   for (const id of ids) {
     let files = [];
     try { files = readdirSync(join(dir, id)); } catch {}
-    const pids = files.map((f) => Number(f.match(/^inuse\.(\d+)\.hold$/)?.[1])).filter((n) => n && alive(n));
+    const pids = files.map((f) => Number(f.match(/^inuse\.(\d+)\.hold$/)?.[1])).filter((n) => n && isCopilot(n));
     if (pids.length) open[id] = { working: !!state[id]?.working && Date.now() - (Date.parse(state[id]?.refreshedAt) || 0) < 15 * 6e4 };
   }
   return open;

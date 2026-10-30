@@ -15,7 +15,7 @@ function openItem(it) {
 function whyLine(it) {
   const d = it.data || {};
   if (it.kind === 'review') return `${esc(d.author)} asked for your ${d.rerequested ? 're-review' : 'review'} ${esc(ago(d.requestedAt))}${d.viaTeam ? ' (via your team)' : ''}.`;
-  if (it.kind === 'pr') return `${esc(d.status.label)}.${prMeta(d) ? ` ${esc(prMeta(d))[0].toUpperCase()}${esc(prMeta(d)).slice(1)}.` : ''} Updated ${esc(ago(d.updatedAt))}.`;
+  if (it.kind === 'pr') return `${esc(d.status.label)}${d.status.detail ? `: ${esc(d.status.detail)}` : ''}.${prMeta(d) ? ` ${esc(prMeta(d))[0].toUpperCase()}${esc(prMeta(d)).slice(1)}.` : ''} Updated ${esc(ago(d.updatedAt))}.`;
   if (it.kind === 'mention') return it.src === 'Jira' ? `${esc(d.people.join(', '))} mentioned you ${esc(ago(d.at))}${d.count > 1 ? `, ${d.count} times` : ''}.${d.status ? ` Ticket is ${esc(d.status)}.` : ''}`
     : it.src === 'Slack' ? `${esc(d.by)} mentioned you in ${esc(d.channel)} ${esc(ago(d.at))}.` : `You were mentioned. Updated ${esc(ago(d.updatedAt))}.`;
   if (it.kind === 'ticket') return `Assigned to you · ${esc([d.status, d.type, d.priority && `${d.priority} priority`, d.due && `due ${d.due}`].filter(Boolean).join(' · '))}.`;
@@ -50,14 +50,14 @@ function standsHtml(it, rel) {
     const chips = [...(p.state === 'open' ? p.pendingReviewers || [] : []).map((n) => [n, 'asked', 'gray']), ...(p.changesRequested || []).map((n) => [n, 'changes requested', 'red']),
       ...(p.approvals || []).map((n) => [n, 'approved', 'green'])];
     return chips.length ? chips.map(([n, st, tone]) => `<span class="badge b-${tone}">${esc(n.replace(/^team:/, ''))} · ${st}</span>`).join('')
-      : p.state === 'open' && p.status?.label !== 'No reviewer yet' ? '<span class="badge b-amber">No reviewer assigned</span>' : '';
+      : p.state === 'open' && !['No reviewer yet', 'In review rounds'].includes(p.status?.label) ? '<span class="badge b-amber">No reviewer assigned</span>' : '';
   };
   const rows = [
     ...[...tickets].map(([key, t]) => `<div class="stand"><span class="lbl-next">Ticket</span><a href="#" data-open-key="issue:${esc(key)}">${esc(key)}</a>
       ${t?.status ? `<span class="badge b-${ticketTone(t)}">${esc(t.status)}</span>` : '<span class="muted">…</span>'}
       ${t ? `<span class="muted">${t.mine ? 'assigned to you' : t.assignee ? `assigned to ${esc(t.assignee)}` : t.status ? 'unassigned' : ''}</span>` : ''}</div>`),
     ...[...prs.values()].map((p) => `<div class="stand"><span class="lbl-next">PR</span><a href="#" data-open-key="pr:${esc(p.repo)}#${p.number}">${esc(prName(p))}</a>
-      <span class="badge b-${PR_TONE[p.status?.tone] || 'gray'}">${esc(p.status?.label || p.state)}</span>${p.author && !p.mine ? `<span class="muted">by ${esc(p.author)}</span>` : ''}
+      <span class="badge b-${PR_TONE[p.status?.tone] || 'gray'}">${esc(p.status?.label || p.state)}${p.status?.detail ? ` · ${esc(p.status.detail)}` : ''}</span>${p.author && !p.mine ? `<span class="muted">by ${esc(p.author)}</span>` : ''}
       ${people(p)}${p.mine && p.state === 'open' && it.kind !== 'pr' ? `<button class="icon-btn small" data-rv-open="${esc(p.repo)}#${p.number}">${icon('users', 14)} Request review</button>` : ''}</div>`),
   ];
   if (it.issue && !prs.size && ticketPrs.get(it.issue)?.prs) rows.push('<div class="stand"><span class="lbl-next">PR</span><span class="muted">None yet with this key in its title or branch</span></div>');

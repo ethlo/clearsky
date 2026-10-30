@@ -23,6 +23,8 @@ test('modules turn their data into work items with the next step', () => {
   assert.deepEqual(it.links, ['issue:ABC-5', 'issue:OPS-1', 'gh:acme/api#9']);
   assert.deepEqual(it.next, { label: 'Request review', run: 'review' });
   assert.equal(prNext({ ...pr, status: { label: '2 unresolved threads' } }).skill, 'continue');
+  assert.equal(prNext({ ...pr, status: { label: 'In review rounds', owner: 'me' } }).label, 'Address Copilot\'s comments');
+  assert.ok(prNext({ ...pr, status: { label: 'In review rounds', owner: 'others' } }).wait);
   const [t, w] = jiraItems({ assigned: [{ key: 'ABC-5', summary: 'x', url: 'j', status: 'In Progress', statusCategory: 'indeterminate' },
     { key: 'ABC-6', summary: 'y', url: 'k', status: 'In Review', statusCategory: 'indeterminate', waiting: true }] });
   assert.equal(t.next.run, 'start');

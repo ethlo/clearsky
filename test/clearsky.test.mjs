@@ -202,7 +202,12 @@ test('PR status: who has the ball', async () => {
     reviewRequests: { nodes: [...asked.reviewRequests.nodes, { requestedReviewer: bot }] },
     reviewThreads: { nodes: [{ isResolved: false, comments: { nodes: [{ author: bot }] } }] },
     commits: { nodes: [{ commit: { committedDate: hoursAgo(0.2) } }] } }), 'Waiting for review');
-  assert.equal(label({ reviewRequests: { nodes: [{ requestedReviewer: bot }] } }), 'No reviewer yet', 'a bot is not a reviewer');
+  // Before any person is asked: rounds with Copilot, then Request review.
+  const status = (o) => myPrStatus(pr(o), 'me');
+  assert.deepEqual(status({ reviewRequests: { nodes: [{ requestedReviewer: bot }] } }), { label: 'In review rounds', detail: 'Copilot reviewing', owner: 'others', tone: 'wait' });
+  const botThread = (extra = {}) => ({ isResolved: false, ...extra, comments: { nodes: [{ author: bot }] } });
+  assert.deepEqual(status({ reviewThreads: { nodes: [botThread(), botThread()] } }), { label: 'In review rounds', detail: '2 Copilot comments', owner: 'me', tone: 'warn' });
+  assert.equal(label({ reviewThreads: { nodes: [botThread({ isResolved: true })] } }), 'No reviewer yet', 'rounds done');
   // Threads you answered last, or that are outdated, aren't yours.
   const thread = (login, extra = {}) => ({ isResolved: false, ...extra, comments: { nodes: [{ author: { __typename: 'User', login } }] } });
   assert.equal(label({ ...asked, reviewThreads: { nodes: [thread('me'), thread('anna', { isOutdated: true })] } }), 'Waiting for review');
