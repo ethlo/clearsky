@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { githubWrite, githubFilter } from '../lib/github-gate.mjs';
+import { githubWrite, githubFilter, graphqlNodeIds } from '../lib/github-gate.mjs';
 
 const req = (method, url, body) => new Request(url, { method, body: body == null ? undefined : JSON.stringify(body) });
 
@@ -67,4 +67,13 @@ test('"Allow on this repo for 15 min" covers that repo\'s changes and review wor
   t += 16 * 6e4;
   await f(req('POST', 'https://api.github.com/repos/acme/api/pulls/7/comments/3/replies', {}));
   assert.equal(asked.length, 5, 'asks again after 15 minutes');
+});
+
+test('a GraphQL change names its nodes, so Clearsky can find the repo (and the chat) it is for', async () => {
+  assert.deepEqual(graphqlNodeIds({ query: 'mutation($t: ID!) { resolveReviewThread(input: {threadId: $t}) { thread { id } } }', variables: { t: 'PRRT_kwDOabc123' } }), ['PRRT_kwDOabc123']);
+  assert.deepEqual(graphqlNodeIds({ query: 'mutation { createPullRequest(input: {repositoryId: "R_kgDOxyz789", title: "PR_ is not an id"}) { x } }' }), ['R_kgDOxyz789']);
+  const seen = [];
+  await githubFilter(async (what, opts) => { seen.push(opts.nodes); return true; })(
+    req('POST', 'https://api.github.com/graphql', { query: 'mutation { addComment(input: {subjectId: "PR_kwDOabc999", body: "x"}) { x } }' }));
+  assert.deepEqual(seen, [['PR_kwDOabc999']]);
 });

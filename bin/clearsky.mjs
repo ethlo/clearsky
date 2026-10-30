@@ -873,9 +873,10 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
 // which chat sent it, so every sandboxed chat that's working asks; the first answer counts.
 // When the only working chat is running a step you just allowed (say `gh pr create`), its
 // GitHub changes are part of what you allowed and go through. With two chats working, it asks.
-function githubAsk(what, { repo } = {}) {
-  const chats = askingChats(repo || (what.match(/^git push to (\S+)/) || [])[1]);
-  if (!chats.length) return Promise.resolve(false);
+async function githubAsk(what, { repo, nodes = [] } = {}) {
+  const chats = askingChats(repo || (what.match(/^git push to (\S+)/) || [])[1] || await nodesRepo(nodes));
+  if (!chats.length) return false;
+  const shared = chats.length > 1;
   if (chats.length === 1 && chats[0].approved.size) return Promise.resolve(true);
   return new Promise((done) => {
     const id = randomBytes(6).toString('hex');
@@ -884,12 +885,13 @@ function githubAsk(what, { repo } = {}) {
         ...(repo ? [{ id: 'repo', name: `Allow changes on ${repo} for 15 min`, kind: 'allow_always' }] : []),
         { id: 'deny', name: 'Deny', kind: 'reject_once' }] };
     const finish = (ok) => {
-      for (const c of chats) { c.waiting.delete(id); c.pending.delete(id); c.emit({ type: 'permission-done', id }); }
+      for (const c of chats) { c.waiting.delete(id); c.pending.delete(id); c.shared.delete(id); c.emit({ type: 'permission-done', id }); }
       done(ok);
     };
     for (const c of chats) {
       if (c.mode === 'full') return finish(true); // Full: you allowed everything
       c.waiting.set(id, (answer) => finish(answer.optionId === 'repo' ? 'repo' : answer.optionId === 'allow'));
+      if (shared) c.shared.add(id); // may not be this chat's: it doesn't mark the chat as needing you
       c.pending.set(id, ev);
       c.emit(ev);
     }
@@ -905,6 +907,19 @@ function askingChats(repo) {
   narrow((c) => c.running.size);
   if (repo) narrow((c) => chatRepo(c) === repo.toLowerCase());
   return chats;
+}
+// The repo of a GraphQL change, from the ids it names (looked up as you, read only).
+async function nodesRepo(ids) {
+  if (!ids.length) return null;
+  try {
+    config.github.token ||= await ghCliToken();
+    const d = await gql(`query($ids: [ID!]!) { nodes(ids: $ids) { __typename ... on Repository { nameWithOwner }
+      ... on PullRequest { repository { nameWithOwner } } ... on Issue { repository { nameWithOwner } }
+      ... on PullRequestReview { repository { nameWithOwner } } ... on PullRequestReviewComment { repository { nameWithOwner } }
+      ... on PullRequestReviewThread { pullRequest { repository { nameWithOwner } } } ... on IssueComment { repository { nameWithOwner } } } }`, { ids });
+    const n = (d.nodes || []).find(Boolean);
+    return (n?.nameWithOwner || n?.repository?.nameWithOwner || n?.pullRequest?.repository?.nameWithOwner || '').toLowerCase() || null;
+  } catch { return null; }
 }
 function chatRepo(c) {
   if (c.repo === undefined) {
@@ -1038,11 +1053,13 @@ async function copilotSessions(bin, force) {
 //   needs-you: it asked to use a tool and waits for your answer (here);
 //   waiting: open in a terminal or here, done with its turn, waiting for your next message;
 //   closed: not open anywhere.
+// Waiting for your answer on something that is this chat's (not a GitHub change that may be another's).
+const needsYou = (c) => !!c && [...c.waiting.keys()].some((id) => !c.shared?.has(id));
 function withStatus(list) {
   const open = openCopilotSessions();
   return list.map((x) => {
     const c = acpChats.get(x.id);
-    const status = c?.waiting.size ? 'needs-you' : c?.busy || open[x.id]?.working ? 'working'
+    const status = needsYou(c) ? 'needs-you' : c?.busy || open[x.id]?.working ? 'working'
       : c || open[x.id] ? 'waiting' : 'closed';
     return { ...x, open: !!open[x.id] && !c, working: status === 'working', here: !!c, status };
   });
@@ -1138,7 +1155,7 @@ async function copilotLinks(bin) {
   const titles = localState.sessionTitles(stateFile), names = localState.sessionNames(stateFile);
   for (const [id, c] of acpChats) if (!sessions.some((x) => x.id === id)) {
     live.push({ id, title: names[id] || titles[id] || 'New chat', updatedAt: new Date(c.lastUsed).toISOString(), cwd: c.cwd || null,
-      status: c.waiting.size ? 'needs-you' : c.busy ? 'working' : 'waiting' });
+      status: needsYou(c) ? 'needs-you' : c.busy ? 'working' : 'waiting' });
   }
   return { links, live, actions };
 }
@@ -1273,7 +1290,7 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin })
   if (c && (c.sig !== sig || c.agent.closed)) { resumeId = c.agent.sessionId; c.agent.close(); acpChats.delete(chat); c = null; }
   if (!c) {
     const agent = await startAgent(bin, args, cwd, { sandbox });
-    c = { agent, sig, cwd, waiting: new Map(), pending: new Map(), approved: new Set(), running: new Set(), emit: () => {}, lastUsed: Date.now() };
+    c = { agent, sig, cwd, waiting: new Map(), pending: new Map(), approved: new Set(), running: new Set(), shared: new Set(), emit: () => {}, lastUsed: Date.now() };
     const id = await agent.start(cwd, resumeId);
     acpChats.set(id, c);
     // A new chat gets Copilot's own session id; the panel keeps using that from now on.
@@ -1465,7 +1482,7 @@ const chatsBusy = () => [...acpChats.values()].filter((c) => c.busy || c.waiting
 function busyChats() {
   const names = localState.sessionNames(stateFile), titles = new Map((sessionsCache?.data || []).map((x) => [x.id, x.title]));
   return [...acpChats.entries()].filter(([, c]) => c.busy || c.waiting.size)
-    .map(([id, c]) => ({ id, title: names[id] || titles.get(id) || 'Copilot chat', status: c.waiting.size ? 'needs-you' : 'working' }));
+    .map(([id, c]) => ({ id, title: names[id] || titles.get(id) || 'Copilot chat', status: needsYou(c) ? 'needs-you' : 'working' }));
 }
 // The page: web/index.html with web/css/app.css and web/js/*.js (in name order, one shared
 // scope) put inline, so it stays one request and works offline.
