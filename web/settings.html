@@ -61,6 +61,16 @@
   .msg { font-size: 13px; }
   .code { font: 600 20px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; }
   a { color: var(--accent); }
+  /* One card at a time, picked from the tabs (kept in the address: settings#copilot). */
+  nav.tabs { display: flex; gap: 4px; padding: 4px 24px 0; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+  nav.tabs a { display: flex; gap: 6px; align-items: center; padding: 8px 12px; color: var(--muted); text-decoration: none; white-space: nowrap;
+    border-bottom: 2px solid transparent; margin-bottom: -1px; font-weight: 600; }
+  nav.tabs a:hover { color: var(--text); }
+  nav.tabs a.on { color: var(--text); border-bottom-color: var(--accent); }
+  nav.tabs .state { font-size: 11px; }
+  main.tabbed { display: block; max-width: 820px; padding-top: 16px; }
+  main.tabbed > section:not(.on) { display: none; }
+  @media (max-width: 520px) { nav.tabs { padding: 4px 12px 0; } }
 </style>
 </head>
 <body>
@@ -69,6 +79,7 @@
   <a href="/">← Back to dashboard</a>
   <span class="meta" id="file"></span>
 </header>
+<nav class="tabs" id="tabs" aria-label="Settings"></nav>
 <main>
   <section>
     <h2>GitHub <span class="state" id="gh-state"></span></h2>
@@ -201,6 +212,26 @@
 </main>
 
 <script>
+// Tabs: one per card, named by its heading (with its connection state), in the address.
+(() => {
+  const main = document.querySelector('main'), nav = document.getElementById('tabs');
+  const slug = (sec) => sec.id || (sec.id = sec.querySelector('h2').firstChild.textContent.trim().toLowerCase().replace(/\W+/g, '-'));
+  const cards = () => [...main.children].filter((x) => x.tagName === 'SECTION' && !x.hidden);
+  main.classList.add('tabbed');
+  function draw() {
+    const list = cards(), want = location.hash.slice(1);
+    const cur = list.find((x) => slug(x) === want) || list[0];
+    list.forEach((x) => x.classList.toggle('on', x === cur));
+    const html = list.map((x) => {
+      const st = x.querySelector('h2 .state');
+      return `<a href="#${slug(x)}"${x === cur ? ' class="on" aria-current="page"' : ''}>${x.querySelector('h2').firstChild.textContent.trim()}${st && st.textContent ? ` ${st.outerHTML.replace(/ id="[^"]*"/, '')}` : ''}</a>`;
+    }).join('');
+    if (nav.innerHTML !== html) nav.innerHTML = html;
+  }
+  addEventListener('hashchange', () => { draw(); scrollTo(0, 0); });
+  new MutationObserver(draw).observe(main, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['hidden', 'class'] });
+  draw();
+})();
 const CSRF = '__CSRF__';
 const SECRET = new Set(['GITHUB_TOKEN', 'GOOGLE_CALENDAR_ICS', 'SLACK_TOKEN']);
 const $ = (s) => document.querySelector(s);
