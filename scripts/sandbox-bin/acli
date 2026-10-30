@@ -1,16 +1,4 @@
 #!/usr/bin/env node
-// acli for Copilot in Clearsky's sandbox: runs the real acli through Clearsky (lib/acli-broker.mjs).
-const { connect } = require('node:net');
-const path = process.env.CLEARSKY_ACLI_SOCKET;
-if (!path) { process.stderr.write('acli: no Clearsky to run it (CLEARSKY_ACLI_SOCKET is not set)\n'); process.exit(127); }
-const sock = connect(path, () => sock.write(`${JSON.stringify({ argv: process.argv.slice(2) })}\n`));
-let buf = '';
-sock.on('data', (d) => { buf += d; });
-sock.on('end', () => {
-  let r;
-  try { r = JSON.parse(buf); } catch { r = { code: 1, stderr: 'acli: no answer from Clearsky\n' }; }
-  if (r.stdout) process.stdout.write(r.stdout);
-  if (r.stderr) process.stderr.write(r.stderr);
-  process.exitCode = r.code;
-});
-sock.on('error', (e) => { process.stderr.write(`acli: Clearsky can't be reached (${e.message})\n`); process.exitCode = 127; });
+// acli in Clearsky's sandbox: acli keeps its Jira login in the keyring, which the sandbox
+// hides, so Clearsky runs it (lib/broker.mjs): reading at once, changes after you OK them.
+require('./shim.js').viaClearsky('acli', process.argv.slice(2));

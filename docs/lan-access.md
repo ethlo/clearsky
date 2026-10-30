@@ -17,7 +17,7 @@ Things that stay as they are:
 2. **HTTPS with Clearsky's own certificate.** Clearsky makes a small certificate authority once, signs a certificate for the laptop's name and address, and shows the authority as a QR code to install on the phone. Without HTTPS the phone can't keep a secure login, use the microphone button or show notifications.
 3. **Pair the phone instead of a password.** Settings on the laptop shows a pairing QR code that works once, for 5 minutes. Scanning it on the phone logs that phone in for 30 days. Settings lists paired phones and can remove one. Nobody on the network can guess their way in, because there's no password to guess.
 4. **Less power from the phone.**
-   - Copilot runs in **Ask** mode only, so every step needs your OK on the phone. Full and Assisted are refused.
+   - Copilot runs in **Ask** mode only, so every step needs your OK on the phone. Full and Sandboxed are refused.
    - Settings, logins and source configuration can't be changed from the phone.
    - Reading, Done, Snooze, Mark read, and answering Allow/Deny all work.
 5. **Check the work phone's rules first.** A managed work phone may not allow installing a certificate authority, and your employer may have a view on work data on a personal network. The fallback for the first point is accepting the browser's certificate warning once per phone.
@@ -59,7 +59,7 @@ A passkey would be nicer than pairing, but a passkey needs a domain name the pho
 |---|---|---|
 | Inbox, item pages, calendar, stand-up, school | yes | yes |
 | Done, Snooze, Mark read, Request review | yes | yes |
-| Copilot chat | any mode | Ask only; Full and Assisted refused on the server |
+| Copilot chat | any mode | Ask only; Full and Sandboxed refused on the server |
 | Allow/Deny on a Copilot step | yes | yes |
 | Settings, logins, sources | yes | no, read-only |
 | Attachments (school files) | yes | yes, same sandbox headers |

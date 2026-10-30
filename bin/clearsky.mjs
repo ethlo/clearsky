@@ -21,10 +21,8 @@ import * as copilot from '../lib/copilot.mjs';
 import { AcpAgent, chatEvent } from '../lib/acp.mjs';
 import { sessionEvents, sessionUsage } from '../lib/copilot-events.mjs';
 import { branchesFor } from '../lib/branches.mjs';
-import { sandboxed, srtSettings, sandboxReadable, DEFAULT_DOMAINS, READ_DEFAULT, parseDomains } from '../lib/sandbox.mjs';
-import { isReadOnly, editInside } from '../lib/readonly.mjs';
-import { assistedReason, outwardReason } from '../lib/assisted.mjs';
-import { serveBroker, brokerSocket, approvals } from '../lib/acli-broker.mjs';
+import { sandboxed, DEFAULT_DOMAINS, READ_DEFAULT, parseDomains } from '../lib/sandbox.mjs';
+import { serveBroker, brokerSocket } from '../lib/broker.mjs';
 import { mavenSandbox } from '../lib/maven.mjs';
 import { attentionItems, diffAttention, desktopNotify, DbusNotifier } from '../lib/notify.mjs';
 import { loadSources, makeContext, hook, asList } from '../lib/sources.mjs';
@@ -811,8 +809,7 @@ const SANDBOX_GIT = [['url.https://github.com/.insteadOf', 'git@github.com:'], [
 // What the sandbox may read besides your folders: Settings → Copilot → Also readable, and
 // Clearsky's own folder (its acli for the sandbox).
 const sandboxOpts = (cwd) => ({ cwd, folders: copilotFolders(), home: homedir(), read: [...list(process.env.COPILOT_READ), join(here, '..')] });
-let acliBroker = null;
-const acliApproved = approvals();
+let broker = null;
 function ghToken() {
   try { return execFileSync('gh', ['auth', 'token'], { timeout: 10_000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null; } catch { return null; }
 }
@@ -830,22 +827,49 @@ function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBOX === 
   const n = Number(env.GIT_CONFIG_COUNT) || 0;
   SANDBOX_GIT.forEach(([k, v], i) => { env[`GIT_CONFIG_KEY_${n + i}`] = k; env[`GIT_CONFIG_VALUE_${n + i}`] = v; });
   env.GIT_CONFIG_COUNT = String(n + SANDBOX_GIT.length);
-  // The keyring is out of reach in the sandbox (see lib/sandbox.mjs), so Copilot, gh and git get
-  // your GitHub CLI login from here, for this process only. Nothing else in the keyring goes in.
-  const token = ghToken();
+  // The keyring is out of reach in the sandbox (see lib/sandbox.mjs), so Copilot, gh and git sign
+  // in with a token from here: the read-only one from Settings → Copilot, so nothing in the
+  // sandbox can push or change GitHub, else (until you add one) your gh login.
+  const limited = process.env.COPILOT_SANDBOX_TOKEN || null;
+  const token = limited || ghToken();
   if (token) Object.assign(env, { COPILOT_GITHUB_TOKEN: token, GH_TOKEN: token });
   if (maven) {
     Object.assign(env, maven.env); // srt shows the sandbox only a placeholder for these
     env.MAVEN_ARGS = `${env.MAVEN_ARGS ? `${env.MAVEN_ARGS} ` : ''}--settings ${maven.settings}`;
     env.JAVA_TOOL_OPTIONS = `${env.JAVA_TOOL_OPTIONS ? `${env.JAVA_TOOL_OPTIONS} ` : ''}${maven.javaOptions}`;
   }
-  // acli's login is in the keyring too: it runs out here instead (lib/acli-broker.mjs).
+  // The doors out (lib/broker.mjs): git push, gh changes, acli and `outside` reach Clearsky,
+  // which asks you in this chat. The key tells Clearsky which chat a request comes from.
+  const key = randomBytes(16).toString('hex');
   if (process.platform === 'linux') {
-    acliBroker ||= serveBroker({ bin: config.jira.acli, allow: assistedAllow, approved: acliApproved, log: console.log });
-    env.CLEARSKY_ACLI_SOCKET = brokerSocket();
+    broker ||= serveBroker({ bins: { acli: config.jira.acli }, allow: assistedAllow, ask: brokerAsk, where: brokerWhere, log: console.log });
+    Object.assign(env, { CLEARSKY_BROKER_SOCKET: brokerSocket(), CLEARSKY_BROKER_KEY: key });
     env.PATH = `${join(here, '..', 'scripts', 'sandbox-bin')}${delimiter}${env.PATH}`;
   }
-  return Object.assign(new AcpAgent(s.bin, s.args, { env }), { sandboxed: true, hosts: [...new Set([...domains, ...(maven?.hosts || [])])] });
+  return Object.assign(new AcpAgent(s.bin, s.args, { env }), { sandboxed: true, brokerKey: key, github: limited ? 'read-only token' : 'your full gh login', hosts: [...new Set([...domains, ...(maven?.hosts || [])])] });
+}
+
+// The chat a sandbox door request comes from, by the key its Copilot was given.
+const chatByKey = (key) => typeof key === 'string' && key ? [...acpChats.values()].find((c) => c.agent.brokerKey === key) : null;
+function brokerWhere(key) {
+  const c = chatByKey(key);
+  return c && [c.cwd, ...copilotFolders().map((d) => d.replace(/^~(?=\/|$)/, homedir()))];
+}
+// Ask in the chat, as for any step Copilot wants to take, and wait for your answer.
+function brokerAsk({ key, tool, argv, cwd }) {
+  const c = chatByKey(key);
+  if (!c) return Promise.resolve(false);
+  if (c.mode === 'full') return Promise.resolve(true); // Full: you allowed everything
+  const line = [tool, ...argv].map((a) => (/^[\w@%+=:,./-]+$/.test(a) ? a : `'${a.replace(/'/g, `'\\''`)}'`)).join(' ');
+  const title = { git: 'Push from your machine', gh: 'Change GitHub as you', acli: 'Change Jira as you', outside: 'Run on your machine, outside the sandbox' }[tool];
+  return new Promise((done) => {
+    const id = randomBytes(6).toString('hex');
+    const ev = { type: 'permission', id, title, kind: 'execute', detail: `${line}\n(in ${cwd.replace(homedir(), '~')})`,
+      options: [{ id: 'allow', name: 'Allow', kind: 'allow_once' }, { id: 'deny', name: 'Deny', kind: 'reject_once' }] };
+    c.waiting.set(id, (answer) => { c.pending.delete(id); done(answer.optionId === 'allow'); });
+    c.pending.set(id, ev);
+    c.emit(ev);
+  });
 }
 
 // A short-lived Copilot process, for listing or reading sessions.
@@ -888,10 +912,14 @@ function foldersHint() {
     + 'Find repos and files there or in the current folder; don\'t list or search the rest of my home. '
     + 'If you need something outside these folders, say what and why first.';
 }
-// What doesn't work in the sandbox, and the way around it (lib/acli-broker.mjs).
-const SANDBOX_HINT = 'You run in a sandbox without Docker. Tests that need Docker (Testcontainers) fail there with errors like '
-  + '"Ryuk is unreachable" or "Could not find a valid Docker environment": run that test command as `outside <command>` '
-  + '(for example `outside ./mvnw verify -pl core`), which runs it on my machine after I OK it. Use it only for those.';
+// How the sandbox works for Copilot, and its doors out (lib/broker.mjs).
+const SANDBOX_HINT = 'You run in a sandbox: everything inside it runs without asking me. Its GitHub token only reads. '
+  + '`git push`, GitHub changes with `gh` (PRs, comments, reviews, API writes) and Jira changes with `acli` go through Clearsky, '
+  + 'which asks me first and runs them as me; use those commands as usual (not curl or a raw git binary) and wait for the result. '
+  + 'There is no Docker in the sandbox. Tests that need it (Testcontainers) fail with errors like "Ryuk is unreachable" or '
+  + '"Could not find a valid Docker environment": run that test command as `outside <command>` (for example '
+  + '`outside ./mvnw verify -pl core`), which runs it on my machine after I OK it. Use `outside` only for those, and don\'t quote '
+  + 'arguments you don\'t need to.';
 // What you typed, without the dashboard and references Clearsky added in front.
 const MSG_MARK = '\n\n---\nMy message:\n';
 export function typedPart(text) {
@@ -1146,9 +1174,7 @@ function toolDetail(call = {}) {
 }
 
 // Folders Copilot chats may use without asking: Settings, else your code folders (~/dev).
-// Command starts Assisted always asks about, on top of its own (Settings → Copilot).
-const assistedAsk = () => list(process.env.COPILOT_ASSISTED_ASK);
-// And command starts they run without asking, like a Jira transition.
+// Commands the sandbox's doors run without asking, like a Jira transition (Settings → Copilot).
 const assistedAllow = () => list(process.env.COPILOT_ASSISTED_ALLOW);
 const copilotFolders = () => (process.env.COPILOT_FOLDERS ? list(process.env.COPILOT_FOLDERS) : codeDirs());
 
@@ -1169,6 +1195,7 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin })
     if (id !== chat) emit({ type: 'session', id });
   }
   c.lastUsed = Date.now();
+  c.mode = options.permission;
   const { agent } = c;
   // Events go to whichever page is watching this chat; none while you look at another one.
   c.emit = emit;
@@ -1182,45 +1209,18 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin })
     // One log line per question, without its content: the mode, the kind of step, the input's
     // field names and how it was answered, to see why something did or didn't ask.
     const resolve = (answer) => {
-      console.log(`clearsky: permission mode=${options.permission || 'ask'} kind=${p.toolCall?.kind || '?'} input=${Object.keys(p.toolCall?.rawInput || {}).join('+') || '-'} -> ${answer.rule || `you${p.why ? ` (${p.why})` : ''}`}`);
+      console.log(`clearsky: permission mode=${options.permission || 'ask'} kind=${p.toolCall?.kind || '?'} input=${Object.keys(p.toolCall?.rawInput || {}).join('+') || '-'} -> ${answer.rule || 'you'}`);
       done(answer.rule ? { outcome: answer.outcome, optionId: answer.optionId } : answer);
     };
     const once = (p.options || []).find((o) => o.kind === 'allow_once');
-    if (once && (autoAllow.includes('*') || autoAllow.includes(p.toolCall?.kind))) {
-      if (c.agent.sandboxed && autoAllow.includes('*')) acliApproved.add(p.toolCall?.rawInput?.command); // Full: allowed already
-      return resolve({ outcome: 'selected', optionId: once.optionId, rule: 'mode' });
-    }
-    // Commands that only read (cat, grep, sed -n, git log…) inside your folders run without asking,
-    // unless that's turned off in Settings → Copilot. Assisted also lets edits in your folders,
-    // builds, tests and local git steps through (its list is in Settings → Copilot too).
-    const where = { cwd: c.cwd, folders: copilotFolders(), home: homedir() };
-    const assisted = options.permission === 'assisted';
-    const command = p.toolCall?.rawInput?.command;
-    // In the sandbox, reading anywhere in your home is fine too: srt hides the secrets (lib/sandbox.mjs).
-    const rules = c.agent.sandboxed && process.env.CLEARSKY_IN_CONTAINER !== '1' ? srtSettings(sandboxOpts(c.cwd)) : null;
-    const readable = rules ? (path) => sandboxReadable(rules, path) : null;
-    const readWhere = { ...where, readable };
-    if (once && process.env.COPILOT_READONLY !== 'off' && isReadOnly(command, readWhere)) return resolve({ outcome: 'selected', optionId: once.optionId, rule: 'read-only' });
-    // Sandboxed: srt holds the fence, so every step inside it runs and only outward commands ask.
-    // A chat whose Copilot isn't in srt (it couldn't start there) gets Assisted's judge instead.
-    const fenced = options.permission === 'sandboxed' && c.agent.sandboxed;
-    if (once && fenced && typeof command !== 'string') return resolve({ outcome: 'selected', optionId: once.optionId, rule: 'sandboxed' });
-    const why = !(assisted || options.permission === 'sandboxed') || typeof command !== 'string' ? undefined
-      : fenced ? outwardReason(command, { ask: assistedAsk(), allow: assistedAllow() })
-        : assistedReason(command, { ...where, ask: assistedAsk(), allow: assistedAllow(), readable });
-    if (once && fenced && why === null) return resolve({ outcome: 'selected', optionId: once.optionId, rule: 'sandboxed-command' });
-    if (once && assisted && why === null) return resolve({ outcome: 'selected', optionId: once.optionId, rule: 'assisted-command' });
-    if (why) p.why = why;
-    if (once && (assisted || options.permission === 'sandboxed') && p.toolCall?.kind === 'edit' && editInside(p.toolCall, where)) return resolve({ outcome: 'selected', optionId: once.optionId, rule: 'assisted-edit' });
+    if (once && (autoAllow.includes('*') || autoAllow.includes(p.toolCall?.kind))) return resolve({ outcome: 'selected', optionId: once.optionId, rule: 'mode' });
+    // Sandboxed: srt is the fence, so every step inside it runs. What leaves it (a push, a GitHub
+    // or Jira change, `outside`) goes through Clearsky's doors, which ask you (lib/broker.mjs).
+    if (once && options.permission === 'sandboxed' && c.agent.sandboxed) return resolve({ outcome: 'selected', optionId: once.optionId, rule: 'sandboxed' });
     const id = randomBytes(6).toString('hex');
     const ev = { type: 'permission', id, title: p.toolCall?.title || 'Copilot wants to use a tool', kind: p.toolCall?.kind,
       detail: toolDetail(p.toolCall), options: (p.options || []).map((o) => ({ id: o.optionId, name: o.name, kind: o.kind })) };
-    c.waiting.set(id, (answer) => {
-      c.pending.delete(id);
-      // An acli change you allowed may then run through the sandbox's acli (once).
-      if (c.agent.sandboxed && /^allow/.test((p.options || []).find((o) => o.optionId === answer.optionId)?.kind || '')) acliApproved.add(command);
-      resolve(answer);
-    });
+    c.waiting.set(id, (answer) => { c.pending.delete(id); resolve(answer); });
     c.pending.set(id, ev);
     c.emit(ev);
   });
@@ -1539,6 +1539,7 @@ function serve() {
             refText = `${REFS_INTRO}\n\n${parts.join('\n\n')}`;
           }
           const list = (v) => (Array.isArray(v) ? v : String(v || '').split(',')).map((x) => String(x).trim()).filter(Boolean);
+          if (body.permission === 'assisted') body.permission = 'sandboxed'; // Assisted is gone: the sandbox does its job
           const options = { model: body.model, effort: body.effort, permission: copilot.PERMISSIONS[body.permission] ? body.permission : 'ask',
             allow: list(body.allow), deny: list(body.deny) };
           // The first turn carries the dashboard so Copilot knows what you're looking at.
@@ -1678,7 +1679,7 @@ function serve() {
         const c = acpChats.get(id);
         const tilde = (p) => (p.startsWith(homedir()) ? `~${p.slice(homedir().length)}` : p);
         return json(res, 200, {
-          running: !!c && !c.agent.closed, busy: !!c?.busy, sandboxed: c ? !!c.agent.sandboxed : null, hosts: c?.agent.hosts || null,
+          running: !!c && !c.agent.closed, busy: !!c?.busy, sandboxed: c ? !!c.agent.sandboxed : null, hosts: c?.agent.hosts || null, github: c?.agent.github || null,
           cwd: c?.cwd ? tilde(c.cwd) : null,
           folders: copilotFolders().map(tilde), read: list(process.env.COPILOT_READ).map(tilde),
           sandbox: process.env.COPILOT_SANDBOX === 'srt',

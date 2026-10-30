@@ -60,7 +60,7 @@
 <p>Sessions link to PRs and tickets in three ways:</p>
 <ul><li>by the item you attached;</li><li>by a checkout of the PR's branch;</li><li>by a key or PR number in the title.</li></ul>
 <p>A chat about a PR runs in your local clone of that repo.</p>
-<p>Every access mode runs over ACP, so anything Copilot wants your OK for (each step in Ask, edits and commands in Assisted) shows as Allow/Deny. Copilot gets none of Clearsky's tokens, and skills never merge, approve, force-push or comment without asking.</p>
+<p>Every access mode runs over ACP, so anything Copilot wants your OK for (each step in Ask, the sandbox's doors out in Sandboxed) shows as Allow/Deny. Copilot gets none of Clearsky's tokens, and skills never merge, approve, force-push or comment without asking.</p>
 <h2 id="security">Security</h2>
 <ul><li><strong>Network:</strong> the server listens on 127.0.0.1 only and refuses other <code>Host</code> headers (DNS rebinding).</li><li><strong>Requests:</strong> writes need a per-install CSRF token from the page.</li><li><strong>Files:</strong> config and state files are mode 600.</li><li><strong>Secrets:</strong> they never go back to the browser.</li><li><strong>School attachments:</strong> served with <code>nosniff</code> and a sandbox CSP.</li></ul>
 <p><a href="remote-access.html">Remote access</a> describes what would change to reach it from a phone.</p>

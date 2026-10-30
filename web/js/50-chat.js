@@ -204,6 +204,7 @@ async function drawInfo(force) {
     d.cwd && ['Folder', d.cwd],
     d.folders?.length && ['Can change', d.folders.join(', ')],
     d.read?.length && ['Can read', d.read.join(', ')],
+    d.github && ['GitHub', d.github],
     d.hosts && ['Hosts', `<details><summary>${d.hosts.length} allowed</summary>${d.hosts.map(esc).join(', ')}</details>`],
   ].filter(Boolean);
   $('#cp-info').innerHTML = rows.map(([a, b]) => `<dt>${a}</dt><dd>${a === 'Hosts' ? b : esc(b)}</dd>`).join('');

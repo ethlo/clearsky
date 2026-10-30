@@ -167,23 +167,20 @@
     <p class="hint warn" id="copilot-unmounted" hidden></p>
     <label for="COPILOT_READ">Folders Copilot can only read</label>
     <textarea id="COPILOT_READ" data-key="COPILOT_READ" rows="2" spellcheck="false" placeholder="~/dev/other-team, ~/notes"></textarea>
-    <p class="hint">Comma-separated. In the sandbox, Copilot can read these but not change them. It can also always read <span id="read-default"></span> (what it needs to run and build) and files outside your home, like <code>/usr/lib/jvm</code>. The rest of your home is hidden from it: mail, documents, browser profiles, shell history and logins. Maven still reaches your repositories: Copilot gets a copy of <code>~/.m2/settings.xml</code> without the passwords, and the sandbox adds your login on the way out, only to the hosts that login is for. Reading commands in either list run without asking.</p>
-    <label for="COPILOT_READONLY">Commands that only read</label>
-    <select id="COPILOT_READONLY" data-key="COPILOT_READONLY"><option value="on">Run without asking</option><option value="off">Ask like any other</option></select>
-    <p class="hint">In Ask and Assisted, commands like <code>cat</code>, <code>ls</code>, <code>grep</code>, <code>find</code>, <code>sed -n</code>, <code>head</code> and <code>git status/log/diff/show</code> run on their own when every part of the command only reads, and only inside the chat's folder and the folders above. Builds, tests, edits, <code>git push</code>, writing to files and anything Clearsky can't tell is safe still ask.</p>
-    <label for="COPILOT_ASSISTED_ALLOW">Assisted and Sandboxed run without asking</label>
-    <textarea id="COPILOT_ASSISTED_ALLOW" data-key="COPILOT_ASSISTED_ALLOW" rows="2" spellcheck="false" placeholder="e.g. acli jira workitem transition, gh pr create"></textarea>
-    <p class="hint">Command starts (comma-separated) that would otherwise ask, like moving a Jira ticket. <code>outside</code> commands (tests run outside the sandbox) only match exactly, like <code>outside ./mvnw verify</code>. Paths outside your folders still ask in Assisted.</p>
-    <label for="COPILOT_ASSISTED_ASK">Assisted also asks before</label>
-    <textarea id="COPILOT_ASSISTED_ASK" data-key="COPILOT_ASSISTED_ASK" rows="2" spellcheck="false" placeholder="e.g. mvn verify, python3 scripts/migrate.py"></textarea>
-    <p class="hint">Assisted runs everything in the chat's folder, the folders above and worktrees next to your clones (builds, tests, scripts like python3, local git including reset, rebase, apply and worktrees, gh and acli lookups, edits) and asks only before risky steps: <code>git push</code>, <code>git clean</code>, deleting unmerged branches or tags, <code>rm</code> (except under /tmp), installs (npm install, pip, npx), deploys and publishes, Jira and GitHub changes (acli create/edit/transition/comment, gh pr create/merge/comment, gh api writes), sudo, ssh, curl uploads, docker run/exec, scripts run by path, and anything outside your folders and /tmp. Add command starts here (comma-separated) to always be asked about them too.</p>
+    <p class="hint">Comma-separated. In the sandbox, Copilot can read these but not change them. It can also always read <span id="read-default"></span> (what it needs to run and build) and files outside your home, like <code>/usr/lib/jvm</code>. The rest of your home is hidden from it: mail, documents, browser profiles, shell history and logins. Maven still reaches your repositories: Copilot gets a copy of <code>~/.m2/settings.xml</code> without the passwords, and the sandbox adds your login on the way out, only to the hosts that login is for.</p>
+    <label for="COPILOT_ASSISTED_ALLOW">Never ask before</label>
+    <textarea id="COPILOT_ASSISTED_ALLOW" data-key="COPILOT_ASSISTED_ALLOW" rows="2" spellcheck="false" placeholder="e.g. acli jira workitem transition, git push"></textarea>
+    <p class="hint">In the sandbox, Copilot runs everything without asking, and asks you only at its doors out: <code>git push</code>, GitHub changes (<code>gh pr create</code>, comments, reviews, API writes), Jira changes through <code>acli</code>, and <code>outside</code> (a command run on your machine, like tests that start Docker containers). Commands that start like one of these (comma-separated) go through without asking. <code>outside</code> commands only match exactly, like <code>outside ./mvnw verify</code>.</p>
     <label for="COPILOT_SANDBOX">Sandbox</label>
     <select id="COPILOT_SANDBOX" data-key="COPILOT_SANDBOX"><option value="off">Off</option><option value="srt">Anthropic sandbox runtime (srt)</option></select>
-    <p class="hint">With the sandbox on, Copilot and everything it runs can write only in the chat's folder, the folders above, <code>~/.copilot</code> and <code>/tmp</code>, can read only the parts of your home listed under <b>Also readable</b> (never <code>~/.ssh</code>, keyrings, browser profiles or Clearsky's own settings), and can reach only the hosts below. That holds in every access mode, Full included. The <b>Sandboxed</b> access mode always runs in it, and then runs every step inside without asking; only pushes, Jira and GitHub changes, uploads, deploys and cloud tools ask. srt comes with Clearsky (Linux also needs <code>bubblewrap</code>, <code>socat</code> and <code>ripgrep</code>). Hosts are checked by name only: an allowed host can be written to as well as read. Inside it, git reaches GitHub over https with your <code>gh</code> login instead of ssh.</p>
+    <p class="hint">With the sandbox on, Copilot and everything it runs can write only in the chat's folder, the folders above, <code>~/.copilot</code> and <code>/tmp</code>, can read only the parts of your home listed under <b>Also readable</b> (never <code>~/.ssh</code>, keyrings, browser profiles or Clearsky's own settings), and can reach only the hosts below. That holds in every access mode, Full included. The <b>Sandboxed</b> access mode always runs in it, and then runs every step inside without asking; only its doors out ask (see <b>Never ask before</b>). srt comes with Clearsky (Linux also needs <code>bubblewrap</code>, <code>socat</code> and <code>ripgrep</code>). Hosts are checked by name only: an allowed host can be written to as well as read. Inside it, git reaches GitHub over https with the token below instead of ssh.</p>
+    <label for="COPILOT_SANDBOX_TOKEN">GitHub token for the sandbox (read only)</label>
+    <input id="COPILOT_SANDBOX_TOKEN" data-key="COPILOT_SANDBOX_TOKEN" type="password" autocomplete="off" placeholder="github_pat_…">
+    <p class="hint">Copilot in the sandbox signs in with this token, so it can read your repos but can't push or change anything on GitHub itself: those go through Clearsky, which asks you. <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">Create a fine-grained token</a> with access to your work repos and these permissions, all read-only: <b>Contents</b>, <b>Pull requests</b>, <b>Issues</b>, <b>Actions</b> and <b>Metadata</b>, plus the account permission <b>Copilot Requests</b>. Without one, the sandbox gets your full <code>gh</code> login and pushes aren't stopped by GitHub.</p>
     <label for="COPILOT_DOMAINS">Hosts a sandboxed Copilot may reach</label>
     <textarea id="COPILOT_DOMAINS" data-key="COPILOT_DOMAINS" rows="2" spellcheck="false"></textarea>
     <p class="hint">Comma-separated, wildcards like <code>*.atlassian.net</code> allowed. Empty means Copilot, GitHub and your Jira site. Add package registries (say <code>repo.maven.apache.org</code>, <code>registry.npmjs.org</code>) if builds need them.</p>
-    <div class="row"><button class="save" data-keys="COPILOT_MODEL,COPILOT_EFFORT,COPILOT_PERMISSION,COPILOT_CWD,COPILOT_FOLDERS,COPILOT_READONLY,COPILOT_ASSISTED_ALLOW,COPILOT_ASSISTED_ASK,COPILOT_SANDBOX,COPILOT_READ,COPILOT_DOMAINS">Save</button><span class="msg"></span></div>
+    <div class="row"><button class="save" data-keys="COPILOT_MODEL,COPILOT_EFFORT,COPILOT_PERMISSION,COPILOT_CWD,COPILOT_FOLDERS,COPILOT_ASSISTED_ALLOW,COPILOT_SANDBOX,COPILOT_SANDBOX_TOKEN,COPILOT_READ,COPILOT_DOMAINS">Save</button><span class="msg"></span></div>
   </section>
 
   <section>
@@ -226,7 +223,7 @@
   draw();
 })();
 const CSRF = '__CSRF__';
-const SECRET = new Set(['GITHUB_TOKEN', 'GOOGLE_CALENDAR_ICS', 'SLACK_TOKEN']);
+const SECRET = new Set(['GITHUB_TOKEN', 'GOOGLE_CALENDAR_ICS', 'SLACK_TOKEN', 'COPILOT_SANDBOX_TOKEN']);
 const $ = (s) => document.querySelector(s);
 
 const manifest = {
@@ -311,8 +308,7 @@ function render(s) {
   um.innerHTML = cp.unmounted?.length ? `Not in Clearsky's container: ${cp.unmounted.map((f) => `<code>${esc(f)}</code>`).join(', ')}. Save, then run <code>clearsky docker up</code> on your machine: it mounts the folders set here (Clearsky restarts).` : '';
   $('#COPILOT_CWD').value = cp.cwd || '';
   $('#COPILOT_MODEL').value = cp.model || '';
-  $('#COPILOT_READONLY').value = cp.readonly || 'on';
-  $('#COPILOT_ASSISTED_ASK').value = cp.assisted || '';
+  $('#COPILOT_SANDBOX_TOKEN').placeholder = cp.sandboxToken ? `${cp.sandboxToken}; paste a new one to replace` : 'github_pat_…';
   $('#COPILOT_ASSISTED_ALLOW').value = cp.assistedAllow || '';
   $('#COPILOT_SANDBOX').value = cp.sandbox || 'off';
   $('#COPILOT_READ').value = cp.read || '';

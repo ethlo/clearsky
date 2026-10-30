@@ -72,7 +72,7 @@ Sessions link to PRs and tickets in three ways:
 
 A chat about a PR runs in your local clone of that repo.
 
-Every access mode runs over ACP, so anything Copilot wants your OK for (each step in Ask, edits and commands in Assisted) shows as Allow/Deny. Copilot gets none of Clearsky's tokens, and skills never merge, approve, force-push or comment without asking.
+Every access mode runs over ACP, so anything Copilot wants your OK for (each step in Ask, the sandbox's doors out in Sandboxed) shows as Allow/Deny. Copilot gets none of Clearsky's tokens, and skills never merge, approve, force-push or comment without asking.
 
 ## Security
 

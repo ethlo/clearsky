@@ -1,0 +1,6 @@
+#!/usr/bin/env node
+// gh in Clearsky's sandbox: reading runs here with the sandbox's read-only token; a change
+// (a PR, a comment, a review) goes to Clearsky, which asks you and runs it as you (lib/broker.mjs).
+const { runHere, viaClearsky } = require('./shim.js');
+const argv = process.argv.slice(2);
+require('./rules.js').ghWrites(argv) ? viaClearsky('gh', argv) : runHere('gh', argv);
