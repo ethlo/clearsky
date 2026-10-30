@@ -1730,7 +1730,7 @@ async function dockerCommand([sub = 'up', ...rest]) {
   if (sub === 'mounts') { for (const m of mounts) console.log(`${m.path}${m.ro ? ' (read-only)' : ''}`); return; }
   const files = [join(repo, 'docker-compose.yml'), file, join(repo, 'docker-compose.override.yml')].filter((f) => existsSync(f)).flatMap((f) => ['-f', f]);
   const compose = { up: ['up', '-d', '--build', ...rest], start: ['up', '-d', ...rest], down: ['down', ...rest], logs: ['logs', '--tail', '50', ...rest], login: ['exec', '-it', 'clearsky', 'clearsky-login', ...rest] }[sub];
-  if (!compose) { console.error('usage: clearsky docker [up|down|logs|login|mounts]'); process.exitCode = 1; return; }
+  if (!compose) { console.error('usage: clearsky docker [up|start|down|logs|login|mounts]'); process.exitCode = 1; return; }
   const env0 = { ...process.env, HOME_DIR: homedir(), UID: String(process.getuid?.() ?? 1000), GID: String(process.getgid?.() ?? 1000), PORT: String(config.port) };
   // Logging in: bring over the logins this machine already has (gh, and Copilot with gh's
   // token; acli with an API token, as its own login can't be copied), the rest in the browser.
@@ -1797,7 +1797,7 @@ async function dockerCommand([sub = 'up', ...rest]) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
   const args = process.argv.slice(2);
   if (args.includes('-h') || args.includes('--help')) {
-    console.log('usage: clearsky [--json] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky app [--port N] | clearsky docker [up|down|logs|login|mounts] [--port N] | clearsky school-handover | clearsky jira-debug');
+    console.log('usage: clearsky [--json] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky app [--port N] | clearsky docker [up|start|down|logs|login|mounts] [--port N] | clearsky school-handover | clearsky jira-debug');
   } else if (args[0] === 'standup') {
     const s = await standup();
     console.log(args.includes('--json') ? JSON.stringify(s, null, 2) : s.text);

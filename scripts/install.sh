@@ -67,6 +67,13 @@ else
   npm install -g --no-fund --no-audit "$DIR"
 fi
 
+# npm's global bin follows the active Node (with nvm, only while 22 is in use): a small
+# launcher in ~/.local/bin runs this Node whatever the shell has picked.
+mkdir -p "$HOME/.local/bin"
+printf '#!/bin/sh\nexec "%s" "%s/bin/clearsky.mjs" "$@"\n' "$(command -v node)" "$DIR" > "$HOME/.local/bin/clearsky"
+chmod 755 "$HOME/.local/bin/clearsky"
+case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) warn "Add ~/.local/bin to your PATH to run clearsky from anywhere";; esac
+
 # ---- Settings live here, readable only by you.
 mkdir -p "$HOME/.config/clearsky"
 chmod 700 "$HOME/.config/clearsky"
