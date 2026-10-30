@@ -7,7 +7,7 @@
 //   clearsky serve        serve the dashboard on http://127.0.0.1:7777
 
 import { createServer } from 'node:http';
-import { readFileSync, writeFileSync, mkdirSync, existsSync, realpathSync, statSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, realpathSync, statSync, readdirSync, rmSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
@@ -1758,7 +1758,19 @@ async function dockerCommand([sub = 'up', ...rest]) {
         ...tmp(home, true), ...tmp(join(home, '.config')), ...tmp(join(home, '.cache'), true),
         ...mounts.flatMap((m) => ['-v', `${m.path}:${m.path}${m.ro ? ':ro' : ''}`]),
         'clearsky:local', '--run', 'acli jira auth login --web'];
+      // The container leaves the login link in a file; open it here, in your own browser.
+      const urlFile = join(dirname(userEnvFile), 'container', 'open-url');
+      try { rmSync(urlFile, { force: true }); } catch {}
+      const watch = setInterval(() => {
+        let u = '';
+        try { u = readFileSync(urlFile, 'utf8').trim(); rmSync(urlFile, { force: true }); } catch { return; }
+        if (!/^https:\/\//.test(u)) return;
+        process.stderr.write(`\nOpening ${u}\n`);
+        const [cmd, ...pre] = process.platform === 'darwin' ? ['open'] : process.platform === 'win32' ? ['cmd', '/c', 'start', ''] : ['xdg-open'];
+        spawn(cmd, [...pre, u], { stdio: 'ignore', detached: true }).on('error', () => {}).unref();
+      }, 300);
       const ok = await new Promise((done) => spawn('docker', args, { stdio: 'inherit' }).on('exit', (c) => done(c === 0)).on('error', () => done(false)));
+      clearInterval(watch);
       await compose('up', '-d');
       if (!ok) left.push('acli');
     } else left.push('acli');

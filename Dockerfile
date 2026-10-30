@@ -28,8 +28,9 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --omit=optional --no-fund --no-audit
 COPY . .
 RUN ln -s /opt/clearsky/scripts/container-login.sh /usr/local/bin/clearsky-login \
-    # No browser in here: a login that opens one prints its link for you to open instead.
-    && printf '#!/bin/sh\necho "Open this link in your browser:" >&2\necho "  $1" >&2\n' > /usr/local/bin/xdg-open \
+    # No browser in here: a login that opens one leaves its link for `clearsky docker login`,
+    # which opens it in your browser (and prints it, for when that doesn't work).
+    && printf '#!/bin/sh\n(umask 077; printf "%%s\\n" "$1" > "$HOME/.config/clearsky/container/open-url")\necho "Open this link in your browser: $1" >&2\n' > /usr/local/bin/xdg-open \
     && chmod 755 /usr/local/bin/xdg-open && ln -s xdg-open /usr/local/bin/x-www-browser && ln -s xdg-open /usr/local/bin/www-browser
 ENV BROWSER=/usr/local/bin/xdg-open
 
