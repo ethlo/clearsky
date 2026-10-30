@@ -44,6 +44,16 @@ Ask me once whether to go ahead with the checklist, unless I already said to con
 
 Commit in small steps with clear messages, and run the tests before each push. Push to the PR's branch only.
 
+## The PR description is for the human reviewer
+
+After Copilot's review rounds, a person's review should be quick but still real. When you open the PR, and after each round of work on it, update its description (`gh pr edit --body-file`) to:
+
+- **What and why:** the change and the reason, with the ticket key.
+- **How it was checked:** the tests you ran and their result; how many Copilot review rounds, and that their findings are addressed or why not.
+- **For the reviewer:** anything still open, decisions worth a second look, and where the risk is. Say "Nothing open" when that's so.
+
+Facts only, short. If the repo has a PR template, keep its headings and fill them this way.
+
 ## Never without asking me
 
 - Merge, approve, close, or force-push.

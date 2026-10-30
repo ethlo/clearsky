@@ -997,6 +997,12 @@ function openCopilotSessions() {
 
 const CONTEXT_INTRO = 'You are helping me with my work. This is my work dashboard right now:';
 // Clearsky shows a ```choices block as buttons (web/js/50-chat.js); a click sends the option.
+// PR descriptions are for the human reviewer: after Copilot's review rounds, theirs should be quick.
+const PR_HINT = 'When you open a PR or finish a round of work on one, write (or update with `gh pr edit --body-file`) its description '
+  + 'for the human reviewer, short and in this shape: "## What and why" (the change and the reason, with the ticket key); '
+  + '"## How it was checked" (tests you ran and their result, Copilot review rounds so far and that their findings are addressed); '
+  + '"## For the reviewer" (anything still open, decisions worth a second look, where the risk is; "Nothing open" if so). '
+  + 'Facts only, no filler; keep any PR template\'s headings and fill them the same way.';
 const CHOICES_HINT = 'When you need me to choose (an approach, a next step, yes or no), ask once, at the end of your answer, as a block I can click:\n'
   + '```choices\nThe question, in one line\n- First option (recommended) | what happens if I pick it\n- Second option | what happens\n```\n'
   + 'Two to four options, the one you recommend first. Then stop and wait for my pick.';
@@ -1667,7 +1673,7 @@ function serve() {
           // The first turn carries the dashboard so Copilot knows what you're looking at.
           const sandboxHint = process.env.COPILOT_SANDBOX === 'srt' || body.permission === 'sandboxed' ? `\n\n${SANDBOX_HINT}` : '';
           const folders = foldersHint();
-          const prefix = [!body.resume && `${CONTEXT_INTRO}\n\n${copilotContext()}\n\n${CHOICES_HINT}${folders && `\n\n${folders}`}${sandboxHint}`, refText].filter(Boolean).join('\n\n---\n\n');
+          const prefix = [!body.resume && `${CONTEXT_INTRO}\n\n${copilotContext()}\n\n${CHOICES_HINT}\n\n${PR_HINT}${folders && `\n\n${folders}`}${sandboxHint}`, refText].filter(Boolean).join('\n\n---\n\n');
           const prompt = prefix ? `${prefix}${MSG_MARK}${message}` : message;
           // Answers stream back as one JSON event per line: text, tool, permission, done, error.
           res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
