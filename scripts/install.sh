@@ -5,7 +5,7 @@
 #   sh scripts/install.sh                 # from a checkout: installs that checkout
 #   sh scripts/install.sh --service       # also start it at login (systemd user service)
 #
-# It puts `clearsky` and Anthropic's sandbox runtime (`srt`, for Settings → Copilot → Sandbox)
+# It adds Clearsky to your app menu (its own window), puts `clearsky` and Anthropic's sandbox runtime (`srt`, for Settings → Copilot → Sandbox)
 # on your PATH with npm, and makes ~/.config/clearsky. It never uses sudo: system packages it
 # can't install (bubblewrap, socat, ripgrep for the sandbox) are listed with the command to run.
 # Running it again updates everything.
@@ -90,6 +90,25 @@ have gh || warn "GitHub CLI (gh) not found: Settings can log you in with it (htt
 have acli || warn "Atlassian CLI (acli) not found: Jira needs it (https://developer.atlassian.com/cloud/acli/guides/install-acli/)"
 have pdftotext || warn "pdftotext not found: school weekly plans in PDF need it  ->  ${pm:-install} poppler-utils"
 have copilot || [ -n "$(ls "$HOME"/.nvm/versions/node/*/bin/copilot 2>/dev/null | head -1)" ] || warn "GitHub Copilot CLI not found: the Copilot panel needs it (npm install -g @github/copilot)"
+
+# ---- Clearsky in its own window: an entry in your app menu that runs `clearsky app`.
+if [ "$(uname -s)" = Linux ]; then
+  apps="$HOME/.local/share/applications"
+  mkdir -p "$apps"
+  cat > "$apps/clearsky.desktop" <<DESKTOP
+[Desktop Entry]
+Type=Application
+Name=Clearsky
+Comment=What needs you today, at work and at home
+Exec=$(command -v node) $DIR/bin/clearsky.mjs app
+Icon=$DIR/web/icon-512.png
+Terminal=false
+Categories=Office;Utility;
+StartupWMClass=Clearsky
+DESKTOP
+  have update-desktop-database && update-desktop-database "$apps" >/dev/null 2>&1 || true
+  echo "  app menu: Clearsky (opens it in a window of its own)"
+fi
 
 # ---- Start it at login, when asked.
 if [ "$SERVICE" = 1 ]; then

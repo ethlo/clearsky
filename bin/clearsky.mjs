@@ -1515,7 +1515,13 @@ function serve() {
         const shown = withReads(src, data);
         return json(res, 200, { ...shown, work: workItemsOf(src, shown), fetchedAt: new Date(sourceCache.get(src)?.at || Date.now()).toISOString() });
       }
-      if (url.pathname === '/favicon.ico') { res.writeHead(204); return res.end(); }
+      // The app window's manifest and icons (Clearsky in its own window: `clearsky app`).
+      const asset = { '/manifest.webmanifest': 'application/manifest+json', '/icon.svg': 'image/svg+xml', '/icon-192.png': 'image/png', '/icon-512.png': 'image/png' }[url.pathname];
+      if (asset) {
+        res.writeHead(200, { 'Content-Type': asset, 'Cache-Control': 'max-age=3600' });
+        return res.end(readFileSync(join(here, '..', 'web', url.pathname.slice(1))));
+      }
+      if (url.pathname === '/favicon.ico') { res.writeHead(302, { Location: '/icon.svg' }); return res.end(); }
       if (url.pathname === '/api/modules') return json(res, 200, { modules: moduleManifests() });
       if (url.pathname === '/api/sources') {
         return json(res, 200, { sources: [...plugins.sources.values()].map((p) => ({ name: p.name, label: p.label, area: p.area, panel: p.panel || null })), errors: plugins.errors });
@@ -1620,12 +1626,34 @@ async function restartCommand(args) {
   console.log(r.busy && !args.includes('--now') ? `Restarting once Copilot is done (${r.busy} chat${r.busy > 1 ? 's' : ''} working; gives up at ${r.until}).` : 'Restarting now.');
 }
 
+// `clearsky app`: Clearsky in a window of its own (Chromium's app mode: no tabs or address bar),
+// starting the server first when it isn't running. Your normal browser profile, so links to
+// GitHub and Jira open logged in.
+const BROWSERS = ['chromium', 'chromium-browser', 'google-chrome', 'google-chrome-stable', 'brave-browser', 'microsoft-edge'];
+export function findBrowser(env = process.env) {
+  if (env.CLEARSKY_BROWSER) return env.CLEARSKY_BROWSER;
+  for (const b of BROWSERS) for (const dir of (env.PATH || '').split(':')) if (dir && existsSync(join(dir, b))) return join(dir, b);
+  for (const p of ['/snap/bin/chromium', '/var/lib/flatpak/exports/bin/org.chromium.Chromium']) if (existsSync(p)) return p;
+  return null;
+}
+async function appCommand() {
+  const base = `http://127.0.0.1:${config.port}`;
+  const up = () => fetch(`${base}/api/restart`).then((r) => r.ok, () => false);
+  if (!(await up())) {
+    spawn(process.execPath, [fileURLToPath(import.meta.url), 'serve', '--port', String(config.port)], { detached: true, stdio: 'ignore', env: process.env, cwd: join(here, '..') }).unref();
+    for (let i = 0; i < 50 && !(await up()); i++) await new Promise((r) => setTimeout(r, 200));
+  }
+  const browser = findBrowser();
+  if (!browser) { console.error(`No Chromium-based browser found (tried ${BROWSERS.join(', ')}). Set CLEARSKY_BROWSER, or open ${base}`); process.exit(1); }
+  spawn(browser, [`--app=${base}/`, '--class=Clearsky'], { detached: true, stdio: 'ignore' }).unref();
+}
+
 // ---------------------------------------------------------------- main
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
   const args = process.argv.slice(2);
   if (args.includes('-h') || args.includes('--help')) {
-    console.log('usage: clearsky [--json] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky jira-debug');
+    console.log('usage: clearsky [--json] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky app [--port N] | clearsky jira-debug');
   } else if (args[0] === 'standup') {
     const s = await standup();
     console.log(args.includes('--json') ? JSON.stringify(s, null, 2) : s.text);
@@ -1633,6 +1661,10 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.a
     const p = args.indexOf('--port');
     if (p > -1) config.port = Number(args[p + 1]);
     await restartCommand(args);
+  } else if (args[0] === 'app') {
+    const p = args.indexOf('--port');
+    if (p > -1) config.port = Number(args[p + 1]);
+    await appCommand();
   } else if (args[0] === 'jira-debug') {
     await jiraDebug();
   } else if (args[0] === 'serve') {

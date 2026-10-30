@@ -98,6 +98,10 @@ Besides the built-in sources, Clearsky loads extra ones, one module each, from `
 
 Work and personal stay apart: a source sets `area: 'work'` to sit with GitHub, Jira and Slack on the **Work** tab, or leaves it out to land on the **Personal** tab (school, training and the like). Only the calendar mixes the two: personal events show in the day schedule on both tabs.
 
+## Its own window
+
+`clearsky app` opens Clearsky in a window of its own (Chromium's app mode: no tabs or address bar, its own taskbar icon), starting the server first if it isn't running. The installer adds it to your app menu as **Clearsky**. It uses your normal browser profile, so links to GitHub and Jira open logged in. Any Chromium-based browser works (`CLEARSKY_BROWSER` picks one). The server is unchanged, so a browser tab still works too.
+
 ## School (Visma Flyt Skole)
 
 If your children's school uses Visma Flyt Skole (Min Skole / Flyt Foresatt), Clearsky shows what waits for you there: unread messages and notices, and forms and consents to answer. Form deadlines show up in Now / Next. It only reads. It never replies or marks anything as read, so the portal still shows everything as unread.
