@@ -176,11 +176,14 @@
     <p class="hint">Assisted runs everything in the chat's folder, the folders above and worktrees next to your clones (builds, tests, scripts like python3, local git including reset, rebase, apply and worktrees, gh and acli lookups, edits) and asks only before risky steps: <code>git push</code>, <code>git clean</code>, deleting unmerged branches or tags, <code>rm</code> (except under /tmp), installs (npm install, pip, npx), deploys and publishes, Jira and GitHub changes (acli create/edit/transition/comment, gh pr create/merge/comment, gh api writes), sudo, ssh, curl uploads, docker run/exec, scripts run by path, and anything outside your folders and /tmp. Add command starts here (comma-separated) to always be asked about them too.</p>
     <label for="COPILOT_SANDBOX">Sandbox</label>
     <select id="COPILOT_SANDBOX" data-key="COPILOT_SANDBOX"><option value="off">Off</option><option value="srt">Anthropic sandbox runtime (srt)</option></select>
-    <p class="hint">With the sandbox on, Copilot and everything it runs can write only in the chat's folder, the folders above, <code>~/.copilot</code> and <code>/tmp</code>, can't read <code>~/.ssh</code>, <code>~/.aws</code>, browser profiles or Clearsky's own settings, and can reach only the hosts below. That holds in every access mode, Full included. The <b>Sandboxed</b> access mode always runs in it, and then runs every step inside without asking; only pushes, Jira and GitHub changes, uploads, deploys and cloud tools ask. srt comes with Clearsky (Linux also needs <code>bubblewrap</code>, <code>socat</code> and <code>ripgrep</code>). Hosts are checked by name only: an allowed host can be written to as well as read. Inside it, git reaches GitHub over https with your <code>gh</code> login instead of ssh.</p>
+    <p class="hint">With the sandbox on, Copilot and everything it runs can write only in the chat's folder, the folders above, <code>~/.copilot</code> and <code>/tmp</code>, can read only the parts of your home listed under <b>Also readable</b> (never <code>~/.ssh</code>, keyrings, browser profiles or Clearsky's own settings), and can reach only the hosts below. That holds in every access mode, Full included. The <b>Sandboxed</b> access mode always runs in it, and then runs every step inside without asking; only pushes, Jira and GitHub changes, uploads, deploys and cloud tools ask. srt comes with Clearsky (Linux also needs <code>bubblewrap</code>, <code>socat</code> and <code>ripgrep</code>). Hosts are checked by name only: an allowed host can be written to as well as read. Inside it, git reaches GitHub over https with your <code>gh</code> login instead of ssh.</p>
+    <label for="COPILOT_READ">Also readable in the sandbox</label>
+    <textarea id="COPILOT_READ" data-key="COPILOT_READ" rows="2" spellcheck="false"></textarea>
+    <p class="hint">In the sandbox, Copilot reads your folders above, files outside your home (like <code>/usr/lib/jvm</code>), and in your home only <span id="read-default"></span> and what you add here (comma-separated). The rest of your home is hidden: mail, documents, browser profiles, shell history, logins. Your Maven and Gradle repository passwords (<code>~/.m2/settings.xml</code>, <code>~/.gradle/gradle.properties</code>) stay hidden even so. Reading commands within all this run without asking in every mode.</p>
     <label for="COPILOT_DOMAINS">Hosts a sandboxed Copilot may reach</label>
     <textarea id="COPILOT_DOMAINS" data-key="COPILOT_DOMAINS" rows="2" spellcheck="false"></textarea>
     <p class="hint">Comma-separated, wildcards like <code>*.atlassian.net</code> allowed. Empty means Copilot, GitHub and your Jira site. Add package registries (say <code>repo.maven.apache.org</code>, <code>registry.npmjs.org</code>) if builds need them.</p>
-    <div class="row"><button class="save" data-keys="COPILOT_MODEL,COPILOT_EFFORT,COPILOT_PERMISSION,COPILOT_CWD,COPILOT_FOLDERS,COPILOT_READONLY,COPILOT_ASSISTED_ALLOW,COPILOT_ASSISTED_ASK,COPILOT_SANDBOX,COPILOT_DOMAINS">Save</button><span class="msg"></span></div>
+    <div class="row"><button class="save" data-keys="COPILOT_MODEL,COPILOT_EFFORT,COPILOT_PERMISSION,COPILOT_CWD,COPILOT_FOLDERS,COPILOT_READONLY,COPILOT_ASSISTED_ALLOW,COPILOT_ASSISTED_ASK,COPILOT_SANDBOX,COPILOT_READ,COPILOT_DOMAINS">Save</button><span class="msg"></span></div>
   </section>
 
   <section>
@@ -312,6 +315,8 @@ function render(s) {
   $('#COPILOT_ASSISTED_ASK').value = cp.assisted || '';
   $('#COPILOT_ASSISTED_ALLOW').value = cp.assistedAllow || '';
   $('#COPILOT_SANDBOX').value = cp.sandbox || 'off';
+  $('#COPILOT_READ').value = cp.read || '';
+  $('#read-default').textContent = cp.readDefault || '';
   $('#COPILOT_DOMAINS').value = cp.domains || '';
   $('#COPILOT_DOMAINS').placeholder = cp.defaultDomains || '';
   // The choices come from Copilot itself (models you've used, its access modes).

@@ -70,14 +70,27 @@ test('reads the shell well enough', () => {
   assert.equal(parseShell('cat <<EOF\nx').error, 'unfinished here-document');
 });
 
-test('in the sandbox, Assisted reads anywhere but still asks for changes outside your folders', () => {
-  const sb = { ...at, readAnywhere: true };
+test('in the sandbox, Assisted reads what srt lets it read and asks for the rest', async () => {
+  const { srtSettings, sandboxReadable } = await import('../lib/sandbox.mjs');
+  const rules = srtSettings({ cwd: '/home/m/dev/acme/abc', folders: ['~/dev/acme'], home: '/home/m', exists: () => true });
+  const sb = { ...at, readable: (p) => sandboxReadable(rules, p) };
   const look = 'cd ~/dev/acme/api && git worktree list; git branch -a --list "*ABC-1*" "*abc-1*"; gh pr list --head ABC-1 --state all --json number,state,url; echo ---; cat .sdkmanrc .java-version 2>/dev/null; grep -n -m5 "maven.compiler.release\\|<java.version>\\|<release>" pom.xml; ls ~/.sdkman/candidates/java/ /usr/lib/jvm 2>/dev/null; echo ---; ls .github/workflows | head -30; git status --short | head';
   runs(look, sb);
   asks(look);
-  runs('cd ~/dev && timeout 60 grep -rIn -i "logging.level" --exclude-dir={node_modules,target} . 2>/dev/null | head -20', sb);
+  assert.match(assistedReason('cd ~/dev && timeout 60 grep -rIn x . | head', sb), /Also readable/);
+  asks('cat ~/.bash_history', sb);
+  asks('ls ~/Documents', sb);
+  asks('cat ~/.m2/settings.xml', sb);
+  runs('ls ~/.m2/repository', sb);
   asks('grep -rn x . > ~/out.txt', sb);
-  asks('cp a.txt /etc/x', sb);
-  asks('find ~/dev -name x -delete', sb);
-  asks('sed -i s/a/b/ ~/notes.txt', sb);
+  asks('find ~/dev/acme -name x -delete', sb);
+});
+
+test('the sandbox hides your home except what it needs', async () => {
+  const { srtSettings, sandboxReadable } = await import('../lib/sandbox.mjs');
+  const r = srtSettings({ cwd: '/home/m/dev/acme/abc', folders: ['~/dev/acme'], home: '/home/m', read: ['~/notes'], exists: () => true });
+  const can = (p) => sandboxReadable(r, p);
+  for (const p of ['/home/m/snap/firefox', '/home/m/.config/rclone', '/home/m/.bash_history', '/home/m/.local/share/evolution', '/home/m/Documents', '/home/m/.ssh/id_ed25519', '/home/m/.m2/settings.xml']) assert.ok(!can(p), p);
+  for (const p of ['/home/m/dev/acme/x', '/home/m/.nvm/versions', '/home/m/.m2/repository/a', '/home/m/notes/a', '/usr/lib/jvm', '/etc/hosts']) assert.ok(can(p), p);
+  assert.equal(r.filesystem.denyRead[0], '/home/m');
 });

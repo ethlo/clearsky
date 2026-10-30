@@ -21,7 +21,7 @@ import * as copilot from '../lib/copilot.mjs';
 import { AcpAgent, chatEvent } from '../lib/acp.mjs';
 import { sessionEvents } from '../lib/copilot-events.mjs';
 import { branchesFor } from '../lib/branches.mjs';
-import { sandboxed, DEFAULT_DOMAINS, parseDomains } from '../lib/sandbox.mjs';
+import { sandboxed, srtSettings, sandboxReadable, DEFAULT_DOMAINS, READ_DEFAULT, parseDomains } from '../lib/sandbox.mjs';
 import { isReadOnly, editInside } from '../lib/readonly.mjs';
 import { assistedReason, outwardReason } from '../lib/assisted.mjs';
 import { serveBroker, brokerSocket, approvals } from '../lib/acli-broker.mjs';
@@ -806,6 +806,9 @@ export function srtBin() {
 // Inside the sandbox ssh can't get out, so git talks to GitHub over https with gh's login.
 const SANDBOX_GIT = [['url.https://github.com/.insteadOf', 'git@github.com:'], ['url.https://github.com/.insteadOf', 'ssh://git@github.com/'],
   ['credential.https://github.com.helper', ''], ['credential.https://github.com.helper', '!gh auth git-credential']];
+// What the sandbox may read besides your folders: Settings → Copilot → Also readable, and
+// Clearsky's own folder (its acli for the sandbox).
+const sandboxOpts = (cwd) => ({ cwd, folders: copilotFolders(), home: homedir(), read: [...list(process.env.COPILOT_READ), join(here, '..')] });
 let acliBroker = null;
 const acliApproved = approvals();
 function ghToken() {
@@ -817,7 +820,7 @@ function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBOX === 
   // (git already goes over https there). The network isn't limited to COPILOT_DOMAINS, though.
   if (process.env.CLEARSKY_IN_CONTAINER === '1') return Object.assign(new AcpAgent(bin, args, { env: copilotEnv() }), { sandboxed: true });
   const domains = process.env.COPILOT_DOMAINS ? parseDomains(process.env.COPILOT_DOMAINS) : DEFAULT_DOMAINS;
-  const s = sandboxed(bin, args, { srt: srtBin(), dir: join(dirname(stateFile), 'sandbox'), cwd, folders: copilotFolders(), home: homedir(), domains });
+  const s = sandboxed(bin, args, { srt: srtBin(), dir: join(dirname(stateFile), 'sandbox'), ...sandboxOpts(cwd), domains });
   const env = copilotEnv();
   const n = Number(env.GIT_CONFIG_COUNT) || 0;
   SANDBOX_GIT.forEach(([k, v], i) => { env[`GIT_CONFIG_KEY_${n + i}`] = k; env[`GIT_CONFIG_VALUE_${n + i}`] = v; });
@@ -1164,7 +1167,9 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin })
     const assisted = options.permission === 'assisted';
     const command = p.toolCall?.rawInput?.command;
     // In the sandbox, reading anywhere in your home is fine too: srt hides the secrets (lib/sandbox.mjs).
-    const readWhere = c.agent.sandboxed ? { ...where, folders: [...where.folders, homedir()] } : where;
+    const rules = c.agent.sandboxed && process.env.CLEARSKY_IN_CONTAINER !== '1' ? srtSettings(sandboxOpts(c.cwd)) : null;
+    const readable = rules ? (path) => sandboxReadable(rules, path) : null;
+    const readWhere = { ...where, readable };
     if (once && process.env.COPILOT_READONLY !== 'off' && isReadOnly(command, readWhere)) return resolve({ outcome: 'selected', optionId: once.optionId, rule: 'read-only' });
     // Sandboxed: srt holds the fence, so every step inside it runs and only outward commands ask.
     // A chat whose Copilot isn't in srt (it couldn't start there) gets Assisted's judge instead.
@@ -1172,7 +1177,7 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin })
     if (once && fenced && typeof command !== 'string') return resolve({ outcome: 'selected', optionId: once.optionId, rule: 'sandboxed' });
     const why = !(assisted || options.permission === 'sandboxed') || typeof command !== 'string' ? undefined
       : fenced ? outwardReason(command, { ask: assistedAsk(), allow: assistedAllow() })
-        : assistedReason(command, { ...where, ask: assistedAsk(), allow: assistedAllow(), readAnywhere: !!c.agent.sandboxed });
+        : assistedReason(command, { ...where, ask: assistedAsk(), allow: assistedAllow(), readable });
     if (once && fenced && why === null) return resolve({ outcome: 'selected', optionId: once.optionId, rule: 'sandboxed-command' });
     if (once && assisted && why === null) return resolve({ outcome: 'selected', optionId: once.optionId, rule: 'assisted-command' });
     if (why) p.why = why;
