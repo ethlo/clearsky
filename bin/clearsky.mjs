@@ -1181,7 +1181,7 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin })
     c.waiting.set(id, (answer) => {
       c.pending.delete(id);
       // An acli change you allowed may then run through the sandbox's acli (once).
-      if (fenced && /^allow/.test((p.options || []).find((o) => o.optionId === answer.optionId)?.kind || '')) acliApproved.add(command);
+      if (c.agent.sandboxed && /^allow/.test((p.options || []).find((o) => o.optionId === answer.optionId)?.kind || '')) acliApproved.add(command);
       resolve(answer);
     });
     c.pending.set(id, ev);
