@@ -1163,7 +1163,9 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin })
     const where = { cwd: c.cwd, folders: copilotFolders(), home: homedir() };
     const assisted = options.permission === 'assisted';
     const command = p.toolCall?.rawInput?.command;
-    if (once && !assisted && process.env.COPILOT_READONLY !== 'off' && isReadOnly(command, where)) return resolve({ outcome: 'selected', optionId: once.optionId, rule: 'read-only' });
+    // In the sandbox, reading anywhere in your home is fine too: srt hides the secrets (lib/sandbox.mjs).
+    const readWhere = c.agent.sandboxed ? { ...where, folders: [...where.folders, homedir()] } : where;
+    if (once && process.env.COPILOT_READONLY !== 'off' && isReadOnly(command, readWhere)) return resolve({ outcome: 'selected', optionId: once.optionId, rule: 'read-only' });
     // Sandboxed: srt holds the fence, so every step inside it runs and only outward commands ask.
     // A chat whose Copilot isn't in srt (it couldn't start there) gets Assisted's judge instead.
     const fenced = options.permission === 'sandboxed' && c.agent.sandboxed;
