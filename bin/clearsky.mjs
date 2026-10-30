@@ -874,7 +874,7 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
 // When the only working chat is running a step you just allowed (say `gh pr create`), its
 // GitHub changes are part of what you allowed and go through. With two chats working, it asks.
 function githubAsk(what, { repo } = {}) {
-  const chats = [...acpChats.values()].filter((c) => c.agent.sandboxed && c.busy);
+  const chats = askingChats(repo || (what.match(/^git push to (\S+)/) || [])[1]);
   if (!chats.length) return Promise.resolve(false);
   if (chats.length === 1 && chats[0].approved.size) return Promise.resolve(true);
   return new Promise((done) => {
@@ -894,6 +894,26 @@ function githubAsk(what, { repo } = {}) {
       c.emit(ev);
     }
   });
+}
+
+// Which working chat a GitHub change came from. srt's proxy can't tell, so narrow it down: chats
+// running a step right now, then those whose folder is a clone of the repo it goes to. Only
+// when that leaves several does every one of them ask (the first answer counts).
+function askingChats(repo) {
+  let chats = [...acpChats.values()].filter((c) => c.agent.sandboxed && c.busy);
+  const narrow = (f) => { const n = chats.filter(f); if (n.length) chats = n; };
+  narrow((c) => c.running.size);
+  if (repo) narrow((c) => chatRepo(c) === repo.toLowerCase());
+  return chats;
+}
+function chatRepo(c) {
+  if (c.repo === undefined) {
+    try {
+      const url = execFileSync('git', ['-C', c.cwd, 'remote', 'get-url', 'origin'], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+      c.repo = (url.match(/github\.com[:/]([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/) || [])[1]?.toLowerCase() || null;
+    } catch { c.repo = null; }
+  }
+  return c.repo;
 }
 
 // The chat a sandbox door request comes from, by the key its Copilot was given.
@@ -1253,7 +1273,7 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin })
   if (c && (c.sig !== sig || c.agent.closed)) { resumeId = c.agent.sessionId; c.agent.close(); acpChats.delete(chat); c = null; }
   if (!c) {
     const agent = await startAgent(bin, args, cwd, { sandbox });
-    c = { agent, sig, cwd, waiting: new Map(), pending: new Map(), approved: new Set(), emit: () => {}, lastUsed: Date.now() };
+    c = { agent, sig, cwd, waiting: new Map(), pending: new Map(), approved: new Set(), running: new Set(), emit: () => {}, lastUsed: Date.now() };
     const id = await agent.start(cwd, resumeId);
     acpChats.set(id, c);
     // A new chat gets Copilot's own session id; the panel keeps using that from now on.
@@ -1268,7 +1288,8 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin })
   agent.onUpdate = (u) => {
     if (u.sessionUpdate === 'available_commands_update') { copilotCommands = agent.commands; c.emit({ type: 'commands', commands: agent.commands }); return; }
     // A step you allowed has finished: its GitHub changes ask again (see githubAsk).
-    if (u.sessionUpdate === 'tool_call_update' && ['completed', 'failed'].includes(u.status)) c.approved.delete(u.toolCallId);
+    if (u.sessionUpdate === 'tool_call_update' && ['completed', 'failed'].includes(u.status)) { c.approved.delete(u.toolCallId); c.running.delete(u.toolCallId); }
+    else if (u.sessionUpdate === 'tool_call' || u.sessionUpdate === 'tool_call_update') c.running.add(u.toolCallId);
     const e = chatEvent(u); if (e && (e.type !== 'text' || e.text)) c.emit(e);
   };
   const autoAllow = copilot.PERMISSIONS[options.permission]?.autoAllow || [];
@@ -1299,7 +1320,7 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin })
   // Switching chats or reloading the page leaves the turn running; Stop ends it.
   res.on('close', () => { if (c.emit === emit) c.emit = () => {}; });
   c.busy = true;
-  const r = await agent.prompt(prompt).finally(() => { c.busy = false; c.approved.clear(); });
+  const r = await agent.prompt(prompt).finally(() => { c.busy = false; c.approved.clear(); c.running.clear(); });
   c.emit({ type: 'done', stopReason: r?.stopReason });
   c.emit = () => {};
 }
