@@ -879,6 +879,15 @@ const CONTEXT_INTRO = 'You are helping me with my work. This is my work dashboar
 const CHOICES_HINT = 'When you need me to choose (an approach, a next step, yes or no), ask once, at the end of your answer, as a block I can click:\n'
   + '```choices\nThe question, in one line\n- First option (recommended) | what happens if I pick it\n- Second option | what happens\n```\n'
   + 'Two to four options, the one you recommend first. Then stop and wait for my pick.';
+// Where my code is, so Copilot looks there first instead of listing my home and asking for it.
+function foldersHint() {
+  const tilde = (p) => (p.startsWith(homedir()) ? `~${p.slice(homedir().length)}` : p);
+  const rw = copilotFolders().map(tilde), ro = list(process.env.COPILOT_READ).map(tilde);
+  if (!rw.length && !ro.length) return '';
+  return `My code is in ${rw.join(', ') || 'this folder'}${ro.length ? ` (and, read only, ${ro.join(', ')})` : ''}. `
+    + 'Find repos and files there or in the current folder; don\'t list or search the rest of my home. '
+    + 'If you need something outside these folders, say what and why first.';
+}
 // What doesn't work in the sandbox, and the way around it (lib/acli-broker.mjs).
 const SANDBOX_HINT = 'You run in a sandbox without Docker. Tests that need Docker (Testcontainers) fail there with errors like '
   + '"Ryuk is unreachable" or "Could not find a valid Docker environment": run that test command as `outside <command>` '
@@ -1526,7 +1535,8 @@ function serve() {
             allow: list(body.allow), deny: list(body.deny) };
           // The first turn carries the dashboard so Copilot knows what you're looking at.
           const sandboxHint = process.env.COPILOT_SANDBOX === 'srt' || body.permission === 'sandboxed' ? `\n\n${SANDBOX_HINT}` : '';
-          const prefix = [!body.resume && `${CONTEXT_INTRO}\n\n${copilotContext()}\n\n${CHOICES_HINT}${sandboxHint}`, refText].filter(Boolean).join('\n\n---\n\n');
+          const folders = foldersHint();
+          const prefix = [!body.resume && `${CONTEXT_INTRO}\n\n${copilotContext()}\n\n${CHOICES_HINT}${folders && `\n\n${folders}`}${sandboxHint}`, refText].filter(Boolean).join('\n\n---\n\n');
           const prompt = prefix ? `${prefix}${MSG_MARK}${message}` : message;
           // Answers stream back as one JSON event per line: text, tool, permission, done, error.
           res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
