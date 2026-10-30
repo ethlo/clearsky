@@ -389,6 +389,27 @@ for (const p of plugins.sources.values()) {
     return { ...data, ...(items && { items: items.hookError ? [] : asList(items), ...(items.hookError && { error: items.hookError }) }) };
   };
 }
+// What each module holds and reaches, for Settings → Modules. Secret values never leave here:
+// `set` only says whether one is saved.
+const BUILTIN_MANIFESTS = [
+  githubManifest,
+  jiraManifest,
+  { name: 'slack', label: 'Slack', area: 'work', secrets: [{ key: 'SLACK_TOKEN', kind: 'token' }], hosts: ['slack.com'], clis: [], files: [] },
+  { name: 'calendar', label: 'Calendar', area: 'work', secrets: [{ key: 'GOOGLE_CALENDAR_ICS', kind: 'token', note: 'the secret iCal address' },
+    { kind: 'keyring', note: 'or GNOME Online Accounts, read from Evolution\'s local cache' }], hosts: ['calendar.google.com'], clis: [], files: ['~/.cache/evolution/calendar', '~/.config/evolution/sources'], dbus: true },
+  { name: 'copilot', label: 'Copilot', area: 'work', secrets: [{ kind: 'cli-login', note: 'none from Clearsky (its tokens are removed from Copilot\'s environment); Copilot keeps its own login in ~/.copilot or the keyring' }],
+    hosts: ['*.githubcopilot.com', 'github.com'], clis: ['copilot'], files: ['~/.copilot', 'your Copilot folders'],
+    note: 'Settings → Copilot → Sandbox limits it to your folders and listed hosts.' },
+];
+export function moduleManifests(env = process.env) {
+  const fromPlugin = (p) => ({ name: p.name, label: p.label, area: p.area, ...(p.manifest || {}),
+    secrets: p.manifest?.secrets || Object.entries(p.settings || {}).filter(([, f]) => f.secret).map(([key]) => ({ key, kind: 'token' })) });
+  return [...BUILTIN_MANIFESTS, ...[...plugins.sources.values()].map(fromPlugin)].map((m) => ({
+    hosts: [], clis: [], files: [], ...m,
+    secrets: (m.secrets || []).map((x) => ({ ...x, ...(x.key && { set: !!env[x.key] }) })),
+  }));
+}
+
 // Each source's data as rows of the one item model (lib/items.mjs).
 const WORK_ITEMS = { github: githubItems, jira: jiraItems, jiraMentions: jiraMentionItems, slack: slackItems };
 function workItemsOf(name, data) {
@@ -1575,6 +1596,7 @@ function serve() {
         return json(res, 200, { ...shown, work: workItemsOf(src, shown), fetchedAt: new Date(sourceCache.get(src)?.at || Date.now()).toISOString() });
       }
       if (url.pathname === '/favicon.ico') { res.writeHead(204); return res.end(); }
+      if (url.pathname === '/api/modules') return json(res, 200, { modules: moduleManifests() });
       if (url.pathname === '/api/sources') {
         return json(res, 200, { sources: [...plugins.sources.values()].map((p) => ({ name: p.name, label: p.label, area: p.area, panel: p.panel || null })), errors: plugins.errors });
       }

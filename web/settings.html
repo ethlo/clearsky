@@ -41,6 +41,11 @@
   .cal-list span { text-align: left; }
   .cal-list small { color: var(--muted); font-size: 12px; }
   .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+  .mods { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12.5px; }
+  .mods th, .mods td { text-align: left; vertical-align: top; padding: 7px 8px 7px 0; border-top: 1px solid var(--line); }
+  .mods th { font-weight: 600; white-space: nowrap; }
+  .mods code { font-size: 11.5px; }
+  .mods .k { color: var(--muted); }
   input, select, textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line);
     border-radius: 6px; padding: 6px 8px; }
   input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
@@ -172,6 +177,12 @@
     <div class="row"><button class="save" data-keys="COPILOT_MODEL,COPILOT_EFFORT,COPILOT_PERMISSION,COPILOT_CWD,COPILOT_FOLDERS,COPILOT_READONLY,COPILOT_ASSISTED_ASK,COPILOT_SANDBOX,COPILOT_DOMAINS">Save</button><span class="msg"></span></div>
   </section>
 
+  <section>
+    <h2>Modules</h2>
+    <p class="hint">What each part of Clearsky holds and talks to. Saved secrets are never shown, only whether one is there. Each source gets only its own settings, and a source that lists its hosts can reach only those through Clearsky.</p>
+    <table class="mods" id="mods"></table>
+  </section>
+
   <section id="extra" hidden>
     <h2>Other sources</h2>
     <p class="hint">Settings for sources added in <code>lib/sources/</code> or <code>~/.config/clearsky/sources/</code>.</p>
@@ -298,8 +309,21 @@ function render(s) {
   }
 }
 
+const KIND = { token: 'Token', 'web-session': 'Web session (cookies)', 'cli-login': 'Login kept by its CLI', keyring: 'Keyring' };
+function renderModules(list) {
+  const code = (xs) => xs.map((x) => `<code>${esc(x)}</code>`).join(', ');
+  $('#mods').innerHTML = list.map((m) => `<tr><th>${esc(m.label)}<div class="k">${esc(m.area)}</div></th><td>
+    ${(m.secrets || []).map((x) => `<div><b>${esc(KIND[x.kind] || x.kind)}</b>${x.key ? ` <code>${esc(x.key)}</code> ${x.set ? '· saved' : '· not set'}` : ''}${x.note ? ` <span class="k">${esc(x.note)}</span>` : ''}</div>`).join('') || '<div class="k">Holds nothing</div>'}
+    ${m.hosts.length ? `<div><span class="k">Reaches</span> ${code(m.hosts)}</div>` : ''}
+    ${m.clis.length ? `<div><span class="k">Runs</span> ${code(m.clis)}</div>` : ''}
+    ${m.files.length ? `<div><span class="k">Files</span> ${code(m.files)}</div>` : ''}
+    ${m.dbus ? '<div><span class="k">Uses the desktop session bus (D-Bus)</span></div>' : ''}
+    ${m.note ? `<div class="k">${esc(m.note)}</div>` : ''}</td></tr>`).join('');
+}
+
 async function load() {
   render(await (await fetch('/api/settings')).json());
+  fetch('/api/modules').then((r) => r.json()).then((r) => renderModules(r.modules || [])).catch(() => {});
 }
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
