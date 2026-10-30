@@ -1,0 +1,17 @@
+#!/usr/bin/env node
+// `outside <command>` in Clearsky's sandbox: runs the command on your machine, outside the
+// sandbox, after you OK it in the chat (lib/acli-broker.mjs). For tests that need Docker.
+const { connect } = require('node:net');
+const path = process.env.CLEARSKY_ACLI_SOCKET;
+if (!path || process.argv.length < 3) { process.stderr.write('usage: outside <command> [args…] (only in Clearsky\'s sandbox)\n'); process.exit(2); }
+const sock = connect(path, () => sock.write(`${JSON.stringify({ outside: true, argv: process.argv.slice(2), cwd: process.cwd() })}\n`));
+let buf = '';
+sock.on('data', (d) => { buf += d; });
+sock.on('end', () => {
+  let r;
+  try { r = JSON.parse(buf); } catch { r = { code: 1, stderr: 'outside: no answer from Clearsky\n' }; }
+  if (r.stdout) process.stdout.write(r.stdout);
+  if (r.stderr) process.stderr.write(r.stderr);
+  process.exitCode = r.code;
+});
+sock.on('error', (e) => { process.stderr.write(`outside: Clearsky can't be reached (${e.message})\n`); process.exitCode = 127; });

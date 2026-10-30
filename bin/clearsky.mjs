@@ -878,6 +878,10 @@ const CONTEXT_INTRO = 'You are helping me with my work. This is my work dashboar
 const CHOICES_HINT = 'When you need me to choose (an approach, a next step, yes or no), ask once, at the end of your answer, as a block I can click:\n'
   + '```choices\nThe question, in one line\n- First option (recommended) | what happens if I pick it\n- Second option | what happens\n```\n'
   + 'Two to four options, the one you recommend first. Then stop and wait for my pick.';
+// What doesn't work in the sandbox, and the way around it (lib/acli-broker.mjs).
+const SANDBOX_HINT = 'You run in a sandbox without Docker. Tests that need Docker (Testcontainers) fail there with errors like '
+  + '"Ryuk is unreachable" or "Could not find a valid Docker environment": run that test command as `outside <command>` '
+  + '(for example `outside ./mvnw verify -pl core`), which runs it on my machine after I OK it. Use it only for those.';
 // What you typed, without the dashboard and references Clearsky added in front.
 const MSG_MARK = '\n\n---\nMy message:\n';
 export function typedPart(text) {
@@ -1172,7 +1176,10 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin })
       done(answer.rule ? { outcome: answer.outcome, optionId: answer.optionId } : answer);
     };
     const once = (p.options || []).find((o) => o.kind === 'allow_once');
-    if (once && (autoAllow.includes('*') || autoAllow.includes(p.toolCall?.kind))) return resolve({ outcome: 'selected', optionId: once.optionId, rule: 'mode' });
+    if (once && (autoAllow.includes('*') || autoAllow.includes(p.toolCall?.kind))) {
+      if (c.agent.sandboxed && autoAllow.includes('*')) acliApproved.add(p.toolCall?.rawInput?.command); // Full: allowed already
+      return resolve({ outcome: 'selected', optionId: once.optionId, rule: 'mode' });
+    }
     // Commands that only read (cat, grep, sed -n, git log…) inside your folders run without asking,
     // unless that's turned off in Settings → Copilot. Assisted also lets edits in your folders,
     // builds, tests and local git steps through (its list is in Settings → Copilot too).
@@ -1517,7 +1524,8 @@ function serve() {
           const options = { model: body.model, effort: body.effort, permission: copilot.PERMISSIONS[body.permission] ? body.permission : 'ask',
             allow: list(body.allow), deny: list(body.deny) };
           // The first turn carries the dashboard so Copilot knows what you're looking at.
-          const prefix = [!body.resume && `${CONTEXT_INTRO}\n\n${copilotContext()}\n\n${CHOICES_HINT}`, refText].filter(Boolean).join('\n\n---\n\n');
+          const sandboxHint = process.env.COPILOT_SANDBOX === 'srt' || body.permission === 'sandboxed' ? `\n\n${SANDBOX_HINT}` : '';
+          const prefix = [!body.resume && `${CONTEXT_INTRO}\n\n${copilotContext()}\n\n${CHOICES_HINT}${sandboxHint}`, refText].filter(Boolean).join('\n\n---\n\n');
           const prompt = prefix ? `${prefix}${MSG_MARK}${message}` : message;
           // Answers stream back as one JSON event per line: text, tool, permission, done, error.
           res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
