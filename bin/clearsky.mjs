@@ -1252,15 +1252,25 @@ function busyChats() {
   return [...acpChats.entries()].filter(([, c]) => c.busy || c.waiting.size)
     .map(([id, c]) => ({ id, title: names[id] || titles.get(id) || 'Copilot chat', status: c.waiting.size ? 'needs-you' : 'working' }));
 }
+// The page: web/index.html with web/css/app.css and web/js/*.js (in name order, one shared
+// scope) put inline, so it stays one request and works offline.
+export function buildPage(csrf, web = join(here, '..', 'web')) {
+  const css = readFileSync(join(web, 'css', 'app.css'), 'utf8');
+  const js = readdirSync(join(web, 'js')).filter((n) => n.endsWith('.js')).sort()
+    .map((n) => readFileSync(join(web, 'js', n), 'utf8')).join('\n');
+  return readFileSync(join(web, 'index.html'), 'utf8').replace('__CSRF__', csrf)
+    .replace('/*__CSS__*/', () => css).replace('/*__JS__*/', () => js);
+}
+
 // Whether Clearsky's files changed since this process started (a pull), so a restart would update it.
 const startedAt = Date.now();
 function updateReady() {
   const root = join(here, '..');
-  for (const dir of ['bin', 'lib', 'lib/sources', 'web']) {
+  for (const dir of ['bin', 'lib', 'lib/sources', 'lib/modules', 'web', 'web/js', 'web/css']) {
     let names = [];
     try { names = readdirSync(join(root, dir)); } catch { continue; }
     for (const n of names) {
-      try { if (/\.(mjs|html)$/.test(n) && statSync(join(root, dir, n)).mtimeMs > startedAt) return true; } catch { /* gone */ }
+      try { if (/\.(mjs|html|js|css)$/.test(n) && statSync(join(root, dir, n)).mtimeMs > startedAt) return true; } catch { /* gone */ }
     }
   }
   return false;
@@ -1292,7 +1302,7 @@ function serve() {
   // websites open in the browser can't change settings or start logins. It's kept across
   // restarts so an open page keeps working.
   const csrf = localToken(join(dirname(userEnvFile), 'csrf'));
-  const page = readFileSync(join(here, '..', 'web', 'index.html'), 'utf8').replace('__CSRF__', csrf);
+  const page = buildPage(csrf);
   const settingsPage = readFileSync(join(here, '..', 'web', 'settings.html'), 'utf8').replace('__CSRF__', csrf);
   const origins = new Set([`http://127.0.0.1:${config.port}`, `http://localhost:${config.port}`]);
   const json = (res, code, body) => {
