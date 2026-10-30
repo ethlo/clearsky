@@ -37,3 +37,16 @@ test('a write waits for your answer; one OK covers both halves of a push', async
   assert.equal((await f(req('POST', 'https://api.githubcopilot.com/mcp/', {}))).action, 'deny');
   assert.deepEqual(asked, ['git push to acme/api', 'POST acme/api/issues/1/comments', 'POST acme/api/issues']);
 });
+
+test('GraphQL: fragments and queries read, a mutation anywhere is a change', async () => {
+  const gql = (query) => githubWrite(req('POST', 'https://api.github.com/graphql', Array.isArray(query) ? query.map((q) => ({ query: q })) : { query }));
+  // The shape gh uses for `gh pr create`'s first look at the repo
+  assert.equal(await gql('fragment repo on Repository { id name owner { login } }\nquery RepositoryInfo($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { ...repo } }'), null);
+  assert.equal(await gql('mutation PullRequestCreate($input: CreatePullRequestInput!) { createPullRequest(input: $input) { pullRequest { url } } }'), 'GitHub change (createPullRequest)');
+  assert.equal(await gql('fragment f on User { login }\nmutation { addStar(input: {starrableId: "{"}) { clientMutationId } }'), 'GitHub change (addStar)');
+  assert.equal(await gql('query Q { search(query: "is:open } {", type: ISSUE) { issueCount } }'), null);
+  assert.equal(await gql(['{ viewer { login } }', 'mutation { deleteRef(input: {}) { x } }']), 'GitHub change (deleteRef)');
+  assert.ok(await gql('query { viewer { login }'), 'unbalanced braces don\'t read as a query');
+  assert.ok(await gql('nonsense { x }'));
+  assert.ok(await gql(''));
+});

@@ -853,9 +853,12 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
 
 // A GitHub change from a sandbox, held at srt's proxy (lib/github-gate.mjs). The proxy can't tell
 // which chat sent it, so every sandboxed chat that's working asks; the first answer counts.
+// When the only working chat is running a step you just allowed (say `gh pr create`), its
+// GitHub changes are part of what you allowed and go through. With two chats working, it asks.
 function githubAsk(what) {
   const chats = [...acpChats.values()].filter((c) => c.agent.sandboxed && c.busy);
   if (!chats.length) return Promise.resolve(false);
+  if (chats.length === 1 && chats[0].approved.size) return Promise.resolve(true);
   return new Promise((done) => {
     const id = randomBytes(6).toString('hex');
     const ev = { type: 'permission', id, title: 'Change GitHub as you', kind: 'execute', detail: what,
@@ -1212,7 +1215,7 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin })
   if (c && (c.sig !== sig || c.agent.closed)) { resumeId = c.agent.sessionId; c.agent.close(); acpChats.delete(chat); c = null; }
   if (!c) {
     const agent = await startAgent(bin, args, cwd, { sandbox });
-    c = { agent, sig, cwd, waiting: new Map(), pending: new Map(), emit: () => {}, lastUsed: Date.now() };
+    c = { agent, sig, cwd, waiting: new Map(), pending: new Map(), approved: new Set(), emit: () => {}, lastUsed: Date.now() };
     const id = await agent.start(cwd, resumeId);
     acpChats.set(id, c);
     // A new chat gets Copilot's own session id; the panel keeps using that from now on.
@@ -1226,6 +1229,8 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin })
   if (agent.commands) { copilotCommands = agent.commands; emit({ type: 'commands', commands: agent.commands }); }
   agent.onUpdate = (u) => {
     if (u.sessionUpdate === 'available_commands_update') { copilotCommands = agent.commands; c.emit({ type: 'commands', commands: agent.commands }); return; }
+    // A step you allowed has finished: its GitHub changes ask again (see githubAsk).
+    if (u.sessionUpdate === 'tool_call_update' && ['completed', 'failed'].includes(u.status)) c.approved.delete(u.toolCallId);
     const e = chatEvent(u); if (e && (e.type !== 'text' || e.text)) c.emit(e);
   };
   const autoAllow = copilot.PERMISSIONS[options.permission]?.autoAllow || [];
@@ -1244,14 +1249,19 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin })
     const id = randomBytes(6).toString('hex');
     const ev = { type: 'permission', id, title: p.toolCall?.title || 'Copilot wants to use a tool', kind: p.toolCall?.kind,
       detail: toolDetail(p.toolCall), options: (p.options || []).map((o) => ({ id: o.optionId, name: o.name, kind: o.kind })) };
-    c.waiting.set(id, (answer) => { c.pending.delete(id); resolve(answer); });
+    c.waiting.set(id, (answer) => {
+      c.pending.delete(id);
+      const opt = (p.options || []).find((o) => o.optionId === answer.optionId);
+      if (/^allow/.test(opt?.kind || '') && p.toolCall?.toolCallId) c.approved.add(p.toolCall.toolCallId);
+      resolve(answer);
+    });
     c.pending.set(id, ev);
     c.emit(ev);
   });
   // Switching chats or reloading the page leaves the turn running; Stop ends it.
   res.on('close', () => { if (c.emit === emit) c.emit = () => {}; });
   c.busy = true;
-  const r = await agent.prompt(prompt).finally(() => { c.busy = false; });
+  const r = await agent.prompt(prompt).finally(() => { c.busy = false; c.approved.clear(); });
   c.emit({ type: 'done', stopReason: r?.stopReason });
   c.emit = () => {};
 }
