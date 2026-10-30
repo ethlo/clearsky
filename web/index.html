@@ -18,20 +18,19 @@
 <div class="drawer-scrim" id="scrim" hidden></div>
 <aside class="side" id="side" aria-label="Menu">
   <nav class="nav" id="nav">
-    <a class="ni" href="#" data-nav="inbox"><span class="ico" data-i="inbox"></span><span class="lab">Inbox</span><b id="n-inbox"></b></a>
+    <a class="ni" href="#" data-nav="inbox"><span class="ico" data-i="work"></span><span class="lab">Work</span><b id="n-inbox"></b></a>
+    <nav class="subnav" id="side-work">
+      <a class="ni" href="#reviews" data-nav="reviews"><span class="ico" data-i="review"></span><span class="lab">Reviews</span><b id="n-reviews"></b></a>
+      <a class="ni" href="#prs" data-nav="prs"><span class="ico" data-i="pr"></span><span class="lab">Your PRs</span><b id="n-prs"></b></a>
+      <a class="ni" href="#mentions" data-nav="mentions"><span class="ico" data-i="at"></span><span class="lab">Mentions</span><b id="n-mentions"></b></a>
+      <a class="ni" href="#tickets" data-nav="tickets"><span class="ico" data-i="ticket"></span><span class="lab">Tickets</span><b id="n-tickets"></b></a>
+    </nav>
     <a class="ni" href="#calendar" data-nav="calendar"><span class="ico" data-i="calendar"></span><span class="lab">Calendar</span><b id="n-calendar"></b></a>
     <a class="ni" href="#standup" data-nav="standup"><span class="ico" data-i="standup"></span><span class="lab">Stand-up</span></a>
     <a class="ni" href="#notifications" data-nav="notifications"><span class="ico" data-i="bell"></span><span class="lab">Notifications</span></a>
   </nav>
   <div class="sg">Copilot <button type="button" id="cp-new-side" title="New chat (Alt+N)" aria-label="New chat"><span data-i="plus" data-size="14"></span></button></div>
   <div id="side-cp"></div>
-  <div class="sg">Work</div>
-  <nav id="side-work">
-    <a class="ni" href="#reviews" data-nav="reviews"><span class="ico" data-i="review"></span><span class="lab">Reviews</span><b id="n-reviews"></b></a>
-    <a class="ni" href="#prs" data-nav="prs"><span class="ico" data-i="pr"></span><span class="lab">Your PRs</span><b id="n-prs"></b></a>
-    <a class="ni" href="#mentions" data-nav="mentions"><span class="ico" data-i="at"></span><span class="lab">Mentions</span><b id="n-mentions"></b></a>
-    <a class="ni" href="#tickets" data-nav="tickets"><span class="ico" data-i="ticket"></span><span class="lab">Tickets</span><b id="n-tickets"></b></a>
-  </nav>
   <div class="sg" id="side-personal-h" hidden>Personal</div>
   <nav id="side-personal"></nav>
   <div class="side-foot">
@@ -55,7 +54,7 @@
 
   <!-- The inbox, and the Reviews / Your PRs / Mentions / Tickets views of it. -->
   <section class="view" id="v-list">
-    <header class="vh"><h1 id="list-title">Inbox</h1>
+    <header class="vh"><h1 id="list-title">Work</h1>
       <input type="search" id="list-q" class="list-q" placeholder="Filter  /" aria-label="Filter this list (/)" spellcheck="false" autocomplete="off"><span class="spacer"></span><span id="su-alert"></span><button class="fresh" data-fresh title="Refresh everything"></button><button class="nowline" id="nowline" title="Open the calendar"></button></header>
     <div class="view-b" id="list" tabindex="-1"></div>
     <div class="kb"><span><kbd>J</kbd><kbd>K</kbd> move</span><span><kbd>↵</kbd> open</span><span><kbd>Esc</kbd> back</span>
@@ -121,13 +120,10 @@
       <aside class="cp-side">
         <div class="chat-ctx" id="chat-ctx" hidden></div>
         <div><h4>Skills</h4><div class="chat-skills" id="cp-skills"></div></div>
-        <div><h4>Settings</h4>
-          <div class="chat-opts">
-            <details class="cp-tools"><summary>Tools</summary>
-              <label>Also allow <input id="cp-allow" placeholder="shell(git:*), shell(gh:*)" spellcheck="false"></label>
-              <label>Also deny <input id="cp-deny" placeholder="url(*), write(**/*.env)" spellcheck="false"></label>
-              <div class="hint">Comma-separated Copilot tool patterns. Deny always wins.</div>
-            </details>
+        <div><h4>This chat</h4><dl class="cp-info" id="cp-info"></dl>
+          <div class="cp-acts">
+            <button class="chip" id="cp-restart" type="button" title="Start this chat's Copilot again; your next message continues the conversation">Restart</button>
+            <button class="chip" id="cp-close" type="button" title="Stop this chat's Copilot and close the chat; it stays in History">Close chat</button>
           </div>
         </div>
       </aside>

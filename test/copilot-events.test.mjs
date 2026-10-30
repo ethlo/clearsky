@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { commandAction, parseEvents } from '../lib/copilot-events.mjs';
+import { commandAction, parseEvents, parseUsage } from '../lib/copilot-events.mjs';
 
 test("Copilot's own steps, from its session log", () => {
   assert.deepEqual(commandAction('cd ~/dev/abc && git push -u origin ABC-1'), { text: 'pushed' });
@@ -21,4 +21,13 @@ test("Copilot's own steps, from its session log", () => {
   const r = parseEvents(log);
   assert.deepEqual(r.branches, ['main', 'feature/ABC-1-x'], 'every branch it started or resumed on');
   assert.deepEqual(r.actions, [{ text: 'pushed', at: '2026-10-29T10:05:03Z' }], 'only steps that succeeded');
+});
+
+test('parseUsage sums model calls once and keeps the latest checkpoint and context', () => {
+  const rec = (id, i, o) => JSON.stringify({ type: 'session.usage_record', data: { usage: { inputTokens: i, outputTokens: o, cacheReadTokens: i - 10, cacheWriteTokens: 5, accounting: { usageId: id } } } });
+  const text = [rec('a', 100, 3), rec('b', 200, 7), rec('a', 100, 3),
+    JSON.stringify({ type: 'session.usage_checkpoint', data: { totalPremiumRequests: 4 } }),
+    JSON.stringify({ type: 'tool.execution_complete', data: { toolTelemetry: { metrics: { context_current_tokens: 900, context_token_limit: 200000 } } } })].join('\n');
+  assert.deepEqual(parseUsage(text), { input: 300, cached: 290, output: 10, calls: 2, premium: 4, context: 900, limit: 200000 });
+  assert.equal(parseUsage(''), null);
 });

@@ -35,8 +35,7 @@ function restoreMode(id) {
   chatSub();
 }
 const saveCp = () => {
-  cpPrefs = { model: $('#cp-model').value.trim(), effort: $('#cp-effort').value, permission: $('#cp-perm').value,
-    allow: $('#cp-allow').value, deny: $('#cp-deny').value };
+  cpPrefs = { model: $('#cp-model').value.trim(), effort: $('#cp-effort').value, permission: $('#cp-perm').value };
   try { localStorage.setItem(CP_KEY, JSON.stringify(cpPrefs)); } catch {}
   if (chat.turns) rememberMode();
   chatSub();
@@ -183,8 +182,38 @@ function drawCtx() {
     ${chat.cwd ? `<div class="ctx-dir" title="${esc(chat.cwd)}">${icon('folder', 13)} ${esc(chat.cwd.replace(/^\/home\/[^/]+/, '~'))}</div>` : ''}`;
 }
 
+// What this chat runs with: mode and whether it's in the sandbox, model, effort, tokens, folders.
+let infoFor = null, infoAt = 0, infoData = null;
+async function drawInfo(force) {
+  const id = chat.turns ? chat.session : null;
+  if (force || id !== infoFor || Date.now() - infoAt > 15_000) {
+    infoFor = id; infoAt = Date.now();
+    try { infoData = await getJson(`/api/copilot/chat${id ? `?id=${encodeURIComponent(id)}` : ''}`); } catch { infoData = null; }
+  }
+  const d = infoData || {}, i = chat.info || {};
+  const k = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
+  const perm = $('#cp-perm').value;
+  const sandbox = d.sandboxed != null ? (d.sandboxed ? 'sandboxed' : 'not sandboxed') : perm === 'sandboxed' || d.sandbox ? 'sandboxed' : 'not sandboxed';
+  const u = d.usage;
+  const rows = [
+    ['Mode', `${i.permissions?.[perm] || perm} · ${sandbox}`],
+    ['Model', $('#cp-model').value.trim() || 'Copilot default'],
+    ['Effort', $('#cp-effort').selectedOptions[0]?.textContent || 'Balanced'],
+    u && ['Tokens', `in ${k(u.input)}${u.input ? ` (${Math.round(100 * u.cached / u.input)}% cached)` : ''} · out ${k(u.output)}${u.premium != null ? ` · ${u.premium} premium` : ''}`],
+    u?.context != null && ['Context', `${k(u.context)}${u.limit ? ` of ${k(u.limit)}` : ''}`],
+    d.cwd && ['Folder', d.cwd],
+    d.folders?.length && ['Can change', d.folders.join(', ')],
+    d.read?.length && ['Can read', d.read.join(', ')],
+    d.hosts && ['Hosts', `<details><summary>${d.hosts.length} allowed</summary>${d.hosts.map(esc).join(', ')}</details>`],
+  ].filter(Boolean);
+  $('#cp-info').innerHTML = rows.map(([a, b]) => `<dt>${a}</dt><dd>${a === 'Hosts' ? b : esc(b)}</dd>`).join('');
+  $('#cp-restart').disabled = !d.running;
+  $('.cp-acts').hidden = !chat.turns;
+}
+
 function chatSub() {
   drawCtx();
+  drawInfo();
   if (!$('#chat-title input')) $('#chat-title').textContent = chat.title || (chat.turns ? 'Copilot session' : 'New chat');
   const i = chat.info;
   $('#chat-sub').textContent = !i ? '' : !i.available ? 'Copilot CLI not found' : `${i.permissions[$('#cp-perm').value] || ''}${chat.turns ? ` · ${chat.turns} turn${chat.turns > 1 ? 's' : ''}` : ''}`;
@@ -273,8 +302,6 @@ async function loadCopilotInfo() {
   $('#cp-effort').innerHTML = `<option value="">Balanced</option>${(i.efforts || []).map((e) => `<option>${esc(e)}</option>`).join('')}`;
   $('#cp-perm').innerHTML = Object.entries(i.permissions || {}).map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('');
   pickDefaults();
-  $('#cp-allow').value = cpPrefs.allow || '';
-  $('#cp-deny').value = cpPrefs.deny || '';
   $('#cp-skills').innerHTML = (i.skills || []).map((sk) =>
     `<button class="chip" data-skill="${esc(sk.name)}" title="${esc(sk.description)}">${esc(sk.name)}</button>`).join('');
   if (!i.available) addMsg('cp', `<div class="err">${esc(i.error || 'The GitHub Copilot CLI wasn’t found on this machine. Install it, or set COPILOT_BIN in ~/.config/clearsky/.env.')}</div>`);
@@ -463,7 +490,7 @@ async function send(text) {
   drawCtx();
   try {
     const res = await fetchWithToken('/api/copilot', { method: 'POST', signal: ctrl.signal,
-      body: JSON.stringify({ message: skillPrompt(text), session: chat.session, resume: chat.turns > 0, cwd: chat.cwd, refs, ...cpPrefs, permission: $('#cp-perm').value }) });
+      body: JSON.stringify({ message: skillPrompt(text), session: chat.session, resume: chat.turns > 0, cwd: chat.cwd, refs, model: cpPrefs.model, effort: cpPrefs.effort, permission: $('#cp-perm').value }) });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
     const reader = res.body.getReader(), dec = new TextDecoder();
     let buf = '';
@@ -621,7 +648,7 @@ $('#hist-list').addEventListener('click', (e) => { const b = e.target.closest('[
 $('#cp-ref-add').onclick = openRefPick;
 $('#cp-refs').addEventListener('click', (e) => { const i = e.target.closest('[data-unref]')?.dataset.unref; if (i != null) { chat.refs.splice(+i, 1); drawRefs(); } });
 document.addEventListener('mousedown', (e) => { if (!e.target.closest('.ref-pick, #cp-ref-add')) closeRefPick(); });
-for (const id of ['#cp-model', '#cp-effort', '#cp-perm', '#cp-allow', '#cp-deny']) $(id).addEventListener('change', saveCp);
+for (const id of ['#cp-model', '#cp-effort', '#cp-perm']) $(id).addEventListener('change', saveCp);
 $('#chat-form').onsubmit = (e) => {
   e.preventDefault();
   const t = $('#chat-text').value;
@@ -756,3 +783,23 @@ $('#cp-skills').addEventListener('click', (e) => {
   ta.value = `/${name} ${ta.value.replace(/^\/[\w-]*\s*/, '')}`.trimEnd() + ' ';
   ta.focus();
 });
+
+// Restart: this chat's Copilot stops; the next message starts it again on the same conversation.
+$('#cp-restart').onclick = async () => {
+  if (chat.stop && !confirm('Copilot is working in this chat. Stop it and restart?')) return;
+  const id = chat.session;
+  if (chat.stop) chat.stop();
+  await post('/api/copilot/close', { chat: id }).catch(() => {});
+  addMsg('cp', `<div class="tool"><span>${icon('refresh', 13)}</span>Copilot restarted. Your next message continues this conversation.</div>`);
+  drawInfo(true);
+};
+// Close: stop it and leave the chat; it stays in History.
+$('#cp-close').onclick = async () => {
+  if (chat.stop && !confirm('Copilot is working in this chat. Stop it and close the chat?')) return;
+  const id = chat.session;
+  if (chat.stop) chat.stop();
+  await post('/api/copilot/close', { chat: id }).catch(() => {});
+  recentChats = recentChats.filter((r) => r.id !== id); saveRecent();
+  newChat();
+  location.hash = '';
+};

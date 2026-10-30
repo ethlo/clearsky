@@ -245,7 +245,7 @@ function sessionItems() {
     });
 }
 
-const LIST_VIEWS = { inbox: 'Inbox', reviews: 'Reviews', prs: 'Your PRs', mentions: 'Mentions', tickets: 'Tickets' };
+const LIST_VIEWS = { inbox: 'Work', reviews: 'Reviews', prs: 'Your PRs', mentions: 'Mentions', tickets: 'Tickets' };
 let listView = 'inbox', listItems = [], selK = null, showWaiting = false;
 
 // Your PRs and Tickets show as tables: what links to what, and which branch the work is on.

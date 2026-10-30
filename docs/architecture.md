@@ -21,7 +21,7 @@ It runs on the laptop, uses the logins already there, has no dependencies beyond
 | Server | `bin/clearsky.mjs` | HTTP on 127.0.0.1, caches sources, plans Now / Next, polls for notifications, talks to Copilot |
 | Modules | `lib/modules/*.mjs` | GitHub, Jira (through acli), Slack and Calendar: each fetches its service, turns it into work items, and declares what it holds and reaches |
 | Item model | `lib/items.mjs` | the one kind of row every list draws, with the next step on each item |
-| Page | `web/index.html`, `web/css/app.css`, `web/js/*.js` | A menu and one work area: the Inbox, an item in full, Copilot chats, Calendar, Stand-up and a page per extra source; the server puts the CSS and scripts inline, so there's no build step |
+| Page | `web/index.html`, `web/css/app.css`, `web/js/*.js` | A menu and one work area: the Work list, an item in full, Copilot chats, Calendar, Stand-up and a page per extra source; the server puts the CSS and scripts inline, so there's no build step |
 | Settings | `web/settings.html`, `lib/settings.mjs` | writes `~/.config/clearsky/.env` (mode 600); never sends saved secrets back |
 | Sources | built in, plus `lib/sources/*.mjs` and `~/.config/clearsky/sources/*.mjs` | each one fetches one service; see the contract in `lib/sources.mjs` |
 | State | `lib/state.mjs` → `~/.config/clearsky/state.json` | done, muted and dismissed items, what was already notified, session links |

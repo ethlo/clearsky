@@ -19,7 +19,7 @@ import * as settings from '../lib/settings.mjs';
 import * as localState from '../lib/state.mjs';
 import * as copilot from '../lib/copilot.mjs';
 import { AcpAgent, chatEvent } from '../lib/acp.mjs';
-import { sessionEvents } from '../lib/copilot-events.mjs';
+import { sessionEvents, sessionUsage } from '../lib/copilot-events.mjs';
 import { branchesFor } from '../lib/branches.mjs';
 import { sandboxed, srtSettings, sandboxReadable, DEFAULT_DOMAINS, READ_DEFAULT, parseDomains } from '../lib/sandbox.mjs';
 import { isReadOnly, editInside } from '../lib/readonly.mjs';
@@ -845,7 +845,7 @@ function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBOX === 
     env.CLEARSKY_ACLI_SOCKET = brokerSocket();
     env.PATH = `${join(here, '..', 'scripts', 'sandbox-bin')}${delimiter}${env.PATH}`;
   }
-  return Object.assign(new AcpAgent(s.bin, s.args, { env }), { sandboxed: true });
+  return Object.assign(new AcpAgent(s.bin, s.args, { env }), { sandboxed: true, hosts: [...new Set([...domains, ...(maven?.hosts || [])])] });
 }
 
 // A short-lived Copilot process, for listing or reading sessions.
@@ -1453,6 +1453,13 @@ function serve() {
           if (force === true) console.log(`clearsky: restart now, stopping ${chatsBusy()} busy chat(s)`);
           return json(res, 200, { restart: restartWhenIdle({ maxWaitMinutes: Math.min(Math.max(Number(maxWaitMinutes) || 60, 1), 240), force: force === true }) });
         }
+        // End a chat's Copilot. Its conversation stays; the next message resumes it in a new one.
+        if (url.pathname === '/api/copilot/close') {
+          const { chat } = await readJson(req);
+          const c = acpChats.get(String(chat || ''));
+          if (c) { stopCopilot(String(chat)); c.agent.close(); acpChats.delete(String(chat)); }
+          return json(res, 200, { closed: !!c });
+        }
         if (url.pathname === '/api/copilot/stop') {
           const { chat } = await readJson(req);
           return json(res, 200, { stopped: stopCopilot(String(chat || '')) });
@@ -1524,7 +1531,8 @@ function serve() {
             const b = found.find((x) => x.local) || found[0];
             if (b) checkout = worktreeFor(b.clone, b.branch) || b.clone;
           }
-          const cwd = checkout || (body.cwd && isDir(body.cwd) ? body.cwd : copilotCwd());
+          // A PR or ticket chat with no clone found starts in your first folder (Settings → Copilot).
+          const cwd = checkout || (body.cwd && isDir(body.cwd) ? body.cwd : (refs.length && !body.resume && copilotFolders().map((d) => d.replace(/^~(?=\/|$)/, homedir())).find(isDir)) || copilotCwd());
           let refText = '';
           if (refs.length) {
             const parts = await Promise.all(refs.map((r) => referenceText(r).catch((e) => `## ${r.key || `${r.repo}#${r.number}`}\n(couldn't load: ${e.message})`)));
@@ -1554,7 +1562,7 @@ function serve() {
             if (itemName) localState.setSessionName(stateFile, sessionId, itemName);
           };
           res.on('close', linkRefs);
-          if (checkout) emit({ type: 'cwd', cwd: checkout });
+          if (cwd !== (body.cwd || copilotCwd())) emit({ type: 'cwd', cwd });
           if (itemName) emit({ type: 'title', title: itemName });
           sessionsCache = null;
           try {
@@ -1664,6 +1672,19 @@ function serve() {
           items: [...attentionItems(data), ...await pluginAttention(false)].map((it) => ({ ...it, at: seen[it.key]?.stamp === String(it.stamp ?? '') ? seen[it.key].at : null })) });
       }
       if (url.pathname === '/api/copilot') return json(res, 200, { ...await copilotInfo(url.searchParams.has('refresh')), commands: copilotCommands });
+      // What one chat runs with, for the panel beside it.
+      if (url.pathname === '/api/copilot/chat') {
+        const id = url.searchParams.get('id') || '';
+        const c = acpChats.get(id);
+        const tilde = (p) => (p.startsWith(homedir()) ? `~${p.slice(homedir().length)}` : p);
+        return json(res, 200, {
+          running: !!c && !c.agent.closed, busy: !!c?.busy, sandboxed: c ? !!c.agent.sandboxed : null, hosts: c?.agent.hosts || null,
+          cwd: c?.cwd ? tilde(c.cwd) : null,
+          folders: copilotFolders().map(tilde), read: list(process.env.COPILOT_READ).map(tilde),
+          sandbox: process.env.COPILOT_SANDBOX === 'srt',
+          usage: /^[\w-]{8,64}$/.test(id) ? sessionUsage(join(homedir(), '.copilot'), id) : null,
+        });
+      }
       if (url.pathname === '/api/copilot/sessions') {
         const info = await copilotInfo();
         if (!info.available) return json(res, 400, { error: 'GitHub Copilot CLI not found' });
