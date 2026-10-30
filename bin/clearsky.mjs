@@ -1722,7 +1722,7 @@ async function dockerCommand([sub = 'up', ...rest]) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
   const args = process.argv.slice(2);
   if (args.includes('-h') || args.includes('--help')) {
-    console.log('usage: clearsky [--json] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky app [--port N] | clearsky docker [up|down|logs|login|mounts] | clearsky school-handover | clearsky jira-debug');
+    console.log('usage: clearsky [--json] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky app [--port N] | clearsky docker [up|down|logs|login|mounts] [--port N] | clearsky school-handover | clearsky jira-debug');
   } else if (args[0] === 'standup') {
     const s = await standup();
     console.log(args.includes('--json') ? JSON.stringify(s, null, 2) : s.text);
@@ -1735,6 +1735,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.a
     if (p > -1) config.port = Number(args[p + 1]);
     await appCommand();
   } else if (args[0] === 'docker') {
+    const p = args.indexOf('--port');
+    if (p > -1) { config.port = Number(args[p + 1]); args.splice(p, 2); }
     await dockerCommand(args.slice(1));
   } else if (args[0] === 'school-handover') {
     const { handOverLogin } = await import('../lib/flyt.mjs');
