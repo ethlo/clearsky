@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, statSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { weekPlanEvents, planMonday } from '../lib/weekplan.mjs';
-import { documentText, docxText } from '../lib/doctext.mjs';
+import { documentText, docxText, pdfText } from '../lib/doctext.mjs';
 import { schoolEvents } from '../lib/school-events.mjs';
 
 // The text of real plans as pdftotext -layout gives it (the school's name and phone changed,
@@ -87,6 +87,7 @@ test('school events: each file read once, kept privately, sent twice shown once,
   const trip = evs.find((e) => /Turdag/.test(e.title));
   assert.equal(new Date(trip.start).getHours(), 9);
   assert.deepEqual(trip.read, { src: 'flyt', key: 'flyt:group:1:a:m2' });
+  assert.equal(trip.title, '3. trinn: Turdag kl. 09.00'); // whose plan, for more than one child
   assert.ok(trip.fyi && !trip.allDay);
   assert.equal(statSync(file).mode & 0o777, 0o600);
   const ends = evs.find((e) => e.kind === 'ends');
@@ -96,4 +97,10 @@ test('school events: each file read once, kept privately, sent twice shown once,
   const failing = await schoolEvents([{ ...msgs[0], key: 'flyt:group:1:c:m3' }], { readFile: async () => { throw new Error('gone'); }, file, now });
   assert.deepEqual(failing, []);
   assert.ok(existsSync(file));
+});
+
+test('PDF text keeps the first line\'s indent, which places its columns', async () => {
+  const bin = join(mkdtempSync(join(tmpdir(), 'cs-pdf-')), 'pdftotext');
+  writeFileSync(bin, '#!/bin/sh\ncat >/dev/null\nprintf "\\n   DIVERSE    MANDAG\\fside 2\\n\\n"\n', { mode: 0o755 });
+  assert.equal(await pdfText(Buffer.from('%PDF-'), { bin }), '   DIVERSE    MANDAG\nside 2');
 });
