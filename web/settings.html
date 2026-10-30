@@ -174,10 +174,13 @@
     <label for="COPILOT_SANDBOX">Sandbox</label>
     <select id="COPILOT_SANDBOX" data-key="COPILOT_SANDBOX"><option value="off">Off</option><option value="srt">Anthropic sandbox runtime (srt)</option></select>
     <p class="hint">With the sandbox on, Copilot and everything it runs can write only in the chat's folder, the folders above, <code>~/.copilot</code> and <code>/tmp</code>, can read only the parts of your home listed under <b>Also readable</b> (never <code>~/.ssh</code>, keyrings, browser profiles or Clearsky's own settings), and can reach only the hosts below. That holds in every access mode, Full included. The <b>Sandboxed</b> access mode always runs in it, and then runs every step inside without asking; only its doors out ask (see <b>Never ask before</b>). srt comes with Clearsky (Linux also needs <code>bubblewrap</code>, <code>socat</code> and <code>ripgrep</code>). Hosts are checked by name only: an allowed host can be written to as well as read. Your GitHub login never enters it: Copilot, git and gh inside get stand-ins, and the sandbox's proxy adds your <code>gh</code> login on the way to GitHub. Reading GitHub goes through; a push or any change (a PR, a comment, a review) waits until you click Allow in the chat. Inside it, git reaches GitHub over https instead of ssh.</p>
+    <label for="COPILOT_SANDBOX_TOKEN">GitHub token for the sandbox (optional)</label>
+    <input id="COPILOT_SANDBOX_TOKEN" data-key="COPILOT_SANDBOX_TOKEN" type="password" autocomplete="off" placeholder="leave empty to use your gh login">
+    <p class="hint">Not needed: by default the sandbox uses your <code>gh</code> login. If you can create a fine-grained token (with <b>Copilot Requests</b>), the sandbox uses it instead, for example one that can only read your work repos. Either way it stays out of the sandbox and changes still wait for your Allow.</p>
     <label for="COPILOT_DOMAINS">Hosts a sandboxed Copilot may reach</label>
     <textarea id="COPILOT_DOMAINS" data-key="COPILOT_DOMAINS" rows="2" spellcheck="false"></textarea>
     <p class="hint">Comma-separated, wildcards like <code>*.atlassian.net</code> allowed. Empty means Copilot, GitHub and your Jira site. Add package registries (say <code>repo.maven.apache.org</code>, <code>registry.npmjs.org</code>) if builds need them.</p>
-    <div class="row"><button class="save" data-keys="COPILOT_MODEL,COPILOT_EFFORT,COPILOT_PERMISSION,COPILOT_CWD,COPILOT_FOLDERS,COPILOT_ASSISTED_ALLOW,COPILOT_SANDBOX,COPILOT_READ,COPILOT_DOMAINS">Save</button><span class="msg"></span></div>
+    <div class="row"><button class="save" data-keys="COPILOT_MODEL,COPILOT_EFFORT,COPILOT_PERMISSION,COPILOT_CWD,COPILOT_FOLDERS,COPILOT_ASSISTED_ALLOW,COPILOT_SANDBOX,COPILOT_SANDBOX_TOKEN,COPILOT_READ,COPILOT_DOMAINS">Save</button><span class="msg"></span></div>
   </section>
 
   <section>
@@ -220,7 +223,7 @@
   draw();
 })();
 const CSRF = '__CSRF__';
-const SECRET = new Set(['GITHUB_TOKEN', 'GOOGLE_CALENDAR_ICS', 'SLACK_TOKEN']);
+const SECRET = new Set(['GITHUB_TOKEN', 'GOOGLE_CALENDAR_ICS', 'SLACK_TOKEN', 'COPILOT_SANDBOX_TOKEN']);
 const $ = (s) => document.querySelector(s);
 
 const manifest = {
@@ -306,6 +309,7 @@ function render(s) {
   $('#COPILOT_CWD').value = cp.cwd || '';
   $('#COPILOT_MODEL').value = cp.model || '';
   $('#COPILOT_ASSISTED_ALLOW').value = cp.assistedAllow || '';
+  $('#COPILOT_SANDBOX_TOKEN').placeholder = cp.sandboxToken ? `${cp.sandboxToken}; paste a new one to replace` : 'leave empty to use your gh login';
   $('#COPILOT_SANDBOX').value = cp.sandbox || 'off';
   $('#COPILOT_READ').value = cp.read || '';
   $('#read-default').textContent = cp.readDefault || '';

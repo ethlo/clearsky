@@ -824,7 +824,8 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   if (maven) Object.assign(process.env, maven.env);
   const env = copilotEnv();
   const n = Number(env.GIT_CONFIG_COUNT) || 0;
-  const token = ghToken();
+  // A token from Settings → Copilot if you made one, else your gh login.
+  const token = process.env.COPILOT_SANDBOX_TOKEN || ghToken();
   const github = token ? githubLogin(token, process.env, n + SANDBOX_GIT.length) : null;
   [...SANDBOX_GIT, ...(github ? [github.git] : [])].forEach(([k, v], i) => { env[`GIT_CONFIG_KEY_${n + i}`] = k; env[`GIT_CONFIG_VALUE_${n + i}`] = v; });
   env.GIT_CONFIG_COUNT = String(n + SANDBOX_GIT.length + (github ? 1 : 0));
@@ -846,7 +847,7 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   const s = await sandboxedCommand(bin, [...args, '--disable-builtin-mcps', '--acp'], { ...sandboxOpts(cwd), domains, maven, github, ca: sandboxCa(keep) },
     { filterRequest: githubFilter(githubAsk) });
   return Object.assign(new AcpAgent(s.bin, s.args, { env, acp: false }), { sandboxed: true, brokerKey: key,
-    github: github ? 'your gh login, added on the way out; changes ask you' : 'not signed in (gh auth login)',
+    github: github ? `${process.env.COPILOT_SANDBOX_TOKEN ? 'your sandbox token' : 'your gh login'}, added on the way out; changes ask you` : 'not signed in (gh auth login)',
     hosts: [...new Set([...domains, ...(maven?.hosts || []), ...(github?.read || [])])] });
 }
 
