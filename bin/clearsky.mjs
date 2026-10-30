@@ -1852,9 +1852,6 @@ async function restartCommand(args) {
   console.log(r.busy && !args.includes('--now') ? `Restarting once Copilot is done (${r.busy} chat${r.busy > 1 ? 's' : ''} working; gives up at ${r.until}).` : 'Restarting now.');
 }
 
-// `clearsky app`: Clearsky in a window of its own (Chromium's app mode: no tabs or address bar),
-// starting the server first when it isn't running. Your normal browser profile, so links to
-// GitHub and Jira open logged in.
 export { findBrowser };
 
 // Your default browser, as the desktop opens links.
@@ -1863,6 +1860,8 @@ function openInBrowser(u) {
   const [cmd, ...pre] = process.platform === 'darwin' ? ['open'] : process.platform === 'win32' ? ['rundll32', 'url.dll,FileProtocolHandler'] : ['xdg-open'];
   spawn(cmd, [...pre, u], { stdio: 'ignore', detached: true }).on('error', () => {}).unref();
 }
+// `clearsky app`: Clearsky in a window of its own (Chromium's app mode: no tabs or address bar),
+// starting the server first when it isn't running. Links elsewhere open in your default browser.
 async function appCommand() {
   const base = `http://127.0.0.1:${config.port}`;
   const up = () => fetch(`${base}/api/restart`).then((r) => r.ok, () => false);

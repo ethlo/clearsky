@@ -188,9 +188,22 @@ document.addEventListener('click', (e) => {
   openReader(a.dataset.read, a.dataset.key, a.getAttribute('href'));
 });
 
-// In its own window (`clearsky app`), Clearsky starts no bigger than the screen: the browser
-// may remember a size from a bigger screen. A normal browser tab ignores this.
-if (matchMedia('(display-mode: standalone)').matches || /[?&]app=1\b/.test(location.search)) {
-  const w = Math.min(outerWidth, screen.availWidth), h = Math.min(outerHeight, screen.availHeight);
-  if (w < outerWidth || h < outerHeight) { try { resizeTo(w, h); moveTo(screen.availLeft || 0, screen.availTop || 0); } catch {} }
+// In its own window (`clearsky app`), Clearsky opens where and as big as you left it, and never
+// bigger than the screen. The browser's own memory of the size is unreliable: a running browser
+// ignores --window-size, and it may remember a size from another screen. A normal tab skips this.
+if (APP_WINDOW) {
+  const KEY = 'clearsky.window';
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch {}
+  const fit = (w, h) => [Math.min(w, screen.availWidth), Math.min(h, screen.availHeight)];
+  const [w, h] = saved ? fit(saved.w, saved.h) : fit(outerWidth, outerHeight);
+  try {
+    if (w !== outerWidth || h !== outerHeight) resizeTo(w, h);
+    if (saved && saved.x + w <= (screen.availLeft || 0) + screen.availWidth + 50 && saved.y + h <= (screen.availTop || 0) + screen.availHeight + 50) moveTo(saved.x, saved.y);
+    else if (!saved && (w < outerWidth || h < outerHeight)) moveTo(screen.availLeft || 0, screen.availTop || 0);
+  } catch {}
+  let t;
+  const keep = () => { clearTimeout(t); t = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify({ w: outerWidth, h: outerHeight, x: screenX, y: screenY })); } catch {} }, 500); };
+  addEventListener('resize', keep);
+  addEventListener('beforeunload', () => { try { localStorage.setItem(KEY, JSON.stringify({ w: outerWidth, h: outerHeight, x: screenX, y: screenY })); } catch {} });
 }
