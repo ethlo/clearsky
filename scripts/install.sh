@@ -114,7 +114,7 @@ Exec=$(command -v node) $DIR/bin/clearsky.mjs app
 Icon=$DIR/web/icon-512.png
 Terminal=false
 Categories=Office;
-StartupWMClass=Clearsky
+StartupWMClass=$( [ "${XDG_SESSION_TYPE:-}" = wayland ] && echo chrome-127.0.0.1__-Default || echo Clearsky )
 DESKTOP
   have update-desktop-database && update-desktop-database "$apps" >/dev/null 2>&1 || true
   echo "  app menu: Clearsky (opens it in a window of its own)"

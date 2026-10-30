@@ -1862,6 +1862,19 @@ function openInBrowser(u) {
   const [cmd, ...pre] = process.platform === 'darwin' ? ['open'] : process.platform === 'win32' ? ['rundll32', 'url.dll,FileProtocolHandler'] : ['xdg-open'];
   spawn(cmd, [...pre, u], { stdio: 'ignore', detached: true }).on('error', () => {}).unref();
 }
+// The launcher's StartupWMClass, so GNOME files the window under Clearsky (icon, Alt+Tab, and a
+// click on the icon brings it back): on Wayland Chrome names an --app window by its address and
+// profile (chrome-127.0.0.1__-Default) and ignores --class, which only X11 uses.
+function fixLauncher(env = process.env) {
+  const file = join(env.XDG_DATA_HOME || join(homedir(), '.local', 'share'), 'applications', 'clearsky.desktop');
+  const wm = env.XDG_SESSION_TYPE === 'wayland' ? 'chrome-127.0.0.1__-Default' : 'Clearsky';
+  try {
+    const text = readFileSync(file, 'utf8');
+    const next = text.replace(/^StartupWMClass=.*$/m, `StartupWMClass=${wm}`);
+    if (next !== text) writeFileSync(file, next);
+  } catch { /* no launcher installed */ }
+}
+
 // `clearsky app`: Clearsky in a window of its own (Chromium's app mode: no tabs or address bar),
 // starting the server first when it isn't running. Links elsewhere open in your default browser.
 async function appCommand() {
@@ -1883,6 +1896,7 @@ async function appCommand() {
   // browser (Wayland ignores --class there), so it couldn't be found as Clearsky in the dock or
   // Alt+Tab. No logins needed in it: links open in your default browser.
   const profile = join(dirname(userEnvFile), 'app-window');
+  if (process.platform === 'linux') fixLauncher();
   spawn(browser, [`--app=${base}/?app=1`, '--class=Clearsky', `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', `--window-size=${size}`],
     { detached: true, stdio: 'ignore' }).unref();
 }
