@@ -1754,7 +1754,8 @@ async function dockerCommand([sub = 'up', ...rest]) {
       await compose('stop', 'clearsky');
       const home = homedir(), ids = `${env0.UID}:${env0.GID}`;
       const tmp = (p, exec) => ['--tmpfs', `${p}:uid=${env0.UID},gid=${env0.GID},mode=0700${exec ? ',exec' : ''}`];
-      const args = ['run', '--rm', '-it', '--network', 'host', '--user', ids, '-e', `HOME=${home}`,
+      // acli only opens a browser when it sees a display; the "browser" in there is the shim.
+      const args = ['run', '--rm', '-it', '--network', 'host', '--user', ids, '-e', `HOME=${home}`, '-e', 'DISPLAY=:0', '-e', 'WAYLAND_DISPLAY=wayland-0',
         ...tmp(home, true), ...tmp(join(home, '.config')), ...tmp(join(home, '.cache'), true),
         ...mounts.flatMap((m) => ['-v', `${m.path}:${m.path}${m.ro ? ':ro' : ''}`]),
         'clearsky:local', '--run', 'acli jira auth login --web'];
