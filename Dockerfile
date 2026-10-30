@@ -10,7 +10,7 @@ FROM node:22-bookworm-slim
 ARG GH_VERSION=2.62.0
 RUN apt-get update && apt-get install -y --no-install-recommends \
       git ca-certificates curl poppler-utils ripgrep openssh-client unzip \
-      dbus gnome-keyring libsecret-tools \
+      dbus gnome-keyring libsecret-tools python3 \
     && curl -fsSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_$(dpkg --print-architecture).tar.gz" \
       | tar -xz -C /usr/local --strip-components=1 \
     && arch=$(dpkg --print-architecture) \
