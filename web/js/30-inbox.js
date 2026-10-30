@@ -96,7 +96,8 @@ document.addEventListener('click', (e) => {
 // What to do next on an item, as one verb phrase and how to do it here:
 //   { label, run: 'review' }                    open the reviewer picker (your PR)
 //   { label, run: 'copilot', skill, prompt }    continue its Copilot chat, or start one
-//   { label, run: 'url', url }                  something only GitHub or Jira does (merge, reply)
+//   { label, run: 'url', url }                  something only GitHub or Jira does (reply)
+//   { label, run: 'merge', repo, number, url }  merge your PR (asks first); ↗ beside it opens it
 //   { label, run: 'item', k }                   go to the item that holds the next step
 //   { label, wait: true }                       nothing for you to do; who or what it waits on
 const hasSkill = (n) => (chat.info?.skills || []).some((s) => s.name === n);
@@ -149,13 +150,28 @@ function nextStep(it, rel = relatedItems(it, xrefAll.length ? xrefAll : inboxIte
 function nextHtml(it, n = nextStep(it)) {
   if (!n) return '';
   return n.wait ? `<span class="next wait">⏳ ${esc(n.label)}</span>`
-    : `<button class="next" data-next="${esc(it.k)}" title="Next step">→ ${esc(n.label)}</button>`;
+    : `<button class="next" data-next="${esc(it.k)}" title="${n.run === 'merge' ? `Merge ${esc(n.repo)}#${esc(n.number)} on GitHub` : 'Next step'}">→ ${esc(n.label)}</button>${n.run === 'merge' && n.url ? `<a class="next-ext" href="${esc(n.url)}" target="_blank" rel="noopener" title="Open on GitHub" aria-label="Open on GitHub">↗</a>` : ''}`;
+}
+// Merging your PR from its next-step button: asks first, then says how it went in place.
+async function mergePr(n, btn) {
+  if (!confirm(`Merge ${n.repo}#${n.number}?`)) return;
+  const label = btn?.textContent;
+  if (btn) { btn.disabled = true; btn.textContent = 'Merging…'; }
+  try {
+    const r = await post('/api/pr/merge', { repo: n.repo, number: n.number });
+    if (btn) btn.textContent = `✓ Merged${r.method ? ` (${r.method})` : ''}`;
+    loadAll(true);
+  } catch (err) {
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+    alert(`Couldn't merge ${n.repo}#${n.number}: ${err.message}`);
+  }
 }
 // Doing the next step: the reviewer picker in place, Copilot in its chat, or GitHub/Jira.
 function runNext(it, btn) {
   const n = nextStep(it);
   if (!n || n.wait) return;
   if (n.run === 'url') return window.open(n.url, '_blank', 'noopener');
+  if (n.run === 'merge') return mergePr(n, btn);
   if (n.run === 'item') { const x = (xrefAll.length ? xrefAll : inboxItems()).find((y) => y.k === n.k); return x && openItem(x); }
   if (n.run === 'review') {
     const d = n.repo ? { repo: n.repo, number: n.number } : it.data || {};
@@ -404,7 +420,7 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('[data-unfold]')) { showWaiting = !showWaiting; renderList(); return; }
   if (e.target.closest('#later-toggle')) { showLater = !showLater; renderList(); return; }
   const r = e.target.closest('#list .r');
-  if (!r || e.target.closest('button, .cp-chip') || getSelection().toString()) return;
+  if (!r || e.target.closest('button, .cp-chip, .next-ext') || getSelection().toString()) return;
   // Ctrl/Cmd-click on the title still opens the source's own page.
   if (e.target.closest('a') && (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0)) return;
   e.preventDefault();

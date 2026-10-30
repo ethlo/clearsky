@@ -29,3 +29,14 @@ test('modules turn their data into work items with the next step', () => {
   assert.deepEqual(w.next, { label: 'Waiting: In Review', wait: true });
   assert.deepEqual(ticketKeys('UTF-8 and SSP-5', 'ops-2-y'), ['UTF-8', 'SSP-5', 'OPS-2']);
 });
+
+test('"Merge it" merges your PR the way the repo allows, and says why GitHub refused', async () => {
+  const { createGitHub } = await import('../lib/modules/github.mjs');
+  assert.deepEqual(prNext({ repo: 'acme/api', number: 7, url: 'https://github.com/acme/api/pull/7', status: { label: 'Ready to merge' } }),
+    { label: 'Merge it', run: 'merge', repo: 'acme/api', number: 7, url: 'https://github.com/acme/api/pull/7' });
+  const calls = [];
+  const http = async (url, o = {}) => { calls.push([o.method || 'GET', url, o.body]); return url.endsWith('/repos/acme/api') ? { allow_squash_merge: false, allow_merge_commit: true } : { merged: true }; };
+  const gh = createGitHub({ config: { github: { api: 'https://gh.test', token: 't' } }, http, execFileP: async () => ({ stdout: '' }), daysAgoIso: () => '' });
+  assert.deepEqual(await gh.mergePr('acme/api', 7), { method: 'merge' });
+  assert.deepEqual(calls.at(-1), ['PUT', 'https://gh.test/repos/acme/api/pulls/7/merge', { merge_method: 'merge' }]);
+});

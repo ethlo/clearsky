@@ -137,7 +137,7 @@ const execFileP = promisify(execFile);
 const settle = (p) => p.catch((e) => ({ error: e.message, ...(e.auth && { needsLogin: true }) }));
 
 const ghModule = createGitHub({ config, http, execFileP, daysAgoIso });
-const { gql, reviewerOptions, requestReviews, ghCliToken } = ghModule;
+const { gql, reviewerOptions, requestReviews, mergePr, ghCliToken } = ghModule;
 const fetchGitHub = ghModule.fetch;
 export { isBot, openThreads, myPrStatus };
 
@@ -1411,6 +1411,23 @@ function serve() {
           localState.logAction(stateFile, `https://github.com/${repo}/pull/${number}`, `Asked ${logins.join(', ')} to review`);
           sourceCache.delete('github');
           return json(res, 200, { ok: true });
+        }
+        // Merge one of your PRs, as you; only from the button, which asks you first.
+        if (url.pathname === '/api/pr/merge') {
+          const { repo, number } = await readJson(req);
+          if (!/^[\w.-]+\/[\w.-]+$/.test(repo || '') || !/^\d+$/.test(String(number))) return json(res, 400, { error: 'bad request' });
+          if (!config.github.orgs.includes(repo.split('/')[0])) return json(res, 400, { error: 'not one of your work repos' });
+          try {
+            const { method } = await mergePr(repo, Number(number));
+            localState.logAction(stateFile, `https://github.com/${repo}/pull/${number}`, `Merged (${method})`);
+            sourceCache.delete('github');
+            return json(res, 200, { ok: true, method });
+          } catch (e) {
+            // GitHub says why (a required review or check, a conflict): pass its message on.
+            let why = e.message;
+            try { why = JSON.parse(e.message.replace(/^[^{]*/, '')).message || why; } catch {}
+            return json(res, 409, { error: why });
+          }
         }
         if (url.pathname === '/api/copilot/permission') {
           const { chat, id, option } = await readJson(req);
