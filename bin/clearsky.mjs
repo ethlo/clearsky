@@ -1533,6 +1533,7 @@ function serve() {
             || !logins.every((l) => /^[A-Za-z\d](?:[A-Za-z\d-]{0,38})$/.test(l))) return json(res, 400, { error: 'bad request' });
           if (!config.github.orgs.includes(repo.split('/')[0])) return json(res, 400, { error: 'not one of your work repos' });
           await requestReviews(repo, Number(number), logins);
+          localState.setLastReviewers(stateFile, repo, logins);
           localState.logAction(stateFile, `https://github.com/${repo}/pull/${number}`, `Asked ${logins.join(', ')} to review`);
           sourceCache.delete('github');
           return json(res, 200, { ok: true });
@@ -1781,7 +1782,12 @@ function serve() {
       if (url.pathname === '/api/pr/reviewers') {
         const repo = url.searchParams.get('repo') || '', number = url.searchParams.get('number') || '';
         if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !/^\d+$/.test(number)) return json(res, 400, { error: 'bad PR reference' });
-        return json(res, 200, await reviewerOptions(repo, Number(number)));
+        const d = await reviewerOptions(repo, Number(number));
+        const last = new Set(localState.lastReviewers(stateFile, repo));
+        for (const p of d.people) p.last = last.has(p.login);
+        const rank = (p) => (p.requested ? 0 : p.last ? 1 : 2);
+        d.people.sort((a, b) => rank(a) - rank(b)); // stable: GitHub's order otherwise
+        return json(res, 200, d);
       }
       // Branches in your clones carrying the key of a ticket you have.
       if (url.pathname === '/api/branches') {

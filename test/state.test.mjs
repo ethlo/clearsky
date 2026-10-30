@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { dismissed, setDismissed, isDismissed, muted, setMuted } from '../lib/state.mjs';
+import { dismissed, setDismissed, isDismissed, muted, setMuted, lastReviewers, setLastReviewers } from '../lib/state.mjs';
 
 test('dismissed and muted items are kept in a private state file', () => {
   const file = join(mkdtempSync(join(tmpdir(), 'clearsky-state-')), 'sub', 'state.json');
@@ -41,4 +41,13 @@ test('read marks are kept per item, and can be taken back', async () => {
   setRead(file, [{ key: 'flyt:flyt:notice:1:5', at: null }]);
   assert.deepEqual(Object.keys(readMarks(file)), ['flyt:flyt:direct:1:7']);
   assert.throws(() => setRead(file, [{ key: '', at: 'x' }]), /bad key/);
+});
+
+test('remembers who you last asked to review, per repo', () => {
+  const file = join(mkdtempSync(join(tmpdir(), 'clearsky-state-')), 'state.json');
+  assert.deepEqual(lastReviewers(file, 'acme/api'), []);
+  setLastReviewers(file, 'acme/api', ['alex', 'sam']);
+  setLastReviewers(file, 'acme/web', ['kim']);
+  assert.deepEqual(lastReviewers(file, 'acme/api'), ['alex', 'sam']);
+  assert.deepEqual(lastReviewers(file, 'acme/new'), ['kim'], 'a repo you haven\'t picked for yet gets your last pick');
 });

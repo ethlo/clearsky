@@ -136,8 +136,8 @@ document.addEventListener('click', async (e) => {
   if (!slot.isConnected) return;
   if (d.error) { slot.innerHTML = `<div class="rv-pick"><div class="err" style="margin:0">${esc(d.error)}</div></div>`; return; }
   const li = (p) => `<li class="${p.requested ? 'off' : ''}" data-q="${esc(`${p.login} ${p.name || ''}`.toLowerCase())}"><label>
-    <input type="checkbox" value="${esc(p.login)}" ${p.requested ? 'checked disabled' : ''}>${esc(p.name || p.login)}${p.name ? ` <span class="muted">${esc(p.login)}</span>` : ''}
-    <small>${p.requested ? 'asked' : p.reviewed ? esc(RV_STATE[p.reviewed] || 'reviewed') + ', ask again' : p.suggested ? 'suggested' : ''}</small></label></li>`;
+    <input type="checkbox" value="${esc(p.login)}" ${p.requested ? 'checked disabled' : p.last ? 'checked' : ''}>${esc(p.name || p.login)}${p.name ? ` <span class="muted">${esc(p.login)}</span>` : ''}
+    <small>${p.requested ? 'asked' : p.last ? 'last time' : p.reviewed ? esc(RV_STATE[p.reviewed] || 'reviewed') + ', ask again' : p.suggested ? 'suggested' : ''}</small></label></li>`;
   slot.innerHTML = `<div class="rv-pick"><input type="search" placeholder="Find a person" aria-label="Find a person">
     <ul>${d.people.map(li).join('') || '<li class="off"><label>Nobody else can review this repo.</label></li>'}</ul>
     <div class="rv-foot"><button class="icon-btn primary" data-rv-send disabled>Request review</button><span class="muted rv-msg"></span></div></div>`;
@@ -148,7 +148,9 @@ document.addEventListener('click', async (e) => {
     const q = ev.target.value.trim().toLowerCase();
     for (const x of box.querySelectorAll('li[data-q]')) x.hidden = !!q && !x.dataset.q.includes(q);
   });
-  box.addEventListener('change', () => { const n = picked().length; sendBtn.disabled = !n; sendBtn.textContent = n > 1 ? `Request review from ${n}` : 'Request review'; });
+  const count = () => { const n = picked().length; sendBtn.disabled = !n; sendBtn.textContent = n > 1 ? `Request review from ${n}` : 'Request review'; };
+  box.addEventListener('change', count);
+  count(); // your last pick is ticked already
   sendBtn.addEventListener('click', async () => {
     sendBtn.disabled = true;
     try {
