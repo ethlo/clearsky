@@ -22,6 +22,7 @@ import * as copilot from '../lib/copilot.mjs';
 import { AcpAgent, chatEvent } from '../lib/acp.mjs';
 import { sessionEvents } from '../lib/copilot-events.mjs';
 import { branchesFor } from '../lib/branches.mjs';
+import { sandboxed, DEFAULT_DOMAINS, parseDomains } from '../lib/sandbox.mjs';
 import { isReadOnly, editInside } from '../lib/readonly.mjs';
 import { assistedReason } from '../lib/assisted.mjs';
 import { attentionItems, diffAttention, desktopNotify, DbusNotifier } from '../lib/notify.mjs';
@@ -1305,9 +1306,17 @@ function stopCopilot(chat) {
   return !!c;
 }
 
+// Start Copilot, inside the sandbox when Settings → Copilot says so (COPILOT_SANDBOX=srt).
+function startAgent(bin, args, cwd) {
+  if (process.env.COPILOT_SANDBOX !== 'srt') return new AcpAgent(bin, args, { env: copilotEnv() });
+  const domains = process.env.COPILOT_DOMAINS ? parseDomains(process.env.COPILOT_DOMAINS) : DEFAULT_DOMAINS;
+  const s = sandboxed(bin, args, { srt: process.env.SRT_BIN || 'srt', dir: join(dirname(stateFile), 'sandbox'), cwd, folders: copilotFolders(), home: homedir(), domains });
+  return new AcpAgent(s.bin, s.args, { env: copilotEnv() });
+}
+
 // A short-lived Copilot process, for listing or reading sessions.
 async function withAgent(bin, fn) {
-  const agent = new AcpAgent(bin, [], { env: copilotEnv() });
+  const agent = startAgent(bin, [], copilotCwd());
   const timer = setTimeout(() => agent.close(), 30_000);
   try { return await fn(agent); } finally { clearTimeout(timer); agent.close(); }
 }
@@ -1593,11 +1602,11 @@ const copilotFolders = () => (process.env.COPILOT_FOLDERS ? list(process.env.COP
 async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin }) {
   // Changing the folders in Settings starts the chat's Copilot again (resuming it) on its next turn.
   const args = [...copilot.optionArgs(options), ...copilot.folderArgs(copilotFolders())];
-  const sig = JSON.stringify(args);
+  const sig = JSON.stringify([args, process.env.COPILOT_SANDBOX, process.env.COPILOT_DOMAINS]);
   let c = acpChats.get(chat);
   if (c && (c.sig !== sig || c.agent.closed)) { resumeId = c.agent.sessionId; c.agent.close(); acpChats.delete(chat); c = null; }
   if (!c) {
-    const agent = new AcpAgent(bin, args, { env: copilotEnv() });
+    const agent = startAgent(bin, args, cwd);
     c = { agent, sig, cwd, waiting: new Map(), pending: new Map(), emit: () => {}, lastUsed: Date.now() };
     const id = await agent.start(cwd, resumeId);
     acpChats.set(id, c);
