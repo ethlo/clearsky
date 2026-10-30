@@ -285,7 +285,11 @@ function tableView(x, list, limit = 12) {
   const groups = [...new Set(list.map((i) => i.group).filter(Boolean))]
     .sort((a, b) => (a === 'School' ? -1 : b === 'School' ? 1 : a.localeCompare(b)));
   const pick = groups.includes(groupPick[x.name]) ? groupPick[x.name] : '';
-  const items = list.filter((i) => !pick || i.group === pick).sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+  // Newest first, or by the column you clicked (see data-isort below).
+  const so = colPrefs.sort, key = { d: (i) => i.at || '', f: (i) => i.from || '', g: (i) => i.group || '', s: (i) => i.title || '' };
+  const items = list.filter((i) => !pick || i.group === pick).sort((a, b) => (so && key[so.c]
+    ? (so.dir === 'desc' ? -1 : 1) * key[so.c](a).localeCompare(key[so.c](b), undefined, { numeric: true, sensitivity: 'base' })
+    : String(b.at || '').localeCompare(String(a.at || ''))));
   const unread = (g) => list.filter((i) => i.unread && (!g || i.group === g)).length;
   const chip = (g, label) => `<button data-pick="${esc(x.name)}" data-group="${esc(g)}" class="${pick === g ? 'on' : ''}">${esc(label)}${unread(g) ? `<span class="n">${unread(g)}</span>` : ''}</button>`;
   const id = `x-${x.name}-${pick}`;
@@ -307,12 +311,21 @@ function tableView(x, list, limit = 12) {
   const cols = `<details class="cols"><summary>Columns</summary><div class="menu">${COLS.filter(([c]) => c !== 's').map(([c, label]) =>
     `<label><input type="checkbox" data-col="${c}"${colPrefs.hidden.includes(c) ? '' : ' checked'}> ${label}</label>`).join('')}
     <button class="reset" data-cols-reset>Reset widths</button></div></details>`;
-  const head = (c, label) => `<span class="${c}">${label}${['d', 'f', 'g'].includes(c) ? `<i class="rz" data-rz="${c}" title="Drag to resize"></i>` : ''}</span>`;
+  const arrow = (c) => (so?.c === c ? (so.dir === 'desc' ? ' ▼' : ' ▲') : '');
+  const head = (c, label) => `<span class="${c} sortable" data-isort="${c}" title="Sort by ${label.toLowerCase()}">${label}${arrow(c)}${['d', 'f', 'g'].includes(c) ? `<i class="rz" data-rz="${c}" title="Drag to resize"></i>` : ''}</span>`;
   const markAll = unread(pick) ? `<button class="mark-all" data-mark-all="${esc(x.name)}" data-group="${esc(pick)}">Mark ${pick ? `${esc(pick)} ` : 'all '}read</button>` : '';
   return `<div class="pick">${groups.length > 1 ? chip('', 'All') + groups.map((g) => chip(g, g)).join('') : ''}${markAll}${cols}</div>` +
-    `<ul class="inbox ${colClasses()}" style="--cols: ${colTemplate()}"><li class="head">${head('d', 'Date')}${head('f', 'From')}${head('g', 'Group')}<span class="s">Subject</span><span class="att"></span></li>${shown.map(line).join('')}</ul>` +
+    `<ul class="inbox ${colClasses()}" style="--cols: ${colTemplate()}"><li class="head">${head('d', 'Date')}${head('f', 'From')}${head('g', 'Group')}${head('s', 'Subject')}<span class="att"></span></li>${shown.map(line).join('')}</ul>` +
     (items.length > shown.length ? `<button class="more" data-more="${id}">Show ${items.length - shown.length} more</button>` : '');
 }
+document.addEventListener('click', (e) => {
+  const h = e.target.closest('[data-isort]');
+  if (!h || e.target.closest('.rz')) return;
+  const c = h.dataset.isort, first = c === 'd' ? 'desc' : 'asc';
+  colPrefs.sort = colPrefs.sort?.c !== c ? { c, dir: first } : colPrefs.sort.dir === first ? { c, dir: first === 'asc' ? 'desc' : 'asc' } : null;
+  try { localStorage.setItem(COLS_KEY, JSON.stringify(colPrefs)); } catch {}
+  renderExtra();
+});
 document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-pick]');
   if (!b) return;

@@ -268,12 +268,50 @@ function applyWcols() {
   el.style.setProperty('--wcols', ['16px', ...cols.filter(([c]) => !off.has(c)).map(([c]) => (c === 't' ? 'minmax(0, 1fr)' : `${wcolWidth(v, c)}px`))].join(' '));
   off.forEach((c) => el.classList.add(`no-${c}`));
 }
+// Sorting by a column: click a header (again to reverse, a third time for the usual order).
+// Within each group, so what needs you stays on top.
+const natural = (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+const TONE_RANK = { red: 0, amber: 1, blue: 2, green: 3 };
+function sortKey(it, c) {
+  const d = it.data || {};
+  switch (c) {
+    case 'id': return it.issue || it.ref || '';
+    case 't': return it.title || '';
+    case 'x': return relatedItems(it, xrefAll)[0]?.ref || '';
+    case 'b': return branchesOf(it, relatedItems(it, xrefAll))[0]?.branch || '';
+    case 'v': return d.fixVersions?.length ? d.fixVersions.map((v) => v.name).join(', ') : null;
+    case 'a': return d.assignee || null;
+    case 's': return it.label ? `${TONE_RANK[it.label[1]] ?? 4} ${it.label[0]}` : null;
+    case 'u': return it.at ? Date.parse(it.at) || 0 : null;
+    default: return '';
+  }
+}
+function sortRows(v, items) {
+  const s = wprefs(v).sort;
+  if (!s) return items;
+  const dir = s.dir === 'desc' ? -1 : 1;
+  return [...items].sort((a, b) => {
+    const x = sortKey(a, s.c), y = sortKey(b, s.c);
+    if (x == null || x === '') return y == null || y === '' ? 0 : 1; // empty last, either way
+    if (y == null || y === '') return -1;
+    return dir * (typeof x === 'number' ? x - y : natural(x, y));
+  });
+}
+document.addEventListener('click', (e) => {
+  const h = e.target.closest('.wt-head [data-wsort]');
+  if (!h || e.target.closest('.rz') || !WORK_COLS[listView]) return;
+  const p = wprefs(listView), c = h.dataset.wsort;
+  p.sort = p.sort?.c !== c ? { c, dir: c === 'u' ? 'desc' : 'asc' } : p.sort.dir === (c === 'u' ? 'desc' : 'asc') ? { c, dir: c === 'u' ? 'asc' : 'desc' } : null;
+  saveWcols(); renderList();
+});
 function workHead(v) {
-  const cols = WORK_COLS[v], off = new Set(wprefs(v).hidden);
+  const cols = WORK_COLS[v], off = new Set(wprefs(v).hidden), s = wprefs(v).sort;
   const menu = `<div class="wt-bar pick"><details class="cols"><summary>Columns</summary><div class="menu">${cols.filter(([c]) => c !== 't').map(([c, label]) =>
     `<label><input type="checkbox" data-wcol="${c}"${off.has(c) ? '' : ' checked'}> ${label}</label>`).join('')}
     <button class="reset" data-wcols-reset>Reset widths</button></div></details></div>`;
-  return `${menu}<div class="wt-head"><span></span>${cols.map(([c, label]) => `<span class="c-${c}">${label}${c !== 't' ? `<i class="rz" data-wrz="${c}" title="Drag to resize"></i>` : ''}</span>`).join('')}</div>`;
+  const arrow = (c) => (s?.c === c ? (s.dir === 'desc' ? ' ▼' : ' ▲') : '');
+  const aria = (c) => (s?.c === c ? (s.dir === 'desc' ? 'descending' : 'ascending') : 'none');
+  return `${menu}<div class="wt-head"><span></span>${cols.map(([c, label]) => `<span class="c-${c} sortable" data-wsort="${c}" role="columnheader" aria-sort="${aria(c)}" title="Sort by ${label.toLowerCase()}">${label}${arrow(c)}${c !== 't' ? `<i class="rz" data-wrz="${c}" title="Drag to resize"></i>` : ''}</span>`).join('')}</div>`;
 }
 document.addEventListener('change', (e) => {
   const c = e.target.closest('[data-wcol]')?.dataset.wcol;
@@ -408,6 +446,7 @@ function renderList() {
       continue;
     }
     html += `${head}${g.title === 'Waiting on others' && listView === 'inbox' ? '<span class="spacer" style="flex:1"></span><button data-unfold>Hide</button>' : ''}</div>`;
+    if (WORK_COLS[listView]) g.items = sortRows(listView, g.items);
     html += g.items.length ? `<ul class="list">${g.items.map((it) => itemRow(it, listItems.push(it) - 1)).join('')}</ul>`
       : g.empty === null ? skeleton(3) : `<div class="empty">✓ ${esc(g.empty)}</div>`;
   }

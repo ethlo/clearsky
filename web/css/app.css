@@ -189,6 +189,8 @@ kbd { font: 500 10.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace; border:
 .wt-head { display: grid; grid-template-columns: var(--wcols); gap: 10px; padding: 6px 20px 4px; color: var(--muted); font-size: 11px;
   text-transform: uppercase; letter-spacing: .04em; position: sticky; top: 0; background: var(--bg); z-index: 2; border-bottom: 1px solid var(--line); }
 .wt-head > span { position: relative; white-space: nowrap; overflow: visible; }
+.wt-head .sortable, .inbox .head .sortable { cursor: pointer; user-select: none; }
+.wt-head .sortable:hover, .inbox .head .sortable:hover { color: var(--text); }
 .wt-head .rz { position: absolute; top: -4px; bottom: -4px; right: -8px; width: 8px; cursor: col-resize; touch-action: none; }
 .wt-head .rz::after { content: ''; position: absolute; left: 3px; top: 2px; bottom: 2px; width: 2px; border-radius: 1px; background: var(--line-strong); opacity: 0; }
 .wt-head:hover .rz::after, .wt-head .rz.on::after { opacity: 1; }
