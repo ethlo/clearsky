@@ -25,6 +25,7 @@ import { sandboxed, srtSettings, sandboxReadable, DEFAULT_DOMAINS, READ_DEFAULT,
 import { isReadOnly, editInside } from '../lib/readonly.mjs';
 import { assistedReason, outwardReason } from '../lib/assisted.mjs';
 import { serveBroker, brokerSocket, approvals } from '../lib/acli-broker.mjs';
+import { mavenSandbox } from '../lib/maven.mjs';
 import { attentionItems, diffAttention, desktopNotify, DbusNotifier } from '../lib/notify.mjs';
 import { loadSources, makeContext, hook, asList } from '../lib/sources.mjs';
 import { pluginItems } from '../lib/items.mjs';
@@ -820,7 +821,10 @@ function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBOX === 
   // (git already goes over https there). The network isn't limited to COPILOT_DOMAINS, though.
   if (process.env.CLEARSKY_IN_CONTAINER === '1') return Object.assign(new AcpAgent(bin, args, { env: copilotEnv() }), { sandboxed: true });
   const domains = process.env.COPILOT_DOMAINS ? parseDomains(process.env.COPILOT_DOMAINS) : DEFAULT_DOMAINS;
-  const s = sandboxed(bin, args, { srt: srtBin(), dir: join(dirname(stateFile), 'sandbox'), ...sandboxOpts(cwd), domains });
+  // Maven's repository logins stay out here; srt adds them on the way out (lib/maven.mjs).
+  let maven = null;
+  try { maven = mavenSandbox({ home: homedir(), out: join(dirname(brokerSocket()), 'maven'), keep: join(dirname(stateFile), 'sandbox') }); } catch (e) { console.log(`clearsky: Maven logins for the sandbox: ${e.message}`); }
+  const s = sandboxed(bin, args, { srt: srtBin(), dir: join(dirname(stateFile), 'sandbox'), ...sandboxOpts(cwd), domains, maven });
   const env = copilotEnv();
   const n = Number(env.GIT_CONFIG_COUNT) || 0;
   SANDBOX_GIT.forEach(([k, v], i) => { env[`GIT_CONFIG_KEY_${n + i}`] = k; env[`GIT_CONFIG_VALUE_${n + i}`] = v; });
@@ -829,6 +833,11 @@ function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBOX === 
   // your GitHub CLI login from here, for this process only. Nothing else in the keyring goes in.
   const token = ghToken();
   if (token) Object.assign(env, { COPILOT_GITHUB_TOKEN: token, GH_TOKEN: token });
+  if (maven) {
+    Object.assign(env, maven.env); // srt shows the sandbox only a placeholder for these
+    env.MAVEN_ARGS = `${env.MAVEN_ARGS ? `${env.MAVEN_ARGS} ` : ''}--settings ${maven.settings}`;
+    env.JAVA_TOOL_OPTIONS = `${env.JAVA_TOOL_OPTIONS ? `${env.JAVA_TOOL_OPTIONS} ` : ''}${maven.javaOptions}`;
+  }
   // acli's login is in the keyring too: it runs out here instead (lib/acli-broker.mjs).
   if (process.platform === 'linux') {
     acliBroker ||= serveBroker({ bin: config.jira.acli, allow: assistedAllow, approved: acliApproved, log: console.log });
