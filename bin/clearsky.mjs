@@ -969,7 +969,9 @@ const SANDBOX_HINT = 'You run in a sandbox: everything inside it runs without as
   + 'and fails with "declined" if I don\'t. Jira changes with `acli` ask me the same way. Your built-in GitHub tools are off here. '
   + 'There is no Docker in the sandbox. Tests that need it (Testcontainers) fail with errors like "Ryuk is unreachable" or '
   + '"Could not find a valid Docker environment": run that test command as `outside <command>` (for example '
-  + '`outside ./mvnw verify -pl core`), which runs it on my machine after I OK it. Use `outside` only for those, and don\'t quote '
+  + '`outside ./mvnw verify -pl core`), which runs it on my machine after I OK it. Builds and tests run fine in the sandbox '
+  + '(Maven, its repository and your JDKs are there): always run them normally first, and use `outside` only after a run in '
+  + 'the sandbox failed with one of those Docker errors. Never use it for other failures (fix those, or ask me), and don\'t quote '
   + 'arguments you don\'t need to.';
 // What you typed, without the dashboard and references Clearsky added in front.
 const MSG_MARK = '\n\n---\nMy message:\n';
