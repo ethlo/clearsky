@@ -4,7 +4,7 @@
 # inside are the same as on your machine (your home is mounted at the same place and the
 # container runs as you), so chats, worktrees and Copilot's session state line up.
 #
-#   docker compose up -d --build     then open http://127.0.0.1:7777 (and "Install app" in the browser)
+#   node bin/clearsky.mjs docker up     then open http://127.0.0.1:7777 (and "Install app" in the browser)
 FROM node:22-bookworm-slim
 
 ARG GH_VERSION=2.62.0

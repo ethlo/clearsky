@@ -1698,12 +1698,31 @@ async function appCommand() {
   spawn(browser, [`--app=${base}/`, '--class=Clearsky'], { detached: true, stdio: 'ignore' }).unref();
 }
 
+// `clearsky docker …`: Clearsky's container, with the folders from Settings → Copilot mounted
+// (see lib/docker.mjs). Runs on your machine, not in the container.
+async function dockerCommand([sub = 'up', ...rest]) {
+  const { dockerMounts, writeMountsFile } = await import('../lib/docker.mjs');
+  if (process.env.CLEARSKY_IN_CONTAINER === '1') { console.error('Run this on your machine, not in the container.'); process.exitCode = 1; return; }
+  const repo = join(here, '..');
+  for (const d of [dirname(userEnvFile), join(homedir(), '.copilot')]) mkdirSync(d, { recursive: true, mode: 0o700 });
+  const mounts = dockerMounts({ folders: copilotFolders(), cwd: process.env.COPILOT_CWD, home: homedir() });
+  const file = writeMountsFile(join(dirname(userEnvFile), 'docker-mounts.yml'), mounts);
+  if (sub === 'mounts') { for (const m of mounts) console.log(`${m.path}${m.ro ? ' (read-only)' : ''}`); return; }
+  const files = [join(repo, 'docker-compose.yml'), file, join(repo, 'docker-compose.override.yml')].filter((f) => existsSync(f)).flatMap((f) => ['-f', f]);
+  const compose = { up: ['up', '-d', '--build', ...rest], down: ['down', ...rest], logs: ['logs', '--tail', '50', ...rest], login: ['exec', '-it', 'clearsky', 'clearsky-login', ...rest] }[sub];
+  if (!compose) { console.error('usage: clearsky docker [up|down|logs|login|mounts]'); process.exitCode = 1; return; }
+  if (sub === 'up') console.log(`Mounting ${mounts.length} folders (clearsky docker mounts lists them).`);
+  const env = { ...process.env, HOME_DIR: homedir(), UID: String(process.getuid?.() ?? 1000), GID: String(process.getgid?.() ?? 1000), PORT: String(config.port) };
+  const code = await new Promise((done) => spawn('docker', ['compose', ...files, ...compose], { stdio: 'inherit', env, cwd: repo }).on('exit', done).on('error', (e) => { console.error(e.message); done(1); }));
+  process.exitCode = code || 0;
+}
+
 // ---------------------------------------------------------------- main
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
   const args = process.argv.slice(2);
   if (args.includes('-h') || args.includes('--help')) {
-    console.log('usage: clearsky [--json] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky app [--port N] | clearsky school-handover | clearsky jira-debug');
+    console.log('usage: clearsky [--json] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky app [--port N] | clearsky docker [up|down|logs|login|mounts] | clearsky school-handover | clearsky jira-debug');
   } else if (args[0] === 'standup') {
     const s = await standup();
     console.log(args.includes('--json') ? JSON.stringify(s, null, 2) : s.text);
@@ -1715,6 +1734,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.a
     const p = args.indexOf('--port');
     if (p > -1) config.port = Number(args[p + 1]);
     await appCommand();
+  } else if (args[0] === 'docker') {
+    await dockerCommand(args.slice(1));
   } else if (args[0] === 'school-handover') {
     const { handOverLogin } = await import('../lib/flyt.mjs');
     const where = await handOverLogin();

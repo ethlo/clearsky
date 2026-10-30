@@ -1,7 +1,7 @@
 #!/bin/sh
 # Logs gh, acli and Copilot in inside Clearsky's container, into its own keyring:
-#   docker compose exec -it clearsky clearsky-login            (all three)
-#   docker compose exec -it clearsky clearsky-login acli       (just one: gh, acli or copilot)
+#   clearsky docker login            (all three; or docker compose exec -it clearsky clearsky-login)
+#   clearsky docker login acli       (just one: gh, acli or copilot)
 # Each prints a link and a code to open in your browser. Settings in Clearsky can do gh and
 # acli too.
 set -eu

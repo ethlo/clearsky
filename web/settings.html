@@ -44,6 +44,7 @@
   .cal-list span { text-align: left; }
   .cal-list small { color: var(--muted); font-size: 12px; }
   .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+  .hint.warn { color: var(--amber); }
   .mods { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12.5px; }
   .mods th, .mods td { text-align: left; vertical-align: top; padding: 7px 8px 7px 0; border-top: 1px solid var(--line); }
   .mods th { font-weight: 600; white-space: nowrap; }
@@ -165,6 +166,7 @@
     <label for="COPILOT_FOLDERS">Folders Copilot may use without asking</label>
     <input id="COPILOT_FOLDERS" data-key="COPILOT_FOLDERS" placeholder="~/dev" spellcheck="false">
     <p class="hint">Comma-separated, like <code>~/dev/kezzler, ~/dev/ethlo</code>. Copilot can read and change files there, including worktrees next to your clones, without the "Access paths outside trusted directories" question. Commands and edits still follow the access mode. Empty means <code>~/dev</code>. Running chats pick changes up on their next message.</p>
+    <p class="hint warn" id="copilot-unmounted" hidden></p>
     <label for="COPILOT_READONLY">Commands that only read</label>
     <select id="COPILOT_READONLY" data-key="COPILOT_READONLY"><option value="on">Run without asking</option><option value="off">Ask like any other</option></select>
     <p class="hint">In Ask and Assisted, commands like <code>cat</code>, <code>ls</code>, <code>grep</code>, <code>find</code>, <code>sed -n</code>, <code>head</code> and <code>git status/log/diff/show</code> run on their own when every part of the command only reads, and only inside the chat's folder and the folders above. Builds, tests, edits, <code>git push</code>, writing to files and anything Clearsky can't tell is safe still ask.</p>
@@ -279,6 +281,10 @@ function render(s) {
   $('#CLEARSKY_TIME_FORMAT').value = s.timeFormat || '24';
   const cp = s.copilot || {};
   $('#COPILOT_FOLDERS').value = cp.folders || '';
+  // In the container, a folder exists only if docker-compose mounts it.
+  const um = $('#copilot-unmounted');
+  um.hidden = !cp.unmounted?.length;
+  um.innerHTML = cp.unmounted?.length ? `Not in Clearsky's container: ${cp.unmounted.map((f) => `<code>${esc(f)}</code>`).join(', ')}. Save, then run <code>clearsky docker up</code> on your machine: it mounts the folders set here (Clearsky restarts).` : '';
   $('#COPILOT_CWD').value = cp.cwd || '';
   $('#COPILOT_MODEL').value = cp.model || '';
   $('#COPILOT_READONLY').value = cp.readonly || 'on';

@@ -5,7 +5,7 @@
 # ~/.config/clearsky/container/ (mounted from your machine, mode 700), so a login survives
 # rebuilds. Your machine's own keyring and logins are never touched.
 #
-# Log in once after the first start:  docker compose exec clearsky clearsky-login
+# Log in once after the first start:  clearsky docker login
 set -eu
 
 if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then exec dbus-run-session -- "$0" "$@"; fi
