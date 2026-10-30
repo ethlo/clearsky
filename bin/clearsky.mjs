@@ -1877,7 +1877,12 @@ async function appCommand() {
   // A size that fits a laptop screen (CLEARSKY_WINDOW_SIZE=1600,1000 for another); the page
   // shrinks the window too when the browser remembers one taller than the screen.
   const size = /^\d+,\d+$/.test(process.env.CLEARSKY_WINDOW_SIZE || '') ? process.env.CLEARSKY_WINDOW_SIZE : '1280,860';
-  spawn(browser, [`--app=${base}/?app=1`, '--class=Clearsky', `--window-size=${size}`], { detached: true, stdio: 'ignore' }).unref();
+  // A browser profile of its own: in your running browser the window would be filed under the
+  // browser (Wayland ignores --class there), so it couldn't be found as Clearsky in the dock or
+  // Alt+Tab. No logins needed in it: links open in your default browser.
+  const profile = join(dirname(userEnvFile), 'app-window');
+  spawn(browser, [`--app=${base}/?app=1`, '--class=Clearsky', `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', `--window-size=${size}`],
+    { detached: true, stdio: 'ignore' }).unref();
 }
 
 // `clearsky docker …`: Clearsky's container, with the folders from Settings → Copilot mounted
