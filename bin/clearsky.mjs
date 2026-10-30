@@ -873,21 +873,23 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
 // which chat sent it, so every sandboxed chat that's working asks; the first answer counts.
 // When the only working chat is running a step you just allowed (say `gh pr create`), its
 // GitHub changes are part of what you allowed and go through. With two chats working, it asks.
-function githubAsk(what) {
+function githubAsk(what, { repo } = {}) {
   const chats = [...acpChats.values()].filter((c) => c.agent.sandboxed && c.busy);
   if (!chats.length) return Promise.resolve(false);
   if (chats.length === 1 && chats[0].approved.size) return Promise.resolve(true);
   return new Promise((done) => {
     const id = randomBytes(6).toString('hex');
     const ev = { type: 'permission', id, title: 'Change GitHub as you', kind: 'execute', detail: what,
-      options: [{ id: 'allow', name: 'Allow', kind: 'allow_once' }, { id: 'deny', name: 'Deny', kind: 'reject_once' }] };
+      options: [{ id: 'allow', name: 'Allow', kind: 'allow_once' },
+        ...(repo ? [{ id: 'repo', name: `Allow changes on ${repo} for 15 min`, kind: 'allow_always' }] : []),
+        { id: 'deny', name: 'Deny', kind: 'reject_once' }] };
     const finish = (ok) => {
       for (const c of chats) { c.waiting.delete(id); c.pending.delete(id); c.emit({ type: 'permission-done', id }); }
       done(ok);
     };
     for (const c of chats) {
       if (c.mode === 'full') return finish(true); // Full: you allowed everything
-      c.waiting.set(id, (answer) => finish(answer.optionId === 'allow'));
+      c.waiting.set(id, (answer) => finish(answer.optionId === 'repo' ? 'repo' : answer.optionId === 'allow'));
       c.pending.set(id, ev);
       c.emit(ev);
     }
@@ -909,9 +911,17 @@ function brokerAsk({ key, tool, argv, cwd }) {
   const title = { git: 'Push from your machine', gh: 'Change GitHub as you', acli: 'Change Jira as you', outside: 'Run on your machine, outside the sandbox' }[tool];
   return new Promise((done) => {
     const id = randomBytes(6).toString('hex');
+    // The same command again (a test run after a fix) can be allowed for the rest of this chat.
+    const same = `${cwd}\n${line}`;
+    if (c.allowedRuns?.has(same)) return done(true);
     const ev = { type: 'permission', id, title, kind: 'execute', detail: `${line}\n(in ${cwd.replace(homedir(), '~')})`,
-      options: [{ id: 'allow', name: 'Allow', kind: 'allow_once' }, { id: 'deny', name: 'Deny', kind: 'reject_once' }] };
-    c.waiting.set(id, (answer) => { c.pending.delete(id); done(answer.optionId === 'allow'); });
+      options: [{ id: 'allow', name: 'Allow', kind: 'allow_once' }, { id: 'chat', name: 'Allow this command again in this chat', kind: 'allow_always' },
+        { id: 'deny', name: 'Deny', kind: 'reject_once' }] };
+    c.waiting.set(id, (answer) => {
+      c.pending.delete(id);
+      if (answer.optionId === 'chat') (c.allowedRuns ||= new Set()).add(same);
+      done(answer.optionId === 'allow' || answer.optionId === 'chat');
+    });
     c.pending.set(id, ev);
     c.emit(ev);
   });

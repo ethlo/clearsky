@@ -50,3 +50,21 @@ test('GraphQL: fragments and queries read, a mutation anywhere is a change', asy
   assert.ok(await gql('nonsense { x }'));
   assert.ok(await gql(''));
 });
+
+test('"Allow on this repo for 15 min" covers that repo\'s changes and review work, not pushes', async () => {
+  let t = 0;
+  const asked = [];
+  const f = githubFilter(async (what, { repo }) => { asked.push(what); return repo ? 'repo' : true; }, { now: () => t });
+  const gql = (query) => req('POST', 'https://api.github.com/graphql', { query });
+  assert.equal((await f(req('POST', 'https://api.github.com/repos/acme/api/pulls/7/comments/1/replies', {}))).action, 'allow');
+  assert.equal((await f(req('POST', 'https://api.github.com/repos/acme/api/pulls/7/comments/2/replies', {}))).action, 'allow');
+  assert.equal((await f(gql('mutation { resolveReviewThread(input: {threadId: "x"}) { thread { id } } }'))).action, 'allow');
+  assert.equal(asked.length, 1, 'asked once');
+  await f(req('POST', 'https://api.github.com/repos/acme/web/issues', {}));
+  await f(gql('mutation { deleteRepository(input: {}) { x } }'));
+  await f(req('GET', 'https://github.com/acme/api.git/info/refs?service=git-receive-pack'));
+  assert.deepEqual(asked.slice(1), ['POST acme/web/issues', 'GitHub change (deleteRepository)', 'git push to acme/api']);
+  t += 16 * 6e4;
+  await f(req('POST', 'https://api.github.com/repos/acme/api/pulls/7/comments/3/replies', {}));
+  assert.equal(asked.length, 5, 'asks again after 15 minutes');
+});
