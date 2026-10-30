@@ -150,6 +150,31 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
   assert.match(await page.locator('#su-say').innerText(), /stand-up/i);
   assert.ok(await page.locator('[data-say="copy"]').isVisible());
 
+  // School week: Monday to Friday, each class labelled and in its own colour; › moves a week.
+  const wk = await page.evaluate(() => {
+    const mon = mondayOf(new Date()), at = (d, h) => new Date(+mon + d * 864e5 + h * 36e5).toISOString();
+    const evs = [
+      { who: '3. trinn', what: 'Gym', start: at(1, 9), end: at(1, 10), allDay: false, kind: 'activity', read: { src: 'flyt', key: 'm1' } },
+      { who: 'SFO', what: 'Tur', start: at(1, 0), end: at(2, 0), allDay: true, read: { src: 'flyt', key: 'm2' } },
+      { who: '7. trinn', what: 'Prøve', start: at(3, 8), end: at(3, 9), allDay: false, read: { src: 'flyt', key: 'm3' } },
+    ];
+    document.body.insertAdjacentHTML('beforeend', '<div id="wk-t"></div>');
+    weekAt.t = +mon;
+    drawWeek('t', evs);
+    const el = document.getElementById('wk-t');
+    const r = { days: el.querySelectorAll('.wk-day').length, evs: el.querySelectorAll('.wk-ev').length, legend: [...el.querySelectorAll('.wk-leg')].map((x) => x.textContent),
+      colors: new Set([...el.querySelectorAll('.wk-ev')].map((x) => x.style.getPropertyValue('--c'))).size, tue: el.querySelectorAll('.wk-day')[1].innerText };
+    r.isoWeeks = ['2026-10-26', '2025-12-29', '2027-01-01'].map((d) => weekNo(new Date(`${d}T12:00`)));
+    el.querySelector('[data-step="1"]').click();
+    r.next = el.querySelectorAll('.wk-ev').length;
+    el.remove();
+    return r;
+  });
+  assert.deepEqual([wk.days, wk.evs, wk.colors, wk.next], [5, 3, 3, 0]);
+  assert.deepEqual(wk.legend, ['3. trinn', '7. trinn', 'SFO']);
+  assert.deepEqual(wk.isoWeeks, [44, 1, 53]);
+  assert.match(wk.tue, /SFO[\s\S]*Tur[\s\S]*3\. trinn[\s\S]*09:00/);
+
   for (const view of ['calendar', 'standup', 'notifications', 'reviews', 'prs', 'tickets']) {
     await page.goto(`${base}/#${view}`);
     await page.waitForTimeout(400);

@@ -210,11 +210,52 @@ function renderExtra() {
     const el = $('#src-body');
     PANEL_SOURCES[el.id] = [x.name];
     if (!d) { card(el, x.panel.title, null, skeleton(3)); continue; }
-    card(el, x.panel.title, d.error ? null : count, (d.error ? `<div class="err">${esc(d.error)}${d.needsLogin ? ' <a href="/settings#extra">Log in again in Settings</a>' : ''}</div>` : '') +
+    // The school week sits above the messages; drawn after card(), which replaces the panel.
+    const week = d.planEvents?.length ? `<div id="wk-${esc(x.name)}"></div>` : '';
+    card(el, x.panel.title, d.error ? null : count, week + (d.error ? `<div class="err">${esc(d.error)}${d.needsLogin ? ' <a href="/settings#extra">Log in again in Settings</a>' : ''}</div>` : '') +
       (list.length ? (table ? tableView(x, list, 40) : rows(`x-${x.name}`, list, (i) => row(i), 30))
         : d.error ? '' : '<div class="empty">Nothing here.</div>'));
+    if (week) drawWeek(x.name, d.planEvents);
   }
 }
+
+// The school week: Monday to Friday side by side, from the weekly plans, each class in a
+// colour of its own. ‹ › moves a week; it opens on this week (next week from Saturday).
+const weekAt = {};
+const WHO_COLORS = ['#2563eb', '#16a34a', '#d97706', '#9333ea', '#dc2626', '#0891b2'];
+function mondayOf(d) { const m = new Date(d); m.setHours(0, 0, 0, 0); m.setDate(m.getDate() - ((m.getDay() + 6) % 7)); return m; }
+function drawWeek(src, events) {
+  const el = document.getElementById(`wk-${src}`);
+  if (!el) return;
+  const now = new Date();
+  weekAt[src] ??= +mondayOf(new Date(+now + (now.getDay() === 6 || now.getDay() === 0 ? 2 * 864e5 : 0)));
+  const mon = new Date(weekAt[src]);
+  const whos = [...new Set(events.map((e) => e.who || 'School'))].sort();
+  const color = (w) => WHO_COLORS[whos.indexOf(w) % WHO_COLORS.length];
+  const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const days = [0, 1, 2, 3, 4].map((i) => new Date(+mon + i * 864e5 + 3 * 36e5)); // 03:00, so a DST shift can't move the day
+  const on = (d) => events.filter((e) => ymd(new Date(e.start)) === ymd(d))
+    .sort((a, b) => (a.allDay === b.allDay ? String(a.start).localeCompare(String(b.start)) : a.allDay ? -1 : 1) || String(a.who).localeCompare(String(b.who)));
+  const ev = (e) => `<button class="wk-ev k-${esc(e.kind || 'activity')}" style="--c:${color(e.who || 'School')}" data-read-src="${esc(e.read?.src || src)}" data-read-key="${esc(e.read?.key || '')}" title="${esc(e.description || '')}">
+      <span class="wk-who">${esc(e.who || 'School')}</span>${e.allDay ? '' : `<time>${hm(e.start)}${e.kind === 'ends' ? '' : `–${hm(e.end)}`}</time>`}<span class="wk-t">${esc(e.what || e.title)}</span></button>`;
+  const today = ymd(now);
+  const count = days.reduce((n, d) => n + on(d).length, 0);
+  el.innerHTML = `<section class="wk"><div class="wk-head"><h2>Week ${weekNo(mon)}</h2>
+      <button class="icon-btn" data-wk="${esc(src)}" data-step="-1" aria-label="Previous week">‹</button><button class="icon-btn" data-wk="${esc(src)}" data-step="0">This week</button><button class="icon-btn" data-wk="${esc(src)}" data-step="1" aria-label="Next week">›</button>
+      <span class="spacer"></span>${whos.map((w) => `<span class="wk-leg" style="--c:${color(w)}">${esc(w)}</span>`).join('')}</div>
+    ${count ? `<div class="wk-grid">${days.map((d) => `<div class="wk-day${ymd(d) === today ? ' today' : ''}"><h3>${d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })}</h3>${on(d).map(ev).join('') || '<div class="muted wk-none">—</div>'}</div>`).join('')}</div>`
+      : '<div class="empty">No weekly plan for this week yet.</div>'}</section>`;
+}
+// ISO week: the week with that week's Thursday in it, counted from the year's first Thursday.
+function weekNo(d) { const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate() + 3 - ((d.getDay() + 6) % 7))); return 1 + Math.floor((t - Date.UTC(t.getUTCFullYear(), 0, 1)) / 6048e5); }
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-wk]');
+  if (!b) return;
+  const src = b.dataset.wk, step = Number(b.dataset.step);
+  const now = new Date();
+  weekAt[src] = step ? +mondayOf(new Date(weekAt[src] + step * 7 * 864e5 + 12 * 36e5)) : +mondayOf(new Date(+now + (now.getDay() === 6 || now.getDay() === 0 ? 2 * 864e5 : 0)));
+  drawWeek(src, state[src]?.planEvents || []);
+});
 
 // A source panel as an inbox: newest first, date, sender and group as columns, filtered by
 // group (School, or a child), with a paperclip on anything that has files. Columns can be
