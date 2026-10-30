@@ -12,13 +12,16 @@ function openItem(it) {
   renderItem();
   location.hash = '#item';
 }
+// A ticket's fix version, flagged when it's released but the ticket isn't done.
+const fixText = (d) => (!d.fixVersions ? '' : !d.fixVersions.length ? 'No fix version'
+  : `Fix version ${d.fixVersions.map((v) => v.name).join(', ')}${d.statusCategory !== 'done' && d.fixVersions.some((v) => v.released) ? ' (released, still open)' : ''}`);
 function whyLine(it) {
   const d = it.data || {};
   if (it.kind === 'review') return `${esc(d.author)} asked for your ${d.rerequested ? 're-review' : 'review'} ${esc(ago(d.requestedAt))}${d.viaTeam ? ' (via your team)' : ''}.`;
   if (it.kind === 'pr') return `${esc(d.status.label)}${d.status.detail ? `: ${esc(d.status.detail)}` : ''}.${prMeta(d) ? ` ${esc(prMeta(d))[0].toUpperCase()}${esc(prMeta(d)).slice(1)}.` : ''} Updated ${esc(ago(d.updatedAt))}.`;
   if (it.kind === 'mention') return it.src === 'Jira' ? `${esc(d.people.join(', '))} mentioned you ${esc(ago(d.at))}${d.count > 1 ? `, ${d.count} times` : ''}.${d.status ? ` Ticket is ${esc(d.status)}.` : ''}`
     : it.src === 'Slack' ? `${esc(d.by)} mentioned you in ${esc(d.channel)} ${esc(ago(d.at))}.` : `You were mentioned. Updated ${esc(ago(d.updatedAt))}.`;
-  if (it.kind === 'ticket') return `Assigned to ${esc(d.assignee || 'you')} · ${esc([d.status, d.type, d.fixVersions?.length && `fix version ${d.fixVersions.join(', ')}`, d.priority && `${d.priority} priority`, d.due && `due ${d.due}`].filter(Boolean).join(' · '))}.`;
+  if (it.kind === 'ticket') return `Assigned to ${esc(d.assignee || 'you')} · ${esc([d.status, d.type, fixText(d), d.priority && `${d.priority} priority`, d.due && `due ${d.due}`].filter(Boolean).join(' · '))}.`;
   return esc(it.step || '');
 }
 const PR_TONE = { bad: 'red', warn: 'amber', good: 'green' };
@@ -105,7 +108,7 @@ async function renderItem() {
     facts = `<span class="${{ green: 'good', red: 'bad' }[tone] || ''}">${label}</span><span>${esc(d.author)}</span><span>+${d.size.additions} −${d.size.deletions} in ${d.size.files} files</span><span>updated ${esc(ago(d.updatedAt))}</span>`;
   } else {
     ticketInfo.set(ref.issue, { ...ticketInfo.get(ref.issue), ...d });
-    facts = `${d.type ? `<span>${esc(d.type)}</span>` : ''}<span>${d.assignee ? `Assignee: ${esc(d.assignee)}` : 'Unassigned'}</span>${d.fixVersions?.length ? `<span>Fix version: ${esc(d.fixVersions.join(', '))}</span>` : ''}${d.priority ? `<span>${esc(d.priority)} priority</span>` : ''}${d.reporter ? `<span>Reporter: ${esc(d.reporter)}</span>` : ''}`;
+    facts = `${d.type ? `<span>${esc(d.type)}</span>` : ''}<span>${d.assignee ? `Assignee: ${esc(d.assignee)}` : 'Unassigned'}</span><span>${esc(fixText(d))}</span>${d.priority ? `<span>${esc(d.priority)} priority</span>` : ''}${d.reporter ? `<span>Reporter: ${esc(d.reporter)}</span>` : ''}`;
   }
   body = d.description ? `<h3>Description</h3><div class="desc">${esc(d.description)}</div>` : '';
   draw();
@@ -463,7 +466,7 @@ function cardHtml(el, d) {
     return `<div class="top"><b style="color:var(--text)">${esc(d.key)}</b>${d.type ? `· ${esc(d.type)}` : ''}
         ${d.status ? `<span class="badge b-${statusTone(d.statusCategory)}">${esc(d.status)}</span>` : ''}</div>
       <h3>${esc(d.summary)}</h3>
-      <div class="people">${[d.assignee ? `Assignee: ${esc(d.assignee)}` : 'Unassigned', d.fixVersions?.length && `Fix version: ${esc(d.fixVersions.join(', '))}`, d.priority && `Priority: ${esc(d.priority)}`].filter(Boolean).join(' · ')}</div>
+      <div class="people">${[d.assignee ? `Assignee: ${esc(d.assignee)}` : 'Unassigned', esc(fixText(d)), d.priority && `Priority: ${esc(d.priority)}`].filter(Boolean).join(' · ')}</div>
       ${d.description ? `<p>${esc(d.description)}</p>` : ''}
       ${d.url ? `<div class="foot"><a href="${esc(d.url)}" target="_blank" rel="noopener">Open in Jira →</a></div>` : ''}`;
   }

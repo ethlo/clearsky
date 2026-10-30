@@ -252,7 +252,7 @@ let listView = 'inbox', listItems = [], selK = null, showWaiting = false;
 // Columns can be resized (drag a header edge) and hidden (Columns); that's kept in this browser.
 const WORK_COLS = {
   prs: [['id', 'PR', 110], ['t', 'Title'], ['x', 'Ticket', 110], ['b', 'Branch', 180], ['s', 'State', 150], ['u', 'Updated', 64]],
-  tickets: [['id', 'Ticket', 96], ['t', 'Title'], ['x', 'Pull requests', 200], ['b', 'Branch', 180], ['s', 'State', 120], ['u', 'Updated', 64]],
+  tickets: [['id', 'Ticket', 96], ['t', 'Title'], ['x', 'Pull requests', 200], ['b', 'Branch', 180], ['v', 'Fix version', 100], ['a', 'Assignee', 120], ['s', 'State', 120], ['u', 'Updated', 64]],
 };
 const WCOLS_KEY = 'clearsky.work.cols';
 let wcolPrefs = {};
@@ -330,6 +330,8 @@ function tableRow(it, i, rel, chips, acts, fresh) {
     t: `<span class="c c-t t"><a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.title)}</a>${rowNext(it, rel)}${it.pr && it.step ? `<span class="step">${esc(it.step)}</span>` : ''}${chips}</span>`,
     x: `<span class="c c-x">${rel.slice(0, 3).map((x) => xrefChip(x, !it.pr)).join('')}</span>`,
     b: `<span class="c c-b">${branchCell(branchesOf(it, rel))}</span>`,
+    v: `<span class="c c-v${(it.data?.fixVersions || []).some((v) => v.released) && it.data?.statusCategory !== 'done' ? ' warn' : ''}"${it.data?.fixVersions ? ` title="${esc(fixText(it.data))}"` : ''}>${it.data?.fixVersions ? (it.data.fixVersions.length ? esc(it.data.fixVersions.map((v) => v.name).join(', ')) : '<span class="muted">none</span>') : ''}</span>`,
+    a: `<span class="c c-a">${esc(it.data?.assignee || '')}</span>`,
     s: `<span class="c c-s">${lt ? `<span class="lbl${tone ? ` ${tone}` : ''}">${tone ? '<i></i>' : ''}${esc(lt)}</span>` : ''}</span>`,
     u: `<span class="c c-u age">${esc(shortAgo(it.at))}</span>`,
   };
@@ -363,7 +365,7 @@ function matchesQ(x, q) {
   if (!q) return true;
   const d = x.data || {};
   const hay = [x.ref, x.issue, x.pr, x.title, x.step, x.src, ...(x.label || []), x.next?.label, d.repo, d.branch, d.status?.label || d.status, d.status?.detail, d.author,
-    d.type, d.priority, d.assignee, ...(d.fixVersions || []), ...(d.pendingReviewers || []), ...(d.approvals || [])].filter(Boolean).join(' ').toLowerCase();
+    d.type, d.priority, d.assignee, ...(d.fixVersions || []).map((v) => v.name), ...(d.pendingReviewers || []), ...(d.approvals || [])].filter(Boolean).join(' ').toLowerCase();
   return q.toLowerCase().split(/\s+/).filter(Boolean).every((w) => hay.includes(w));
 }
 function renderList() {
