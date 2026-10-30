@@ -40,3 +40,10 @@ test('anything that writes, runs code or leaves your folders asks', () => {
   no('cat < f');
 });
 
+
+test('a time limit or nice in front of a reading command still counts as reading', () => {
+  ok('cd ~/dev/acme && timeout 60 grep -rIn -i "logging.level" --exclude-dir={node_modules,target} . 2>/dev/null | head -20');
+  ok('nice -n 10 grep -rn foo .');
+  no('timeout 60 rm -rf build');
+  no('cd ~/dev && timeout 60 grep -rn foo .');
+});
