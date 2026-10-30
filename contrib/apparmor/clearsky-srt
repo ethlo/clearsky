@@ -1,0 +1,31 @@
+# Clearsky's sandbox (srt) on Ubuntu 24.04 and newer.
+#
+# Ubuntu lets bwrap create user namespaces but runs its children under unpriv_bwrap, without
+# capabilities. srt's seccomp helper (apply-seccomp), which bwrap starts first, needs them in
+# the namespace it makes for the filter, so it gets this profile instead; whatever it then runs
+# (Copilot and its commands) goes back under unpriv_bwrap, without capabilities.
+#
+# Installed by scripts/ubuntu-sandbox.sh, together with one line in
+# /etc/apparmor.d/local/bwrap-userns-restrict that sends apply-seccomp here.
+
+abi <abi/4.0>,
+include <tunables/global>
+
+profile clearsky_srt_seccomp flags=(attach_disconnected,mediate_deleted) {
+  allow capability,
+  allow file rwlkm /{**,},
+  allow network,
+  allow unix,
+  allow ptrace,
+  allow signal,
+  allow mqueue,
+  allow io_uring,
+  allow userns,
+  allow mount,
+  allow umount,
+  allow pivot_root,
+  allow dbus,
+  allow pix /** -> &clearsky_srt_seccomp//&unpriv_bwrap,
+
+  include if exists <local/clearsky_srt_seccomp>
+}

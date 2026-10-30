@@ -12,6 +12,7 @@ import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { execFile, spawn } from 'node:child_process';
+import { delimiter } from 'node:path';
 import { promisify } from 'node:util';
 import { randomBytes } from 'node:crypto';
 import * as settings from '../lib/settings.mjs';
@@ -1632,9 +1633,13 @@ async function restartCommand(args) {
 const BROWSERS = ['chromium', 'chromium-browser', 'google-chrome', 'google-chrome-stable', 'brave-browser', 'microsoft-edge'];
 export function findBrowser(env = process.env) {
   if (env.CLEARSKY_BROWSER) return env.CLEARSKY_BROWSER;
-  for (const b of BROWSERS) for (const dir of (env.PATH || '').split(':')) if (dir && existsSync(join(dir, b))) return join(dir, b);
-  for (const p of ['/snap/bin/chromium', '/var/lib/flatpak/exports/bin/org.chromium.Chromium']) if (existsSync(p)) return p;
-  return null;
+  for (const b of BROWSERS) for (const dir of (env.PATH || '').split(delimiter)) if (dir && existsSync(join(dir, b))) return join(dir, b);
+  // Where they install themselves on Linux (snap, flatpak), macOS and Windows.
+  const pf = [env.ProgramFiles, env['ProgramFiles(x86)'], env.LOCALAPPDATA].filter(Boolean);
+  const known = ['/snap/bin/chromium', '/var/lib/flatpak/exports/bin/org.chromium.Chromium',
+    ...['Google Chrome', 'Chromium', 'Microsoft Edge', 'Brave Browser'].map((a) => `/Applications/${a}.app/Contents/MacOS/${a}`),
+    ...pf.flatMap((d) => [join(d, 'Google', 'Chrome', 'Application', 'chrome.exe'), join(d, 'Microsoft', 'Edge', 'Application', 'msedge.exe')])];
+  return known.find((p) => existsSync(p)) || null;
 }
 async function appCommand() {
   const base = `http://127.0.0.1:${config.port}`;
