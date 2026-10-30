@@ -47,7 +47,7 @@ function standsHtml(it, rel) {
   }
   if (it.issue) (ticketPrs.get(it.issue)?.prs || []).forEach(addPr);
   const people = (p) => {
-    const chips = [...(p.pendingReviewers || []).map((n) => [n, 'asked', 'gray']), ...(p.changesRequested || []).map((n) => [n, 'changes requested', 'red']),
+    const chips = [...(p.state === 'open' ? p.pendingReviewers || [] : []).map((n) => [n, 'asked', 'gray']), ...(p.changesRequested || []).map((n) => [n, 'changes requested', 'red']),
       ...(p.approvals || []).map((n) => [n, 'approved', 'green'])];
     return chips.length ? chips.map(([n, st, tone]) => `<span class="badge b-${tone}">${esc(n.replace(/^team:/, '👥 '))} · ${st}</span>`).join('')
       : p.state === 'open' && p.status?.label !== 'No reviewer yet' ? '<span class="badge b-amber">No reviewer assigned</span>' : '';
