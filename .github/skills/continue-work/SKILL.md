@@ -57,7 +57,7 @@ Commit in small steps with clear messages, and run the tests before each push. P
 
 ## The PR description is for the human reviewer
 
-After Copilot's review rounds, a person's review should be quick but still real. When you open the PR, and after each round of work on it, update its description (`gh pr edit --body-file`) to:
+After Copilot's review rounds, a person's review should be quick but still real. When you open the PR, and after each round of work on it, update its description (`gh api -X PATCH repos/<owner>/<repo>/pulls/<n> -F body=@<file>`; `gh pr edit` can silently drop the edit) to:
 
 - **What and why:** the change and the reason, with the ticket key.
 - **How it was checked:** the tests you ran and their result; how many Copilot review rounds, and that their findings are addressed or why not.

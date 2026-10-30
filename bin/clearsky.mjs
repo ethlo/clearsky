@@ -998,7 +998,7 @@ function openCopilotSessions() {
 const CONTEXT_INTRO = 'You are helping me with my work. This is my work dashboard right now:';
 // Clearsky shows a ```choices block as buttons (web/js/50-chat.js); a click sends the option.
 // PR descriptions are for the human reviewer: after Copilot's review rounds, theirs should be quick.
-const PR_HINT = 'When you open a PR or finish a round of work on one, write (or update with `gh pr edit --body-file`) its description '
+const PR_HINT = 'When you open a PR or finish a round of work on one, write (or update with `gh api -X PATCH repos/<owner>/<repo>/pulls/<n> -F body=@<file>`; `gh pr edit` can silently drop the edit) its description '
   + 'for the human reviewer, short and in this shape: "## What and why" (the change and the reason, with the ticket key); '
   + '"## How it was checked" (tests you ran and their result, Copilot review rounds so far and that their findings are addressed, '
   + 'and the CI build: once Copilot has no more findings, run the branch\'s CI build with tests, e.g. `gh workflow run <workflow> --ref <branch>` '
