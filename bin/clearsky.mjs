@@ -73,6 +73,9 @@ const buildConfig = (env = process.env) => ({
   days: Number(env.CLEARSKY_MENTION_DAYS || 14),
   cacheSeconds: Number(env.CLEARSKY_CACHE_SECONDS || 120),
   port: Number(env.CLEARSKY_PORT || 7777),
+  // Where it listens: this machine only. A container sets 0.0.0.0 and publishes the port to
+  // the host's 127.0.0.1 (see Dockerfile).
+  bind: env.CLEARSKY_BIND || '127.0.0.1',
   github: {
     token: env.GITHUB_TOKEN,
     api: (env.GITHUB_API_URL || 'https://api.github.com').replace(/\/$/, ''),
@@ -1608,13 +1611,13 @@ function serve() {
   let tries = 0;
   server.on('error', (e) => {
     if (e.code !== 'EADDRINUSE' || ++tries > 20) throw e;
-    setTimeout(() => server.listen(config.port, '127.0.0.1'), 500);
+    setTimeout(() => server.listen(config.port, config.bind), 500);
   });
   server.once('listening', () => {
     console.log(`clearsky: http://127.0.0.1:${config.port}  (settings and logins: http://127.0.0.1:${config.port}/settings)`);
     if (process.env.CLEARSKY_POLL_MINUTES !== '0') startPolling();
   });
-  server.listen(config.port, '127.0.0.1');
+  server.listen(config.port, config.bind);
 }
 
 // `clearsky restart`: ask the running server to restart once Copilot is idle.

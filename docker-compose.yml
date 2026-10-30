@@ -1,0 +1,26 @@
+# Clearsky in Docker. Set these in a .env next to this file (or your shell):
+#   HOME_DIR  your home folder, e.g. /home/morten (on Windows, a WSL path)
+#   UID, GID  your user and group ids (id -u, id -g)
+services:
+  clearsky:
+    build: .
+    image: clearsky:local
+    restart: unless-stopped   # also brings it back after Clearsky restarts itself
+    user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      HOME: ${HOME_DIR}
+    ports:
+      - "127.0.0.1:7777:7777"  # this machine only
+    volumes:
+      # Your code, where chats run and worktrees go.
+      - ${HOME_DIR}/dev:${HOME_DIR}/dev
+      # Clearsky's settings and state, Copilot's sessions and skills.
+      - ${HOME_DIR}/.config/clearsky:${HOME_DIR}/.config/clearsky
+      - ${HOME_DIR}/.copilot:${HOME_DIR}/.copilot
+      # Logins of the CLIs it uses, and git's settings.
+      - ${HOME_DIR}/.config/gh:${HOME_DIR}/.config/gh
+      - ${HOME_DIR}/.config/acli:${HOME_DIR}/.config/acli
+      - ${HOME_DIR}/.gitconfig:${HOME_DIR}/.gitconfig:ro
+      # Builds: JDKs from SDKMAN and the Maven cache, if you use them.
+      - ${HOME_DIR}/.sdkman:${HOME_DIR}/.sdkman:ro
+      - ${HOME_DIR}/.m2:${HOME_DIR}/.m2
