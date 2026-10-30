@@ -1707,7 +1707,10 @@ async function appCommand() {
   const base = `http://127.0.0.1:${config.port}`;
   const up = () => fetch(`${base}/api/restart`).then((r) => r.ok, () => false);
   if (!(await up())) {
-    spawn(process.execPath, [fileURLToPath(import.meta.url), 'serve', '--port', String(config.port)], { detached: true, stdio: 'ignore', env: process.env, cwd: join(here, '..') }).unref();
+    // Clearsky runs in Docker once `clearsky docker up` has run (until `clearsky docker down`):
+    // start that container, else Clearsky here.
+    if (existsSync(join(dirname(userEnvFile), 'docker-mounts.yml'))) await dockerCommand(['start']);
+    else spawn(process.execPath, [fileURLToPath(import.meta.url), 'serve', '--port', String(config.port)], { detached: true, stdio: 'ignore', env: process.env, cwd: join(here, '..') }).unref();
     for (let i = 0; i < 50 && !(await up()); i++) await new Promise((r) => setTimeout(r, 200));
   }
   const browser = findBrowser();
@@ -1726,7 +1729,7 @@ async function dockerCommand([sub = 'up', ...rest]) {
   const file = writeMountsFile(join(dirname(userEnvFile), 'docker-mounts.yml'), mounts);
   if (sub === 'mounts') { for (const m of mounts) console.log(`${m.path}${m.ro ? ' (read-only)' : ''}`); return; }
   const files = [join(repo, 'docker-compose.yml'), file, join(repo, 'docker-compose.override.yml')].filter((f) => existsSync(f)).flatMap((f) => ['-f', f]);
-  const compose = { up: ['up', '-d', '--build', ...rest], down: ['down', ...rest], logs: ['logs', '--tail', '50', ...rest], login: ['exec', '-it', 'clearsky', 'clearsky-login', ...rest] }[sub];
+  const compose = { up: ['up', '-d', '--build', ...rest], start: ['up', '-d', ...rest], down: ['down', ...rest], logs: ['logs', '--tail', '50', ...rest], login: ['exec', '-it', 'clearsky', 'clearsky-login', ...rest] }[sub];
   if (!compose) { console.error('usage: clearsky docker [up|down|logs|login|mounts]'); process.exitCode = 1; return; }
   const env0 = { ...process.env, HOME_DIR: homedir(), UID: String(process.getuid?.() ?? 1000), GID: String(process.getgid?.() ?? 1000), PORT: String(config.port) };
   // Logging in: bring over the logins this machine already has (gh, and Copilot with gh's
@@ -1785,6 +1788,8 @@ async function dockerCommand([sub = 'up', ...rest]) {
   if (sub === 'up') console.log(`Mounting ${mounts.length} folders (clearsky docker mounts lists them).`);
   const code = await new Promise((done) => spawn('docker', ['compose', ...files, ...compose], { stdio: 'inherit', env: env0, cwd: repo }).on('exit', done).on('error', (e) => { console.error(e.message); done(1); }));
   process.exitCode = code || 0;
+  // Back to running natively: the app window starts Clearsky here again.
+  if (sub === 'down' && !code) rmSync(file, { force: true });
 }
 
 // ---------------------------------------------------------------- main
