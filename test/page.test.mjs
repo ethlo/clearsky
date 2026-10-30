@@ -181,7 +181,7 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
   }
 
   // Settings → Copilot: defaults for new chats, with Copilot's own choices; a saved default is used by a new chat.
-  await page.goto(`${base}/settings`);
+  await page.goto(`${base}/settings#copilot`);
   await page.waitForSelector('#COPILOT_PERMISSION option[value="full"]', { state: 'attached' });
   await page.selectOption('#COPILOT_PERMISSION', 'read');
   await page.click('button.save[data-keys^="COPILOT_"]');

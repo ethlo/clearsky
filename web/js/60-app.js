@@ -187,3 +187,10 @@ document.addEventListener('click', (e) => {
   e.preventDefault();
   openReader(a.dataset.read, a.dataset.key, a.getAttribute('href'));
 });
+
+// In its own window (`clearsky app`), Clearsky starts no bigger than the screen: the browser
+// may remember a size from a bigger screen. A normal browser tab ignores this.
+if (matchMedia('(display-mode: standalone)').matches || /[?&]app=1\b/.test(location.search)) {
+  const w = Math.min(outerWidth, screen.availWidth), h = Math.min(outerHeight, screen.availHeight);
+  if (w < outerWidth || h < outerHeight) { try { resizeTo(w, h); moveTo(screen.availLeft || 0, screen.availTop || 0); } catch {} }
+}

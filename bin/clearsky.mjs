@@ -1741,7 +1741,10 @@ async function appCommand() {
   }
   const browser = findBrowser();
   if (!browser) { console.error(`No Chromium-based browser found (tried ${BROWSERS.join(', ')}). Set CLEARSKY_BROWSER, or open ${base}`); process.exit(1); }
-  spawn(browser, [`--app=${base}/`, '--class=Clearsky'], { detached: true, stdio: 'ignore' }).unref();
+  // A size that fits a laptop screen (CLEARSKY_WINDOW_SIZE=1600,1000 for another); the page
+  // shrinks the window too when the browser remembers one taller than the screen.
+  const size = /^\d+,\d+$/.test(process.env.CLEARSKY_WINDOW_SIZE || '') ? process.env.CLEARSKY_WINDOW_SIZE : '1280,860';
+  spawn(browser, [`--app=${base}/?app=1`, '--class=Clearsky', `--window-size=${size}`], { detached: true, stdio: 'ignore' }).unref();
 }
 
 // `clearsky docker …`: Clearsky's container, with the folders from Settings → Copilot mounted
