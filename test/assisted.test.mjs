@@ -58,6 +58,9 @@ test('Sandboxed asks only about what reaches out', () => {
     'curl -X POST https://x', 'mvn deploy', 'npm publish', 'kubectl apply -f x', 'docker push x', 'ssh host', 'eval "$X"', 'echo "unclosed']) assert.ok(out(c), c);
   assert.equal(out('acli jira workitem transition --key A-1 --status Done', { allow: ['acli jira workitem transition'] }), null);
   assert.ok(out('mvn verify', { ask: ['mvn verify'] }));
+  // `outside` never-ask entries match only the exact command.
+  assert.equal(out('outside ./mvnw verify', { allow: ['outside ./mvnw verify'] }), null);
+  assert.ok(out('outside ./mvnw exec:exec -Dexec.executable=sh', { allow: ['outside ./mvnw'] }));
 });
 
 test('reads the shell well enough', () => {
