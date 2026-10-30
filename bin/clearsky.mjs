@@ -861,7 +861,7 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   }
   // Copilot's built-in GitHub tools would change GitHub past the gate: off.
   const s = await sandboxedCommand(bin, [...args, '--disable-builtin-mcps', '--acp'], { ...sandboxOpts(cwd), domains, maven, github, ca: sandboxCa(keep) },
-    { filterRequest: githubFilter(githubAsk) });
+    { filterRequest: githubFilter(githubAsk, { told: githubTold, look: githubLook }) });
   const agent = new AcpAgent(s.bin, s.args, { env, acp: false });
   agent.child.once('exit', sandboxEnded);
   return Object.assign(agent, { sandboxed: true, brokerKey: key,
@@ -881,16 +881,14 @@ async function githubAsk(what, { repo, nodes = [] } = {}) {
   return new Promise((done) => {
     const id = randomBytes(6).toString('hex');
     const ev = { type: 'permission', id, title: 'Change GitHub as you', kind: 'execute', detail: what,
-      options: [{ id: 'allow', name: 'Allow', kind: 'allow_once' },
-        ...(repo ? [{ id: 'repo', name: `Allow changes on ${repo} for 15 min`, kind: 'allow_always' }] : []),
-        { id: 'deny', name: 'Deny', kind: 'reject_once' }] };
+      options: [{ id: 'allow', name: 'Allow', kind: 'allow_once' }, { id: 'deny', name: 'Deny', kind: 'reject_once' }] };
     const finish = (ok) => {
       for (const c of chats) { c.waiting.delete(id); c.pending.delete(id); c.shared.delete(id); c.emit({ type: 'permission-done', id }); }
       done(ok);
     };
     for (const c of chats) {
       if (c.mode === 'full') return finish(true); // Full: you allowed everything
-      c.waiting.set(id, (answer) => finish(answer.optionId === 'repo' ? 'repo' : answer.optionId === 'allow'));
+      c.waiting.set(id, (answer) => finish(answer.optionId === 'allow'));
       if (shared) c.shared.add(id); // may not be this chat's: it doesn't mark the chat as needing you
       c.pending.set(id, ev);
       c.emit(ev);
@@ -908,6 +906,28 @@ function askingChats(repo) {
   if (repo) narrow((c) => chatRepo(c) === repo.toLowerCase());
   return chats;
 }
+// Reading GitHub as you, for the gate's checks (lib/github-gate.mjs).
+async function ghGet(path) {
+  config.github.token ||= await ghCliToken();
+  return http(`${config.github.api}${path}`, { headers: { Authorization: `Bearer ${config.github.token}` } });
+}
+const defaultBranches = new Map();
+const githubLook = {
+  compare: (repo, base, head) => ghGet(`/repos/${repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`),
+  run: (repo, id) => ghGet(`/repos/${repo}/actions/runs/${id}`),
+  async defaultBranch(repo) {
+    if (!defaultBranches.has(repo)) defaultBranches.set(repo, (await ghGet(`/repos/${repo}`)).default_branch);
+    return defaultBranches.get(repo);
+  },
+};
+
+// An everyday GitHub change that went through without asking: a line in the chat that made it.
+async function githubTold(what, { repo, nodes = [] } = {}) {
+  const chats = askingChats(repo || await nodesRepo(nodes));
+  console.log(`clearsky: GitHub change let through: ${what}`);
+  for (const c of chats) c.emit({ type: 'note', text: `GitHub: ${what}${chats.length > 1 ? ' (from one of your working chats)' : ''}` });
+}
+
 // The repo of a GraphQL change, from the ids it names (looked up as you, read only).
 async function nodesRepo(ids) {
   if (!ids.length) return null;

@@ -195,7 +195,14 @@ test('PR status: who has the ball', async () => {
   assert.equal(label({ ...commented, commits: { nodes: [{ commit: { committedDate: hoursAgo(0.5) } }] } }), 'Waiting for review', 'pushed since the feedback');
   const asked = { reviewRequests: { nodes: [{ requestedReviewer: { __typename: 'User', login: 'anna' } }] } };
   assert.equal(label(asked), 'Waiting for review');
-  assert.equal(label({}), 'No reviewer yet');
+  assert.equal(label({}), 'Ready for a reviewer', 'Copilot\'s rounds done and CI green');
+  assert.equal(label({ commits: { nodes: [{ commit: {} }] } }), 'No reviewer yet', 'no CI at all');
+  // A build started by hand isn't in the rollup, only in the commit's check suites.
+  const suites = (status, conclusion) => ({ commits: { nodes: [{ commit: { statusCheckRollup: { state: 'SUCCESS' },
+    checkSuites: { nodes: [{ status, conclusion, workflowRun: { event: 'workflow_dispatch', url: 'https://ci/1', workflow: { name: 'Build' } } }] } } }] } });
+  assert.deepEqual(myPrStatus(pr(suites('IN_PROGRESS', null)), 'me'), { label: 'CI build running', detail: 'Build', url: 'https://ci/1', owner: 'others', tone: 'wait' });
+  assert.equal(label(suites('COMPLETED', 'FAILURE')), 'CI failing');
+  assert.equal(label(suites('COMPLETED', 'SUCCESS')), 'Ready for a reviewer');
   // Copilot's reviewer bot comments after every push; that never makes it your move.
   const bot = { __typename: 'Bot', login: 'copilot-pull-request-reviewer' };
   assert.equal(label({ ...asked, reviews: { nodes: [{ state: 'COMMENTED', submittedAt: hoursAgo(0.1), author: bot }] },
@@ -207,7 +214,7 @@ test('PR status: who has the ball', async () => {
   assert.deepEqual(status({ reviewRequests: { nodes: [{ requestedReviewer: bot }] } }), { label: 'In review rounds', detail: 'Copilot reviewing', owner: 'others', tone: 'wait' });
   const botThread = (extra = {}) => ({ isResolved: false, ...extra, comments: { nodes: [{ author: bot }] } });
   assert.deepEqual(status({ reviewThreads: { nodes: [botThread(), botThread()] } }), { label: 'In review rounds', detail: '2 Copilot comments', owner: 'me', tone: 'warn' });
-  assert.equal(label({ reviewThreads: { nodes: [botThread({ isResolved: true })] } }), 'No reviewer yet', 'rounds done');
+  assert.equal(label({ reviewThreads: { nodes: [botThread({ isResolved: true })] } }), 'Ready for a reviewer', 'rounds done');
   // Threads you answered last, or that are outdated, aren't yours.
   const thread = (login, extra = {}) => ({ isResolved: false, ...extra, comments: { nodes: [{ author: { __typename: 'User', login } }] } });
   assert.equal(label({ ...asked, reviewThreads: { nodes: [thread('me'), thread('anna', { isOutdated: true })] } }), 'Waiting for review');

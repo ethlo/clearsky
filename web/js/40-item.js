@@ -53,7 +53,7 @@ function standsHtml(it, rel) {
     const chips = [...(p.state === 'open' ? p.pendingReviewers || [] : []).map((n) => [n, 'asked', 'gray']), ...(p.changesRequested || []).map((n) => [n, 'changes requested', 'red']),
       ...(p.approvals || []).map((n) => [n, 'approved', 'green'])];
     return chips.length ? chips.map(([n, st, tone]) => `<span class="badge b-${tone}">${esc(n.replace(/^team:/, ''))} · ${st}</span>`).join('')
-      : p.state === 'open' && !['No reviewer yet', 'In review rounds'].includes(p.status?.label) ? '<span class="badge b-amber">No reviewer assigned</span>' : '';
+      : p.state === 'open' && !['No reviewer yet', 'Ready for a reviewer', 'In review rounds', 'CI build running'].includes(p.status?.label) ? '<span class="badge b-amber">No reviewer assigned</span>' : '';
   };
   const rows = [
     ...[...tickets].map(([key, t]) => `<div class="stand"><span class="lbl-next">Ticket</span><a href="#" data-open-key="issue:${esc(key)}">${esc(key)}</a>

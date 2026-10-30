@@ -232,14 +232,21 @@ document.addEventListener('click', (e) => {
 }, true);
 
 // Copilot sessions open anywhere (here, a terminal, an editor), most urgent first.
+// The state of one of your PRs by its item key (pr:owner/repo#n), as a short line.
+function prStateOf(k) {
+  const p = k?.startsWith('pr:') && (state.github?.myPrs || []).find((x) => `pr:${x.repo}#${x.number}` === k);
+  return p?.status ? `PR: ${p.status.label}${p.status.detail ? ` (${p.status.detail})` : ''}` : '';
+}
 function sessionItems() {
   const order = { 'needs-you': 0, waiting: 1, working: 2 };
   const linked = (id) => Object.entries(cpLinks.links || {}).find(([, l]) => l.some((x) => x.id === id))?.[0];
   return [...(cpLinks.live || [])].sort((a, b) => order[a.status] - order[b.status] || Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
     .map((x) => {
       const k = linked(x.id), folder = (x.cwd || '').split('/').filter(Boolean).pop() || '';
+      // A chat on one of your PRs also shows where the PR stands (review rounds, CI, reviewer).
+      const st = prStateOf(k);
       return { group: 'copilot', kind: 'session', sid: x.id, cwd: x.cwd, k: `cp:${x.id}`, title: x.title || 'Copilot chat',
-        ref: k ? k.replace(/^(pr|gh):[\w.-]+\//, '').replace('#', ' #').replace(/^issue:/, '') : folder, step: k ? folder : '',
+        ref: k ? k.replace(/^(pr|gh):[\w.-]+\//, '').replace('#', ' #').replace(/^issue:/, '') : folder, step: [st, k ? folder : ''].filter(Boolean).join(' · '),
         glyph: `s-${x.status}`, label: [STATUS_TEXT[x.status] || x.status, x.status === 'needs-you' ? 'amber' : x.status === 'working' ? 'green' : 'blue'],
         at: x.updatedAt, status: x.status };
     });

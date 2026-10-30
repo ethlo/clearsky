@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { githubWrite, githubFilter, graphqlNodeIds } from '../lib/github-gate.mjs';
+import { githubWrite, githubFilter, graphqlNodeIds, pushedRefs } from '../lib/github-gate.mjs';
 
 const req = (method, url, body) => new Request(url, { method, body: body == null ? undefined : JSON.stringify(body) });
 
@@ -21,23 +21,6 @@ test('reads pass; pushes, API writes and GraphQL mutations are named', async () 
   assert.equal(await githubWrite(req('POST', 'https://registry.npmjs.org/x', {})), null);
 });
 
-test('a write waits for your answer; one OK covers both halves of a push', async () => {
-  const asked = [];
-  let answer = true;
-  const f = githubFilter(async (what) => { asked.push(what); return answer; });
-  assert.equal((await f(req('GET', 'https://api.github.com/user'))).action, 'allow');
-  assert.equal((await f(req('GET', 'https://github.com/acme/api.git/info/refs?service=git-receive-pack'))).action, 'allow');
-  assert.equal((await f(req('POST', 'https://github.com/acme/api.git/git-receive-pack', {}))).action, 'allow');
-  answer = false;
-  const no = await f(req('POST', 'https://api.github.com/repos/acme/api/issues/1/comments', {}));
-  assert.equal(no.action, 'deny'); assert.match(no.reason, /declined/);
-  const body = req('POST', 'https://api.github.com/repos/acme/api/issues', { title: 'x' });
-  await f(body);
-  assert.ok(body.bodyUsed, 'a denied request\'s body is read (srt crashes otherwise)');
-  assert.equal((await f(req('POST', 'https://api.githubcopilot.com/mcp/', {}))).action, 'deny');
-  assert.deepEqual(asked, ['git push to acme/api', 'POST acme/api/issues/1/comments', 'POST acme/api/issues']);
-});
-
 test('GraphQL: fragments and queries read, a mutation anywhere is a change', async () => {
   const gql = (query) => githubWrite(req('POST', 'https://api.github.com/graphql', Array.isArray(query) ? query.map((q) => ({ query: q })) : { query }));
   // The shape gh uses for `gh pr create`'s first look at the repo
@@ -51,29 +34,55 @@ test('GraphQL: fragments and queries read, a mutation anywhere is a change', asy
   assert.ok(await gql(''));
 });
 
-test('"Allow on this repo for 15 min" covers that repo\'s changes and review work, not pushes', async () => {
-  let t = 0;
-  const asked = [];
-  const f = githubFilter(async (what, { repo }) => { asked.push(what); return repo ? 'repo' : true; }, { now: () => t });
-  const gql = (query) => req('POST', 'https://api.github.com/graphql', { query });
-  assert.equal((await f(req('POST', 'https://api.github.com/repos/acme/api/pulls/7/comments/1/replies', {}))).action, 'allow');
-  assert.equal((await f(req('POST', 'https://api.github.com/repos/acme/api/pulls/7/comments/2/replies', {}))).action, 'allow');
-  assert.equal((await f(gql('mutation { resolveReviewThread(input: {threadId: "x"}) { thread { id } } }'))).action, 'allow');
-  assert.equal(asked.length, 1, 'asked once');
-  await f(req('POST', 'https://api.github.com/repos/acme/web/issues', {}));
-  await f(gql('mutation { deleteRepository(input: {}) { x } }'));
-  await f(req('GET', 'https://github.com/acme/api.git/info/refs?service=git-receive-pack'));
-  assert.deepEqual(asked.slice(1), ['POST acme/web/issues', 'GitHub change (deleteRepository)', 'git push to acme/api']);
-  t += 16 * 6e4;
-  await f(req('POST', 'https://api.github.com/repos/acme/api/pulls/7/comments/3/replies', {}));
-  assert.equal(asked.length, 5, 'asks again after 15 minutes');
-});
-
 test('a GraphQL change names its nodes, so Clearsky can find the repo (and the chat) it is for', async () => {
   assert.deepEqual(graphqlNodeIds({ query: 'mutation($t: ID!) { resolveReviewThread(input: {threadId: $t}) { thread { id } } }', variables: { t: 'PRRT_kwDOabc123' } }), ['PRRT_kwDOabc123']);
   assert.deepEqual(graphqlNodeIds({ query: 'mutation { createPullRequest(input: {repositoryId: "R_kgDOxyz789", title: "PR_ is not an id"}) { x } }' }), ['R_kgDOxyz789']);
   const seen = [];
-  await githubFilter(async (what, opts) => { seen.push(opts.nodes); return true; })(
+  await githubFilter(async () => true, { told: (what, opts) => seen.push(opts.nodes) })(
     req('POST', 'https://api.github.com/graphql', { query: 'mutation { addComment(input: {subjectId: "PR_kwDOabc999", body: "x"}) { x } }' }));
   assert.deepEqual(seen, [['PR_kwDOabc999']]);
+});
+
+const pkt = (s) => (s.length + 4).toString(16).padStart(4, '0') + s;
+const sha = (c) => c.repeat(40);
+const push = (...lines) => new Request('https://github.com/acme/api.git/git-receive-pack', { method: 'POST',
+  body: Buffer.concat([Buffer.from(lines.map((l, i) => pkt(`${l}${i ? '' : '\0report-status side-band-64k'}\n`)).join('') + '0000'), Buffer.from('PACK...')]) });
+
+test('everyday branch and PR work goes through and is told; what is hard to undo asks', async () => {
+  const asked = [], told = [];
+  let answer = true;
+  const look = { compare: async (repo, base, head) => (head === sha('f') ? { status: 'diverged' } : head === 'wf' ? { files: [{ filename: '.github/workflows/build.yaml' }] } : { status: 'ahead', files: [{ filename: 'src/A.java' }] }),
+    run: async () => ({ head_sha: 'wf' }), defaultBranch: async () => 'main' };
+  const f = githubFilter(async (what) => { asked.push(what); return answer; }, { told: (what) => told.push(what), look });
+  const ok = async (r) => (await f(r)).action === 'allow';
+  // Through, without a card
+  assert.ok(await ok(req('GET', 'https://github.com/acme/api.git/info/refs?service=git-receive-pack')));
+  assert.ok(await ok(push(`${sha('0')} ${sha('a')} refs/heads/feature/abc-1`)));
+  assert.ok(await ok(push(`${sha('a')} ${sha('b')} refs/heads/feature/abc-1`)));
+  assert.ok(await ok(req('POST', 'https://api.github.com/repos/acme/api/pulls/7/comments/1/replies', {})));
+  assert.ok(await ok(req('POST', 'https://api.github.com/repos/acme/api/pulls', {})));
+  assert.ok(await ok(req('POST', 'https://api.github.com/graphql', { query: 'mutation { resolveReviewThread(input: {threadId: "PRRT_abcdef1"}) { x } }' })));
+  assert.ok(await ok(req('POST', 'https://api.github.com/repos/acme/api/actions/workflows/build.yaml/dispatches', { ref: 'feature/abc-1' })));
+  assert.equal(asked.length, 0);
+  assert.equal(told.length, 6, 'each one shows in the chat (not the ref list)');
+  // Asks
+  for (const r of [push(`${sha('a')} ${sha('b')} refs/heads/main`), push(`${sha('a')} ${sha('0')} refs/heads/feature/x`), push(`${sha('0')} ${sha('a')} refs/tags/v1.0`),
+    push(`${sha('a')} ${sha('f')} refs/heads/feature/x`), push(`${sha('a')} ${sha('b')} refs/heads/v3.1`),
+    req('PUT', 'https://api.github.com/repos/acme/api/pulls/7/merge', {}), req('DELETE', 'https://api.github.com/repos/acme/api/git/refs/heads/x'),
+    req('PATCH', 'https://api.github.com/repos/acme/api', {}), req('PUT', 'https://api.github.com/repos/acme/api/actions/secrets/X', {}),
+    req('POST', 'https://api.github.com/graphql', { query: 'mutation { mergePullRequest(input: {}) { x } }' }),
+    req('POST', 'https://api.github.com/repos/acme/api/actions/runs/5/rerun', {})]) await f(r);
+  assert.deepEqual(asked.map((a) => a.replace(/^.*\((.*)\)$/, '$1')), ['pushes to main', 'deletes feature/x', 'pushes tags/v1.0', 'force-pushes feature/x', 'pushes to v3.1',
+    'merges, releases or changes repo settings', 'deletes something', 'repo settings', 'merges, releases or changes repo settings', 'mergePullRequest',
+    'runs CI on a branch that changes its workflows']);
+  answer = false;
+  const body = push(`${sha('a')} ${sha('b')} refs/heads/main`);
+  const no = await f(body);
+  assert.equal(no.action, 'deny'); assert.match(no.reason, /declined/);
+  assert.equal((await f(req('POST', 'https://api.githubcopilot.com/mcp/', {}))).action, 'deny');
+});
+
+test('the refs a push updates', () => {
+  const buf = Buffer.from(pkt(`${sha('a')} ${sha('b')} refs/heads/x\0caps\n`) + pkt(`${sha('0')} ${sha('c')} refs/heads/y\n`) + '0000PACK');
+  assert.deepEqual(pushedRefs(buf).map((r) => [r.ref, r.create, r.remove]), [['refs/heads/x', false, false], ['refs/heads/y', true, false]]);
 });

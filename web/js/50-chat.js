@@ -64,7 +64,8 @@ function chatTabs() {
     const r = recentChats.find((x) => x.id === id), l = live.get(id) || known.get(id);
     const current = id === chat.session && (chat.turns || chat.stop);
     const status = current && chat.stop ? ($('#chat-log .perm-b button') ? 'needs-you' : 'working') : live.get(id)?.status || 'closed';
-    return { id, cwd: l?.cwd || r?.cwd, title: (current && chat.title) || (r?.title?.startsWith('/') && l?.title) || r?.title || l?.title || 'Copilot chat', status, live: live.has(id) };
+    const key = Object.entries(cpLinks.links || {}).find(([, list]) => list.some((x) => x.id === id))?.[0];
+    return { id, cwd: l?.cwd || r?.cwd, title: (current && chat.title) || (r?.title?.startsWith('/') && l?.title) || r?.title || l?.title || 'Copilot chat', status, live: live.has(id), pr: prStateOf(key) };
   }).sort((a, b) => (b.live - a.live)).slice(0, 8);
 }
 function drawTabs() {
@@ -73,7 +74,7 @@ function drawTabs() {
   const folder = (d) => (d || '').split('/').filter(Boolean).pop() || '';
   $('#side-cp').innerHTML = tabs.map((t, i) => `<a class="ni cp${onChat && t.id === chat.session && !isNew ? ' on' : ''}" href="#copilot"
       data-tab="${esc(t.id)}" data-cwd="${esc(t.cwd || '')}" title="${esc(t.title)}${STATUS_TEXT[t.status] ? ` · ${STATUS_TEXT[t.status]}` : ''}${i < 9 ? ` (Alt+${i + 1})` : ''}">
-      <span class="live s-${esc(t.status)}"></span><span class="lab">${esc(t.title)}<small>${esc([STATUS_TEXT[t.status] || (t.live ? 'open' : ''), folder(t.cwd)].filter(Boolean).join(' · '))}</small></span>
+      <span class="live s-${esc(t.status)}"></span><span class="lab">${esc(t.title)}<small>${esc([STATUS_TEXT[t.status] || (t.live ? 'open' : ''), t.pr, folder(t.cwd)].filter(Boolean).join(' · '))}</small></span>
       ${t.status === 'working' || t.status === 'needs-you' ? '' : `<span class="x" data-nudge-tab="${esc(t.id)}" title="Nudge: send Copilot “Try again.”" aria-label="Nudge">${icon('refresh', 12)}</span>`}
       ${t.live ? '' : `<span class="x" data-forget="${esc(t.id)}" title="Remove from this list" aria-label="Remove">✕</span>`}</a>`).join('')
     + (onChat && isNew ? '<a class="ni cp on" href="#copilot"><span class="live"></span><span class="lab">New chat</span></a>' : '');
@@ -480,6 +481,7 @@ async function send(text) {
     // A new chat about a PR or ticket is named after it, not after the skill or first words.
     else if (e.type === 'title') { mine.title = e.title; if (here()) { chat.title = e.title; drawCtx(); } }
     else if (e.type === 'cwd') { if (here()) { chat.cwd = e.cwd; drawCtx(); } segs.push({ type: 'note', text: `Working in ${e.cwd}` }); }
+    else if (e.type === 'note') segs.push({ type: 'note', text: e.text });
     if (e.type === 'done' || e.type === 'error') ended = true;
   };
   let ended = false;
@@ -565,6 +567,7 @@ async function attachLive(id) {
         else if (e.type === 'tool') { const t = segs.find((g) => g.type === 'tool' && g.id === e.id); if (t) Object.assign(t, Object.fromEntries(Object.entries(e).filter(([, v]) => v != null))); else segs.push(e); }
         else if (e.type === 'permission' || e.type === 'error') segs.push(e);
         else if (e.type === 'permission-done') { const g = segs.find((x) => x.type === 'permission' && x.id === e.id); if (g && !g.answered) g.answered = 'Answered'; }
+        else if (e.type === 'note') segs.push({ type: 'note', text: e.text });
         else if (e.type === 'done') done = true;
       }
       draw();

@@ -54,17 +54,17 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
   await page.goto(base);
   await page.waitForSelector('#list li.r', { timeout: 10_000 });
   assert.ok(await page.locator('#list li.r').count() >= 2, 'the inbox lists the PRs');
-  assert.match(await page.locator("#list").innerText(), /no reviewer yet/i);
+  assert.match(await page.locator("#list").innerText(), /ready for a reviewer/i);
 
   // Your PR and the ticket in its branch link to each other, and the link opens the other here.
   assert.match(await page.locator('#list li.r', { hasText: 'ABC-5' }).first().locator('.xref').innerText(), /OPS-1/);
   const ticketLink = page.locator('#list li.r', { hasText: 'Rotate certs' }).locator('.xref');
-  assert.match(await ticketLink.innerText(), /api #1 · no reviewer yet/i);
+  assert.match(await ticketLink.innerText(), /api #1 · ready for a reviewer/i);
   await ticketLink.click();
   await page.waitForSelector('#v-item:not([hidden]) h2:text("ABC-5: Fix capture")');
   assert.match(await page.locator('#item .stands').innerText(), /OPS-1/);
   // Where it stands: the ticket's status, the PR's, and that nobody reviews it yet.
-  assert.match(await page.locator('#item .stands').innerText(), /TICKET\s+OPS-1\s+In Progress[\s\S]*PR\s+api #1\s+No reviewer yet/i);
+  assert.match(await page.locator('#item .stands').innerText(), /TICKET\s+OPS-1\s+In Progress[\s\S]*PR\s+api #1\s+Ready for a reviewer/i);
   if (process.env.SHOT) await page.screenshot({ path: `${process.env.SHOT}/stands.png` });
   await page.goto(`${base}/#inbox`);
   await page.waitForSelector('#list li.r');
@@ -106,7 +106,7 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
   // Your PRs and Tickets as tables, with the branch.
   await page.goto(`${base}/#prs`);
   await page.waitForSelector('#list .wt-head');
-  assert.match(await page.locator('#list li.r.tbl', { hasText: 'ABC-5' }).innerText(), /feature\/ops-1-certs[\s\S]*no reviewer yet/i);
+  assert.match(await page.locator('#list li.r.tbl', { hasText: 'ABC-5' }).innerText(), /feature\/ops-1-certs[\s\S]*ready for a reviewer/i);
   if (process.env.SHOT) await page.screenshot({ path: `${process.env.SHOT}/prs.png` });
   await page.goto(`${base}/#tickets`);
   await page.waitForSelector('#list li.r.tbl');
