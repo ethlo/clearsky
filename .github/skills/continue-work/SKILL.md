@@ -41,6 +41,17 @@ Ask me once whether to go ahead with the checklist, unless I already said to con
 2. Fix failing CI. Run the same checks locally first when you can.
 3. Address unresolved review comments: make the change, or draft a reply explaining why not.
 4. Finish what the ticket still asks for.
+5. When Copilot's review rounds are done (its review is no longer requested and none of its threads are open), run the branch's CI build with tests, as below.
+
+## CI build after the review rounds
+
+Once Copilot has no more findings, the branch gets a full CI build with tests before a person reviews it:
+
+- Find how the repo builds in CI: `.github/workflows/` (`gh workflow list`). Pick the workflow that builds and tests branches or PRs.
+- If it can be started by hand (`workflow_dispatch`), run it on the PR's branch: `gh workflow run <workflow> --ref <branch>`. If it only runs on push or on the PR, check the run for the latest commit instead (`gh pr checks`, `gh run list --branch <branch>`); start it again only if it didn't run for that commit (`gh run rerun <id>`).
+- Follow it to the end (`gh run watch <id> --exit-status`). If it fails, read the failing step (`gh run view <id> --log-failed`), fix the cause, push, and run it again.
+- If the repo builds somewhere else (Jenkins, for example), say so and ask me how to start it; don't guess.
+- Put the result in the PR description under "How it was checked", with a link to the run.
 
 Commit in small steps with clear messages, and run the tests before each push. Push to the PR's branch only.
 

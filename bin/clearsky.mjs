@@ -1000,7 +1000,9 @@ const CONTEXT_INTRO = 'You are helping me with my work. This is my work dashboar
 // PR descriptions are for the human reviewer: after Copilot's review rounds, theirs should be quick.
 const PR_HINT = 'When you open a PR or finish a round of work on one, write (or update with `gh pr edit --body-file`) its description '
   + 'for the human reviewer, short and in this shape: "## What and why" (the change and the reason, with the ticket key); '
-  + '"## How it was checked" (tests you ran and their result, Copilot review rounds so far and that their findings are addressed); '
+  + '"## How it was checked" (tests you ran and their result, Copilot review rounds so far and that their findings are addressed, '
+  + 'and the CI build: once Copilot has no more findings, run the branch\'s CI build with tests, e.g. `gh workflow run <workflow> --ref <branch>` '
+  + 'or the run for the latest commit, follow it to the end with `gh run watch`, fix and rerun if it fails, and link the run); '
   + '"## For the reviewer" (anything still open, decisions worth a second look, where the risk is; "Nothing open" if so). '
   + 'Facts only, no filler; keep any PR template\'s headings and fill them the same way.';
 const CHOICES_HINT = 'When you need me to choose (an approach, a next step, yes or no), ask once, at the end of your answer, as a block I can click:\n'
