@@ -248,6 +248,25 @@ async function post(url, body) {
   return data;
 }
 
+// In the app window, links to elsewhere (Jira, GitHub, …) open in your own browser, where
+// you're logged in, instead of in a window of the app's browser.
+const APP_WINDOW = new URLSearchParams(location.search).has('app') || matchMedia('(display-mode: standalone)').matches;
+if (APP_WINDOW) {
+  const own = window.open.bind(window);
+  const external = (u) => { try { const x = new URL(u, location.href); return /^https?:$/.test(x.protocol) && x.origin !== location.origin; } catch { return false; } };
+  window.open = (u, ...rest) => {
+    if (!external(u)) return own(u, ...rest);
+    post('/api/open', { url: new URL(u, location.href).href }).catch(() => own(u, ...rest));
+    return null;
+  };
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest('a[href]');
+    if (!a || e.defaultPrevented || !external(a.href)) return;
+    e.preventDefault();
+    window.open(a.href, '_blank', 'noopener');
+  });
+}
+
 async function dismiss(body) {
   try { ({ dismissed } = await post('/api/dismiss', body)); } catch (e) { $('#status').textContent = `Could not save: ${e.message}`; }
   renderToday();

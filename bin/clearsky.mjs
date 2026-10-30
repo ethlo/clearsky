@@ -1527,6 +1527,14 @@ function serve() {
           return json(res, 200, { ok: true });
         }
         // Ask people to review one of your PRs, as you (through your GitHub login).
+        // A link from the app window, opened in your own browser (where you're logged in).
+        if (url.pathname === '/api/open') {
+          const { url: u } = await readJson(req);
+          if (!/^https?:\/\/[^\s]+$/.test(String(u || ''))) return json(res, 400, { error: 'not a web link' });
+          if (process.env.CLEARSKY_IN_CONTAINER === '1') return json(res, 501, { error: 'no desktop in the container' });
+          openInBrowser(String(u));
+          return json(res, 200, { ok: true });
+        }
         if (url.pathname === '/api/pr/request-review') {
           const { repo, number, logins } = await readJson(req);
           if (!/^[\w.-]+\/[\w.-]+$/.test(repo || '') || !/^\d+$/.test(String(number)) || !Array.isArray(logins) || !logins.length || logins.length > 15
@@ -1841,6 +1849,13 @@ async function restartCommand(args) {
 // starting the server first when it isn't running. Your normal browser profile, so links to
 // GitHub and Jira open logged in.
 export { findBrowser };
+
+// Your default browser, as the desktop opens links.
+function openInBrowser(u) {
+  // Windows' start would read & as a command separator; rundll32 takes the URL as it is.
+  const [cmd, ...pre] = process.platform === 'darwin' ? ['open'] : process.platform === 'win32' ? ['rundll32', 'url.dll,FileProtocolHandler'] : ['xdg-open'];
+  spawn(cmd, [...pre, u], { stdio: 'ignore', detached: true }).on('error', () => {}).unref();
+}
 async function appCommand() {
   const base = `http://127.0.0.1:${config.port}`;
   const up = () => fetch(`${base}/api/restart`).then((r) => r.ok, () => false);
@@ -1911,8 +1926,7 @@ async function dockerCommand([sub = 'up', ...rest]) {
         try { u = readFileSync(urlFile, 'utf8').trim(); rmSync(urlFile, { force: true }); } catch { return; }
         if (!/^https:\/\//.test(u)) return;
         process.stderr.write(`\nOpening ${u}\n`);
-        const [cmd, ...pre] = process.platform === 'darwin' ? ['open'] : process.platform === 'win32' ? ['cmd', '/c', 'start', ''] : ['xdg-open'];
-        spawn(cmd, [...pre, u], { stdio: 'ignore', detached: true }).on('error', () => {}).unref();
+        openInBrowser(u);
       }, 300);
       const ok = await new Promise((done) => spawn('docker', args, { stdio: 'inherit' }).on('exit', (c) => done(c === 0)).on('error', () => done(false)));
       clearInterval(watch);
