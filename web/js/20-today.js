@@ -248,7 +248,9 @@ function showEvent(btn, pin) {
     <dl>${row('Calendar', esc(e.calendar || ''))}${row('Where', esc(e.location || ''))}${row('Organizer', esc(e.organizer || ''))}
       ${row('People', e.attendees ? String(e.attendees) : '')}${row('Join', e.url ? `<a class="join" href="${esc(e.url)}" target="_blank" rel="noopener">${esc(e.url.replace(/^https?:\/\//, '').slice(0, 40))}</a>` : '')}</dl>
     ${e.description ? `<div class="desc">${esc(e.description)}</div>` : ''}
-    ${e.fyi ? '<div class="note">On a shared calendar, added by someone else: shown, but doesn\'t take your time.</div>' : ''}`;
+    ${e.read ? `<div class="acts-row"><button class="icon-btn" data-read-src="${esc(e.read.src)}" data-read-key="${esc(e.read.key)}">Open the message</button></div>` : ''}
+    ${e.read ? '<div class="note">From a weekly plan, read by Clearsky: shown, but doesn\'t take your time.</div>'
+      : e.fyi ? '<div class="note">On a shared calendar, added by someone else: shown, but doesn\'t take your time.</div>' : ''}`;
   document.body.append(evPop);
   const r = btn.getBoundingClientRect(), w = evPop.offsetWidth, h = evPop.offsetHeight;
   const left = Math.min(Math.max(16, r.left), innerWidth - w - 16);
@@ -277,6 +279,8 @@ document.addEventListener('focusin', (e) => { const b = e.target.closest?.('.ev'
 document.addEventListener('click', async (e) => {
   const b = e.target.closest('.ev');
   if (b) { if (evPinned === b) hideEvent(true); else showEvent(b, true); return; }
+  const r = e.target.closest('[data-read-key]');
+  if (r) { hideEvent(true); openReader(r.dataset.readSrc, r.dataset.readKey); return; }
   if (!e.target.closest('.ev-pop')) hideEvent(true);
   const t = e.target.closest('.cal-tog');
   if (!t) return;

@@ -85,6 +85,7 @@ if [ "$SANDBOX" = 1 ] && [ "$(uname -s)" = Linux ]; then
 fi
 have gh || warn "GitHub CLI (gh) not found: Settings can log you in with it (https://cli.github.com), or use a token"
 have acli || warn "Atlassian CLI (acli) not found: Jira needs it (https://developer.atlassian.com/cloud/acli/guides/install-acli/)"
+have pdftotext || warn "pdftotext not found: school weekly plans in PDF need it  ->  ${pm:-install} poppler-utils"
 have copilot || [ -n "$(ls "$HOME"/.nvm/versions/node/*/bin/copilot 2>/dev/null | head -1)" ] || warn "GitHub Copilot CLI not found: the Copilot panel needs it (npm install -g @github/copilot)"
 
 # ---- Start it at login, when asked.

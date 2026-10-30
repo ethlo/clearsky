@@ -332,7 +332,7 @@ export async function collect(force) {
   // Events from other sources (school, activities) join your calendar in Now / Next.
   const more = [...plugins.sources.values()].flatMap((p) => (extra[p.name]?.error || extra[p.name]?.disabled ? []
     : asList(hook(p, 'events', extra[p.name])).map((e) => ({ ...e, calendar: e.calendar || p.label }))));
-  const cal = more.length && !calendar.error ? { ...calendar, events: [...(calendar.events || []), ...more] } : calendar;
+  const cal = more.length ? { ...calendar, events: [...(calendar.events || []), ...more] } : calendar;
   return {
     generatedAt: new Date().toISOString(),
     plan: planNow({ github, jira, slack, calendar: cal }),
@@ -348,7 +348,7 @@ export async function collect(force) {
     github,
     jira,
     slack,
-    calendar,
+    calendar: cal,
     sources: extra,
     // Everything that can need you, from every source, with the next step on each.
     items: [['github', github], ['jira', jiraWork], ['jiraMentions', jiraMentions], ['slack', slack], ...Object.entries(extra)].flatMap(([n, d]) => workItemsOf(n, d)),
