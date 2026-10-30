@@ -12,7 +12,7 @@ if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then exec dbus-run-session -- "$0" "$
 
 KEEP="$HOME/.config/clearsky/container"
 mkdir -p "$KEEP/keyrings" "$KEEP/gh" "$KEEP/acli" "$HOME/.local/share" "$HOME/.config"
-chmod 700 "$KEEP" "$KEEP/keyrings"
+chmod 700 "$KEEP" "$KEEP/keyrings" "$KEEP/gh" "$KEEP/acli"
 # Home in here is a scratch folder: point the tools' login folders into the kept one.
 ln -sfn "$KEEP/keyrings" "$HOME/.local/share/keyrings"
 ln -sfn "$KEEP/gh" "$HOME/.config/gh"

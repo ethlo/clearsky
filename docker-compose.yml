@@ -20,6 +20,8 @@ services:
     # mounted on top of it.
     tmpfs:
       - ${HOME_DIR}:uid=${UID:-1000},gid=${GID:-1000},mode=0700
+      # Also ~/.config, else Docker makes it (for the mount below) owned by root.
+      - ${HOME_DIR}/.config:uid=${UID:-1000},gid=${GID:-1000},mode=0700
     volumes:
       # Your code, where chats run and worktrees go.
       - ${HOME_DIR}/dev:${HOME_DIR}/dev
