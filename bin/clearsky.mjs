@@ -24,6 +24,7 @@ import { branchesFor } from '../lib/branches.mjs';
 import { sandboxed, DEFAULT_DOMAINS, parseDomains } from '../lib/sandbox.mjs';
 import { isReadOnly, editInside } from '../lib/readonly.mjs';
 import { assistedReason, outwardReason } from '../lib/assisted.mjs';
+import { serveBroker, brokerSocket, approvals } from '../lib/acli-broker.mjs';
 import { attentionItems, diffAttention, desktopNotify, DbusNotifier } from '../lib/notify.mjs';
 import { loadSources, makeContext, hook, asList } from '../lib/sources.mjs';
 import { pluginItems } from '../lib/items.mjs';
@@ -805,6 +806,8 @@ export function srtBin() {
 // Inside the sandbox ssh can't get out, so git talks to GitHub over https with gh's login.
 const SANDBOX_GIT = [['url.https://github.com/.insteadOf', 'git@github.com:'], ['url.https://github.com/.insteadOf', 'ssh://git@github.com/'],
   ['credential.https://github.com.helper', ''], ['credential.https://github.com.helper', '!gh auth git-credential']];
+let acliBroker = null;
+const acliApproved = approvals();
 function ghToken() {
   try { return execFileSync('gh', ['auth', 'token'], { timeout: 10_000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null; } catch { return null; }
 }
@@ -823,6 +826,12 @@ function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBOX === 
   // your GitHub CLI login from here, for this process only. Nothing else in the keyring goes in.
   const token = ghToken();
   if (token) Object.assign(env, { COPILOT_GITHUB_TOKEN: token, GH_TOKEN: token });
+  // acli's login is in the keyring too: it runs out here instead (lib/acli-broker.mjs).
+  if (process.platform === 'linux') {
+    acliBroker ||= serveBroker({ bin: config.jira.acli, allow: assistedAllow, approved: acliApproved, log: console.log });
+    env.CLEARSKY_ACLI_SOCKET = brokerSocket();
+    env.PATH = `${join(here, '..', 'scripts', 'sandbox-bin')}${delimiter}${env.PATH}`;
+  }
   return Object.assign(new AcpAgent(s.bin, s.args, { env }), { sandboxed: true });
 }
 
@@ -1169,7 +1178,12 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin })
     const id = randomBytes(6).toString('hex');
     const ev = { type: 'permission', id, title: p.toolCall?.title || 'Copilot wants to use a tool', kind: p.toolCall?.kind,
       detail: toolDetail(p.toolCall), options: (p.options || []).map((o) => ({ id: o.optionId, name: o.name, kind: o.kind })) };
-    c.waiting.set(id, (answer) => { c.pending.delete(id); resolve(answer); });
+    c.waiting.set(id, (answer) => {
+      c.pending.delete(id);
+      // An acli change you allowed may then run through the sandbox's acli (once).
+      if (fenced && /^allow/.test((p.options || []).find((o) => o.optionId === answer.optionId)?.kind || '')) acliApproved.add(command);
+      resolve(answer);
+    });
     c.pending.set(id, ev);
     c.emit(ev);
   });
