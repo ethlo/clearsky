@@ -26,11 +26,14 @@ const prByKey = (k) => [...(state.github?.myPrs || []), ...(state.github?.review
 const snoozedUntil = (k) => { const u = mutedMap[k]; return u && Date.parse(u) > Date.now() ? u : null; };
 
 // The rows come from the server (lib/items.mjs), one list per source as it loads.
+// PRs you merged here leave the lists at once: GitHub's search can show them open a little longer.
+const mergedAt = new Map();
+const justMerged = (url) => url && Date.now() - (mergedAt.get(url) || 0) < 10 * 6e4;
 function inboxItems() {
   const out = [];
   for (const name of ['github', 'jira', 'jiraMentions', 'slack', ...extraSources.map((x) => x.name)]) {
     const d = state[name];
-    if (d && !d.error) (d.work || []).forEach((x) => out.push({ ...x }));
+    if (d && !d.error) (d.work || []).filter((x) => !justMerged(x.url)).forEach((x) => out.push({ ...x }));
   }
   for (const it of out) { it.done = isHidden(it); it.snoozed = !it.done && snoozedUntil(it.k); }
   // Mentions: newest first, after reviews and your own PRs.
@@ -160,7 +163,11 @@ async function mergePr(n, btn) {
   try {
     const r = await post('/api/pr/merge', { repo: n.repo, number: n.number });
     if (btn) btn.textContent = `✓ Merged${r.method ? ` (${r.method})` : ''}`;
-    loadAll(true);
+    if (n.url) mergedAt.set(n.url, Date.now());
+    if (typeof prClosed !== 'undefined') prClosed.set(`${n.repo}#${n.number}`, 'Merged');
+    // Let the ✓ show for a moment, then the list without it; fetch again once GitHub has caught up.
+    setTimeout(() => { renderToday(); loadSource('github', true); }, 1200);
+    setTimeout(() => loadSource('github', true).then(loadPlan), 8000);
   } catch (err) {
     if (btn) { btn.disabled = false; btn.textContent = label; }
     alert(`Couldn't merge ${n.repo}#${n.number}: ${err.message}`);

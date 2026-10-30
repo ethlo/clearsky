@@ -57,8 +57,8 @@
 
   <!-- The inbox, and the Reviews / Your PRs / Mentions / Tickets views of it. -->
   <section class="view" id="v-list">
-    <header class="vh"><h1 id="list-title">Inbox</h1><button class="fresh" data-fresh title="Refresh everything"></button>
-      <input type="search" id="list-q" class="list-q" placeholder="Filter  /" aria-label="Filter this list (/)" spellcheck="false" autocomplete="off"><span class="spacer"></span><span id="su-alert"></span><button class="nowline" id="nowline" title="Open the calendar"></button></header>
+    <header class="vh"><h1 id="list-title">Inbox</h1>
+      <input type="search" id="list-q" class="list-q" placeholder="Filter  /" aria-label="Filter this list (/)" spellcheck="false" autocomplete="off"><span class="spacer"></span><span id="su-alert"></span><button class="fresh" data-fresh title="Refresh everything"></button><button class="nowline" id="nowline" title="Open the calendar"></button></header>
     <div class="view-b" id="list" tabindex="-1"></div>
     <div class="kb"><span><kbd>J</kbd><kbd>K</kbd> move</span><span><kbd>↵</kbd> open</span><span><kbd>Esc</kbd> back</span>
       <span><kbd>E</kbd> done</span><span><kbd>H</kbd> snooze</span><span><kbd>A</kbd> Copilot</span></div>
@@ -86,7 +86,7 @@
     <div class="view-b"><div id="notes"></div></div>
   </section>
   <section class="view" id="v-src" hidden>
-    <header class="vh"><h1 id="src-title"></h1><button class="fresh" data-fresh title="Refresh everything"></button><span class="spacer"></span><button class="nowline" data-nowline></button></header>
+    <header class="vh"><h1 id="src-title"></h1><span class="spacer"></span><button class="fresh" data-fresh title="Refresh everything"></button><button class="nowline" data-nowline></button></header>
     <div class="view-b"><div class="page src-page" id="src-body"></div></div>
   </section>
 
