@@ -766,8 +766,24 @@ async function copilotInfo(force) {
 // Copilot signs in on its own; don't hand it Clearsky's tokens.
 // copilot and srt start with `#!/usr/bin/env node`, and the app menu's PATH has no nvm Node:
 // put this Node and copilot's own folder (often another nvm version) first.
+// Copilot's own scratch folder, instead of /tmp: inside its sandbox and its trusted folders, so
+// a temporary file doesn't ask. Files older than a week go at startup.
+let scratch = null;
+function copilotTmp() {
+  if (scratch) return scratch;
+  scratch = process.env.COPILOT_TMP || join(homedir(), '.cache', 'clearsky', 'tmp');
+  mkdirSync(scratch, { recursive: true, mode: 0o700 });
+  for (const f of readdirSync(scratch)) {
+    try { if (Date.now() - statSync(join(scratch, f)).mtimeMs > 7 * 864e5) rmSync(join(scratch, f), { recursive: true, force: true }); } catch { /* in use or gone */ }
+  }
+  return scratch;
+}
+
 function copilotEnv() {
   const env = { ...process.env };
+  env.TMPDIR = env.TMP = env.TEMP = copilotTmp();
+  // Java ignores TMPDIR (Maven, Gradle, tests)
+  env.JAVA_TOOL_OPTIONS = `${env.JAVA_TOOL_OPTIONS ? `${env.JAVA_TOOL_OPTIONS} ` : ''}-Djava.io.tmpdir=${copilotTmp()}`;
   for (const k of ['GITHUB_TOKEN', 'GH_TOKEN', 'SLACK_TOKEN', 'GOOGLE_CALENDAR_ICS', 'CALENDAR_ICS_URL']) delete env[k];
   const bin = copilot.findCopilot(process.env.COPILOT_BIN);
   const dirs = [bin?.includes('/') && dirname(bin), dirname(process.execPath)].filter(Boolean);
@@ -803,7 +819,7 @@ const SANDBOX_GIT = [['url.https://github.com/.insteadOf', 'git@github.com:'], [
   ['credential.https://github.com.helper', '']];
 // What the sandbox may read besides your folders: Settings → Copilot → Also readable, and
 // Clearsky's own folder (its acli for the sandbox).
-const sandboxOpts = (cwd) => ({ cwd, folders: copilotFolders(), home: homedir(), read: [...list(process.env.COPILOT_READ), join(here, '..')] });
+const sandboxOpts = (cwd) => ({ cwd, folders: [...copilotFolders(), copilotTmp()], home: homedir(), read: [...list(process.env.COPILOT_READ), join(here, '..')] });
 let broker = null;
 function ghToken() {
   try { return execFileSync('gh', ['auth', 'token'], { timeout: 10_000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null; } catch { return null; }
@@ -934,10 +950,11 @@ const CHOICES_HINT = 'When you need me to choose (an approach, a next step, yes 
 function foldersHint() {
   const tilde = (p) => (p.startsWith(homedir()) ? `~${p.slice(homedir().length)}` : p);
   const rw = copilotFolders().map(tilde), ro = list(process.env.COPILOT_READ).map(tilde);
-  if (!rw.length && !ro.length) return '';
+  if (!rw.length && !ro.length) return `For temporary files use $TMPDIR (${tilde(copilotTmp())}), not /tmp.`;
   return `My code is in ${rw.join(', ') || 'this folder'}${ro.length ? ` (and, read only, ${ro.join(', ')})` : ''}. `
     + 'Find repos and files there or in the current folder; don\'t list or search the rest of my home. '
-    + 'If you need something outside these folders, say what and why first.';
+    + 'If you need something outside these folders, say what and why first. '
+    + `For temporary files use $TMPDIR (${tilde(copilotTmp())}), not /tmp.`;
 }
 // How the sandbox works for Copilot, and its doors out (lib/broker.mjs).
 const SANDBOX_HINT = 'You run in a sandbox: everything inside it runs without asking me. git and gh work as usual; reading GitHub '
@@ -1207,7 +1224,7 @@ const copilotFolders = () => (process.env.COPILOT_FOLDERS ? list(process.env.COP
 
 async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin }) {
   // Changing the folders in Settings starts the chat's Copilot again (resuming it) on its next turn.
-  const args = [...copilot.optionArgs(options), ...copilot.folderArgs(copilotFolders())];
+  const args = [...copilot.optionArgs(options), ...copilot.folderArgs([...copilotFolders(), copilotTmp()])];
   // Sandboxed mode always runs in srt; the others when Settings → Copilot → Sandbox says so.
   const sandbox = !!copilot.PERMISSIONS[options.permission]?.sandbox || process.env.COPILOT_SANDBOX === 'srt';
   const sig = JSON.stringify([args, sandbox, process.env.COPILOT_DOMAINS, process.env.COPILOT_FOLDERS]);
