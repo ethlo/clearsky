@@ -432,6 +432,15 @@
   .chat-ctx .ctx-item a { color: var(--text); font-weight: 500; flex: none; }
   .chat-ctx .ctx-item a:hover { color: var(--accent); }
   .chat-ctx .ctx-item span { color: var(--text-2); }
+  .next { font: inherit; font-size: 12.5px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+    border-radius: 999px; padding: 2px 10px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .next:hover { background: var(--accent); color: #fff; }
+  .next.wait { color: var(--muted); background: none; border-color: transparent; font-weight: 500; cursor: default; padding: 2px 0; }
+  .lbl-next { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .next-row { display: flex; align-items: center; gap: 8px; margin: 10px 0 4px; }
+  .chat-ctx .ctx-item a.ext { color: var(--muted); font-weight: 400; text-decoration: none; }
+  .chat-ctx a.badge { text-decoration: none; }
+  .r .t .next { flex: none; font-size: 11.5px; padding: 0 8px; }
   .rv-who { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0; flex-basis: 100%; }
   .chat-ctx .ctx-item .rv-slot { flex-basis: 100%; } .chat-ctx .ctx-item .rv-slot .rv-pick { margin: 6px 0 0; }
   .chat-opts { display: flex; flex-direction: column; gap: 8px; color: var(--text-2); }
@@ -499,13 +508,25 @@
   #chat-title { cursor: text; } #chat-title .rename { font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--accent); border-radius: 6px; padding: 0 6px; width: min(100%, 420px); }
   .msg.me .queued { display: block; font-size: 11px; color: var(--text-2); margin-top: 4px; }
   .chat-empty { color: var(--muted); font-size: 13px; margin: auto; text-align: center; max-width: 340px; }
-  .chat-in { display: flex; gap: 8px; padding: 12px 24px 16px; align-items: flex-end; }
-  .chat-in textarea { flex: 1; resize: none; font: inherit; font-size: 13.5px; color: var(--text); background: var(--surface-2); border: 1px solid var(--line);
-    border-radius: 9px; padding: 9px 11px; max-height: 200px; }
-  .chat-in textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-  .chat-in .icon-btn { height: 34px; }
-  .mic { width: 34px; padding: 0; justify-content: center; flex: none; }
-  .mic.on { background: var(--red-soft); color: var(--red); border-color: var(--red); animation: pulse 1.2s ease-in-out infinite; }
+  /* The message box: one rounded box, the text on top and a quiet toolbar under it. */
+  .chat-in { padding: 10px 24px 16px; }
+  .cbox { border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); padding: 10px 10px 6px 14px; }
+  .cbox:focus-within { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+  .cbox textarea { display: block; width: 100%; resize: none; font: inherit; font-size: 13.5px; color: var(--text); background: none; border: 0; outline: none;
+    padding: 2px 0 6px; max-height: 200px; }
+  .cbar { display: flex; align-items: center; gap: 2px; margin-left: -6px; }
+  .cb-gap { flex: 1; }
+  .cb-btn, .cb-send { display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 7px; background: none; color: var(--text-2); cursor: pointer; flex: none; }
+  .cb-btn svg, .cb-send svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .cb-btn:hover, .cb-send:hover { background: var(--surface); color: var(--text); }
+  .cb-btn.on { color: var(--red); background: var(--red-soft); animation: pulse 1.2s ease-in-out infinite; }
+  .cb-sel { font: inherit; font-size: 12.5px; color: var(--text-2); background: none; border: 0; border-radius: 7px; height: 28px; padding: 0 6px; cursor: pointer; max-width: 160px; }
+  .cb-sel:hover, .cb-sel:focus { background: var(--surface); color: var(--text); outline: none; }
+  .cb-model { width: 11ch; cursor: text; }
+  .cb-model::placeholder { color: var(--text-2); }
+  .cb-send[data-state="stop"] { background: var(--red-soft); color: var(--red); }
+  .cb-send[data-state="stop"] svg { fill: currentColor; stroke: none; width: 10px; height: 10px; }
+  .cb-send[data-state="queue"] { color: var(--accent); }
 
   /* Inbox: a source panel shown as a mail list (panel.view 'table'). */
   .pick { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
@@ -648,11 +669,21 @@
     <div class="cpw">
       <div class="cp-main">
         <div class="chat-log" id="chat-log"></div>
-        <div class="chat-refs" id="cp-refs"><button class="chip" id="cp-ref-add" type="button" title="Give Copilot a PR or Jira ticket to work with">＋ PR or ticket</button></div>
+        <div class="chat-refs" id="cp-refs"></div>
         <form class="chat-in" id="chat-form">
-          <textarea id="chat-text" rows="3" placeholder="Ask about your work… / for skills · Enter to send, Shift+Enter for a new line"></textarea>
-          <button class="icon-btn mic" id="chat-mic" type="button" hidden title="Talk: click, speak, click again to stop" aria-label="Talk" aria-pressed="false">🎤</button>
-          <button class="icon-btn primary" id="chat-send" type="submit">Send</button>
+          <div class="cbox">
+            <textarea id="chat-text" rows="2" placeholder="Ask a follow-up. Type @ to add a PR or ticket, / for skills." aria-label="Message (Enter sends, Shift+Enter for a new line)"></textarea>
+            <div class="cbar">
+              <button class="cb-btn" id="cp-ref-add" type="button" title="Give Copilot a PR or Jira ticket to work with (@)" aria-label="Add a PR or ticket"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg></button>
+              <select class="cb-sel" id="cp-perm" title="What Copilot may do without asking"></select>
+              <input class="cb-sel cb-model" id="cp-model" list="cp-models" placeholder="Auto" spellcheck="false" title="Model (empty: Copilot's default)">
+              <datalist id="cp-models"></datalist>
+              <select class="cb-sel" id="cp-effort" title="Reasoning effort"><option value="">Balanced</option></select>
+              <button class="cb-btn" id="chat-mic" type="button" hidden title="Talk: click, speak, click again to stop" aria-label="Talk" aria-pressed="false"><svg viewBox="0 0 16 16"><rect x="5.75" y="1.75" width="4.5" height="8" rx="2.25"/><path d="M3.5 7.5a4.5 4.5 0 0 0 9 0M8 12v2.25"/></svg></button>
+              <span class="cb-gap"></span>
+              <button class="cb-send" id="chat-send" type="submit" data-state="send" title="Send (Enter)" aria-label="Send"><svg viewBox="0 0 16 16"><path d="M2.5 2.75 14 8 2.5 13.25 4.25 8zM4.25 8H9"/></svg></button>
+            </div>
+          </div>
         </form>
       </div>
       <aside class="cp-side">
@@ -660,10 +691,6 @@
         <div><h4>Skills</h4><div class="chat-skills" id="cp-skills"></div></div>
         <div><h4>Settings</h4>
           <div class="chat-opts">
-            <label>Model <input id="cp-model" list="cp-models" placeholder="default" spellcheck="false"></label>
-            <datalist id="cp-models"></datalist>
-            <label>Effort <select id="cp-effort"><option value="">default</option></select></label>
-            <label>Access <select id="cp-perm"></select></label>
             <details class="cp-tools"><summary>Tools</summary>
               <label>Also allow <input id="cp-allow" placeholder="shell(git:*), shell(gh:*)" spellcheck="false"></label>
               <label>Also deny <input id="cp-deny" placeholder="url(*), write(**/*.env)" spellcheck="false"></label>
@@ -1382,6 +1409,112 @@ function unlistedTicket(key) {
   const url = site ? `${new URL(site).origin}/browse/${key}` : '';
   return { group: 'linked', kind: 'linked', k: `linked:${key}`, issue: key, ref: key, url, title: key, src: 'Jira', glyph: 'todo', label: ['not in your lists'], step: 'Not in your lists: assigned to someone else, or closed.', data: {} };
 }
+// The item behind a key like pr:owner/repo#12 or issue:SSP-1: the one in your lists, or
+// one made up from the key so it still opens here (with what GitHub or Jira says about it).
+function itemForKey(k) {
+  const all = xrefAll.length ? xrefAll : inboxItems();
+  const rank = (x) => ({ pr: 0, review: 0, ticket: 0, issue: 1, mention: 2 }[x.kind] ?? 3);
+  const hit = all.filter((x) => (k.startsWith('issue:') ? x.issue === k.slice(6) : x.url && itemKey(x.url) === k)).sort((a, b) => rank(a) - rank(b))[0];
+  if (hit) return hit;
+  if (k.startsWith('issue:')) return unlistedTicket(k.slice(6));
+  const m = k.match(/^(pr|gh):([\w.-]+\/[\w.-]+)#(\d+)$/);
+  if (!m) return null;
+  const url = `https://github.com/${m[2]}/${m[1] === 'pr' ? 'pull' : 'issues'}/${m[3]}`;
+  return { group: 'linked', kind: 'linked', k: `linked:${k}`, pr: m[1] === 'pr' ? `${m[2]}#${m[3]}` : null, ref: `${shortRepo(m[2])} #${m[3]}`, url,
+    title: `${m[2]}#${m[3]}`, src: 'GitHub', glyph: 'todo', label: ['not in your lists'], step: 'Not in your lists.', data: { repo: m[2], number: Number(m[3]) } };
+}
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('[data-open-key]');
+  if (!a || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+  const it = itemForKey(a.dataset.openKey);
+  if (!it) return;
+  e.preventDefault(); e.stopPropagation();
+  openItem(it);
+}, true);
+
+// ---------------------------------------------------------------- the next step
+// What to do next on an item, as one verb phrase and how to do it here:
+//   { label, run: 'review' }                    open the reviewer picker (your PR)
+//   { label, run: 'copilot', skill, prompt }    continue its Copilot chat, or start one
+//   { label, run: 'url', url }                  something only GitHub or Jira does (merge, reply)
+//   { label, run: 'item', k }                   go to the item that holds the next step
+//   { label, wait: true }                       nothing for you to do; who or what it waits on
+const hasSkill = (n) => (chat.info?.skills || []).some((s) => s.name === n);
+function nextStep(it, rel = relatedItems(it, xrefAll.length ? xrefAll : inboxItems())) {
+  const d = it.data || {};
+  const fix = (label, prompt) => ({ label, run: 'copilot', skill: hasSkill('continue-work') ? 'continue-work' : '', prompt });
+  if (it.kind === 'pr') {
+    switch (d.status?.label?.replace(/^\d+ unresolved threads?$/, 'threads')) {
+      case 'Draft': return { label: 'Mark it ready for review', run: 'url', url: d.url };
+      case 'Merge conflict': return fix('Resolve the merge conflict', 'Merge the default branch into this PR and resolve the conflicts, then run the affected tests.');
+      case 'CI failing': return fix('Fix the failing checks', 'Find out why the checks fail on this PR and fix it.');
+      case 'Changes requested': case 'threads': case 'Has feedback':
+        return fix('Address the review comments', 'Go through the open review comments on this PR: fix what is right, and draft replies for the rest. Don\'t post or resolve anything without asking.');
+      case 'Ready to merge': return { label: 'Merge it', run: 'url', url: d.url };
+      case 'Approved, CI running': return { label: 'Wait for the checks', wait: true };
+      case 'No reviewer yet': return { label: 'Request review', run: 'review' };
+      default: return { label: d.pendingReviewers?.length ? `Waiting on ${d.pendingReviewers.join(', ')}` : 'Waiting for review', wait: true };
+    }
+  }
+  if (it.kind === 'review') return { label: d.rerequested ? 'Review the new changes' : 'Review it', run: 'copilot', skill: '',
+    prompt: 'Review this PR: summarise the change, check it against the ticket, and draft review comments. Don\'t post anything.' };
+  if (it.kind === 'mention') return { label: 'Reply', run: 'url', url: it.url };
+  if (it.issue || it.kind === 'issue' || it.kind === 'linked') {
+    // A ticket with a PR: the PR's next step is the ticket's.
+    const pr = rel.find((x) => x.kind === 'pr' || x.kind === 'review');
+    if (pr) { const n = nextStep(pr, []); return n.wait ? { ...n, label: `${pr.ref}: ${n.label.toLowerCase()}` } : { label: `${n.label} (${pr.ref})`, run: 'item', k: pr.k }; }
+    if (it.kind === 'ticket' && d.waiting) return { label: `Waiting: ${d.status}`, wait: true };
+    const start = hasSkill('feature-delivery') ? 'feature-delivery' : hasSkill('continue-work') ? 'continue-work' : '';
+    if (it.glyph === 'prog' || (cpLinks.links[itemKey(it.url || '')] || []).length) return { label: 'Continue it', run: 'copilot', skill: hasSkill('continue-work') ? 'continue-work' : start, prompt: '' };
+    return { label: 'Start it', run: 'copilot', skill: start, prompt: '' };
+  }
+  return null;
+}
+function nextHtml(it, n = nextStep(it)) {
+  if (!n) return '';
+  return n.wait ? `<span class="next wait">⏳ ${esc(n.label)}</span>`
+    : `<button class="next" data-next="${esc(it.k)}" title="Next step">→ ${esc(n.label)}</button>`;
+}
+// Doing the next step: the reviewer picker in place, Copilot in its chat, or GitHub/Jira.
+function runNext(it, btn) {
+  const n = nextStep(it);
+  if (!n || n.wait) return;
+  if (n.run === 'url') return window.open(n.url, '_blank', 'noopener');
+  if (n.run === 'item') { const x = (xrefAll.length ? xrefAll : inboxItems()).find((y) => y.k === n.k); return x && openItem(x); }
+  if (n.run === 'review') {
+    const d = it.data || {};
+    const inChat = !$('#chat').hidden && $(`#chat-ctx [data-rv-open="${d.repo}#${d.number}"]`);
+    if (inChat) return inChat.click();
+    if ($('#v-item').hidden || curItem?.k !== it.k) { openItem(it); setTimeout(() => $(`#item [data-rv-open]`)?.click(), 50); return; }
+    return $(`#item [data-rv-open="${d.repo}#${d.number}"]`)?.click();
+  }
+  if (n.run === 'copilot') {
+    const ref = refFromUrl(it.url);
+    const linked = (cpLinks.links[itemKey(it.url || '')] || []).slice().sort((a, b) => Date.parse(b.updatedAt || 0) - Date.parse(a.updatedAt || 0))[0];
+    if (linked) {
+      // Carry on in the chat that already knows this work; the request waits in the box for you to send.
+      openChat(true, true);
+      openSession(linked.id, linked.cwd).then(() => { if (n.prompt) { $('#chat-text').value = n.prompt; $('#chat-text').focus(); } });
+      return;
+    }
+    if (!ref) return;
+    if (!chat.session || chat.turns || chat.stop) newChat();
+    chat.refs = [];
+    addRef(ref);
+    openChat(true, true);
+    send([n.skill && `/${n.skill}`, n.prompt].filter(Boolean).join(' ') || 'What is the next step on this?');
+  }
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-next]');
+  if (!b) return;
+  e.preventDefault(); e.stopPropagation();
+  const k = b.dataset.next;
+  const it = (xrefAll.length ? xrefAll : inboxItems()).find((y) => y.k === k) || (curItem?.k === k ? curItem : null)
+    || (k.startsWith('linked:') ? itemForKey(k.slice(7)) : null);
+  if (it) runNext(it, b);
+}, true);
+
 // A link to a related item: opens it here, or on its own site when it isn't listed.
 function xrefChip(x, withState) {
   const [lt, tone] = x.label || [];
@@ -1485,11 +1618,17 @@ function branchCell(list) {
   const tip = list.map((b) => `${b.repo ? `${shortRepo(b.repo)}: ` : ''}${b.branch}${b.pr ? ' (PR)' : b.local && !b.remote ? ' (local only)' : b.remote && !b.local ? ' (remote only)' : ''}`).join('\n');
   return `<span title="${esc(tip)}">${esc(list[0].branch)}${list.length > 1 ? ` +${list.length - 1}` : ''}</span>`;
 }
+// The next step in a row, only when there's something for you to do.
+function rowNext(it, rel) {
+  if (it.kind === 'session' || it.group === 'linked') return '';
+  const n = nextStep(it, rel);
+  return n && !n.wait ? nextHtml(it, n) : '';
+}
 function tableRow(it, i, rel, chips, acts, fresh) {
   const [lt, tone] = it.label || [];
   const cell = {
     id: `<span class="c c-id id"${refAttrs(it)}>${esc(it.issue || it.ref || '')}</span>`,
-    t: `<span class="c c-t t"><a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.title)}</a>${it.pr && it.step ? `<span class="step">${esc(it.step)}</span>` : ''}${chips}</span>`,
+    t: `<span class="c c-t t"><a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.title)}</a>${rowNext(it, rel)}${it.pr && it.step ? `<span class="step">${esc(it.step)}</span>` : ''}${chips}</span>`,
     x: `<span class="c c-x">${rel.slice(0, 3).map((x) => xrefChip(x, !it.pr)).join('')}</span>`,
     b: `<span class="c c-b">${branchCell(branchesOf(it, rel))}</span>`,
     s: `<span class="c c-s">${lt ? `<span class="lbl${tone ? ` ${tone}` : ''}">${tone ? '<i></i>' : ''}${esc(lt)}</span>` : ''}</span>`,
@@ -1513,7 +1652,7 @@ function itemRow(it, i) {
   return `<li class="r${it.group === 'waiting' ? ' quiet' : ''}${it.k === selK ? ' sel' : ''}" data-i="${i}" tabindex="-1">
     ${fresh ? '<span class="new-dot" title="New since you last looked" aria-label="New"></span>' : ''}<span class="st ${esc(it.glyph)}"></span>
     <span class="id"${refAttrs(it)}>${esc(it.ref || '')}</span>
-    <span class="t"><a href="${esc(it.url || '#copilot')}"${it.url ? ' target="_blank" rel="noopener"' : ''}>${esc(it.title)}</a>${xrefs}${it.step ? `<span class="step">${esc(it.step)}</span>` : ''}</span>
+    <span class="t"><a href="${esc(it.url || '#copilot')}"${it.url ? ' target="_blank" rel="noopener"' : ''}>${esc(it.title)}</a>${xrefs}${rowNext(it, rel)}${it.step ? `<span class="step">${esc(it.step)}</span>` : ''}</span>
     <span class="lb">${chips}${lt ? `<span class="lbl${tone ? ` ${tone}` : ''}">${tone ? '<i></i>' : ''}${esc(lt)}</span>` : ''}</span>
     <span class="age">${esc(shortAgo(it.at))}</span>${acts}</li>`;
 }
@@ -1633,7 +1772,8 @@ async function renderItem() {
   const sessions = cpLinks.links[itemKey(it.url || '')] || [];
   $('#it-crumb').textContent = `${it.src || ''}${it.ref ? ` · ${it.ref}` : ''}`;
   const head = `<div class="src"><span class="st ${esc(it.glyph)}"></span>${esc(it.ref || '')}</div>
-    <h2>${esc(it.title)}</h2><div class="why">${whyLine(it)}</div>${it.pr ? reviewerChips(it.data) : ''}${lastActLine(it)}`;
+    <h2>${esc(it.title)}</h2><div class="why">${whyLine(it)}</div>${it.pr ? reviewerChips(it.data) : ''}${lastActLine(it)}
+    ${(() => { const n = nextHtml(it); return n ? `<div class="next-row"><span class="lbl-next">Next</span>${n}</div>` : ''; })()}`;
   const acts = `<div class="acts-row">${it.url ? `<a class="icon-btn primary" href="${esc(it.url)}" target="_blank" rel="noopener">${where} ↗</a>` : ''}
     ${it.kind === 'pr' ? `<button class="icon-btn" data-rv-open="${esc(it.data.repo)}#${it.data.number}">👥 Request review</button>` : ''}
     ${refFromUrl(it.url) ? `<button class="icon-btn" data-ask="${esc(it.url)}" data-title="${esc(it.title)}">✦ Copilot on this</button>` : ''}
@@ -2182,7 +2322,7 @@ function drawCtx() {
     const url = info.url || (k.startsWith('pr:') ? `https://github.com/${label.replace('#', '/pull/')}` : k.startsWith('gh:') ? `https://github.com/${label.replace('#', '/issues/')}`
       : jiraBaseGuess() ? `${jiraBaseGuess()}/browse/${label}` : '');
     const mine = k.startsWith('pr:') && (state.github?.myPrs || []).some((p) => `pr:${p.repo}#${p.number}` === k);
-    return `<div class="ctx-item">📎 ${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(label)}</a>` : `<b>${esc(label)}</b>`}
+    return `<div class="ctx-item">📎 <a href="${esc(url || '#')}" data-open-key="${esc(k)}" title="Open here">${esc(label)}</a>${url ? `<a class="ext" href="${esc(url)}" target="_blank" rel="noopener" title="Open on ${k.startsWith('issue:') ? 'Jira' : 'GitHub'}" aria-label="Open on ${k.startsWith('issue:') ? 'Jira' : 'GitHub'}">↗</a>` : ''}
       ${info.status ? `<span class="badge b-${info.tone || 'gray'}">${esc(info.status)}</span>` : ''}<span>${esc(info.title || '')}</span>
       ${k.startsWith('pr:') ? reviewerChips(prByKey(k)) : ''}
       ${mine ? `<button class="chip" data-rv-open="${esc(label)}">👥 Request review</button><div class="rv-slot"></div>` : ''}</div>`;
@@ -2193,12 +2333,17 @@ function drawCtx() {
     const info = idx.get(k) || {};
     if (k.startsWith('issue:')) {
       const st = info.status ? info : ctxTicketStatus(k.slice(6));
-      return st?.status ? `<span class="badge b-${st.tone || 'gray'}" title="${esc(k.slice(6))} in Jira">${esc(k.slice(6))} · ${esc(st.status)}</span>` : '';
+      return st?.status ? `<a class="badge b-${st.tone || 'gray'}" href="#" data-open-key="${esc(k)}" title="Open ${esc(k.slice(6))} here">${esc(k.slice(6))} · ${esc(st.status)}</a>` : '';
     }
-    return info.status ? `<span class="badge b-${info.tone || 'gray'}" title="${esc(k.slice(3))}">${esc(k.replace(/^(pr|gh):[\w.-]+\//, '').replace('#', ' #'))} · ${esc(info.status)}</span>` : '';
+    return info.status ? `<a class="badge b-${info.tone || 'gray'}" href="#" data-open-key="${esc(k)}" title="Open ${esc(k.slice(3))} here">${esc(k.replace(/^(pr|gh):[\w.-]+\//, '').replace('#', ' #'))} · ${esc(info.status)}</a>` : '';
   }).filter(Boolean).join('');
+  // The next step on this work: the PR's if there is one, else the ticket's.
+  const mainKey = [...keys].find((k) => k.startsWith('pr:')) || [...keys].find((k) => k.startsWith('issue:')) || [...keys][0];
+  const mainItem = mainKey && itemForKey(mainKey);
+  const next = mainItem ? nextHtml(mainItem) : '';
   el.innerHTML = `<div class="ctx-line"><span class="ctx-title">${esc(title || (chat.turns ? 'Copilot session' : 'New chat'))}</span></div>
     <div class="ctx-line ctx-work">${work}${status ? `<span class="ctx-st s-${esc(status)}" title="This chat"><i></i>chat ${esc(STATUS_TEXT[status] || status)}</span>` : ''}</div>
+    ${next ? `<div class="ctx-line ctx-next"><span class="lbl-next">Next</span>${next}</div>` : ''}
     ${items}
     ${chat.cwd ? `<div class="ctx-dir" title="${esc(chat.cwd)}">📁 ${esc(chat.cwd.replace(/^\/home\/[^/]+/, '~'))}</div>` : ''}`;
 }
@@ -2271,7 +2416,7 @@ async function loadCopilotInfo() {
   try { chat.info = await getJson('/api/copilot'); } catch (e) { chat.info = { available: false, error: e.message }; }
   const i = chat.info;
   $('#cp-models').innerHTML = (i.models || []).map((m) => `<option value="${esc(m)}">`).join('');
-  $('#cp-effort').innerHTML = `<option value="">default</option>${(i.efforts || []).map((e) => `<option>${esc(e)}</option>`).join('')}`;
+  $('#cp-effort').innerHTML = `<option value="">Balanced</option>${(i.efforts || []).map((e) => `<option>${esc(e)}</option>`).join('')}`;
   $('#cp-perm').innerHTML = Object.entries(i.permissions || {}).map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('');
   pickDefaults();
   $('#cp-allow').value = cpPrefs.allow || '';
@@ -2384,7 +2529,7 @@ function drawRefs() {
     const el = document.createElement('span');
     el.className = 'ref';
     el.innerHTML = `<span title="${esc(r.title || '')}">${esc(refLabel(r))}${r.title ? ` ${esc(r.title)}` : ''}</span><button type="button" data-unref="${i}" aria-label="Remove">✕</button>`;
-    $('#cp-ref-add').before(el);
+    $('#cp-refs').append(el);
   }
 }
 function addRef(r) {
@@ -2627,8 +2772,28 @@ $('#chat-form').onsubmit = (e) => {
   sendLabel();
 };
 // The button says what Enter will do.
-function sendLabel() { $('#chat-send').textContent = !chat.stop ? 'Send' : $('#chat-text').value.trim() ? 'Queue' : 'Stop'; }
+const SEND_ICONS = {
+  send: '<path d="M2.5 2.75 14 8 2.5 13.25 4.25 8zM4.25 8H9"/>',
+  queue: '<path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13.5h10"/>',
+  stop: '<rect x="1" y="1" width="14" height="14" rx="2"/>',
+};
+function sendLabel() {
+  const st = !chat.stop ? 'send' : $('#chat-text').value.trim() ? 'queue' : 'stop', b = $('#chat-send');
+  if (b.dataset.state === st) return;
+  b.dataset.state = st;
+  b.innerHTML = `<svg viewBox="0 0 16 16">${SEND_ICONS[st]}</svg>`;
+  const t = { send: 'Send (Enter)', queue: 'Queue: sends when Copilot is done (Enter)', stop: 'Stop Copilot' }[st];
+  b.title = t; b.setAttribute('aria-label', t.replace(/ \(.*/, ''));
+}
 $('#chat-text').addEventListener('input', sendLabel);
+// Typing @ (at the start or after a space) opens the PR/ticket picker instead.
+$('#chat-text').addEventListener('input', (e) => {
+  const ta = e.target, i = ta.selectionStart;
+  if (e.data !== '@' || ta.value[i - 1] !== '@' || (i > 1 && !/\s/.test(ta.value[i - 2]))) return;
+  ta.value = ta.value.slice(0, i - 1) + ta.value.slice(i);
+  ta.setSelectionRange(i - 1, i - 1);
+  openRefPick();
+});
 // After a turn: send the next message you typed meanwhile. True if it did.
 function sendQueued() {
   const next = chat.queued.shift();

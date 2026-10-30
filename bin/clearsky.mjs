@@ -1901,8 +1901,15 @@ function serve() {
           // A chat about a PR or GitHub issue runs in your clone of its repo; one about a ticket, in
           // the clone of the PR that carries its key (in the PR's title or branch), if there is one.
           const repoRef = !body.resume && !body.cwd && (refs.find((r) => r.kind === 'pr' || r.kind === 'gh') || ticketPr(refs.find((r) => r.kind === 'issue')));
-          const clone = repoRef ? findCheckout(repoRef.repo) : null;
-          const checkout = clone && (worktreeFor(clone, prBranch(repoRef)) || clone);
+          let clone = repoRef ? findCheckout(repoRef.repo) : null;
+          let checkout = clone && (worktreeFor(clone, prBranch(repoRef)) || clone);
+          // A ticket with no PR yet: the clone (and worktree) of a branch that carries its key.
+          const ticket = !checkout && !body.resume && !body.cwd && refs.find((r) => r.kind === 'issue');
+          if (ticket) {
+            const found = (await branchesFor([ticket.key], codeDirs()).catch(() => ({})))[ticket.key] || [];
+            const b = found.find((x) => x.local) || found[0];
+            if (b) checkout = worktreeFor(b.clone, b.branch) || b.clone;
+          }
           const cwd = checkout || (body.cwd && isDir(body.cwd) ? body.cwd : copilotCwd());
           let refText = '';
           if (refs.length) {

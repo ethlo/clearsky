@@ -66,6 +66,17 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
   await page.goto(`${base}/#inbox`);
   await page.waitForSelector('#list li.r');
 
+  // The next step: your PR without reviewers asks for one, in the row and on its page, and the
+  // button opens the reviewer picker there.
+  assert.match(await page.locator('#list li.r', { hasText: 'SSP-5' }).first().locator('.next').innerText(), /Request review/);
+  await page.locator('#list li.r', { hasText: 'SSP-5' }).first().locator('.next').click();
+  await page.waitForSelector('#v-item:not([hidden]) .next-row');
+  assert.match(await page.locator('#item .next-row').innerText(), /Request review/);
+  await page.waitForSelector('.rv-pick li[data-q]');
+  if (process.env.SHOT) await page.screenshot({ path: `${process.env.SHOT}/item.png` });
+  await page.goto(`${base}/#inbox`);
+  await page.waitForSelector('#list li.r');
+
   // A PR page shows who reviews it and where each stands.
   await page.locator('#list li.r', { hasText: 'Their change' }).first().locator('.t > a').first().click();
   await page.waitForSelector('#v-item:not([hidden]) .rv-who');
@@ -124,8 +135,9 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
   await page.goto(`${base}/#copilot`);
   await page.selectOption('#cp-perm', 'full');
   await page.fill('#chat-text', 'hello');
+  if (process.env.SHOT) await page.screenshot({ path: `${process.env.SHOT}/chat.png` });
   await page.press('#chat-text', 'Enter');
-  await page.waitForFunction(() => document.querySelector('#chat-send').textContent === 'Send', null, { timeout: 10_000 });
+  await page.waitForFunction(() => document.querySelector('#chat-send').dataset.state === 'send', null, { timeout: 10_000 });
   await page.goto(`${base}/#inbox`);
   await page.waitForSelector('#side-cp .ni', { timeout: 15_000 });
 
