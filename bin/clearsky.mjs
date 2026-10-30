@@ -481,6 +481,34 @@ export function standupText(s) {
   return out.join('\n');
 }
 
+// What to say at stand-up, in your words rather than a list of tickets: Copilot turns the
+// stand-up above into a few spoken sentences, grouped by what the work is for. It gets the text
+// only, no tools; the answer is kept until the next stand-up or a new one is asked for.
+const SAY_PROMPT = `This is my stand-up, as a list from my GitHub, Jira and Copilot work. Write what I'll say in the meeting:
+first person, spoken and plain, 4 to 7 short sentences in three short paragraphs (yesterday, today, blockers).
+Group the work by what it's for (the feature or problem), not ticket by ticket; name a ticket key only when it helps
+people find it, and leave out repo names, PR numbers and statuses unless they matter (say "it's in review" rather
+than a status). Don't invent anything that isn't in the list. If there are no blockers, say so in a few words.
+Answer with the text only, no headings or bullets.
+
+`;
+let sayCache = { key: null, text: null, at: null };
+async function standupSay(s, force) {
+  const key = `${s.sinceLabel}|${s.text}`;
+  if (!force && sayCache.key === key) return sayCache;
+  const info = await copilotInfo();
+  if (!info.available) throw new Error('Copilot CLI not found');
+  const text = await new Promise((done, fail) => {
+    let out = '';
+    copilot.runCopilot(info.bin, copilot.copilotArgs({ prompt: SAY_PROMPT + s.text, permission: 'read', model: process.env.COPILOT_MODEL || undefined, cwd: copilotCwd() }), {
+      env: copilotEnv(), timeoutMs: 120_000, onData: (d) => { out += d; },
+      onEnd: ({ code, stderr }) => (code === 0 && out.trim() ? done(out.trim()) : fail(new Error(stderr.trim().split('\n').pop() || `Copilot exited with ${code}`))),
+    });
+  });
+  sayCache = { key, text, at: new Date().toISOString() };
+  return sayCache;
+}
+
 // Copilot sessions you worked in since the last stand-up: local work that may not be
 // on GitHub or Jira yet. Titles are Copilot's own summaries of each session.
 async function standupCopilot(since) {
@@ -1490,6 +1518,13 @@ function serve() {
       if (url.pathname === '/settings') {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
         return res.end(settingsPage);
+      }
+      if (url.pathname === '/api/standup/say') {
+        if (!standupCache.data) standupCache = { at: Date.now(), data: await standup(await collect(false)) };
+        // ?cached=1: what was written for this stand-up already, without asking Copilot.
+        if (url.searchParams.has('cached')) return json(res, 200, sayCache.key === `${standupCache.data.sinceLabel}|${standupCache.data.text}` ? { text: sayCache.text, at: sayCache.at } : { text: null });
+        try { const r = await standupSay(standupCache.data, url.searchParams.has('refresh')); return json(res, 200, { text: r.text, at: r.at }); }
+        catch (e) { return json(res, 502, { error: e.message }); }
       }
       if (url.pathname === '/api/standup') {
         const force = url.searchParams.has('refresh');

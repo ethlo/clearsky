@@ -390,6 +390,8 @@ ul.rows .row:first-child { border-top: 0; }
 .su-card { padding: 4px 0 14px; border-bottom: 1px solid var(--line); }
 .su-card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 12px 0 4px; }
 .su-card ul { margin: 0; padding-left: 18px; }
+.su-say p { margin: 0 0 8px; font-size: 15px; line-height: 1.55; max-width: 70ch; }
+.su-say .acts-row { margin-top: 6px; }
 .su-card li { padding: 4px 0; }
 a.ref { color: var(--accent); font-weight: 550; border-bottom: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent); }
 a.ref:hover { border-bottom-style: solid; }

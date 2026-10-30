@@ -142,6 +142,14 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
   assert.deepEqual([ctx.next, ctx.here, ctx.ext], [false, 2, 2]);
   await page.evaluate(() => { Object.assign(chat, { items: [], title: null, turns: 0, stop: null }); drawCtx(); });
 
+  // Stand-up: "Say this" asks Copilot (the fake one echoes the prompt) and shows its text.
+  await page.goto(`${base}/#standup`);
+  await page.waitForSelector('[data-say="go"]', { timeout: 15_000 });
+  await page.click('[data-say="go"]');
+  await page.waitForSelector('#su-say p', { timeout: 15_000 });
+  assert.match(await page.locator('#su-say').innerText(), /stand-up/i);
+  assert.ok(await page.locator('[data-say="copy"]').isVisible());
+
   for (const view of ['calendar', 'standup', 'notifications', 'reviews', 'prs', 'tickets']) {
     await page.goto(`${base}/#${view}`);
     await page.waitForTimeout(400);

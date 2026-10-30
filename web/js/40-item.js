@@ -362,15 +362,36 @@ function renderStandup() {
     if (h) sections.push({ title: h[1], items: [] });
     else if (line.startsWith('- ') && sections.length) sections.at(-1).items.push(line.slice(2));
   }
-  $('#su-body').innerHTML = (errs.length ? `<div class="err">${esc(errs.join(' · '))}</div>` : '') + sections.map((sec) =>
+  // What to say, in a few sentences (Copilot writes it from the lists below; Generate asks it).
+  const say = `<section class="card su-card su-say"><h2>Say this</h2>
+    <div id="su-say">${sayData?.text ? sayHtml(sayData.text) : sayData?.error ? `<div class="err">${esc(sayData.error)}</div>` : sayData?.loading ? skeleton(3) : '<p class="muted">A few sentences to say, grouped by what the work is for, written by Copilot from the lists below.</p>'}</div>
+    <div class="acts-row"><button class="icon-btn${sayData?.text ? '' : ' primary'}" data-say="${sayData?.text ? 'refresh' : 'go'}" ${sayData?.loading ? 'disabled' : ''}>${sayData?.text ? 'Write it again' : 'Write it'}</button>${sayData?.text ? '<button class="icon-btn" data-say="copy">Copy</button>' : ''}</div></section>`;
+  $('#su-body').innerHTML = say + (errs.length ? `<div class="err">${esc(errs.join(' · '))}</div>` : '') + sections.map((sec) =>
     `<section class="card su-card"><h2>${esc(sec.title)}</h2><ul>${sec.items.map((i) => `<li>${linkify(i, s.jiraBase)}</li>`).join('')}</ul></section>`).join('');
 }
+
+let sayData = null;
+const sayHtml = (t) => t.split(/\n{2,}/).map((p) => `<p>${linkify(p.trim(), standupData?.jiraBase)}</p>`).join('');
+async function loadSay(force) {
+  sayData = { ...sayData, loading: true, error: null };
+  renderStandup();
+  try { sayData = await getJson(`/api/standup/say${force ? '?refresh=1' : ''}`); if (sayData.error) throw new Error(sayData.error); }
+  catch (e) { sayData = { error: e.message }; }
+  renderStandup();
+}
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-say]');
+  if (!b) return;
+  if (b.dataset.say === 'copy') { await navigator.clipboard?.writeText(sayData?.text || ''); b.textContent = 'Copied'; return; }
+  loadSay(b.dataset.say === 'refresh');
+});
 
 async function loadStandup(force) {
   busy(1);
   try { standupData = await getJson(`/api/standup${force ? '?refresh=1' : ''}`); }
   catch (e) { standupData = { error: e.message }; }
   finally { busy(-1); renderStandup(); }
+  if (!sayData?.text) getJson('/api/standup/say?cached=1').then((d) => { if (d.text) { sayData = d; renderStandup(); } }).catch(() => {});
 }
 
 // ---------------------------------------------------------------- hover cards
