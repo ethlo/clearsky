@@ -7,7 +7,8 @@ import { weekPlanEvents, planMonday } from '../lib/weekplan.mjs';
 import { documentText, docxText } from '../lib/doctext.mjs';
 import { schoolEvents } from '../lib/school-events.mjs';
 
-// The text of two real plans as pdftotext -layout gives it (the school's name changed).
+// The text of real plans as pdftotext -layout gives it (the school's name and phone changed,
+// parents' names removed).
 const fixture = (n) => readFileSync(new URL(`./fixtures/${n}`, import.meta.url));
 const grade = fixture('ukeplan-3trinn.txt').toString();
 const sfo = fixture('ukeplan-sfo.txt').toString();
@@ -37,6 +38,24 @@ test('an SFO plan: each group\'s activities, the side column and meals left out'
     '2026-10-28 1 Forming', '2026-10-28 2 Gymsalen', '2026-10-29 1 Gymsalen', '2026-10-29 2 Halloween BINGO',
     '2026-10-30 1 Halloween BINGO', '2026-10-30 2 Gymsalen']);
   assert.ok(evs.every((e) => e.allDay));
+});
+
+test('a plan whose homework table runs onto the next page, further left', () => {
+  const evs = weekPlanEvents(fixture('ukeplan-3trinn-uke44.txt').toString(), { sentAt: '2026-10-23T06:57:45Z', title: 'Ukeplan for 3. trinn uke 44' });
+  assert.deepEqual(pick(evs, 'homework'), ['2026-10-27 Lekse norsk: Salto lesebok: sidene 118-121', '2026-10-28 Lekse norsk: Salto lesebok: sidene 118-121',
+    '2026-10-29 Lekse norsk: Salto lesebok: sidene 124-127', '2026-10-30 Lekse norsk: Salto lesebok: sidene 124-127']);
+  assert.deepEqual(pick(evs, 'activity'), ['2026-10-29 Turdag, «ut på tur, ALDRI sur/ALLTID blid»😊 10:15 12:15']);
+});
+
+test('a plan with times over two lines, cells that touch and prose that names weekdays', () => {
+  const evs = weekPlanEvents(fixture('ukeplan-7trinn.txt').toString(), { sentAt: '2026-10-23T06:16:37Z', title: 'Uke 44' });
+  assert.deepEqual(pick(evs, 'activity'), [
+    '2026-10-26 Oppstart strikking 08:30 09:15', '2026-10-26 Futsalturnering for hele trinnet 12:05 13:15',
+    '2026-10-28 Vi strikker 08:30 09:15', '2026-10-28 Futsalturnering for hele trinnet 12:05 13:15',
+    '2026-10-29 Delingstime matematikk Delingstime norsk 08:30 10:00', '2026-10-29 Fysak 10:15 11:15', '2026-10-29 Futsalturnering for hele trinnet 12:05 13:15',
+    '2026-10-30 Halloween i hallen. Vi har ulike halloween aktiviteter 08:30 10:00']);
+  assert.deepEqual(pick(evs, 'ends').map((e) => e.slice(0, 31)), ['2026-10-26 Skolen slutter 14.15', '2026-10-27 Skolen slutter 13.15',
+    '2026-10-28 Skolen slutter 14.10', '2026-10-29 Skolen slutter 14.10', '2026-10-30 Skolen slutter 14.00']);
 });
 
 test('a Word plan reads the same way: cells in columns, the table ends with its last row', async () => {
@@ -70,6 +89,8 @@ test('school events: each file read once, kept privately, sent twice shown once,
   assert.deepEqual(trip.read, { src: 'flyt', key: 'flyt:group:1:a:m2' });
   assert.ok(trip.fyi && !trip.allDay);
   assert.equal(statSync(file).mode & 0o777, 0o600);
+  const ends = evs.find((e) => e.kind === 'ends');
+  assert.equal(Date.parse(ends.end) - Date.parse(ends.start), 15 * 6e4);
   await schoolEvents(msgs, { readFile, file, now });
   assert.equal(reads, 2); // from the file
   const failing = await schoolEvents([{ ...msgs[0], key: 'flyt:group:1:c:m3' }], { readFile: async () => { throw new Error('gone'); }, file, now });
