@@ -38,3 +38,10 @@ test('Copilot starts through srt', async () => {
   const agent = new AcpAgent(r.bin, r.args, { env: process.env });
   try { assert.ok(await agent.start(dir)); } finally { agent.close(); }
 });
+
+test('on Linux, srt runs without its socket filter and hides the session bus instead', () => {
+  const s = srtSettings({ cwd: '/h/dev/x', home: '/h', platform: 'linux', uid: 1000 });
+  assert.equal(s.network.allowAllUnixSockets, true);
+  assert.ok(s.filesystem.denyRead.includes('/run/user/1000'));
+  assert.equal(srtSettings({ cwd: '/h/x', home: '/h', platform: 'darwin', uid: 501 }).network.allowAllUnixSockets, undefined);
+});

@@ -90,8 +90,9 @@ if [ "$SANDBOX" = 1 ] && [ "$(uname -s)" = Linux ]; then
   have socat || missing="$missing socat"
   have rg || missing="$missing ripgrep"
   if [ -n "$missing" ]; then warn "the Copilot sandbox needs:$missing  ->  ${pm:-install}$missing"; else echo "  sandbox: bubblewrap, socat and ripgrep are there"; fi
-  if [ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null || echo 0)" = 1 ]; then
-    warn "Ubuntu limits user namespaces, which the sandbox needs. See the srt README (Ubuntu 24.04+ note) before turning it on."
+  # Ubuntu 24.04+ limits user namespaces, but its own AppArmor profile for bwrap lets srt run.
+  if [ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null || echo 0)" = 1 ] && [ ! -f /etc/apparmor.d/bwrap-userns-restrict ]; then
+    warn "user namespaces are limited here and there's no AppArmor profile for bwrap: the sandbox may not start"
   fi
 fi
 have gh || warn "GitHub CLI (gh) not found: Settings can log you in with it (https://cli.github.com), or use a token"

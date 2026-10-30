@@ -8,11 +8,9 @@
 # Log in once after the first start:  clearsky docker login
 set -eu
 
-# The proxy for Copilot's container needs no keyring.
-if [ "${1:-}" = egress ]; then exec node /opt/clearsky/scripts/container-roles.mjs egress; fi
 if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then exec dbus-run-session -- "$0" "$@"; fi
 
-# Clearsky's logins, or Copilot's own (its container gets a separate folder: CLEARSKY_KEEP).
+# Where the logins are kept (CLEARSKY_KEEP to use another folder).
 KEEP="${CLEARSKY_KEEP:-$HOME/.config/clearsky/container}"
 mkdir -p "$KEEP/keyrings" "$KEEP/gh" "$KEEP/acli" "$HOME/.local/share" "$HOME/.config"
 chmod 700 "$KEEP" "$KEEP/keyrings" "$KEEP/gh" "$KEEP/acli"
@@ -32,6 +30,5 @@ gnome-keyring-daemon --start --components=secrets > /dev/null
 
 # `--run <command>`: a one-off command with the keyring (clearsky docker login uses it).
 if [ "${1:-}" = --run ]; then exec sh -c "$2"; fi
-if [ "${1:-}" = runner ]; then exec node /opt/clearsky/scripts/container-roles.mjs runner; fi
 [ $# -gt 0 ] || set -- serve
 exec node /opt/clearsky/bin/clearsky.mjs "$@"
