@@ -137,6 +137,27 @@ document.addEventListener('click', (e) => {
   }
 });
 
+// One message as a card: who and when, then its text and files.
+function msgCard(m, file, title, cls = '') {
+  return `<div class="msg-r${m.mine ? ' mine' : ''}${cls}">
+    <div class="who"><b>${esc(m.from || '')}</b>${m.at ? ` · ${esc(new Date(m.at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short', hourCycle: hourCycle() }))}` : ''}</div>
+    ${m.title && m.title !== title ? `<div class="sub">${esc(m.title)}</div>` : ''}
+    <div class="txt">${linkText(m.text || '')}</div>
+    ${m.attachments?.length ? `<div class="files">${m.attachments.map((a) => a.id
+      ? `<a href="${file(a)}" target="_blank" rel="noopener">📎 ${esc(a.name)} <span class="size">${bytes(a.bytes)}</span></a>`
+      : `<span title="Open it in the portal">📎 ${esc(a.name)}</span>`).join('')}</div>` : ''}
+  </div>`;
+}
+// A thread: the newest message first, open; the earlier ones folded under it, newest first,
+// each its own card. A group chat (a class's parents) can hold weeks of messages.
+function thread(messages, file, title) {
+  if (!messages.length) return '<div class="empty" style="padding-left:0">Nothing to show.</div>';
+  const newest = [...messages].reverse();
+  const [latest, ...earlier] = newest;
+  return msgCard(latest, file, title, ' latest') + (earlier.length ? `<details class="earlier"><summary>Earlier in this conversation (${earlier.length})</summary>
+    ${earlier.map((m) => msgCard(m, file, title)).join('')}</details>` : '');
+}
+
 // A source's item read in full, such as a school message, in the work area.
 async function openReader(src, key, url) {
   curItem = { reader: true, k: `${src}:${key}`, title: 'Loading…' };
@@ -152,14 +173,7 @@ async function openReader(src, key, url) {
     setTimeout(() => { if (curItem === it) { const i = sourceItem(src, key); if (i?.unread) markRead(src, [i], true); else drawReadToggle(src, key); } });
     const file = (a) => `/api/source/${encodeURIComponent(src)}/attachment?key=${encodeURIComponent(key)}&id=${encodeURIComponent(a.id)}`;
     el.innerHTML = `<h2>${esc(d.title || 'Message')}</h2><div class="why">${esc([d.child, d.meta].filter(Boolean).join(' · '))}</div>${open(d.url || url)}
-      ${(d.messages || []).map((m) => `<div class="msg-r${m.mine ? ' mine' : ''}">
-      <div class="who"><b>${esc(m.from || '')}</b>${m.at ? ` · ${esc(new Date(m.at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short', hourCycle: hourCycle() }))}` : ''}</div>
-      ${m.title && m.title !== d.title ? `<div class="sub">${esc(m.title)}</div>` : ''}
-      <div class="txt">${linkText(m.text || '')}</div>
-      ${m.attachments?.length ? `<div class="files">${m.attachments.map((a) => a.id
-        ? `<a href="${file(a)}" target="_blank" rel="noopener">📎 ${esc(a.name)} <span class="size">${bytes(a.bytes)}</span></a>`
-        : `<span title="Open it in the portal">📎 ${esc(a.name)}</span>`).join('')}</div>` : ''}
-    </div>`).join('') || '<div class="empty" style="padding-left:0">Nothing to show.</div>'}`;
+      ${thread(d.messages || [], file, d.title)}`;
   } catch (e) {
     if (curItem !== it) return;
     el.innerHTML = `<h2>Couldn’t open this</h2>${open(url)}<div class="err" style="margin:0">${esc(e.message)}${/log in/i.test(e.message) ? ' <a href="/settings#extra">Log in again in Settings</a>' : ''}</div>`;

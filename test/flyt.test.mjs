@@ -162,16 +162,19 @@ test('the source module fits the contract and turns data into rows, notification
     const items = hook(s, 'items', data);
     assert.deepEqual(items.map((i) => [i.key, i.group, i.unread, i.files]), [
       ['flyt:notice:1001:5', 'Ola', true, 1],
-      ['flyt:direct:1001:7', 'Ola', true, 0],
-      ['flyt:group:1001:c1', 'Ola', true, 1],
+      ['flyt:direct:1001:7:m1', 'Ola', true, 0],
+      ['flyt:group:1001:c1:1793127600000', 'Ola', true, 1],
+      ['flyt:group:1001:c1:1793124000000', 'Ola', false, 0],
       ['flyt:form:1001:11', 'Ola', true, null],
       ['flyt:notice:1001:6', 'School', false, 0],
       ['flyt:direct:1001:8', 'Ola', false, null],
     ]);
     assert.equal(items[0].url, 'https://foresatt.visma.no/eksempel');
     assert.deepEqual([items[1].from, items[1].at, items[1].detail], ['Lærer Hansen', '2026-10-28T07:15:00.000Z', true]);
-    assert.equal(items[3].tone, 'amber');
-    assert.equal(items[3].meta, 'Answer by 2026-11-03');
+    assert.equal(items[4].tone, 'amber');
+    assert.equal(items[4].meta, 'Answer by 2026-11-03');
+    // Each message of a group thread is a row, named by its group.
+    assert.deepEqual([items[2].from, items[2].meta, items[3].quote], ['Kontaktlærer', 'in Klasse 3B', 'Hei alle']);
     // Reading it at school changes the stamp, so a hidden row would show again as read.
     assert.notEqual(items[0].stamp, hook(s, 'items', { ...data, children: data.children.map((k) => ({ ...k, notices: k.notices.map((n) => ({ ...n, unread: false })) })) })[0].stamp);
     const notes = hook(s, 'attention', data);
@@ -213,6 +216,9 @@ test('reads a whole thread, notice or form, oldest first, without marking anythi
     assert.equal(direct.child, 'Ola');
     assert.deepEqual(direct.messages.map((m) => [m.from, m.mine, m.text.split('\n')[0]]), [['Lærer Hansen', false, 'Husk matpakke og'], ['You', true, 'Takk!']]);
 
+    // One message of it, as its row opens it: only that message.
+    const one = await readFlyt('flyt:group:1001:c1:1793124000000', data, { store, api: v.api });
+    assert.deepEqual([one.meta, one.messages.map((m) => m.text)], ['Klasse 3B', ['Hei alle']]);
     const group = await readFlyt('flyt:group:1001:c1', data, { store, api: v.api });
     assert.equal(group.meta, 'Kontaktlærer, Kari');
     assert.deepEqual(group.messages.map((m) => m.text), ['Hei alle', 'Foreldremøte tirsdag']);
@@ -236,6 +242,8 @@ test('reads a whole thread, notice or form, oldest first, without marking anythi
 
 test('only plain ids from a key go into an API path', () => {
   assert.deepEqual(parseKey('flyt:group:1001:c1'), { kind: 'group', pupil: '1001', id: 'c1' });
+  assert.deepEqual(parseKey('flyt:group:1001:c1:m9'), { kind: 'group', pupil: '1001', id: 'c1', message: 'm9' });
+  assert.throws(() => parseKey('flyt:form:1001:11:2'), /Not a Visma/);
   for (const bad of ['flyt:group:1001:../../v1/session', 'flyt:direct:7', 'flyt:other:1:2', 'flyt:form:1001:1?x=1']) assert.throws(() => parseKey(bad), /Not a Visma/);
 });
 
