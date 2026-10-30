@@ -11,7 +11,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, realpathSync, statS
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
-import { execFile, spawn } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import { delimiter } from 'node:path';
 import { promisify } from 'node:util';
 import { randomBytes } from 'node:crypto';
@@ -805,6 +805,9 @@ export function srtBin() {
 // Inside the sandbox ssh can't get out, so git talks to GitHub over https with gh's login.
 const SANDBOX_GIT = [['url.https://github.com/.insteadOf', 'git@github.com:'], ['url.https://github.com/.insteadOf', 'ssh://git@github.com/'],
   ['credential.https://github.com.helper', ''], ['credential.https://github.com.helper', '!gh auth git-credential']];
+function ghToken() {
+  try { return execFileSync('gh', ['auth', 'token'], { timeout: 10_000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null; } catch { return null; }
+}
 function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBOX === 'srt' } = {}) {
   if (!sandbox) return new AcpAgent(bin, args, { env: copilotEnv() });
   // In Clearsky's container, the container is the sandbox: Copilot sees only what's mounted
@@ -816,6 +819,10 @@ function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBOX === 
   const n = Number(env.GIT_CONFIG_COUNT) || 0;
   SANDBOX_GIT.forEach(([k, v], i) => { env[`GIT_CONFIG_KEY_${n + i}`] = k; env[`GIT_CONFIG_VALUE_${n + i}`] = v; });
   env.GIT_CONFIG_COUNT = String(n + SANDBOX_GIT.length);
+  // The keyring is out of reach in the sandbox (see lib/sandbox.mjs), so Copilot, gh and git get
+  // your GitHub CLI login from here, for this process only. Nothing else in the keyring goes in.
+  const token = ghToken();
+  if (token) Object.assign(env, { COPILOT_GITHUB_TOKEN: token, GH_TOKEN: token });
   return Object.assign(new AcpAgent(s.bin, s.args, { env }), { sandboxed: true });
 }
 
