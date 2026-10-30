@@ -225,13 +225,15 @@ const jiraBaseGuess = () => standupData?.jiraBase || (state.jira?.assigned?.[0]?
 // URLs, Jira keys and PRs (which get hover cards). A ```choices block is a question with
 // buttons (Copilot is asked to use one when you should pick: see CHOICES_HINT on the server).
 function md(text) {
-  const parts = text.split(/```([\w-]*)\n?/);
-  let out = '';
-  for (let i = 0; i < parts.length; i += 3) {
-    out += mdText(parts[i], i > 0);
-    if (i + 2 < parts.length) out += parts[i + 1] === 'choices' ? choicesCard(parts[i + 2]) : `<pre><code>${esc(parts[i + 2].replace(/\n$/, ''))}</code></pre>`;
-  }
-  return out;
+  // Fenced blocks: an opening ```lang line, then everything up to a closing ``` line. One still
+  // open (Copilot is mid-answer) shows as code so far.
+  const re = /^```([\w-]*)[ \t]*\n([\s\S]*?)^```[ \t]*$/gm;
+  const block = (lang, body) => (lang === 'choices' ? choicesCard(body) : `<pre><code>${esc(body.replace(/\n$/, ''))}</code></pre>`);
+  let out = '', last = 0, m;
+  while ((m = re.exec(text))) { out += mdText(text.slice(last, m.index), last > 0); out += block(m[1], m[2]); last = re.lastIndex; }
+  const rest = text.slice(last), open = rest.match(/^```([\w-]*)[ \t]*\n/m);
+  if (!open) return out + mdText(rest, last > 0);
+  return out + mdText(rest.slice(0, open.index), last > 0) + (open[1] === 'choices' ? '' : block('', rest.slice(open.index + open[0].length)));
 }
 function mdText(part, afterBlock) {
   let h = linkify(afterBlock ? part.replace(/^\n/, '') : part, jiraBaseGuess());

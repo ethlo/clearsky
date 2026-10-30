@@ -54,6 +54,10 @@ test('outside runs a command on the machine only when that command was allowed i
     assert.equal(acliAllowed(['jira', 'workitem', 'view', 'X-1'], { approved: ok }), 'read'); // reading Jira doesn't use it up
     assert.deepEqual(await go(['./mvnw', 'verify']), { code: 0, out: 'BUILD SUCCESS\n', err: '' });
     assert.equal((await go(['./mvnw', 'verify'])).code, 1); // once
-    assert.deepEqual(seen, [['./mvnw', 'verify', cwd]]);
+    // Quotes in the allowed command are the shell's, not part of the arguments.
+    ok.add(`cd /x && outside env A=1 mvn -Dtest='A,B' > /tmp/it.log 2>&1; echo rc=$?`);
+    assert.equal((await go(['env', 'A=1', 'mvn', '-Dtest=A,B', '-X'])).code, 1); // not the allowed arguments
+    assert.equal((await go(['env', 'A=1', 'mvn', '-Dtest=A,B'])).code, 0);
+    assert.deepEqual(seen, [['./mvnw', 'verify', cwd], ['env', 'A=1', 'mvn', '-Dtest=A,B', cwd]]);
   } finally { server.close(); }
 });
