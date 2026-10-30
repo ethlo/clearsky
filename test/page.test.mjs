@@ -128,6 +128,20 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
   await page.waitForSelector('.rv-pick li[data-q]');
   assert.equal(await page.locator('.rv-pick li[data-q]').count(), 2);
 
+  // The chat panel names the ticket and the PR once each, opening here with ↗ to Jira or
+  // GitHub, and offers no next step while the chat is working.
+  const ctx = await page.evaluate(() => {
+    Object.assign(chat, { items: ['issue:OPS-1', 'pr:acme/api#1'], title: 'OPS-1 · Rotate certs', turns: 2, stop: true });
+    drawCtx();
+    const el = document.querySelector('#chat-ctx');
+    return { text: el.innerText, next: !!el.querySelector('.next'), here: el.querySelectorAll('[data-open-key]').length, ext: el.querySelectorAll('a.ext').length };
+  });
+  assert.equal(ctx.text.match(/OPS-1/g).length, 1, ctx.text);
+  assert.match(ctx.text, /acme\/api#1/);
+  assert.match(ctx.text, /chat working/);
+  assert.deepEqual([ctx.next, ctx.here, ctx.ext], [false, 2, 2]);
+  await page.evaluate(() => { Object.assign(chat, { items: [], title: null, turns: 0, stop: null }); drawCtx(); });
+
   for (const view of ['calendar', 'standup', 'notifications', 'reviews', 'prs', 'tickets']) {
     await page.goto(`${base}/#${view}`);
     await page.waitForTimeout(400);

@@ -142,6 +142,7 @@ function nextStep(it, rel = relatedItems(it, xrefAll.length ? xrefAll : inboxIte
   if (n.run !== 'start') return { ...n, skill: cont };
   const chats = cpLinks.links[itemKey(it.url || '')] || [], did = cpLinks.actions?.[itemKey(it.url || '')]?.text;
   const feature = hasSkill('feature-delivery') ? 'feature-delivery' : cont;
+  if (chats.some((c) => c.status === 'working')) return { label: 'Copilot is working on it', wait: true };
   if (chats.length) return { label: `Continue the Copilot chat${did ? `: it ${did}` : ''}`, run: 'copilot', skill: cont || feature, prompt: '' };
   return { label: it.glyph === 'prog' ? 'Pick it up in Copilot: branch, code and PR' : 'Start it in Copilot: branch, code and PR', run: 'copilot', skill: feature, prompt: '' };
 }

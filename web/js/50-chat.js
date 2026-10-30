@@ -151,32 +151,28 @@ function drawCtx() {
     // Whether it's still open: a PR merged since the lists loaded can't take reviewers.
     if (k.startsWith('pr:') && !ctxPrs.has(label)) { ctxPrs.add(label); preview({ dataset: { pr: label } }).then((d) => { notePrState(label, d); if (prClosed.has(label)) drawCtx(); }); }
     const shut = prClosed.get(label);
+    const st = info.status ? info : k.startsWith('issue:') ? ctxTicketStatus(label) || {} : {};
     const mine = !shut && k.startsWith('pr:') && (state.github?.myPrs || []).some((p) => `pr:${p.repo}#${p.number}` === k);
     return `<div class="ctx-item">📎 <a href="${esc(url || '#')}" data-open-key="${esc(k)}" title="Open here">${esc(label)}</a>${url ? `<a class="ext" href="${esc(url)}" target="_blank" rel="noopener" title="Open on ${k.startsWith('issue:') ? 'Jira' : 'GitHub'}" aria-label="Open on ${k.startsWith('issue:') ? 'Jira' : 'GitHub'}">↗</a>` : ''}
-      ${shut ? `<span class="badge b-${shut === 'Merged' ? 'green' : 'gray'}">${shut}</span>` : info.status ? `<span class="badge b-${info.tone || 'gray'}">${esc(info.status)}</span>` : ''}<span>${esc(info.title || '')}</span>
+      ${shut ? `<span class="badge b-${shut === 'Merged' ? 'green' : 'gray'}">${shut}</span>` : st.status ? `<span class="badge b-${st.tone || 'gray'}">${esc(st.status)}</span>` : ''}<span>${esc(info.title || '')}</span>
       ${k.startsWith('pr:') && !shut ? reviewerChips(prByKey(k)) : ''}
       ${mine ? `<button class="chip" data-rv-open="${esc(label)}">👥 Request review</button><div class="rv-slot"></div>` : ''}</div>`;
   }).join('');
   el.hidden = false;
-  // Where the work stands comes first: the ticket's Jira status and the PR's, then the chat's own state.
-  const work = [...keys].map((k) => {
-    const info = idx.get(k) || {};
-    if (k.startsWith('issue:')) {
-      const st = info.status ? info : ctxTicketStatus(k.slice(6));
-      return st?.status ? `<a class="badge b-${st.tone || 'gray'}" href="#" data-open-key="${esc(k)}" title="Open ${esc(k.slice(6))} here">${esc(k.slice(6))} · ${esc(st.status)}</a>` : '';
-    }
-    const shut = k.startsWith('pr:') && prClosed.get(k.slice(3));
-    if (shut) return `<a class="badge b-${shut === 'Merged' ? 'green' : 'gray'}" href="#" data-open-key="${esc(k)}">${esc(k.replace(/^(pr|gh):[\w.-]+\//, '').replace('#', ' #'))} · ${shut}</a>`;
-    return info.status ? `<a class="badge b-${info.tone || 'gray'}" href="#" data-open-key="${esc(k)}" title="Open ${esc(k.slice(3))} here">${esc(k.replace(/^(pr|gh):[\w.-]+\//, '').replace('#', ' #'))} · ${esc(info.status)}</a>` : '';
-  }).filter(Boolean).join('');
   // The next step on this work: the PR's if there is one, else the ticket's.
   const mainKey = [...keys].find((k) => k.startsWith('pr:')) || [...keys].find((k) => k.startsWith('issue:')) || [...keys][0];
   const mainItem = mainKey && itemForKey(mainKey);
-  const next = mainItem ? nextHtml(mainItem) : '';
-  el.innerHTML = `<div class="ctx-line"><span class="ctx-title">${esc(title || (chat.turns ? 'Copilot session' : 'New chat'))}</span></div>
-    <div class="ctx-line ctx-work">${work}${status ? `<span class="ctx-st s-${esc(status)}" title="This chat"><i></i>chat ${esc(STATUS_TEXT[status] || status)}</span>` : ''}</div>
-    ${next ? `<div class="ctx-line ctx-next"><span class="lbl-next">Next</span>${next}</div>` : ''}
+  // Not while this chat is at it, and not "continue the chat" when you're in it.
+  const n = mainItem && !['working', 'needs-you'].includes(status) && nextStep(mainItem);
+  const next = n && n.run !== 'copilot' ? nextHtml(mainItem, n) : '';
+  // Each ticket and PR once: its row says what it is and where it stands, so the chat's
+  // title is left out when it only repeats them.
+  const labels = [...keys].map((k) => k.replace(/^(pr|gh|issue):/, '').replace(/^[\w.-]+\//, ''));
+  const showTitle = !labels.some((l) => (title || '').includes(l));
+  el.innerHTML = `${showTitle ? `<div class="ctx-line"><span class="ctx-title">${esc(title || (chat.turns ? 'Copilot session' : 'New chat'))}</span></div>` : ''}
     ${items}
+    <div class="ctx-line ctx-work">${status ? `<span class="ctx-st s-${esc(status)}" title="This chat"><i></i>chat ${esc(STATUS_TEXT[status] || status)}</span>` : ''}</div>
+    ${next ? `<div class="ctx-line ctx-next"><span class="lbl-next">Next</span>${next}</div>` : ''}
     ${chat.cwd ? `<div class="ctx-dir" title="${esc(chat.cwd)}">📁 ${esc(chat.cwd.replace(/^\/home\/[^/]+/, '~'))}</div>` : ''}`;
 }
 
