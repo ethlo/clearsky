@@ -1320,46 +1320,14 @@ function reviewerChips(p) {
   return `<div class="rv-who">${[...people].map(([n, [st, tone]]) => `<span class="badge b-${tone}" title="${esc(n)}: ${esc(st)}">${esc(n.replace(/^team:/, '👥 '))} · ${esc(st)}</span>`).join('')}</div>`;
 }
 const prByKey = (k) => [...(state.github?.myPrs || []), ...(state.github?.reviewRequested || [])].find((p) => `pr:${p.repo}#${p.number}` === k);
-const TONE = { bad: 'red', warn: 'amber', good: 'green' };
-const GLYPH = { bad: 'chg', warn: 'rev', good: 'rdy', wait: 'wait', neutral: 'todo' };
 const snoozedUntil = (k) => { const u = mutedMap[k]; return u && Date.parse(u) > Date.now() ? u : null; };
 
+// The rows come from the server (lib/items.mjs), one list per source as it loads.
 function inboxItems() {
-  const g = state.github, j = state.jira, jm = state.jiraMentions, sl = state.slack, out = [];
-  const add = (group, kind, x) => out.push({ group, kind, ...x, k: x.dismissKey || x.url });
-  if (g && !g.error) {
-    [...(g.reviewRequested || [])].sort((a, b) => (b.rerequested - a.rerequested) || Date.parse(a.requestedAt) - Date.parse(b.requestedAt))
-      .forEach((p) => add('needs', 'review', { url: p.url, stamp: p.stamp, pr: prRef(p), ref: `${shortRepo(p.repo)} #${p.number}`, title: p.title,
-        step: `${p.author} · +${p.size.additions} −${p.size.deletions}${p.viaTeam ? ' · via team' : ''}`, glyph: 'rev',
-        label: p.rerequested ? ['re-review', 'amber'] : [p.draft ? 'draft' : 'review'], at: p.requestedAt, src: 'GitHub', data: p }));
-    (g.myPrs || []).forEach((p) => add(p.status.owner === 'me' ? 'needs' : 'waiting', 'pr', { url: p.url, stamp: p.stamp, pr: prRef(p),
-      ref: `${shortRepo(p.repo)} #${p.number}`, title: p.title, step: prMeta(p),
-      glyph: p.status.owner === 'me' ? GLYPH[p.status.tone] || 'todo' : 'wait',
-      label: [p.status.label.toLowerCase(), p.status.owner === 'me' ? TONE[p.status.tone] : null], at: p.updatedAt, src: 'GitHub', data: p }));
-    (g.mentions || []).forEach((m) => add('needs', 'mention', { url: m.url, stamp: m.stamp, pr: m.kind === 'PR' ? prRef(m) : null,
-      ref: `${shortRepo(m.repo)} #${m.number}`, title: m.title, step: `mentioned you in this ${m.kind === 'PR' ? 'PR' : 'issue'}`, glyph: 'ment',
-      label: ['GitHub'], at: m.updatedAt, src: 'GitHub', data: m }));
-    (g.assigned || []).forEach((i) => add('tickets', 'issue', { url: i.url, stamp: i.stamp, ref: `${shortRepo(i.repo)} #${i.number}`, title: i.title,
-      glyph: 'todo', label: ['GitHub issue'], at: i.updatedAt, src: 'GitHub', data: i }));
-  }
-  if (jm && !jm.error) (jm.tickets || []).forEach((t) => add('needs', 'mention', { url: t.url, stamp: t.stamp, dismissKey: t.dismissKey, issue: t.key,
-    ref: t.key, title: t.summary, step: `${t.people.join(', ')}${t.count > 1 ? ` · ${t.count} mentions` : ''}`, quote: t.excerpt, glyph: 'ment',
-    label: ['Jira'], at: t.at, src: 'Jira', data: t }));
-  if (sl && !sl.error) (sl.mentions || []).forEach((m) => add('needs', 'mention', { url: m.url, stamp: m.stamp, ref: m.channel, title: `${m.by} in ${m.channel}`,
-    step: m.excerpt, quote: m.excerpt, glyph: 'ment', label: ['Slack'], at: m.at, src: 'Slack', data: m }));
-  if (j && !j.error) {
-    const cat = (i) => (i.statusCategory === 'indeterminate' ? 0 : 1);
-    [...(j.assigned || [])].sort((a, b) => cat(a) - cat(b)).forEach((i) => add(i.waiting ? 'waiting' : 'tickets', 'ticket', { url: i.url, stamp: i.stamp, issue: i.key, ref: i.key,
-      title: i.summary, step: [i.status, i.type, i.priority && `${i.priority} priority`].filter(Boolean).join(' · '),
-      glyph: i.waiting ? 'wait' : cat(i) ? 'todo' : 'prog', label: i.waiting ? [i.status.toLowerCase()] : i.due ? [`due ${i.due}`, 'amber'] : [cat(i) ? 'to do' : 'in progress'], at: i.updatedAt, src: 'Jira', data: i }));
-  }
-  // Work sources from plugins whose panel needs you show up here too; personal ones keep to their own page.
-  for (const x of extraSources.filter((s) => s.area !== 'personal' && s.panel.zone === 'needs')) {
-    const d = state[x.name];
-    if (!d || d.error || d.disabled) continue;
-    (d.items || []).forEach((i) => add('needs', 'extra', { url: i.url || '', stamp: i.stamp, dismissKey: i.key ? `${x.name}:${i.key}` : undefined,
-      ref: x.panel.title, title: i.title, step: i.meta || i.quote, quote: i.quote, glyph: 'ment', label: [i.badge || x.panel.title, i.badge ? TONE[i.tone] || i.tone : null],
-      at: i.at, src: x.panel.title, read: i.detail && i.key ? { src: x.name, key: i.key } : null, data: i }));
+  const out = [];
+  for (const name of ['github', 'jira', 'jiraMentions', 'slack', ...extraSources.map((x) => x.name)]) {
+    const d = state[name];
+    if (d && !d.error) (d.work || []).forEach((x) => out.push({ ...x }));
   }
   for (const it of out) { it.done = isHidden(it); it.snoozed = !it.done && snoozedUntil(it.k); }
   // Mentions: newest first, after reviews and your own PRs.
@@ -1369,30 +1337,19 @@ function inboxItems() {
 }
 
 // One piece of work across sources: a PR links to the Jira tickets in its title or branch and the
-// GitHub issues it closes; a ticket or issue links back to those PRs. Keys count only for Jira
-// projects you have tickets in, so "UTF-8" in a title isn't taken for a ticket.
-const JIRA_KEY = /\b([A-Za-z][A-Za-z0-9_]+-\d+)\b/g;
-function jiraKeysOf(p, projects) {
-  const keys = new Set();
-  for (const [text, anyCase] of [[p.title || '', false], [p.branch || '', true]]) {
-    for (const m of text.matchAll(JIRA_KEY)) {
-      const k = m[1].toUpperCase();
-      if ((anyCase || m[1] === k) && projects.has(k.split('-')[0])) keys.add(k);
-    }
-  }
-  return keys;
-}
+// GitHub issues it closes (its `links`); a ticket or issue links back to those PRs. Ticket keys
+// count only for projects you have tickets in, so "UTF-8" in a branch isn't taken for a ticket.
 function relatedItems(it, all) {
-  const projects = new Set([...(state.jira?.assigned || []), ...(state.jiraMentions?.tickets || [])].map((t) => t.key.split('-')[0]));
-  const isPr = (x) => !!x.pr && x.data;
-  const ghKey = (x) => (x.kind === 'issue' ? `${x.data.repo}#${x.data.number}` : null);
+  const projects = new Set(all.filter((x) => x.issue).map((x) => x.issue.split('-')[0]));
+  const ghKey = (x) => (x.kind === 'issue' && x.data ? `gh:${x.data.repo}#${x.data.number}` : null);
   const id = (x) => (x.issue ? `issue:${x.issue}` : x.url);
+  const links = (x) => (x.links || []).filter((l) => !l.startsWith('issue:') || projects.has(l.slice(6).split('-')[0]));
   let match = () => false;
-  if (isPr(it)) {
-    const keys = jiraKeysOf(it.data, projects), closes = new Set(it.data.issues || []);
-    match = (x) => (x.issue && keys.has(x.issue)) || closes.has(ghKey(x));
+  if (it.pr && it.links) {
+    const mine = new Set(links(it));
+    match = (x) => (x.issue && mine.has(`issue:${x.issue}`)) || mine.has(ghKey(x));
   } else if (it.issue || it.kind === 'issue') {
-    match = (x) => isPr(x) && ((it.issue && jiraKeysOf(x.data, projects).has(it.issue)) || (ghKey(it) && (x.data.issues || []).includes(ghKey(it))));
+    match = (x) => !!x.pr && links(x).some((l) => l === `issue:${it.issue}` || l === ghKey(it));
   }
   // The ticket or PR itself rather than a mention of it, when both are listed.
   const seen = new Set([id(it)]), out = [];
@@ -1400,7 +1357,7 @@ function relatedItems(it, all) {
     if (!seen.has(id(x)) && match(x)) { seen.add(id(x)); out.push(x); }
   }
   // A PR's tickets that aren't in your lists (someone else's, or closed) still get a link.
-  if (isPr(it)) for (const key of jiraKeysOf(it.data, projects)) if (!seen.has(`issue:${key}`)) out.push(unlistedTicket(key));
+  if (it.pr) for (const l of links(it)) if (l.startsWith('issue:') && !seen.has(l)) out.push(unlistedTicket(l.slice(6)));
   return out;
 }
 // A ticket you don't have in a list, opened here with what Jira says about it.
@@ -1440,35 +1397,21 @@ document.addEventListener('click', (e) => {
 //   { label, run: 'item', k }                   go to the item that holds the next step
 //   { label, wait: true }                       nothing for you to do; who or what it waits on
 const hasSkill = (n) => (chat.info?.skills || []).some((s) => s.name === n);
+// The server says what's next on each item (lib/items.mjs); here it gets what only the page
+// knows: a ticket's PR, whether a Copilot chat already works on it, and which skills you have.
 function nextStep(it, rel = relatedItems(it, xrefAll.length ? xrefAll : inboxItems())) {
-  const d = it.data || {};
-  const fix = (label, prompt) => ({ label, run: 'copilot', skill: hasSkill('continue-work') ? 'continue-work' : '', prompt });
-  if (it.kind === 'pr') {
-    switch (d.status?.label?.replace(/^\d+ unresolved threads?$/, 'threads')) {
-      case 'Draft': return { label: 'Mark it ready for review', run: 'url', url: d.url };
-      case 'Merge conflict': return fix('Resolve the merge conflict', 'Merge the default branch into this PR and resolve the conflicts, then run the affected tests.');
-      case 'CI failing': return fix('Fix the failing checks', 'Find out why the checks fail on this PR and fix it.');
-      case 'Changes requested': case 'threads': case 'Has feedback':
-        return fix('Address the review comments', 'Go through the open review comments on this PR: fix what is right, and draft replies for the rest. Don\'t post or resolve anything without asking.');
-      case 'Ready to merge': return { label: 'Merge it', run: 'url', url: d.url };
-      case 'Approved, CI running': return { label: 'Wait for the checks', wait: true };
-      case 'No reviewer yet': return { label: 'Request review', run: 'review' };
-      default: return { label: d.pendingReviewers?.length ? `Waiting on ${d.pendingReviewers.join(', ')}` : 'Waiting for review', wait: true };
-    }
-  }
-  if (it.kind === 'review') return { label: d.rerequested ? 'Review the new changes' : 'Review it', run: 'copilot', skill: '',
-    prompt: 'Review this PR: summarise the change, check it against the ticket, and draft review comments. Don\'t post anything.' };
-  if (it.kind === 'mention') return { label: 'Reply', run: 'url', url: it.url };
-  if (it.issue || it.kind === 'issue' || it.kind === 'linked') {
+  if (it.kind !== 'mention' && (it.issue || it.kind === 'issue' || it.kind === 'linked')) {
     // A ticket with a PR: the PR's next step is the ticket's.
     const pr = rel.find((x) => x.kind === 'pr' || x.kind === 'review');
-    if (pr) { const n = nextStep(pr, []); return n.wait ? { ...n, label: `${pr.ref}: ${n.label.toLowerCase()}` } : { label: `${n.label} (${pr.ref})`, run: 'item', k: pr.k }; }
-    if (it.kind === 'ticket' && d.waiting) return { label: `Waiting: ${d.status}`, wait: true };
-    const start = hasSkill('feature-delivery') ? 'feature-delivery' : hasSkill('continue-work') ? 'continue-work' : '';
-    if (it.glyph === 'prog' || (cpLinks.links[itemKey(it.url || '')] || []).length) return { label: 'Continue it', run: 'copilot', skill: hasSkill('continue-work') ? 'continue-work' : start, prompt: '' };
-    return { label: 'Start it', run: 'copilot', skill: start, prompt: '' };
+    if (pr) { const n = nextStep(pr, []); return !n ? null : n.wait ? { ...n, label: `${pr.ref}: ${n.label.toLowerCase()}` } : { label: `${n.label} (${pr.ref})`, run: 'item', k: pr.k }; }
   }
-  return null;
+  const n = it.next || (it.kind === 'linked' ? { label: 'Start it', run: 'start' } : null);
+  if (!n || n.wait || n.run !== 'start' && n.skill !== 'continue') return n;
+  const cont = hasSkill('continue-work') ? 'continue-work' : '';
+  if (n.run !== 'start') return { ...n, skill: cont };
+  const going = it.glyph === 'prog' || (cpLinks.links[itemKey(it.url || '')] || []).length;
+  return going ? { label: 'Continue it', run: 'copilot', skill: cont || (hasSkill('feature-delivery') ? 'feature-delivery' : ''), prompt: '' }
+    : { label: 'Start it', run: 'copilot', skill: hasSkill('feature-delivery') ? 'feature-delivery' : cont, prompt: '' };
 }
 function nextHtml(it, n = nextStep(it)) {
   if (!n) return '';

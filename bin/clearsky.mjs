@@ -27,8 +27,9 @@ import { isReadOnly, editInside } from '../lib/readonly.mjs';
 import { assistedReason } from '../lib/assisted.mjs';
 import { attentionItems, diffAttention, desktopNotify, DbusNotifier } from '../lib/notify.mjs';
 import { loadSources, makeContext, hook, asList } from '../lib/sources.mjs';
-import { manifest as githubManifest, createGitHub, PR_FIELDS, ITEM_FIELDS, ciState, isBot, latestReviewsByUser, openThreads, humanReviewers, myPrStatus, reviewerName } from '../lib/modules/github.mjs';
-import { manifest as jiraManifest, createJira, listOf, fieldsOf, nameOf, commentInfo, excerpt, userId, mapLimit, JIRA_WAITING, jiraMentionsByTicket, mergeJira } from '../lib/modules/jira.mjs';
+import { pluginItems, replyNext } from '../lib/items.mjs';
+import { manifest as githubManifest, createGitHub, workItems as githubItems, PR_FIELDS, ITEM_FIELDS, ciState, isBot, latestReviewsByUser, openThreads, humanReviewers, myPrStatus, reviewerName } from '../lib/modules/github.mjs';
+import { manifest as jiraManifest, createJira, workItems as jiraItems, mentionItems as jiraMentionItems, listOf, fieldsOf, nameOf, commentInfo, excerpt, userId, mapLimit, JIRA_WAITING, jiraMentionsByTicket, mergeJira } from '../lib/modules/jira.mjs';
 
 // ---------------------------------------------------------------- config
 
@@ -185,6 +186,13 @@ async function fetchSlack() {
       excerpt: slackText(m.text, me),
     }));
   return { user: auth.user, team: auth.team, mentions };
+}
+
+// Slack mentions as work items (see lib/items.mjs).
+function slackItems(sl) {
+  if (!sl || sl.error || sl.disabled) return [];
+  return (sl.mentions || []).map((m) => ({ group: 'needs', kind: 'mention', src: 'Slack', k: m.url, url: m.url, stamp: m.stamp, ref: m.channel,
+    title: `${m.by} in ${m.channel}`, step: m.excerpt, quote: m.excerpt, glyph: 'ment', label: ['Slack'], at: m.at, next: replyNext(m.url), data: m }));
 }
 
 // ---------------------------------------------------------------- Calendar
@@ -381,6 +389,18 @@ for (const p of plugins.sources.values()) {
     return { ...data, ...(items && { items: items.hookError ? [] : asList(items), ...(items.hookError && { error: items.hookError }) }) };
   };
 }
+// Each source's data as rows of the one item model (lib/items.mjs).
+const WORK_ITEMS = { github: githubItems, jira: jiraItems, jiraMentions: jiraMentionItems, slack: slackItems };
+function workItemsOf(name, data) {
+  try {
+    if (WORK_ITEMS[name]) return WORK_ITEMS[name](data);
+    const p = plugins.sources.get(name);
+    return p ? pluginItems(p, data) : [];
+  } catch (e) {
+    console.error(`clearsky: items from ${name}: ${e.message}`);
+    return [];
+  }
+}
 const pluginData = async (force) => Object.fromEntries(await Promise.all([...plugins.sources.keys()].map(async (n) => [n, await source(n, force)])));
 const sourceCache = new Map();
 
@@ -423,6 +443,8 @@ export async function collect(force) {
     slack,
     calendar,
     sources: extra,
+    // Everything that can need you, from every source, with the next step on each.
+    items: [['github', github], ['jira', jiraWork], ['jiraMentions', jiraMentions], ['slack', slack], ...Object.entries(extra)].flatMap(([n, d]) => workItemsOf(n, d)),
   };
 }
 
@@ -1549,7 +1571,8 @@ function serve() {
       if (src) {
         if (!SOURCES[src]) return json(res, 404, { error: 'unknown source' });
         const data = await source(src, url.searchParams.has('refresh'));
-        return json(res, 200, { ...withReads(src, data), fetchedAt: new Date(sourceCache.get(src)?.at || Date.now()).toISOString() });
+        const shown = withReads(src, data);
+        return json(res, 200, { ...shown, work: workItemsOf(src, shown), fetchedAt: new Date(sourceCache.get(src)?.at || Date.now()).toISOString() });
       }
       if (url.pathname === '/favicon.ico') { res.writeHead(204); return res.end(); }
       if (url.pathname === '/api/sources') {
