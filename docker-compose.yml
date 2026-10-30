@@ -1,6 +1,11 @@
-# Clearsky in Docker. Set these in a .env next to this file (or your shell):
-#   HOME_DIR  your home folder, e.g. /home/morten (on Windows, a WSL path)
-#   UID, GID  your user and group ids (id -u, id -g)
+# Clearsky in Docker. Put these in a .env next to this file (chmod 600 it: it holds tokens):
+#   HOME_DIR              your home folder, e.g. /home/morten (on Windows, a WSL path)
+#   UID, GID              your user and group ids (id -u, id -g)
+#   GH_TOKEN              for gh, git and Clearsky's GitHub lists (`gh auth token` prints yours);
+#                         there's no keyring in the container to find it in
+#   COPILOT_GITHUB_TOKEN  Copilot's own login: a token with Copilot access (Clearsky never
+#                         hands Copilot its GitHub token)
+#   PORT                  the port on your machine, 7777 unless you set it
 services:
   clearsky:
     build: .
@@ -9,8 +14,15 @@ services:
     user: "${UID:-1000}:${GID:-1000}"
     environment:
       HOME: ${HOME_DIR}
+      GH_TOKEN: ${GH_TOKEN:-}
+      COPILOT_GITHUB_TOKEN: ${COPILOT_GITHUB_TOKEN:-}
+      CLEARSKY_PUBLIC_PORT: ${PORT:-7777}
     ports:
-      - "127.0.0.1:7777:7777"  # this machine only
+      - "127.0.0.1:${PORT:-7777}:7777"  # this machine only
+    # Your home inside is a scratch folder (tools keep caches there), with the folders below
+    # mounted on top of it.
+    tmpfs:
+      - ${HOME_DIR}:uid=${UID:-1000},gid=${GID:-1000},mode=0700
     volumes:
       # Your code, where chats run and worktrees go.
       - ${HOME_DIR}/dev:${HOME_DIR}/dev

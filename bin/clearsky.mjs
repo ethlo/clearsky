@@ -1360,7 +1360,10 @@ function serve() {
   const csrf = localToken(join(dirname(userEnvFile), 'csrf'));
   const page = buildPage(csrf);
   const settingsPage = readFileSync(join(here, '..', 'web', 'settings.html'), 'utf8').replace('__CSRF__', csrf);
-  const origins = new Set([`http://127.0.0.1:${config.port}`, `http://localhost:${config.port}`]);
+  // A container publishes its port to another one on the host (CLEARSKY_PUBLIC_PORT), and the
+  // browser then names that port.
+  const ports = [...new Set([config.port, Number(process.env.CLEARSKY_PUBLIC_PORT) || config.port])];
+  const origins = new Set(ports.flatMap((p) => [`http://127.0.0.1:${p}`, `http://localhost:${p}`]));
   const json = (res, code, body) => {
     res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify(body));
@@ -1368,7 +1371,7 @@ function serve() {
 
   // Only answer to this machine's own names, so a web page can't reach the API through a
   // DNS name it controls that points here.
-  const hosts = new Set([`127.0.0.1:${config.port}`, `localhost:${config.port}`]);
+  const hosts = new Set(ports.flatMap((p) => [`127.0.0.1:${p}`, `localhost:${p}`]));
 
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');

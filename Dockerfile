@@ -15,7 +15,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && arch=$(dpkg --print-architecture) \
     && curl -fsSL -o /usr/local/bin/acli "https://acli.atlassian.com/linux/latest/acli_linux_${arch}/acli" && chmod 755 /usr/local/bin/acli \
     && npm install -g --no-fund --no-audit @github/copilot \
-    && rm -rf /var/lib/apt/lists/* /root/.npm
+    && rm -rf /var/lib/apt/lists/* /root/.npm \
+    # No ssh keys in here: git talks to GitHub over https with gh's login (GH_TOKEN).
+    && git config --system url.https://github.com/.insteadOf git@github.com: \
+    && git config --system --add url.https://github.com/.insteadOf ssh://git@github.com/ \
+    && git config --system credential.https://github.com.helper '!gh auth git-credential'
 
 WORKDIR /opt/clearsky
 COPY package.json package-lock.json ./
