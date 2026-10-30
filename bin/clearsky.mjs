@@ -21,9 +21,10 @@ import * as copilot from '../lib/copilot.mjs';
 import { AcpAgent, chatEvent } from '../lib/acp.mjs';
 import { sessionEvents, sessionUsage } from '../lib/copilot-events.mjs';
 import { branchesFor } from '../lib/branches.mjs';
-import { sandboxed, DEFAULT_DOMAINS, READ_DEFAULT, parseDomains } from '../lib/sandbox.mjs';
+import { sandboxedCommand, stopSandbox, githubLogin, DEFAULT_DOMAINS, READ_DEFAULT, parseDomains } from '../lib/sandbox.mjs';
 import { serveBroker, brokerSocket } from '../lib/broker.mjs';
-import { mavenSandbox } from '../lib/maven.mjs';
+import { mavenSandbox, sandboxCa } from '../lib/maven.mjs';
+import { githubFilter } from '../lib/github-gate.mjs';
 import { attentionItems, diffAttention, desktopNotify, DbusNotifier } from '../lib/notify.mjs';
 import { loadSources, makeContext, hook, asList } from '../lib/sources.mjs';
 import { pluginItems } from '../lib/items.mjs';
@@ -796,16 +797,10 @@ function stopCopilot(chat) {
   return !!c;
 }
 
-// Start Copilot, inside the sandbox when Settings → Copilot says so (COPILOT_SANDBOX=srt).
-// srt: Settings, else the one installed with Clearsky (npm optional dependency), else PATH.
-export function srtBin() {
-  if (process.env.SRT_BIN) return process.env.SRT_BIN;
-  const own = join(here, '..', 'node_modules', '.bin', 'srt');
-  return existsSync(own) ? own : 'srt';
-}
-// Inside the sandbox ssh can't get out, so git talks to GitHub over https with gh's login.
+// Inside the sandbox ssh can't get out, so git talks to GitHub over https, sending the login
+// header srt fills in (lib/sandbox.mjs, githubLogin) instead of asking a credential helper.
 const SANDBOX_GIT = [['url.https://github.com/.insteadOf', 'git@github.com:'], ['url.https://github.com/.insteadOf', 'ssh://git@github.com/'],
-  ['credential.https://github.com.helper', ''], ['credential.https://github.com.helper', '!gh auth git-credential']];
+  ['credential.https://github.com.helper', '']];
 // What the sandbox may read besides your folders: Settings → Copilot → Also readable, and
 // Clearsky's own folder (its acli for the sandbox).
 const sandboxOpts = (cwd) => ({ cwd, folders: copilotFolders(), home: homedir(), read: [...list(process.env.COPILOT_READ), join(here, '..')] });
@@ -813,40 +808,68 @@ let broker = null;
 function ghToken() {
   try { return execFileSync('gh', ['auth', 'token'], { timeout: 10_000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null; } catch { return null; }
 }
-function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBOX === 'srt' } = {}) {
+// Start Copilot, inside the sandbox (srt, run by Clearsky itself) when the mode or Settings →
+// Copilot says so.
+async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBOX === 'srt' } = {}) {
   if (!sandbox) return new AcpAgent(bin, args, { env: copilotEnv() });
   // In Clearsky's container, the container is the sandbox: Copilot sees only what's mounted
   // (git already goes over https there). The network isn't limited to COPILOT_DOMAINS, though.
   if (process.env.CLEARSKY_IN_CONTAINER === '1') return Object.assign(new AcpAgent(bin, args, { env: copilotEnv() }), { sandboxed: true });
   const domains = process.env.COPILOT_DOMAINS ? parseDomains(process.env.COPILOT_DOMAINS) : DEFAULT_DOMAINS;
-  // Maven's repository logins stay out here; srt adds them on the way out (lib/maven.mjs).
+  const keep = join(dirname(stateFile), 'sandbox');
+  // Logins stay out here; srt adds them on the way out. srt reads them from Clearsky's own
+  // environment, and the sandbox gets stand-ins: Maven's (lib/maven.mjs) and your gh login.
   let maven = null;
-  try { maven = mavenSandbox({ home: homedir(), out: join(dirname(brokerSocket()), 'maven'), keep: join(dirname(stateFile), 'sandbox') }); } catch (e) { console.log(`clearsky: Maven logins for the sandbox: ${e.message}`); }
-  const s = sandboxed(bin, args, { srt: srtBin(), dir: join(dirname(stateFile), 'sandbox'), ...sandboxOpts(cwd), domains, maven });
+  try { maven = mavenSandbox({ home: homedir(), out: join(dirname(brokerSocket()), 'maven'), keep }); } catch (e) { console.log(`clearsky: Maven logins for the sandbox: ${e.message}`); }
+  if (maven) Object.assign(process.env, maven.env);
   const env = copilotEnv();
   const n = Number(env.GIT_CONFIG_COUNT) || 0;
-  SANDBOX_GIT.forEach(([k, v], i) => { env[`GIT_CONFIG_KEY_${n + i}`] = k; env[`GIT_CONFIG_VALUE_${n + i}`] = v; });
-  env.GIT_CONFIG_COUNT = String(n + SANDBOX_GIT.length);
-  // The keyring is out of reach in the sandbox (see lib/sandbox.mjs), so Copilot, gh and git sign
-  // in with a token from here: the read-only one from Settings → Copilot, so nothing in the
-  // sandbox can push or change GitHub, else (until you add one) your gh login.
-  const limited = process.env.COPILOT_SANDBOX_TOKEN || null;
-  const token = limited || ghToken();
-  if (token) Object.assign(env, { COPILOT_GITHUB_TOKEN: token, GH_TOKEN: token });
+  const token = ghToken();
+  const github = token ? githubLogin(token, process.env, n + SANDBOX_GIT.length) : null;
+  [...SANDBOX_GIT, ...(github ? [github.git] : [])].forEach(([k, v], i) => { env[`GIT_CONFIG_KEY_${n + i}`] = k; env[`GIT_CONFIG_VALUE_${n + i}`] = v; });
+  env.GIT_CONFIG_COUNT = String(n + SANDBOX_GIT.length + (github ? 1 : 0));
   if (maven) {
-    Object.assign(env, maven.env); // srt shows the sandbox only a placeholder for these
     env.MAVEN_ARGS = `${env.MAVEN_ARGS ? `${env.MAVEN_ARGS} ` : ''}--settings ${maven.settings}`;
     env.JAVA_TOOL_OPTIONS = `${env.JAVA_TOOL_OPTIONS ? `${env.JAVA_TOOL_OPTIONS} ` : ''}${maven.javaOptions}`;
   }
-  // The doors out (lib/broker.mjs): git push, gh changes, acli and `outside` reach Clearsky,
-  // which asks you in this chat. The key tells Clearsky which chat a request comes from.
+  // The real values never go in: srt sets the stand-ins.
+  for (const c of [...(github?.credentials || []), ...(maven?.credentials || [])]) delete env[c.name];
+  // The doors srt's network can't be (lib/broker.mjs): acli and `outside` reach Clearsky, which
+  // asks you in this chat. The key tells Clearsky which chat a request comes from.
   const key = randomBytes(16).toString('hex');
   if (process.platform === 'linux') {
     broker ||= serveBroker({ bins: { acli: config.jira.acli }, allow: assistedAllow, ask: brokerAsk, where: brokerWhere, log: console.log });
     Object.assign(env, { CLEARSKY_BROKER_SOCKET: brokerSocket(), CLEARSKY_BROKER_KEY: key });
     env.PATH = `${join(here, '..', 'scripts', 'sandbox-bin')}${delimiter}${env.PATH}`;
   }
-  return Object.assign(new AcpAgent(s.bin, s.args, { env }), { sandboxed: true, brokerKey: key, github: limited ? 'read-only token' : 'your full gh login', hosts: [...new Set([...domains, ...(maven?.hosts || [])])] });
+  // Copilot's built-in GitHub tools would change GitHub past the gate: off.
+  const s = await sandboxedCommand(bin, [...args, '--disable-builtin-mcps', '--acp'], { ...sandboxOpts(cwd), domains, maven, github, ca: sandboxCa(keep) },
+    { filterRequest: githubFilter(githubAsk) });
+  return Object.assign(new AcpAgent(s.bin, s.args, { env, acp: false }), { sandboxed: true, brokerKey: key,
+    github: github ? 'your gh login, added on the way out; changes ask you' : 'not signed in (gh auth login)',
+    hosts: [...new Set([...domains, ...(maven?.hosts || []), ...(github?.read || [])])] });
+}
+
+// A GitHub change from a sandbox, held at srt's proxy (lib/github-gate.mjs). The proxy can't tell
+// which chat sent it, so every sandboxed chat that's working asks; the first answer counts.
+function githubAsk(what) {
+  const chats = [...acpChats.values()].filter((c) => c.agent.sandboxed && c.busy);
+  if (!chats.length) return Promise.resolve(false);
+  return new Promise((done) => {
+    const id = randomBytes(6).toString('hex');
+    const ev = { type: 'permission', id, title: 'Change GitHub as you', kind: 'execute', detail: what,
+      options: [{ id: 'allow', name: 'Allow', kind: 'allow_once' }, { id: 'deny', name: 'Deny', kind: 'reject_once' }] };
+    const finish = (ok) => {
+      for (const c of chats) { c.waiting.delete(id); c.pending.delete(id); c.emit({ type: 'permission-done', id }); }
+      done(ok);
+    };
+    for (const c of chats) {
+      if (c.mode === 'full') return finish(true); // Full: you allowed everything
+      c.waiting.set(id, (answer) => finish(answer.optionId === 'allow'));
+      c.pending.set(id, ev);
+      c.emit(ev);
+    }
+  });
 }
 
 // The chat a sandbox door request comes from, by the key its Copilot was given.
@@ -874,7 +897,7 @@ function brokerAsk({ key, tool, argv, cwd }) {
 
 // A short-lived Copilot process, for listing or reading sessions.
 async function withAgent(bin, fn) {
-  const agent = startAgent(bin, [], copilotCwd());
+  const agent = await startAgent(bin, [], copilotCwd());
   const timer = setTimeout(() => agent.close(), 30_000);
   try { return await fn(agent); } finally { clearTimeout(timer); agent.close(); }
 }
@@ -913,9 +936,9 @@ function foldersHint() {
     + 'If you need something outside these folders, say what and why first.';
 }
 // How the sandbox works for Copilot, and its doors out (lib/broker.mjs).
-const SANDBOX_HINT = 'You run in a sandbox: everything inside it runs without asking me. Its GitHub token only reads. '
-  + '`git push`, GitHub changes with `gh` (PRs, comments, reviews, API writes) and Jira changes with `acli` go through Clearsky, '
-  + 'which asks me first and runs them as me; use those commands as usual (not curl or a raw git binary) and wait for the result. '
+const SANDBOX_HINT = 'You run in a sandbox: everything inside it runs without asking me. git and gh work as usual; reading GitHub '
+  + 'goes through, while a push or any GitHub change (a PR, a comment, a review) waits at the sandbox\'s network until I click Allow, '
+  + 'and fails with "declined" if I don\'t. Jira changes with `acli` ask me the same way. Your built-in GitHub tools are off here. '
   + 'There is no Docker in the sandbox. Tests that need it (Testcontainers) fail with errors like "Ryuk is unreachable" or '
   + '"Could not find a valid Docker environment": run that test command as `outside <command>` (for example '
   + '`outside ./mvnw verify -pl core`), which runs it on my machine after I OK it. Use `outside` only for those, and don\'t quote '
@@ -1187,7 +1210,7 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin })
   let c = acpChats.get(chat);
   if (c && (c.sig !== sig || c.agent.closed)) { resumeId = c.agent.sessionId; c.agent.close(); acpChats.delete(chat); c = null; }
   if (!c) {
-    const agent = startAgent(bin, args, cwd, { sandbox });
+    const agent = await startAgent(bin, args, cwd, { sandbox });
     c = { agent, sig, cwd, waiting: new Map(), pending: new Map(), emit: () => {}, lastUsed: Date.now() };
     const id = await agent.start(cwd, resumeId);
     acpChats.set(id, c);
@@ -1409,6 +1432,7 @@ function restartWhenIdle({ maxWaitMinutes = 60, force = false } = {}) {
     clearInterval(restart.timer);
     console.log('clearsky: restarting');
     for (const c of acpChats.values()) c.agent.close();
+    stopSandbox().catch(() => {});
     restart.server?.close();
     if (process.env.CLEARSKY_SUPERVISED === '1') process.exit(75); // a supervisor (systemd) starts us again
     spawn(process.execPath, process.argv.slice(1), { detached: true, stdio: 'inherit', env: process.env, cwd: process.cwd() }).unref();

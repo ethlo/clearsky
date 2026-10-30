@@ -1,6 +1,0 @@
-#!/usr/bin/env node
-// git in Clearsky's sandbox: `git push` goes to Clearsky, which asks you and pushes from your
-// machine (lib/broker.mjs); everything else is the real git, here.
-const { runHere, viaClearsky } = require('./shim.js');
-const argv = process.argv.slice(2);
-require('./rules.js').gitWrites(argv) ? viaClearsky('git', argv) : runHere('git', argv);
