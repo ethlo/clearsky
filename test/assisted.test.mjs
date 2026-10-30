@@ -69,3 +69,15 @@ test('reads the shell well enough', () => {
   assert.deepEqual(h.cmds.map((c) => c.words[0]), ['cd', 'python3', 'echo']);
   assert.equal(parseShell('cat <<EOF\nx').error, 'unfinished here-document');
 });
+
+test('in the sandbox, Assisted reads anywhere but still asks for changes outside your folders', () => {
+  const sb = { ...at, readAnywhere: true };
+  const look = 'cd ~/dev/acme/api && git worktree list; git branch -a --list "*ABC-1*" "*abc-1*"; gh pr list --head ABC-1 --state all --json number,state,url; echo ---; cat .sdkmanrc .java-version 2>/dev/null; grep -n -m5 "maven.compiler.release\\|<java.version>\\|<release>" pom.xml; ls ~/.sdkman/candidates/java/ /usr/lib/jvm 2>/dev/null; echo ---; ls .github/workflows | head -30; git status --short | head';
+  runs(look, sb);
+  asks(look);
+  runs('cd ~/dev && timeout 60 grep -rIn -i "logging.level" --exclude-dir={node_modules,target} . 2>/dev/null | head -20', sb);
+  asks('grep -rn x . > ~/out.txt', sb);
+  asks('cp a.txt /etc/x', sb);
+  asks('find ~/dev -name x -delete', sb);
+  asks('sed -i s/a/b/ ~/notes.txt', sb);
+});

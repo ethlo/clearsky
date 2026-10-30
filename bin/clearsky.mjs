@@ -1172,7 +1172,7 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin })
     if (once && fenced && typeof command !== 'string') return resolve({ outcome: 'selected', optionId: once.optionId, rule: 'sandboxed' });
     const why = !(assisted || options.permission === 'sandboxed') || typeof command !== 'string' ? undefined
       : fenced ? outwardReason(command, { ask: assistedAsk(), allow: assistedAllow() })
-        : assistedReason(command, { ...where, ask: assistedAsk(), allow: assistedAllow() });
+        : assistedReason(command, { ...where, ask: assistedAsk(), allow: assistedAllow(), readAnywhere: !!c.agent.sandboxed });
     if (once && fenced && why === null) return resolve({ outcome: 'selected', optionId: once.optionId, rule: 'sandboxed-command' });
     if (once && assisted && why === null) return resolve({ outcome: 'selected', optionId: once.optionId, rule: 'assisted-command' });
     if (why) p.why = why;
