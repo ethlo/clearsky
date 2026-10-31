@@ -28,6 +28,7 @@
     <a class="ni" href="#calendar" data-nav="calendar"><span class="ico" data-i="calendar"></span><span class="lab">Calendar</span><b id="n-calendar"></b></a>
     <a class="ni" href="#standup" data-nav="standup"><span class="ico" data-i="standup"></span><span class="lab">Stand-up</span></a>
     <a class="ni" href="#notifications" data-nav="notifications"><span class="ico" data-i="bell"></span><span class="lab">Notifications</span></a>
+    <a class="ni" href="#changes" data-nav="changes"><span class="ico" data-i="spark"></span><span class="lab">Copilot's changes</span></a>
   </nav>
   <div class="sg">Copilot <button type="button" id="cp-new-side" title="New chat (Alt+N)" aria-label="New chat"><span data-i="plus" data-size="14"></span></button></div>
   <div id="side-cp"></div>
@@ -78,6 +79,10 @@
   </section>
 
   <!-- A source on its own page, such as School. -->
+  <section class="view" id="v-changes" hidden>
+    <header class="vh"><h1>Copilot's changes</h1><span class="sub">what it changed as you on GitHub and Jira, from its sandbox</span><span class="spacer"></span></header>
+    <div class="view-b"><div id="changes"></div></div>
+  </section>
   <section class="view" id="v-notes" hidden>
     <header class="vh"><h1>Recent notifications</h1><span class="sub" id="notes-sub"></span><span class="spacer"></span></header>
     <div class="view-b"><div id="notes"></div></div>
@@ -120,6 +125,7 @@
       <aside class="cp-side">
         <div class="chat-ctx" id="chat-ctx" hidden></div>
         <div class="vm" id="cp-vm" hidden></div>
+        <div id="cp-changes" hidden></div>
         <div><h4>Skills</h4><div class="chat-skills" id="cp-skills"></div></div>
         <div><h4>This chat</h4><dl class="cp-info" id="cp-info"></dl>
           <div class="cp-acts">

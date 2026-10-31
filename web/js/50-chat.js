@@ -253,10 +253,21 @@ async function drawVm() {
 }
 setInterval(() => { if (!$('#chat').hidden && !document.hidden && chat.turns) drawVm(); }, 3000);
 
+// What this chat changed on GitHub and Jira (all chats: Copilot's changes in the menu).
+async function drawChanges() {
+  const el = $('#cp-changes'), id = chat.turns ? chat.session : null;
+  let list = [];
+  if (id) try { list = (await getJson(`/api/agent-log?chat=${encodeURIComponent(id)}&limit=8`)).writes; } catch {}
+  if (id !== (chat.turns ? chat.session : null)) return;
+  el.hidden = !list.length;
+  el.innerHTML = list.length ? `<h4>Changed as you</h4>${changeRows(list, { chats: false })}<a href="#changes" class="more">All of Copilot's changes</a>` : '';
+}
+
 function chatSub() {
   drawCtx();
   drawInfo();
   drawVm();
+  drawChanges();
   if (!$('#chat-title input')) $('#chat-title').textContent = chat.title || (chat.turns ? 'Copilot session' : 'New chat');
   const i = chat.info;
   $('#chat-sub').textContent = !i ? '' : !i.available ? 'Copilot CLI not found' : `${i.permissions[$('#cp-perm').value] || ''}${chat.turns ? ` · ${chat.turns} turn${chat.turns > 1 ? 's' : ''}` : ''}`;
@@ -522,7 +533,7 @@ async function send(text) {
     // A new chat about a PR or ticket is named after it, not after the skill or first words.
     else if (e.type === 'title') { mine.title = e.title; if (here()) { chat.title = e.title; drawCtx(); } }
     else if (e.type === 'cwd') { if (here()) { chat.cwd = e.cwd; drawCtx(); } segs.push({ type: 'note', text: `Working in ${e.cwd}` }); }
-    else if (e.type === 'note') segs.push({ type: 'note', text: e.text });
+    else if (e.type === 'note') { segs.push({ type: 'note', text: e.text }); if (/^(GitHub|Jira):/.test(e.text)) setTimeout(drawChanges, 300); }
     if (e.type === 'done' || e.type === 'error') ended = true;
   };
   let ended = false;
@@ -608,7 +619,7 @@ async function attachLive(id) {
         else if (e.type === 'tool') { const t = segs.find((g) => g.type === 'tool' && g.id === e.id); if (t) Object.assign(t, Object.fromEntries(Object.entries(e).filter(([, v]) => v != null))); else segs.push(e); }
         else if (e.type === 'permission' || e.type === 'error') segs.push(e);
         else if (e.type === 'permission-done') { const g = segs.find((x) => x.type === 'permission' && x.id === e.id); if (g && !g.answered) g.answered = 'Answered'; }
-        else if (e.type === 'note') segs.push({ type: 'note', text: e.text });
+        else if (e.type === 'note') { segs.push({ type: 'note', text: e.text }); if (/^(GitHub|Jira):/.test(e.text)) setTimeout(drawChanges, 300); }
         else if (e.type === 'done') done = true;
       }
       draw();

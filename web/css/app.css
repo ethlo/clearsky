@@ -250,6 +250,13 @@ kbd { font: 500 10.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace; border:
 .notes .when, .notes .kind { color: var(--muted); font-size: 12px; white-space: nowrap; }
 .notes .what { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .notes .what small { display: block; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.changes .what b { font-weight: 600; }
+.changes .what small { white-space: normal; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; }
+.changes .what small + small { font-family: inherit; color: var(--muted); }
+.changes .d-declined .kind { color: var(--red); }
+.changes .d-allowed .kind { color: var(--amber); }
+#cp-changes .changes li { grid-template-columns: 1fr; gap: 1px; padding: 6px 0; font-size: 12px; }
+#cp-changes .more { display: inline-block; margin-top: 6px; font-size: 12px; }
 @media (max-width: 560px) { .notes li { grid-template-columns: 1fr; gap: 2px; } }
 .fresh { display: inline-flex; align-items: center; gap: 5px; border: 0; background: none; color: var(--muted); font-size: 12px; padding: 4px 6px; border-radius: 6px; margin-left: 6px; white-space: nowrap; }
 .fresh:hover { color: var(--text); background: var(--bg); }

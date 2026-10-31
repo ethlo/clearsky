@@ -183,6 +183,24 @@ async function renderNotes() {
     : '<div class="empty">Nothing yet. New review requests, PRs that turn your move, and mentions show up here.</div>';
 }
 
+// What Copilot changed as you (GitHub and Jira show it as you; this tells it apart), newest first.
+const DECIDED = { auto: 'went through', allowed: 'you allowed', 'allowed with a step': 'with a step you allowed', declined: 'you declined' };
+function changeRows(list, { chats = true } = {}) {
+  const name = (id) => recentChats.find((r) => r.id === id)?.title || 'a Copilot chat';
+  return `<ul class="notes changes">${list.map((w) => `<li class="d-${esc(w.decided.split(' ')[0])}">
+      <span class="when" title="${esc(new Date(w.at).toLocaleString())}">${esc(ago(w.at))}</span>
+      <span class="what"><b>${esc(w.where === 'jira' ? 'Jira' : 'GitHub')}${w.target ? ` · ${esc(w.target)}` : ''}</b><small>${esc(w.what)}</small>
+        ${chats && w.chats?.length ? `<small>${w.chats.length > 1 ? 'one of: ' : ''}${w.chats.map((c) => esc(name(c.id))).join(', ')}</small>` : ''}</span>
+      <span class="kind">${esc(DECIDED[w.decided] || w.decided)}</span></li>`).join('')}</ul>`;
+}
+async function renderChanges() {
+  const el = $('#changes');
+  el.innerHTML = skeleton(4);
+  let d;
+  try { d = await getJson('/api/agent-log'); } catch (e) { el.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  el.innerHTML = d.writes.length ? changeRows(d.writes) : '<div class="empty">Nothing yet. Comments, pushes, PR edits and Jira changes Copilot makes from its sandbox show up here.</div>';
+}
+
 // Done or snoozed from the item page: back to the list.
 document.addEventListener('click', (e) => { if (e.target.closest('[data-back-after]')) setTimeout(back, 0); });
 

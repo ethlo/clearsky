@@ -23,6 +23,7 @@ import { sessionEvents, sessionUsage } from '../lib/copilot-events.mjs';
 import { branchesFor } from '../lib/branches.mjs';
 import { sandboxedCommand, sandboxEnded, stopSandbox, sandboxProxy, githubLogin, DEFAULT_DOMAINS, READ_DEFAULT, parseDomains } from '../lib/sandbox.mjs';
 import { VmImage, ChatVm, vmSupport, VM_DOMAINS } from '../lib/vm.mjs';
+import { logWrite, readWrites } from '../lib/agent-log.mjs';
 import { serveBroker, brokerSocket } from '../lib/broker.mjs';
 import { mavenSandbox, sandboxCa } from '../lib/maven.mjs';
 import { githubFilter } from '../lib/github-gate.mjs';
@@ -51,6 +52,7 @@ function loadEnvFile(path) {
 const here = dirname(fileURLToPath(import.meta.url));
 export const userEnvFile = join(homedir(), '.config', 'clearsky', '.env');
 const stateFile = process.env.CLEARSKY_STATE || join(homedir(), '.config', 'clearsky', 'state.json');
+const agentLogFile = join(dirname(stateFile), 'agent-writes.jsonl');
 loadEnvFile(join(process.cwd(), '.env'));
 loadEnvFile(join(here, '..', '.env'));
 loadEnvFile(userEnvFile);
@@ -863,7 +865,7 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   }
   // Copilot's built-in GitHub tools would change GitHub past the gate: off.
   const s = await sandboxedCommand(bin, [...args, '--disable-builtin-mcps', '--acp'], { ...sandboxOpts(cwd), domains, maven, github, ca: sandboxCa(keep) },
-    { filterRequest: githubFilter(githubAsk, { told: githubTold, look: githubLook }) });
+    { filterRequest: githubFilter(githubAsk, { told: githubTold, look: githubLook, scope: githubScope }) });
   const agent = new AcpAgent(s.bin, s.args, { env, acp: false });
   agent.child.once('exit', sandboxEnded);
   return Object.assign(agent, { sandboxed: true, brokerKey: key,
@@ -875,21 +877,29 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
 // which chat sent it, so every sandboxed chat that's working asks; the first answer counts.
 // When the only working chat is running a step you just allowed (say `gh pr create`), its
 // GitHub changes are part of what you allowed and go through. With two chats working, it asks.
-async function githubAsk(what, { repo, nodes = [] } = {}) {
-  const chats = askingChats(repo || (what.match(/^git push to (\S+)/) || [])[1] || await nodesRepo(nodes));
+async function githubAsk(what, { repo, nodes = [], why = null } = {}) {
+  repo ||= (what.match(/^git push to (\S+)/) || [])[1] || await nodesRepo(nodes);
+  const chats = askingChats(repo);
   if (!chats.length) return false;
   const shared = chats.length > 1;
-  if (chats.length === 1 && chats[0].approved.size) return Promise.resolve(true);
+  if (chats.length === 1 && chats[0].approved.size) {
+    logWrite(agentLogFile, { where: 'github', what, target: repo, chats: chats.map(chatRef), decided: 'allowed with a step' });
+    return Promise.resolve(true);
+  }
   return new Promise((done) => {
     const id = randomBytes(6).toString('hex');
     const ev = { type: 'permission', id, title: 'Change GitHub as you', kind: 'execute', detail: what,
       options: [{ id: 'allow', name: 'Allow', kind: 'allow_once' }, { id: 'deny', name: 'Deny', kind: 'reject_once' }] };
     const finish = (ok) => {
       for (const c of chats) { c.waiting.delete(id); c.pending.delete(id); c.shared.delete(id); c.emit({ type: 'permission-done', id }); }
+      const target = repo || (what.match(/^git push to (\S+)/) || [])[1] || null;
+      // Allowed in the one chat it came from: that repo is part of this chat's work from now on.
+      if (ok && !shared && target && why?.startsWith('goes to ')) chats[0].repos.add(target.toLowerCase());
+      logWrite(agentLogFile, { where: 'github', what, target, chats: chats.map(chatRef), decided: ok ? 'allowed' : 'declined' });
       done(ok);
     };
     for (const c of chats) {
-      if (c.mode === 'full') return finish(true); // Full: you allowed everything
+      if (c.mode === 'full') return finish(true); // Full: you allowed everything (logged as allowed)
       c.waiting.set(id, (answer) => finish(answer.optionId === 'allow'));
       if (shared) c.shared.add(id); // may not be this chat's: it doesn't mark the chat as needing you
       c.pending.set(id, ev);
@@ -917,6 +927,7 @@ const defaultBranches = new Map();
 const githubLook = {
   compare: (repo, base, head) => ghGet(`/repos/${repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`),
   run: (repo, id) => ghGet(`/repos/${repo}/actions/runs/${id}`),
+  protected: async (repo, branch) => !!(await ghGet(`/repos/${repo}/branches/${encodeURIComponent(branch)}`)).protected,
   async defaultBranch(repo) {
     if (!defaultBranches.has(repo)) defaultBranches.set(repo, (await ghGet(`/repos/${repo}`)).default_branch);
     return defaultBranches.get(repo);
@@ -925,10 +936,23 @@ const githubLook = {
 
 // An everyday GitHub change that went through without asking: a line in the chat that made it.
 async function githubTold(what, { repo, nodes = [] } = {}) {
-  const chats = askingChats(repo || await nodesRepo(nodes));
+  repo ||= await nodesRepo(nodes);
+  const chats = askingChats(repo);
   console.log(`clearsky: GitHub change let through: ${what}`);
+  logWrite(agentLogFile, { where: 'github', what, target: repo, chats: chats.map(chatRef), decided: 'auto' });
   for (const c of chats) c.emit({ type: 'note', text: `GitHub: ${what}${chats.length > 1 ? ' (from one of your working chats)' : ''}` });
 }
+
+// A GitHub write goes through only to a repo a working chat is on: its clone's remote, the PRs
+// it was started about, or one you allowed in it. Others ask.
+async function githubScope({ repo, nodes = [] }) {
+  repo ||= await nodesRepo(nodes);
+  if (!repo) return 'Clearsky couldn\'t tell which repo it changes';
+  const r = repo.toLowerCase();
+  const chats = [...acpChats.values()].filter((c) => c.agent.sandboxed && c.busy);
+  return chats.some((c) => chatRepo(c) === r || c.repos.has(r)) ? null : `goes to ${repo}, not a repo this chat works on`;
+}
+const chatRef = (c) => ({ id: c.id });
 
 // The repo of a GraphQL change, from the ids it names (looked up as you, read only).
 async function nodesRepo(ids) {
@@ -994,6 +1018,29 @@ function hostJava() {
 }
 const sandboxHosts = () => [...new Set([...(process.env.COPILOT_DOMAINS ? parseDomains(process.env.COPILOT_DOMAINS) : DEFAULT_DOMAINS), ...VM_DOMAINS])];
 
+// Which Jira tickets and projects an acli command changes; `bulk` when it picks them by a query.
+export function jiraTargets(argv) {
+  const keys = new Set(), projects = new Set();
+  let bulk = false;
+  argv.forEach((a, i) => {
+    if (/^--(jql|filter)(=|$)/.test(a)) bulk = true;
+    const v = a.includes('=') && a.startsWith('--') ? a.slice(a.indexOf('=') + 1) : a;
+    const flag = a.startsWith('--') ? a.split('=')[0] : argv[i - 1];
+    if (/^(--project|-p)$/.test(flag) && /^[A-Z][A-Z0-9_]+$/.test(v)) projects.add(v);
+    for (const k of v.split(',')) if (/^[A-Z][A-Z0-9_]+-\d+$/.test(k.trim())) { keys.add(k.trim()); projects.add(k.trim().split('-')[0]); }
+  });
+  return { keys: [...keys], projects: [...projects], bulk };
+}
+// The Jira projects this chat works in: its tickets, and the one its branch is named after.
+function chatJira(c) {
+  const set = new Set(c.jira);
+  try {
+    const branch = execFileSync('git', ['-C', c.cwd, 'branch', '--show-current'], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] });
+    for (const m of branch.toUpperCase().matchAll(/\b([A-Z][A-Z0-9_]+)-\d+\b/g)) set.add(m[1]);
+  } catch {}
+  return set;
+}
+
 // The chat a sandbox door request comes from, by the key its Copilot was given.
 const chatByKey = (key) => typeof key === 'string' && key ? [...acpChats.values()].find((c) => c.agent.brokerKey === key) : null;
 function brokerWhere(key) {
@@ -1004,8 +1051,16 @@ function brokerWhere(key) {
 function brokerAsk({ key, tool, argv, cwd }) {
   const c = chatByKey(key);
   if (!c) return Promise.resolve(false);
-  if (c.mode === 'full') return Promise.resolve(true); // Full: you allowed everything
   const line = [tool, ...argv].map((a) => (/^[\w@%+=:,./-]+$/.test(a) ? a : `'${a.replace(/'/g, `'\\''`)}'`)).join(' ');
+  const jira = tool === 'acli' ? jiraTargets(argv) : null;
+  const log = (decided) => jira && logWrite(agentLogFile, { where: 'jira', what: line, target: jira.keys.join(', ') || jira.projects.join(', ') || null, chats: [chatRef(c)], decided });
+  if (c.mode === 'full') { log('allowed'); return Promise.resolve(true); } // Full: you allowed everything
+  // A Jira change to the tickets of this chat's project goes through, and shows in the chat.
+  if (jira && !jira.bulk && jira.projects.length && jira.projects.every((p) => chatJira(c).has(p))) {
+    log('auto');
+    c.emit({ type: 'note', text: `Jira: ${line}` });
+    return Promise.resolve(true);
+  }
   const title = { git: 'Push from your machine', gh: 'Change GitHub as you', acli: 'Change Jira as you', outside: 'Run on your machine, outside the sandbox' }[tool];
   return new Promise((done) => {
     const id = randomBytes(6).toString('hex');
@@ -1018,7 +1073,11 @@ function brokerAsk({ key, tool, argv, cwd }) {
     c.waiting.set(id, (answer) => {
       c.pending.delete(id);
       if (answer.optionId === 'chat') (c.allowedRuns ||= new Set()).add(same);
-      done(answer.optionId === 'allow' || answer.optionId === 'chat');
+      const ok = answer.optionId === 'allow' || answer.optionId === 'chat';
+      log(ok ? 'allowed' : 'declined');
+      // Allowed here: that ticket's project is part of this chat's work from now on.
+      if (ok && jira && !jira.bulk) for (const p of jira.projects) c.jira.add(p);
+      done(ok);
     });
     c.pending.set(id, ev);
     c.emit(ev);
@@ -1352,26 +1411,34 @@ function toolDetail(call = {}) {
 const assistedAllow = () => list(process.env.COPILOT_ASSISTED_ALLOW);
 const copilotFolders = () => (process.env.COPILOT_FOLDERS ? list(process.env.COPILOT_FOLDERS) : codeDirs());
 
-async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin }) {
+async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, scope = [] }) {
   // Changing the folders in Settings starts the chat's Copilot again (resuming it) on its next turn.
   const args = [...copilot.optionArgs(options), ...copilot.folderArgs([...copilotFolders(), copilotTmp()])];
   // Sandboxed mode always runs in srt; the others when Settings → Copilot → Sandbox says so.
   const sandbox = !!copilot.PERMISSIONS[options.permission]?.sandbox || process.env.COPILOT_SANDBOX === 'srt';
   const sig = JSON.stringify([args, sandbox, process.env.COPILOT_DOMAINS, process.env.COPILOT_FOLDERS]);
   let c = acpChats.get(chat);
-  let vm = null; // a new Copilot for the same chat keeps its VM
-  if (c && (c.sig !== sig || c.agent.closed)) { resumeId = c.agent.sessionId; vm = c.vm; c.agent.close(); acpChats.delete(chat); c = null; }
+  // A new Copilot for the same chat keeps its VM, and the repos and Jira projects it works on.
+  let keep = {};
+  if (c && (c.sig !== sig || c.agent.closed)) { resumeId = c.agent.sessionId; keep = { vm: c.vm, repos: c.repos, jira: c.jira }; c.agent.close(); acpChats.delete(chat); c = null; }
   if (!c) {
     const agent = await startAgent(bin, args, cwd, { sandbox });
-    c = { agent, sig, cwd, vm, waiting: new Map(), pending: new Map(), approved: new Set(), running: new Set(), shared: new Set(), emit: () => {}, lastUsed: Date.now() };
+    c = { agent, sig, cwd, vm: keep.vm || null, repos: keep.repos || new Set(), jira: keep.jira || new Set(), waiting: new Map(), pending: new Map(), approved: new Set(), running: new Set(), shared: new Set(), emit: () => {}, lastUsed: Date.now() };
     bindVm(c);
     const id = await agent.start(cwd, resumeId);
+    c.id = id;
     acpChats.set(id, c);
     // A new chat gets Copilot's own session id; the panel keeps using that from now on.
     if (id !== chat) emit({ type: 'session', id });
   }
   c.lastUsed = Date.now();
   c.mode = options.permission;
+  // What this chat is about (the items it was started with, the tickets you named): its writes
+  // to those go through without asking.
+  for (const x of scope) {
+    if (x.kind === 'issue') c.jira.add(x.key.split('-')[0]);
+    else if (x.repo) c.repos.add(x.repo.toLowerCase());
+  }
   const { agent } = c;
   // Events go to whichever page is watching this chat; none while you look at another one.
   c.emit = emit;
@@ -1769,7 +1836,8 @@ function serve() {
           if (itemName) emit({ type: 'title', title: itemName });
           sessionsCache = null;
           try {
-            await acpTurn({ chat: body.session, options, prompt, resumeId: body.resume ? body.session : null, cwd, emit, res, bin: info.bin });
+            const named = [...String(message).matchAll(/\b([A-Z][A-Z0-9_]+)-\d+\b/g)].map((m) => ({ kind: 'issue', key: m[0] }));
+            await acpTurn({ chat: body.session, options, prompt, resumeId: body.resume ? body.session : null, cwd, emit, res, bin: info.bin, scope: [...refs, ...named] });
           } catch (e) { emit({ type: 'error', message: e.message }); }
           return res.end();
         }
@@ -1888,6 +1956,8 @@ function serve() {
           usage: /^[\w-]{8,64}$/.test(id) ? sessionUsage(join(homedir(), '.copilot'), id) : null,
         });
       }
+      // What Copilot changed as you on GitHub and Jira (all chats, or one).
+      if (url.pathname === '/api/agent-log') return json(res, 200, { writes: readWrites(agentLogFile, { chat: url.searchParams.get('chat') || null, limit: Math.min(Number(url.searchParams.get('limit')) || 300, 2000) }) });
       // A chat's VM, for its view: what runs in it, what it can reach, and what happened.
       if (url.pathname === '/api/vm') {
         const vm = acpChats.get(url.searchParams.get('id') || '')?.vm;

@@ -82,6 +82,21 @@ test('everyday branch and PR work goes through and is told; what is hard to undo
   assert.equal((await f(req('POST', 'https://api.githubcopilot.com/mcp/', {}))).action, 'deny');
 });
 
+test('a push to a protected main is GitHub\'s to refuse; writes to other repos ask', async () => {
+  const asked = [];
+  const look = { compare: async () => ({ status: 'ahead' }), protected: async (repo, b) => repo === 'acme/api' && b === 'main' };
+  const scope = async ({ repo }) => (repo === 'acme/api' ? null : repo ? `goes to ${repo}, not a repo this chat works on` : 'Clearsky couldn\'t tell which repo it changes');
+  const f = githubFilter(async (what, info) => { asked.push([what.replace(/^.*\((.*)\)$/, '$1'), info.why]); return true; }, { look, scope });
+  await f(push(`${sha('a')} ${sha('b')} refs/heads/main`));
+  await f(push(`${sha('a')} ${sha('b')} refs/heads/release/2`));
+  await f(req('POST', 'https://api.github.com/repos/acme/api/issues/3/comments', {}));
+  await f(req('POST', 'https://api.github.com/repos/other/lib/issues/3/comments', {}));
+  await f(new Request('https://github.com/other/lib.git/git-receive-pack', { method: 'POST', body: Buffer.from(pkt(`${sha('a')} ${sha('b')} refs/heads/feature/y\0caps\n`) + '0000') }));
+  await f(req('POST', 'https://api.github.com/graphql', { query: 'mutation { addComment(input: {body: "x"}) { x } }' }));
+  assert.deepEqual(asked.map((a) => a[0]), ['pushes to release/2', 'goes to other/lib, not a repo this chat works on', 'goes to other/lib, not a repo this chat works on',
+    'Clearsky couldn\'t tell which repo it changes']);
+});
+
 test('the refs a push updates', () => {
   const buf = Buffer.from(pkt(`${sha('a')} ${sha('b')} refs/heads/x\0caps\n`) + pkt(`${sha('0')} ${sha('c')} refs/heads/y\n`) + '0000PACK');
   assert.deepEqual(pushedRefs(buf).map((r) => [r.ref, r.create, r.remove]), [['refs/heads/x', false, false], ['refs/heads/y', true, false]]);

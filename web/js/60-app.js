@@ -36,6 +36,7 @@ function route() {
   $('#v-standup').hidden = h !== 'standup';
   $('#v-src').hidden = !h.startsWith('src-');
   $('#v-notes').hidden = h !== 'notifications';
+  $('#v-changes').hidden = h !== 'changes';
   $('#chat').hidden = h !== 'copilot';
   for (const a of document.querySelectorAll('[data-nav]')) a.classList.toggle('on', a.dataset.nav === (h === 'item' ? returnTo : h));
   menu_(false);
@@ -44,6 +45,7 @@ function route() {
   if (list) { listView = h; $('#list-title').textContent = LIST_VIEWS[h]; renderList(); $('#list').focus({ preventScroll: true }); }
   if (h === 'calendar') renderCalendar();
   if (h === 'notifications') renderNotes();
+  if (h === 'changes') renderChanges();
   if (h === 'standup' && !standupData) { renderStandup(); loadStandup(false); }
   if (h.startsWith('src-')) { $('#src-body').innerHTML = ''; renderExtra(); }
   if (h === 'copilot') { showChat(openChatSkip); openChatSkip = false; }
