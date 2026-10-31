@@ -1177,7 +1177,7 @@ const SANDBOX_HINT = 'You run in a sandbox: everything inside it runs without as
   + 'There is no Docker in the sandbox. Tests that need it (Testcontainers) fail with errors like "Ryuk is unreachable" or '
   + '"Could not find a valid Docker environment": run that test command as `vm <command>` (for example `vm ./mvnw verify -pl core`). '
   + 'It runs in this chat\'s own VM, in the same folder, with Docker and without asking me; the first one starts the VM, and it '
-  + 'stays up for the next ones. It sees only this repo (read-write), my JDKs, and my Maven repository and wrapper downloads (read only, already wired into Maven: don't copy them). If a `vm` run fails for another reason, tell me what failed instead of working around the VM. If `vm` says there is no VM, use `outside <command>` instead, which runs it on my machine after '
+  + 'stays up for the next ones. It sees only this repo (read-write), my JDKs, and my Maven repository and wrapper downloads (read only, already wired into Maven: don\'t copy them). If a `vm` run fails for another reason, tell me what failed instead of working around the VM. If `vm` says there is no VM, use `outside <command>` instead, which runs it on my machine after '
   + 'I OK it. Builds and tests run fine in the sandbox (Maven, its repository and your JDKs are there): always run them normally '
   + 'first, and use `vm` only after a run in the sandbox failed with one of those Docker errors. Never use `outside` for other '
   + 'failures (fix those, or ask me), and don\'t quote arguments you don\'t need to.';
