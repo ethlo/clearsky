@@ -799,6 +799,7 @@ const copilotHome = () => process.env.CLEARSKY_COPILOT_HOME || join(homedir(), '
 
 // Slash commands Copilot last offered (its built-ins and your skills).
 let copilotCommands = null;
+const hintOwed = new Set(); // resumed chats whose first message was a command: the hint goes with the next one
 
 // Ask-mode chats keep a Copilot process running between turns, keyed by Copilot's session id.
 const acpChats = new Map();
@@ -1584,9 +1585,43 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, s
   // Switching chats or reloading the page leaves the turn running; Stop ends it.
   res.on('close', () => { if (c.emit === emit) c.emit = () => {}; });
   c.busy = true;
-  const r = await agent.prompt(prompt).finally(() => { c.busy = false; c.approved.clear(); c.running.clear(); });
+  // /compact: Copilot's answer to it isn't a reliable end (sometimes it never comes), so the
+  // compaction's own record in the session's log ends the turn.
+  const compact = /^\s*\/compact\b/.test(prompt) ? watchCompaction(c, chat) : null;
+  const r = await (compact ? Promise.race([agent.prompt(prompt), compact]) : agent.prompt(prompt))
+    .finally(() => { compact?.turnOver(); c.busy = false; c.approved.clear(); c.running.clear(); });
   c.emit({ type: 'done', stopReason: r?.stopReason });
   c.emit = () => {};
+}
+
+// Waits for Copilot's session.compaction_complete (after this point in its log) and says how much it
+// removed. If Copilot is still "answering" the /compact turn then, that turn is ended: the
+// compaction is done. Gives up after three minutes. `turnOver()` says the turn ended by itself.
+function watchCompaction(c, id) {
+  const file = join(copilotHome(), 'session-state', c.agent.sessionId || id, 'events.jsonl');
+  let from = 0, over = false;
+  try { from = statSync(file).size; } catch {}
+  const k = (n) => `${Math.round((n || 0) / 1000)}k`;
+  const started = Date.now();
+  let timer;
+  const p = new Promise((done) => {
+    timer = setInterval(() => {
+      let text = '';
+      try { const buf = readFileSync(file); text = buf.subarray(Math.min(from, buf.length)).toString('utf8'); } catch {}
+      const line = text.split('\n').find((l) => l.includes('"session.compaction_complete"'));
+      if (!line && Date.now() - started < 180_000) return;
+      clearInterval(timer);
+      let d = {};
+      try { d = JSON.parse(line).data || {}; } catch {}
+      // After a turn that ended by itself, the note goes to the chat's next turn or nowhere.
+      c.emit({ type: 'note', text: !line ? 'Compact: no word from Copilot after 3 minutes' : d.success === false ? `Compact didn't work${d.error ? `: ${d.error}` : ''}`
+        : `Compacted: ${k(d.preCompactionTokens)} → ${k(d.postCompactionTokens)} tokens` });
+      if (over) return;
+      setTimeout(() => { if (!over) { c.agent.cancel(); done({ stopReason: 'end_turn' }); } }, 2000);
+    }, 1000);
+  });
+  p.turnOver = () => { over = true; };
+  return p;
 }
 
 // Watch a chat that is still running (after switching back to it): its open questions, then
@@ -1920,8 +1955,13 @@ function serve() {
           // The first turn carries the dashboard so Copilot knows what you're looking at.
           const sandboxHint = process.env.COPILOT_SANDBOX === 'srt' || body.permission === 'sandboxed' ? `\n\n${SANDBOX_HINT}` : '';
           const folders = foldersHint();
-          const update = body.resume && sandboxHint && !acpChats.has(body.session) && `${UPDATE_INTRO}${sandboxHint}`;
-          const prefix = [update, !body.resume && `${CONTEXT_INTRO}\n\n${copilotContext()}\n\n${CHOICES_HINT}\n\n${PR_HINT}${folders && `\n\n${folders}`}${sandboxHint}`, refText].filter(Boolean).join('\n\n---\n\n');
+          // A Copilot command (/compact, say) only works as the whole message: nothing goes in front.
+          // The sandbox hint a resumed chat is owed then goes with the next message instead.
+          const command = /^\/(compact|clear|context|usage|model)\b/.test(message.trim());
+          const owed = body.resume && sandboxHint && (!acpChats.has(body.session) || hintOwed.has(body.session));
+          if (command) { if (owed) hintOwed.add(body.session); } else hintOwed.delete(body.session);
+          const update = !command && owed && `${UPDATE_INTRO}${sandboxHint}`;
+          const prefix = command ? '' : [update, !body.resume && `${CONTEXT_INTRO}\n\n${copilotContext()}\n\n${CHOICES_HINT}\n\n${PR_HINT}${folders && `\n\n${folders}`}${sandboxHint}`, refText].filter(Boolean).join('\n\n---\n\n');
           const prompt = prefix ? `${prefix}${MSG_MARK}${message}` : message;
           // Answers stream back as one JSON event per line: text, tool, permission, done, error.
           res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
