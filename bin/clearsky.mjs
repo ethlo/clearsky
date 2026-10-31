@@ -26,7 +26,7 @@ import { VmImage, ChatVm, vmSupport, VM_DOMAINS } from '../lib/vm.mjs';
 import { logWrite, readWrites } from '../lib/agent-log.mjs';
 import { serveBroker, brokerSocket } from '../lib/broker.mjs';
 import { mavenSandbox, sandboxCa } from '../lib/maven.mjs';
-import { githubFilter, REGISTRY_HOSTS, SHARED_BRANCH } from '../lib/github-gate.mjs';
+import { githubFilter, REGISTRY_HOSTS, GITHUB_LOG_HOSTS, SHARED_BRANCH } from '../lib/github-gate.mjs';
 import { githubAdvice, jiraAdvice, outsideAdvice, parseRules, ruleLabel } from '../lib/advice.mjs';
 import { attentionItems, diffAttention, desktopNotify, DbusNotifier } from '../lib/notify.mjs';
 import { loadSources, makeContext, hook, asList } from '../lib/sources.mjs';
@@ -867,7 +867,8 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   }
   // Copilot's built-in GitHub tools would change GitHub past the gate: off.
   const s = await sandboxedCommand(bin, [...args, '--disable-builtin-mcps', '--acp'], { ...sandboxOpts(cwd), domains, maven, github, ca: sandboxCa(keep),
-    inspect: vmSupport().ok ? REGISTRY_HOSTS : [] },
+    // Read only, so the proxy reads them: CI logs (with GitHub on), Docker Hub (with the VM).
+    inspect: [...(github ? GITHUB_LOG_HOSTS : []), ...(vmSupport().ok ? REGISTRY_HOSTS : [])] },
     { filterRequest: githubFilter(githubAsk, { told: githubTold, look: githubLook, scope: githubScope }) });
   const agent = new AcpAgent(s.bin, s.args, { env, acp: false });
   agent.child.once('exit', sandboxEnded);

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { githubWrite, githubFilter, graphqlNodeIds, pushedRefs } from '../lib/github-gate.mjs';
+import { githubWrite, githubFilter, graphqlNodeIds, pushedRefs, GITHUB_LOG_HOSTS } from '../lib/github-gate.mjs';
 
 const req = (method, url, body) => new Request(url, { method, body: body == null ? undefined : JSON.stringify(body) });
 
@@ -111,4 +111,14 @@ test('a push to a protected main is GitHub\'s to refuse; writes to other repos a
 test('the refs a push updates', () => {
   const buf = Buffer.from(pkt(`${sha('a')} ${sha('b')} refs/heads/x\0caps\n`) + pkt(`${sha('0')} ${sha('c')} refs/heads/y\n`) + '0000PACK');
   assert.deepEqual(pushedRefs(buf).map((r) => [r.ref, r.create, r.remove]), [['refs/heads/x', false, false], ['refs/heads/y', true, false]]);
+});
+
+test('CI log storage is read only: downloads go through, uploads are refused', async () => {
+  const f = githubFilter(async () => true);
+  const host = 'https://productionresultssa7.blob.core.windows.net/actions-results/x/logs.txt?sig=abc';
+  assert.equal((await f(new Request(host))).action, 'allow');
+  const up = await f(new Request(host, { method: 'PUT', body: 'code' }));
+  assert.equal(up.action, 'deny');
+  assert.match(up.reason, /CI log storage is read only/);
+  assert.equal(GITHUB_LOG_HOSTS.length, 20);
 });
