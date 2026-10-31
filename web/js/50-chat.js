@@ -190,6 +190,7 @@ async function drawInfo(force) {
   if (force || id !== infoFor || Date.now() - infoAt > 15_000) {
     infoFor = id; infoAt = Date.now();
     try { infoData = await getJson(`/api/copilot/chat${id ? `?id=${encodeURIComponent(id)}` : ''}`); } catch { infoData = null; }
+    drawTrim();
   }
   const d = infoData || {}, i = chat.info || {};
   const k = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
@@ -215,6 +216,52 @@ async function drawInfo(force) {
 
 // This chat's VM (`vm <command>`): what Copilot has running in it, what it can reach, and its log.
 let vmData = null, vmFor = null;
+// Keeping a chat lean. Every step sends Copilot the whole conversation again, so a long one gets
+// slower and loses track; one picked up after hours idle is read in full (its cache has expired).
+// So: Compact (Copilot's own /compact) once it's over 60% full and not working, and Start fresh
+// for a big chat you come back to after a day. Never a clear: that throws away what it knows.
+const TRIM = { compact: 0.6, cold: 0.3, coldMs: 24 * 3600e3 };
+function drawTrim() {
+  const el = $('#cp-trim'), d = infoData || {}, u = d.usage;
+  const full = u?.context != null && u.limit ? u.context / u.limit : 0;
+  const cold = d.lastAt && Date.now() - d.lastAt > TRIM.coldMs && full >= TRIM.cold;
+  const show = chat.turns && !chat.stop && !d.busy && (full >= TRIM.compact || cold);
+  el.hidden = !show;
+  if (!show) return;
+  const pct = `${Math.round(100 * full)}% full`;
+  el.innerHTML = `<span>${cold ? `This chat is ${pct} and was last used ${esc(ago(new Date(d.lastAt).toISOString()))}: picking it up reads all of it again.`
+    : `This chat's context is ${pct}: long chats get slower and lose track.`}</span>
+    <button type="button" data-trim="compact" title="Copilot's /compact: it replaces the conversation with its own summary">Compact</button>
+    ${cold ? '<button type="button" data-trim="fresh" title="A new chat in the same folder, with the same PRs and tickets and this chat\'s last answer, ready for you to edit and send. This one stays in History.">Start fresh</button>' : ''}
+    <button type="button" data-trim="hide" class="x" title="Not now" aria-label="Not now">✕</button>`;
+}
+$('#cp-trim').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-trim]');
+  if (!b) return;
+  $('#cp-trim').hidden = true;
+  if (b.dataset.trim === 'compact') send('/compact');
+  if (b.dataset.trim === 'fresh') freshStart();
+});
+// A new chat that picks up where this one left off, from facts and its last answer (no extra
+// request to the old chat). You read the handoff before sending it.
+function freshStart() {
+  const cwd = chat.cwd, title = chat.title, refs = (infoData?.refs || []).map(parseRefKey).filter(Boolean);
+  const answers = [...document.querySelectorAll('#chat-log .msg.cp')].map((m) => (m.segs || []).filter((g) => g.type === 'text').map((g) => g.text).join('')).filter((t) => t.trim());
+  const last = (answers.at(-1) || '').trim();
+  newChat();
+  chat.cwd = cwd;
+  chat.refs = refs;
+  drawRefs();
+  $('#chat-text').value = `Pick up this work from an earlier chat${title ? ` ("${title}")` : ''}. Check the current state (git status, the branch, the PR) before doing anything.${last ? `\n\nThe earlier chat's last answer:\n${last.length > 3000 ? `${last.slice(0, 3000)}…` : last}` : ''}\n\nNext: `;
+  $('#chat-text').focus();
+}
+const parseRefKey = (k) => {
+  const i = k.match(/^issue:([A-Z][A-Z0-9_]+-\d+)$/);
+  if (i) return { kind: 'issue', key: i[1] };
+  const p = k.match(/^pr:([\w.-]+\/[\w.-]+)#(\d+)$/);
+  return p ? { kind: 'pr', repo: p[1], number: Number(p[2]) } : null;
+};
+
 async function drawVm() {
   const el = $('#cp-vm');
   const id = chat.turns ? chat.session : null;
@@ -444,7 +491,7 @@ function drawSessions() {
   const folder = (d) => (d || '').split('/').filter(Boolean).pop() || d || '';
   $('#hist-list').innerHTML = list.map((x) => `<button class="hs${x.id === chat.session ? ' cur' : ''}" data-sid="${esc(x.id)}" data-cwd="${esc(x.cwd || '')}">
       <b>${esc(x.title || 'Untitled session')}</b>
-      <small>${x.updatedAt ? esc(ago(x.updatedAt)) : ''}${x.cwd ? ` · ${esc(folder(x.cwd))}` : ''}</small>${x.working ? '<span class="hbadge work">working</span>' : x.open ? '<span class="hbadge" title="Open in a terminal or editor">open</span>' : ''}${x.here ? '<span class="hbadge">live here</span>' : ''}
+      <small>${x.updatedAt ? esc(ago(x.updatedAt)) : ''}${x.cwd ? ` · ${esc(folder(x.cwd))}` : ''}${x.limit ? ` · <span class="${x.context / x.limit >= TRIM.compact ? 'full' : ''}" title="How full its context is: ${Math.round(x.context / 1000)}k of ${Math.round(x.limit / 1000)}k tokens">${Math.round(100 * x.context / x.limit)}% full</span>` : ''}</small>${x.working ? '<span class="hbadge work">working</span>' : x.open ? '<span class="hbadge" title="Open in a terminal or editor">open</span>' : ''}${x.here ? '<span class="hbadge">live here</span>' : ''}
     </button>`).join('') || '<div class="chat-empty">No sessions match.</div>';
 }
 function showHistory(open = $('#chat-hist').hidden) {

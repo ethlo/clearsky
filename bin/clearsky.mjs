@@ -2062,6 +2062,9 @@ function serve() {
           folders: copilotFolders().map(tilde), read: list(process.env.COPILOT_READ).map(tilde),
           sandbox: process.env.COPILOT_SANDBOX === 'srt',
           usage: /^[\w-]{8,64}$/.test(id) ? sessionUsage(join(homedir(), '.copilot'), id) : null,
+          // When it last did anything (its log's time), and what it's about: for "start fresh".
+          lastAt: /^[\w-]{8,64}$/.test(id) ? (() => { try { return statSync(join(homedir(), '.copilot', 'session-state', id, 'events.jsonl')).mtimeMs; } catch { return null; } })() : null,
+          refs: localState.sessionRefs(stateFile)[id] || [],
         });
       }
       // What Copilot changed as you on GitHub and Jira (all chats, or one).
@@ -2079,7 +2082,9 @@ function serve() {
       if (url.pathname === '/api/copilot/sessions') {
         const info = await copilotInfo();
         if (!info.available) return json(res, 400, { error: 'GitHub Copilot CLI not found' });
-        return json(res, 200, { cwd: copilotCwd(), sessions: await copilotSessions(info.bin, url.searchParams.has('refresh')) });
+        // How full each chat's context is (from its log, cached by the file's size and time).
+        const full = (x) => { const u = /^[\w-]{8,64}$/.test(x.id) ? sessionUsage(join(homedir(), '.copilot'), x.id) : null; return u?.context != null && u.limit ? { context: u.context, limit: u.limit } : {}; };
+        return json(res, 200, { cwd: copilotCwd(), sessions: (await copilotSessions(info.bin, url.searchParams.has('refresh'))).map((x) => ({ ...x, ...full(x) })) });
       }
       if (url.pathname === '/api/copilot/links') {
         const info = await copilotInfo();
