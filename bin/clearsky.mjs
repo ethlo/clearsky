@@ -26,7 +26,7 @@ import { VmImage, ChatVm, vmSupport, VM_DOMAINS } from '../lib/vm.mjs';
 import { logWrite, readWrites } from '../lib/agent-log.mjs';
 import { serveBroker, brokerSocket } from '../lib/broker.mjs';
 import { mavenSandbox, sandboxCa } from '../lib/maven.mjs';
-import { githubFilter } from '../lib/github-gate.mjs';
+import { githubFilter, REGISTRY_HOSTS } from '../lib/github-gate.mjs';
 import { attentionItems, diffAttention, desktopNotify, DbusNotifier } from '../lib/notify.mjs';
 import { loadSources, makeContext, hook, asList } from '../lib/sources.mjs';
 import { pluginItems } from '../lib/items.mjs';
@@ -864,7 +864,8 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
     env.PATH = `${join(here, '..', 'scripts', 'sandbox-bin')}${delimiter}${env.PATH}`;
   }
   // Copilot's built-in GitHub tools would change GitHub past the gate: off.
-  const s = await sandboxedCommand(bin, [...args, '--disable-builtin-mcps', '--acp'], { ...sandboxOpts(cwd), domains, maven, github, ca: sandboxCa(keep) },
+  const s = await sandboxedCommand(bin, [...args, '--disable-builtin-mcps', '--acp'], { ...sandboxOpts(cwd), domains, maven, github, ca: sandboxCa(keep),
+    inspect: vmSupport().ok ? REGISTRY_HOSTS : [] },
     { filterRequest: githubFilter(githubAsk, { told: githubTold, look: githubLook, scope: githubScope }) });
   const agent = new AcpAgent(s.bin, s.args, { env, acp: false });
   agent.child.once('exit', sandboxEnded);
@@ -1011,6 +1012,7 @@ async function vmRun({ key, argv, cwd, java, signal }, out, err) {
   if (!c) throw new Error('this chat is closed');
   const proxy = await sandboxProxy();
   if (!proxy) throw new Error('the sandbox\'s proxy isn\'t running');
+  proxy.ca = readFileSync(sandboxCa(join(dirname(stateFile), 'sandbox')).cert, 'utf8'); // the VM trusts it: the proxy reads Docker Hub's HTTPS
   if (c.vm && c.vm.state !== 'off' && cwd !== c.vm.cwd && !cwd.startsWith(`${c.vm.cwd}/`)) {
     c.vm.event(`Moving the VM to ${cwd}`); c.vm.stop(); c.vm = null;
   }

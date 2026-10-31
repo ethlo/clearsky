@@ -5,7 +5,9 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, VM_DOMAINS, VmImage, ChatVm } from '../lib/vm.mjs';
+import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VmImage, ChatVm } from '../lib/vm.mjs';
+import { registryWrite, githubFilter } from '../lib/github-gate.mjs';
+import { srtSettings } from '../lib/sandbox.mjs';
 import { needs, serveBroker } from '../lib/broker.mjs';
 
 test('whether this machine can run the VM, and why not', () => {
@@ -121,4 +123,26 @@ test('a VM resumes from its snapshot only on the same devices: every share is al
   assert.ok(a.includes('local,path=/empty,mount_tag=jvm,security_model=none,readonly=on'));
   assert.ok(a.some((x) => x.startsWith('user,id=n0,restrict=on,hostfwd=tcp:127.0.0.1:2222-:22,guestfwd=tcp:10.0.2.100:3128-cmd:socat - TCP:127.0.0.1:3128')));
   assert.deepEqual(a.slice(-2), ['-qmp', 'unix:q,server=on,wait=off']);
+});
+
+test('a failed pull is spotted in dockerd\'s log', () => {
+  assert.equal(pullFailure('level=error msg="Handler for POST /v1.44/images/create returned error: Get \\"https://registry.example.com/v2/\\": Forbidden"'),
+    'Get "https://registry.example.com/v2/": Forbidden');
+  assert.equal(pullFailure('level=info msg="Loading containers: done."'), null);
+});
+
+test('Docker Hub is read only: pulls go through, pushes and push logins are refused', async () => {
+  const r = (m, url) => new Request(url, { method: m, ...(m !== 'GET' && { body: '' }) });
+  assert.equal(registryWrite(r('GET', 'https://registry-1.docker.io/v2/library/mysql/manifests/8.4')), null);
+  assert.equal(registryWrite(r('GET', 'https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/mysql:pull')), null);
+  assert.ok(registryWrite(r('GET', 'https://auth.docker.io/token?service=registry.docker.io&scope=repository:evil/x:push,pull')));
+  assert.ok(registryWrite(r('POST', 'https://registry-1.docker.io/v2/evil/x/blobs/uploads/')));
+  assert.ok(registryWrite(r('PUT', 'https://registry-1.docker.io/v2/evil/x/manifests/latest')));
+  assert.equal(registryWrite(r('POST', 'https://example.org/x')), null);
+  const f = githubFilter(async () => true);
+  assert.equal((await f(r('PATCH', 'https://registry-1.docker.io/v2/evil/x/blobs/uploads/1'))).action, 'deny');
+  const s = srtSettings({ cwd: '/w', home: '/h', domains: ['github.com'], ca: { cert: 'c', key: 'k' }, inspect: ['registry-1.docker.io'], exists: () => true });
+  assert.ok(s.network.allowedDomains.includes('registry-1.docker.io'));
+  assert.ok(!s.network.tlsTerminate.excludeDomains.includes('registry-1.docker.io'));
+  assert.ok(s.network.tlsTerminate.excludeDomains.includes('github.com'));
 });
