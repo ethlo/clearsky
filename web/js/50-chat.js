@@ -786,12 +786,37 @@ $('#chat-form').onsubmit = (e) => {
   if (chat.stop && !t.trim()) return chat.halt ? chat.halt() : chat.stop();
   $('#chat-text').value = '';
   if (chat.stop) {
-    const el = addMsg('me', `${esc(t)}<span class="queued">Sends when Copilot is done</span>`);
+    const el = addMsg('me', `${esc(t)}<span class="queued">Sends when Copilot is done · <button type="button" class="linkish" data-now>Send now</button></span>`);
     el.classList.add('is-queued');
-    chat.queued.push({ text: t, el });
+    const q = { text: t, el };
+    chat.queued.push(q);
+    if (e.submitter?.dataset.now != null || forceNext) sendNow(q);
   } else send(t);
+  forceNext = false;
   sendLabel();
 };
+// Send now (Ctrl+Enter, or the button on a waiting message): stop what Copilot is doing and send
+// this next. If Copilot doesn't stop within a few seconds (a step that hangs), its process is
+// restarted on the same conversation, as with Restart, and the message goes to that.
+let forceNext = false;
+function sendNow(q) {
+  if (!chat.stop) return;
+  chat.queued = [q, ...chat.queued.filter((x) => x !== q)];
+  q.el.querySelector('.queued').textContent = 'Sending now: stopping what Copilot is doing';
+  const id = chat.session;
+  (chat.halt || chat.stop)();
+  setTimeout(async () => {
+    if (chat.session !== id || !chat.stop || chat.queued[0] !== q) return;
+    q.el.querySelector('.queued').textContent = 'Sending now: Copilot didn\'t stop, restarting it on this conversation';
+    await post('/api/copilot/close', { chat: id }).catch(() => {});
+    chat.stop?.();
+  }, 8000);
+}
+$('#chat-log').addEventListener('click', (e) => {
+  if (e.target.closest('[data-now]') == null) return;
+  const q = chat.queued.find((x) => x.el.contains(e.target));
+  if (q) sendNow(q);
+});
 // The button says what Enter will do.
 const SEND_ICONS = {
   send: '<path d="M2.5 2.75 14 8 2.5 13.25 4.25 8zM4.25 8H9"/>',
@@ -803,7 +828,7 @@ function sendLabel() {
   if (b.dataset.state === st) return;
   b.dataset.state = st;
   b.innerHTML = `<svg viewBox="0 0 16 16">${SEND_ICONS[st]}</svg>`;
-  const t = { send: 'Send (Enter)', queue: 'Queue: sends when Copilot is done (Enter)', stop: 'Stop Copilot' }[st];
+  const t = { send: 'Send (Enter)', queue: 'Queue: sends when Copilot is done (Enter; Ctrl+Enter stops Copilot and sends now)', stop: 'Stop Copilot' }[st];
   b.title = t; b.setAttribute('aria-label', t.replace(/ \(.*/, ''));
 }
 $('#chat-text').addEventListener('input', sendLabel);
@@ -904,6 +929,7 @@ $('#chat-text').addEventListener('keydown', (e) => {
     if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') { e.preventDefault(); pickSlash(slash.on); return; }
     if (e.key === 'Escape') { $('#cp-refs .slash')?.remove(); slash = null; e.stopPropagation(); return; }
   }
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.isComposing) { e.preventDefault(); forceNext = !!chat.stop; $('#chat-form').requestSubmit(); return; }
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('#chat-form').requestSubmit(); }
 });
 $('#cp-skills').addEventListener('click', (e) => {
