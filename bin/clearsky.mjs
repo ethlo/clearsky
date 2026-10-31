@@ -915,7 +915,7 @@ function askingChats(repo) {
   let chats = [...acpChats.values()].filter((c) => c.agent.sandboxed && c.busy);
   const narrow = (f) => { const n = chats.filter(f); if (n.length) chats = n; };
   narrow((c) => c.running.size);
-  if (repo) narrow((c) => chatRepo(c) === repo.toLowerCase());
+  if (repo) narrow((c) => chatRepos(c).has(repo.toLowerCase()));
   return chats;
 }
 // Reading GitHub as you, for the gate's checks (lib/github-gate.mjs).
@@ -950,7 +950,7 @@ async function githubScope({ repo, nodes = [] }) {
   if (!repo) return 'Clearsky couldn\'t tell which repo it changes';
   const r = repo.toLowerCase();
   const chats = [...acpChats.values()].filter((c) => c.agent.sandboxed && c.busy);
-  return chats.some((c) => chatRepo(c) === r || c.repos.has(r)) ? null : `goes to ${repo}, not a repo this chat works on`;
+  return chats.some((c) => chatRepos(c).has(r)) ? null : `goes to ${repo}, not a repo this chat works on`;
 }
 const chatRef = (c) => ({ id: c.id });
 
@@ -967,14 +967,29 @@ async function nodesRepo(ids) {
     return (n?.nameWithOwner || n?.repository?.nameWithOwner || n?.pullRequest?.repository?.nameWithOwner || '').toLowerCase() || null;
   } catch { return null; }
 }
-function chatRepo(c) {
-  if (c.repo === undefined) {
-    try {
-      const url = execFileSync('git', ['-C', c.cwd, 'remote', 'get-url', 'origin'], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-      c.repo = (url.match(/github\.com[:/]([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/) || [])[1]?.toLowerCase() || null;
-    } catch { c.repo = null; }
+// The GitHub repos a chat works on: those of its folder's git remotes (or, when it started in a
+// folder of clones, theirs), the PRs and issues it was started about, and the ones you allowed in
+// it. Looked up again after a minute: Copilot may clone or switch while it works.
+export const remoteRepo = (url) => (/github/i.test(url) && (url.match(/[:/]([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/) || [])[1]?.toLowerCase()) || null;
+function gitRepos(dir) {
+  try {
+    const out = execFileSync('git', ['-C', dir, 'remote', '-v'], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] });
+    return out.split('\n').map((l) => remoteRepo(l.split(/\s+/)[1] || '')).filter(Boolean);
+  } catch { return null; }
+}
+function chatRepos(c) {
+  if (!c.known || Date.now() - c.known.at > 60_000) {
+    const set = new Set(gitRepos(c.cwd) || []);
+    if (!existsSync(join(c.cwd, '.git')) && !set.size) {
+      const sub = (d) => { try { return readdirSync(d, { withFileTypes: true }).filter((e) => e.isDirectory() && !e.name.startsWith('.')).map((e) => join(d, e.name)); } catch { return []; } };
+      for (const d of sub(c.cwd).flatMap((d) => (existsSync(join(d, '.git')) ? [d] : sub(d).slice(0, 50))).slice(0, 300)) {
+        if (existsSync(join(d, '.git'))) for (const r of gitRepos(d) || []) set.add(r);
+      }
+    }
+    for (const k of localState.sessionRefs(stateFile)[c.id] || []) { const m = k.match(/^(?:pr|gh):([\w.-]+\/[\w.-]+)#/); if (m) set.add(m[1].toLowerCase()); }
+    c.known = { at: Date.now(), repos: set };
   }
-  return c.repo;
+  return new Set([...c.known.repos, ...c.repos]);
 }
 
 // Each sandboxed chat's VM (lib/vm.mjs), for `vm <command>`: started on first use, in the git
@@ -1034,6 +1049,7 @@ export function jiraTargets(argv) {
 // The Jira projects this chat works in: its tickets, and the one its branch is named after.
 function chatJira(c) {
   const set = new Set(c.jira);
+  for (const k of localState.sessionRefs(stateFile)[c.id] || []) if (k.startsWith('issue:')) set.add(k.slice(6).split('-')[0]);
   try {
     const branch = execFileSync('git', ['-C', c.cwd, 'branch', '--show-current'], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] });
     for (const m of branch.toUpperCase().matchAll(/\b([A-Z][A-Z0-9_]+)-\d+\b/g)) set.add(m[1]);

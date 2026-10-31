@@ -4,7 +4,7 @@ import { mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { logWrite, readWrites } from '../lib/agent-log.mjs';
-import { jiraTargets } from '../bin/clearsky.mjs';
+import { jiraTargets, remoteRepo } from '../bin/clearsky.mjs';
 
 test('every write Copilot makes as you is kept, newest first, per chat', () => {
   const file = join(mkdtempSync(join(tmpdir(), 'alog-')), 'sub', 'agent-writes.jsonl');
@@ -20,4 +20,12 @@ test('which Jira tickets and projects an acli command changes', () => {
   assert.deepEqual(jiraTargets(['jira', 'workitem', 'create', '--project=OPS', '--summary', 'x']), { keys: [], projects: ['OPS'], bulk: false });
   assert.equal(jiraTargets(['jira', 'workitem', 'edit', '--jql', 'project = ABC', '--assignee', 'x']).bulk, true);
   assert.deepEqual(jiraTargets(['jira', 'workitem', 'comment', 'create', '--key', 'ABC-1', '--body', 'see XYZ-9']).projects, ['ABC']);
+});
+
+test('the repo of a git remote, however the GitHub host is written', () => {
+  assert.equal(remoteRepo('git@github.com:Acme/API.git'), 'acme/api');
+  assert.equal(remoteRepo('git@github.com-work:acme/api.git'), 'acme/api');
+  assert.equal(remoteRepo('https://github.com/acme/api'), 'acme/api');
+  assert.equal(remoteRepo('ssh://git@github.com/acme/api.git/'), 'acme/api');
+  assert.equal(remoteRepo('git@gitlab.example.com:acme/api.git'), null);
 });
