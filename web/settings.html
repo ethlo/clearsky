@@ -182,7 +182,7 @@
     <p class="hint">Comma-separated, wildcards like <code>*.atlassian.net</code> allowed. Empty means Copilot, GitHub and your Jira site. Add package registries (say <code>repo.maven.apache.org</code>, <code>registry.npmjs.org</code>) if builds need them.</p>
     <label for="COPILOT_VM_IMAGES">Images the VM copies from your Docker</label>
     <textarea id="COPILOT_VM_IMAGES" data-key="COPILOT_VM_IMAGES" rows="2" spellcheck="false" placeholder="registry.example.com/team/"></textarea>
-    <p class="hint">Comma-separated name prefixes, for private images tests need (say from your company's registry). Before each <code>vm</code> command, images your own Docker has that start with one of these are copied into the chat's VM if it doesn't have them yet. Your registry login never goes in the VM; pull a newer image on your machine when you want it there.</p>
+    <p class="hint">Comma-separated, for private images tests need (say from your company's registry): a whole image like <code>registry.example.com/team/app:main</code>, or a name prefix like <code>registry.example.com/</code> (then the newest tag of each image there). Before each <code>vm</code> command, the ones your own Docker has are copied into the chat's VM if it doesn't have that version yet. Your registry login never goes in the VM. The VM gets what your Docker has: <code>docker pull</code> on your machine when the image changes.</p>
     <div class="row"><button class="save" data-keys="COPILOT_MODEL,COPILOT_EFFORT,COPILOT_PERMISSION,COPILOT_CWD,COPILOT_FOLDERS,COPILOT_ASSISTED_ALLOW,COPILOT_SANDBOX,COPILOT_SANDBOX_TOKEN,COPILOT_READ,COPILOT_DOMAINS,COPILOT_VM_IMAGES">Save</button><span class="msg"></span></div>
   </section>
 
