@@ -968,8 +968,9 @@ async function nodesRepo(ids) {
   } catch { return null; }
 }
 // The GitHub repos a chat works on: those of its folder's git remotes (or, when it started in a
-// folder of clones, theirs), the PRs and issues it was started about, and the ones you allowed in
-// it. Looked up again after a minute: Copilot may clone or switch while it works.
+// folder of clones, those whose branch is named after one of its tickets), the PRs it was started
+// about, and the ones you allowed in it. Looked up again after a minute: Copilot may clone or
+// switch branches while it works.
 export const remoteRepo = (url) => (/github/i.test(url) && (url.match(/[:/]([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/) || [])[1]?.toLowerCase()) || null;
 function gitRepos(dir) {
   try {
@@ -980,13 +981,17 @@ function gitRepos(dir) {
 function chatRepos(c) {
   if (!c.known || Date.now() - c.known.at > 60_000) {
     const set = new Set(gitRepos(c.cwd) || []);
-    if (!existsSync(join(c.cwd, '.git')) && !set.size) {
+    const refs = localState.sessionRefs(stateFile)[c.id] || [];
+    for (const k of refs) { const m = k.match(/^(?:pr|gh):([\w.-]+\/[\w.-]+)#/); if (m) set.add(m[1].toLowerCase()); }
+    const tickets = new Set([...c.tickets, ...refs.filter((k) => k.startsWith('issue:')).map((k) => k.slice(6))]);
+    if (!existsSync(join(c.cwd, '.git')) && tickets.size) {
       const sub = (d) => { try { return readdirSync(d, { withFileTypes: true }).filter((e) => e.isDirectory() && !e.name.startsWith('.')).map((e) => join(d, e.name)); } catch { return []; } };
+      const branch = (d) => { try { return (readFileSync(join(d, '.git', 'HEAD'), 'utf8').match(/^ref: refs\/heads\/(.+)/) || [])[1]?.toUpperCase() || ''; } catch { return ''; } };
+      const named = (b) => [...tickets].some((t) => new RegExp(`(^|[^A-Z0-9])${t}([^0-9]|$)`).test(b));
       for (const d of sub(c.cwd).flatMap((d) => (existsSync(join(d, '.git')) ? [d] : sub(d).slice(0, 50))).slice(0, 300)) {
-        if (existsSync(join(d, '.git'))) for (const r of gitRepos(d) || []) set.add(r);
+        if (named(branch(d))) for (const r of gitRepos(d) || []) set.add(r);
       }
     }
-    for (const k of localState.sessionRefs(stateFile)[c.id] || []) { const m = k.match(/^(?:pr|gh):([\w.-]+\/[\w.-]+)#/); if (m) set.add(m[1].toLowerCase()); }
     c.known = { at: Date.now(), repos: set };
   }
   return new Set([...c.known.repos, ...c.repos]);
@@ -1436,10 +1441,10 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, s
   let c = acpChats.get(chat);
   // A new Copilot for the same chat keeps its VM, and the repos and Jira projects it works on.
   let keep = {};
-  if (c && (c.sig !== sig || c.agent.closed)) { resumeId = c.agent.sessionId; keep = { vm: c.vm, repos: c.repos, jira: c.jira }; c.agent.close(); acpChats.delete(chat); c = null; }
+  if (c && (c.sig !== sig || c.agent.closed)) { resumeId = c.agent.sessionId; keep = { vm: c.vm, repos: c.repos, jira: c.jira, tickets: c.tickets }; c.agent.close(); acpChats.delete(chat); c = null; }
   if (!c) {
     const agent = await startAgent(bin, args, cwd, { sandbox });
-    c = { agent, sig, cwd, vm: keep.vm || null, repos: keep.repos || new Set(), jira: keep.jira || new Set(), waiting: new Map(), pending: new Map(), approved: new Set(), running: new Set(), shared: new Set(), emit: () => {}, lastUsed: Date.now() };
+    c = { agent, sig, cwd, vm: keep.vm || null, repos: keep.repos || new Set(), jira: keep.jira || new Set(), tickets: keep.tickets || new Set(), waiting: new Map(), pending: new Map(), approved: new Set(), running: new Set(), shared: new Set(), emit: () => {}, lastUsed: Date.now() };
     bindVm(c);
     const id = await agent.start(cwd, resumeId);
     c.id = id;
@@ -1452,7 +1457,7 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, s
   // What this chat is about (the items it was started with, the tickets you named): its writes
   // to those go through without asking.
   for (const x of scope) {
-    if (x.kind === 'issue') c.jira.add(x.key.split('-')[0]);
+    if (x.kind === 'issue') { c.jira.add(x.key.split('-')[0]); c.tickets.add(x.key); }
     else if (x.repo) c.repos.add(x.repo.toLowerCase());
   }
   const { agent } = c;
