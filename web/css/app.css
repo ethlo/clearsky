@@ -680,3 +680,7 @@ a.ref:hover { border-bottom-style: solid; }
 .wk-ev.k-homework .wk-t::before { content: '✎ '; }
 .wk-none { padding: 4px; }
 @media (max-width: 760px) { .wk-grid { grid-template-columns: 1fr; } .wk-day { min-height: 0; } }
+/* When each line in a chat happened, and how long ago the last one was. */
+time.at { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; margin-right: 6px; white-space: nowrap; }
+.idle { color: var(--muted); font-size: 11.5px; margin-top: 6px; }
+.idle b { font-weight: 600; color: var(--text-2); }

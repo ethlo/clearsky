@@ -1594,7 +1594,7 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, s
 function attachCopilot(chat, req, res) {
   const c = acpChats.get(chat);
   res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
-  const send = (e) => { if (!res.writableEnded && !res.destroyed) res.write(`${JSON.stringify(e)}\n`); };
+  const send = (e) => { e.at ??= Date.now(); if (!res.writableEnded && !res.destroyed) res.write(`${JSON.stringify(e)}\n`); };
   if (!c?.busy) { send({ type: 'done' }); return res.end(); }
   for (const ev of c.pending.values()) send(ev);
   const emit = (e) => { send(e); if (e.type === 'done') res.end(); };
@@ -1927,6 +1927,7 @@ function serve() {
           res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
           let sessionId = body.session;
           const emit = (e) => {
+            e.at ??= Date.now(); // when it happened, shown on each line in the chat
             if (e.type === 'session') { sessionId = e.id; linkRefs(); }
             if (!res.writableEnded && !res.destroyed) res.write(`${JSON.stringify(e)}\n`);
           };

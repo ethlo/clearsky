@@ -367,24 +367,40 @@ async function loadCopilotInfo() {
   chatSub();
 }
 
+// A tool step: its first event says when it started, a finished one when it ended.
+function toolEvent(segs, e) {
+  const t = segs.find((g) => g.type === 'tool' && g.id === e.id);
+  if (!t) { segs.push({ ...e, start: e.at }); return; }
+  Object.assign(t, Object.fromEntries(Object.entries(e).filter(([, v]) => v != null)));
+  if (['completed', 'failed'].includes(e.status)) t.end ||= e.at;
+}
+// When each line happened (local time), and how long a step took.
+const clock = (ms) => (ms ? new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '');
+const took = (a, b) => { const s = Math.round((b - a) / 1000); return s < 1 ? '' : s < 90 ? `${s}s` : `${Math.round(s / 60)} min`; };
+const stamp = (ms) => (ms ? `<time class="at" datetime="${new Date(ms).toISOString()}">${clock(ms)}</time>` : '');
+const sinceNow = (ms) => { const s = Math.max(0, Math.round((Date.now() - ms) / 1000)); return s < 60 ? `${s}s ago` : s < 3600 ? `${Math.floor(s / 60)} min ago` : `${Math.floor(s / 3600)} h ago`; };
+// "Last activity …" under a running answer keeps counting.
+setInterval(() => { for (const el of document.querySelectorAll('.idle[data-at]')) el.querySelector('b').textContent = sinceNow(Number(el.dataset.at)); }, 5000);
+
 // One answer is a list of segments: text, tool steps and approval questions, in order.
-function renderAnswer(segs) {
+function renderAnswer(segs, running = false) {
   // Stopped on an error or a failed step: a nudge sends "Try again" (shown on the last answer only).
   const end = segs.at(-1);
   const stuck = end && (end.type === 'error' || (end.type === 'tool' && end.status === 'failed'));
   return segs.map((g) => {
     if (g.type === 'text') return md(g.text);
-    if (g.type === 'tool') return `<div class="tool s-${esc(g.status || 'pending')}"><span>${icon('tool', 13)}</span>${esc(g.title || 'Tool')}<i>${esc((g.status || '').replace('_', ' '))}</i></div>`;
+    if (g.type === 'tool') return `<div class="tool s-${esc(g.status || 'pending')}">${stamp(g.start || g.at)}<span>${icon('tool', 13)}</span>${esc(g.title || 'Tool')}<i>${esc((g.status || '').replace('_', ' '))}${g.end && g.start ? ` · ${took(g.start, g.end)}` : ''}</i></div>`.replace(' · </i>', '</i>');
     if (g.type === 'permission') {
-      return `<div class="perm"><div class="perm-t">${esc(g.title)}</div>${g.detail ? `<code>${esc(g.detail)}</code>` : ''}
+      return `<div class="perm"><div class="perm-t">${stamp(g.at)}${esc(g.title)}</div>${g.detail ? `<code>${esc(g.detail)}</code>` : ''}
         ${g.advice ? `<div class="perm-a a-${g.advice.level === 'fine' ? 'fine' : 'check'}" title="Clearsky's advice, from GitHub's and Jira's facts (not from PR or ticket text). You decide.">${esc(g.advice.text)}</div>` : ''}
         <div class="perm-b">${g.answered ? `<span class="perm-done">${esc(g.answered)}</span>`
           : g.options.map((o) => `<button class="${/^allow/.test(o.kind) ? 'ok' : 'no'}" data-perm="${esc(g.id)}" data-option="${esc(o.id)}" data-name="${esc(o.name)}">${esc(o.name)}</button>`).join('')}</div></div>`;
     }
-    if (g.type === 'error') return `<div class="err">${esc(g.message)}</div>`;
-    if (g.type === 'note') return `<div class="tool"><span>${icon('folder', 13)}</span>${esc(g.text)}</div>`;
+    if (g.type === 'error') return `<div class="err">${stamp(g.at)}${esc(g.message)}</div>`;
+    if (g.type === 'note') return `<div class="tool">${stamp(g.at)}<span>${icon('folder', 13)}</span>${esc(g.text)}</div>`;
     return '';
-  }).join('') + (stuck ? `<button class="nudge" data-nudge title="Send Copilot “Try again.”">${icon('refresh', 13)} Nudge</button>` : '');
+  }).join('')
+    + (running && segs.moved ? `<div class="idle" data-at="${segs.moved}">Last activity ${clock(segs.moved)} · <b>${sinceNow(segs.moved)}</b></div>` : '') + (stuck ? `<button class="nudge" data-nudge title="Send Copilot “Try again.”">${icon('refresh', 13)} Nudge</button>` : '');
 }
 
 // Reopen a Copilot session (from here, the terminal or an editor) with its conversation so far.
@@ -524,11 +540,12 @@ async function send(text) {
   const out = addMsg('cp', '<span class="typing">Thinking</span>');
   const segs = [];
   out.segs = segs;
-  const draw = () => { out.innerHTML = renderAnswer(segs) || '<span class="typing">Thinking</span>'; $('#chat-log').scrollTop = $('#chat-log').scrollHeight; drawCtx(); };
+  const draw = () => { out.innerHTML = renderAnswer(segs, !ended) || '<span class="typing">Thinking</span>'; $('#chat-log').scrollTop = $('#chat-log').scrollHeight; drawCtx(); };
   const apply = (e) => {
     const last = segs.at(-1);
-    if (e.type === 'text') { if (last?.type === 'text') last.text += e.text; else segs.push({ type: 'text', text: e.text }); }
-    else if (e.type === 'tool') { const t = segs.find((g) => g.type === 'tool' && g.id === e.id); if (t) Object.assign(t, Object.fromEntries(Object.entries(e).filter(([, v]) => v != null))); else segs.push(e); }
+    e.at ||= Date.now(); segs.moved = e.at;
+    if (e.type === 'text') { if (last?.type === 'text') last.text += e.text; else segs.push({ type: 'text', text: e.text, at: e.at }); }
+    else if (e.type === 'tool') toolEvent(segs, e);
     else if (e.type === 'permission' || e.type === 'error') segs.push(e);
     // Answered in another chat (a GitHub change asks in every sandboxed chat that's working).
     else if (e.type === 'permission-done') { const g = segs.find((x) => x.type === 'permission' && x.id === e.id); if (g && !g.answered) g.answered = 'Answered'; }
@@ -536,8 +553,8 @@ async function send(text) {
     else if (e.type === 'commands' && chat.info) chat.info.commands = e.commands;
     // A new chat about a PR or ticket is named after it, not after the skill or first words.
     else if (e.type === 'title') { mine.title = e.title; if (here()) { chat.title = e.title; drawCtx(); } }
-    else if (e.type === 'cwd') { if (here()) { chat.cwd = e.cwd; drawCtx(); } segs.push({ type: 'note', text: `Working in ${e.cwd}` }); }
-    else if (e.type === 'note') { segs.push({ type: 'note', text: e.text }); if (/^(GitHub|Jira):/.test(e.text)) setTimeout(drawChanges, 300); }
+    else if (e.type === 'cwd') { if (here()) { chat.cwd = e.cwd; drawCtx(); } segs.push({ type: 'note', text: `Working in ${e.cwd}`, at: e.at }); }
+    else if (e.type === 'note') { segs.push({ type: 'note', text: e.text, at: e.at }); if (/^(GitHub|Jira):/.test(e.text)) setTimeout(drawChanges, 300); }
     if (e.type === 'done' || e.type === 'error') ended = true;
   };
   let ended = false;
@@ -599,7 +616,7 @@ async function attachLive(id) {
   const out = addMsg('cp', '<span class="typing">Still working</span>');
   const segs = [];
   out.segs = segs;
-  const draw = () => { out.innerHTML = renderAnswer(segs) || '<span class="typing">Still working</span>'; $('#chat-log').scrollTop = $('#chat-log').scrollHeight; drawCtx(); };
+  const draw = () => { out.innerHTML = renderAnswer(segs, !done) || '<span class="typing">Still working</span>'; $('#chat-log').scrollTop = $('#chat-log').scrollHeight; drawCtx(); };
   const ctrl = new AbortController();
   chat.stop = () => ctrl.abort();
   chat.halt = () => haltTurn(id);
@@ -619,11 +636,12 @@ async function attachLive(id) {
       for (const l of lines) {
         let e; try { e = JSON.parse(l); } catch { continue; }
         const last = segs.at(-1);
-        if (e.type === 'text') { if (last?.type === 'text') last.text += e.text; else segs.push({ type: 'text', text: e.text }); }
-        else if (e.type === 'tool') { const t = segs.find((g) => g.type === 'tool' && g.id === e.id); if (t) Object.assign(t, Object.fromEntries(Object.entries(e).filter(([, v]) => v != null))); else segs.push(e); }
+        e.at ||= Date.now(); segs.moved = e.at;
+        if (e.type === 'text') { if (last?.type === 'text') last.text += e.text; else segs.push({ type: 'text', text: e.text, at: e.at }); }
+        else if (e.type === 'tool') toolEvent(segs, e);
         else if (e.type === 'permission' || e.type === 'error') segs.push(e);
         else if (e.type === 'permission-done') { const g = segs.find((x) => x.type === 'permission' && x.id === e.id); if (g && !g.answered) g.answered = 'Answered'; }
-        else if (e.type === 'note') { segs.push({ type: 'note', text: e.text }); if (/^(GitHub|Jira):/.test(e.text)) setTimeout(drawChanges, 300); }
+        else if (e.type === 'note') { segs.push({ type: 'note', text: e.text, at: e.at }); if (/^(GitHub|Jira):/.test(e.text)) setTimeout(drawChanges, 300); }
         else if (e.type === 'done') done = true;
       }
       draw();
