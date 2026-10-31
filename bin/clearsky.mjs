@@ -1063,15 +1063,14 @@ function gitRepos(dir) {
     return out.split('\n').map((l) => remoteRepo(l.split(/\s+/)[1] || '')).filter(Boolean);
   } catch { return null; }
 }
-// Folders of working chats that are clones of a repo: the chat's own folder, or the clones in it.
+// Clones of a repo where a push's commits may be: working chats' folders, and the clones (and
+// worktrees) in your code folders (Settings → Copilot), since a chat may cd into one to push.
 function cloneDirs(repo) {
   const r = repo?.toLowerCase(), out = [];
   const sub = (d) => { try { return readdirSync(d, { withFileTypes: true }).filter((e) => e.isDirectory() && !e.name.startsWith('.')).map((e) => join(d, e.name)); } catch { return []; } };
-  for (const c of acpChats.values()) {
-    if (!c.busy) continue;
-    const dirs = existsSync(join(c.cwd, '.git')) ? [c.cwd] : sub(c.cwd).flatMap((d) => (existsSync(join(d, '.git')) ? [d] : sub(d).slice(0, 50))).slice(0, 300);
-    for (const d of dirs) if ((gitRepos(d) || []).includes(r)) out.push(d);
-  }
+  const clones = (root) => (existsSync(join(root, '.git')) ? [root] : sub(root).flatMap((d) => (existsSync(join(d, '.git')) ? [d] : sub(d).slice(0, 50))).slice(0, 300));
+  const roots = [...[...acpChats.values()].filter((c) => c.busy).map((c) => c.cwd), ...copilotFolders().map((d) => d.replace(/^~(?=\/|$)/, homedir()))];
+  for (const root of new Set(roots)) for (const d of clones(root)) if ((gitRepos(d) || []).includes(r)) out.push(d);
   return [...new Set(out)];
 }
 function chatRepos(c) {

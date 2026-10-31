@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VmImage, ChatVm, vmSize, VM_DEFAULT } from '../lib/vm.mjs';
+import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VmImage, ChatVm, vmSize, VM_DEFAULT, loginForwarder, loginHead } from '../lib/vm.mjs';
 import { registryWrite, githubFilter } from '../lib/github-gate.mjs';
 import { srtSettings } from '../lib/sandbox.mjs';
 import { needs, serveBroker } from '../lib/broker.mjs';
@@ -159,4 +159,22 @@ test('vmSize: default, overrides, and kept within the machine', () => {
   assert.equal(vmSize({ COPILOT_VM_CPUS: '0' }, host).cpus, Math.min(20, VM_DEFAULT.cpus));
   assert.equal(vmSize({ COPILOT_VM_MEMORY_GB: '6,5' }, host).memMb, 6656);
   assert.equal(vmSize({ COPILOT_VM_CPUS: 'lots' }, host).cpus, Math.min(20, VM_DEFAULT.cpus));
+});
+
+test('the VM\'s proxy needs no login: Clearsky adds it on the way to srt\'s proxy', async () => {
+  const { createServer, connect } = await import('node:net');
+  assert.equal(loginHead('GET http://a/x HTTP/1.1\r\nHost: a\r\nProxy-Connection: keep-alive\r\nProxy-Authorization: Basic bad', 'dTpw'),
+    'GET http://a/x HTTP/1.1\r\nProxy-Authorization: Basic dTpw\r\nConnection: close\r\nHost: a');
+  assert.equal(loginHead('CONNECT a:443 HTTP/1.1\r\nHost: a:443', 'dTpw'), 'CONNECT a:443 HTTP/1.1\r\nProxy-Authorization: Basic dTpw\r\nHost: a:443');
+  const seen = [];
+  const up = createServer((s) => s.on('data', (d) => { seen.push(d.toString()); s.end('HTTP/1.1 200 OK\r\n\r\nhi'); }));
+  await new Promise((ok) => up.listen(0, '127.0.0.1', ok));
+  const fwd = await loginForwarder({ url: 'http://u:p%40ss@', port: up.address().port });
+  const got = await new Promise((ok) => {
+    const c = connect(fwd.address().port, '127.0.0.1', () => c.write('GET http://example.org/ HTTP/1.1\r\nHost: example.org\r\n\r\n'));
+    let out = ''; c.on('data', (d) => { out += d; }); c.on('close', () => ok(out));
+  });
+  assert.match(got, /200 OK[\s\S]*hi/);
+  assert.match(seen.join(''), new RegExp(`Proxy-Authorization: Basic ${Buffer.from('u:p@ss').toString('base64')}`));
+  fwd.close(); up.close();
 });
