@@ -52,6 +52,9 @@ test('a chat\'s VM keeps a log and a view of what runs in it', () => {
   assert.equal(vm.events.length, 300);
   assert.equal(vm.events[0].text, 'e5');
   assert.equal(seen.length, 305);
+  const priv = new ChatVm({ id: 'p', cwd: '/w', image, proxy: { port: 1, url: 'http://srt:s3cr3t@' } });
+  priv.event('$ curl -x http://srt:s3cr3t@10.0.2.100:3128 https://x; echo s3cr3t; git clone https://a:b@github.com/x');
+  assert.equal(priv.events[0].text, '$ curl -x http://…@10.0.2.100:3128 https://x; echo …; git clone https://…@github.com/x');
   const v = vm.view();
   assert.equal(v.state, 'off');
   assert.deepEqual(v.network.hosts, ['repo1.maven.org']);
