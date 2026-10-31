@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { vmSupport, mavenSettings, javaEnv, cloudConfig, VM_DOMAINS, VmImage, ChatVm } from '../lib/vm.mjs';
+import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, VM_DOMAINS, VmImage, ChatVm } from '../lib/vm.mjs';
 import { needs, serveBroker } from '../lib/broker.mjs';
 
 test('whether this machine can run the VM, and why not', () => {
@@ -28,7 +28,8 @@ test('the prepared image: our keys, Docker and Maven via the proxy, nothing left
   assert.match(c, /ed25519_private: \|\n    -----BEGIN OPENSSH PRIVATE KEY-----\n    abc\n/);
   assert.match(c, /http_proxy: http:\/\/srt:t@10\.0\.2\.100:3128/);
   assert.match(c, /packages: \[docker\.io, maven\]/);
-  for (const s of ['systemctl disable docker.service docker.socket', 'snapd.seeded.service', 'systemd-networkd-wait-online', 'rm -f /etc/apt/apt.conf.d/90cloud-init-aptproxy', 'cloud-init clean --logs', 'cloud-init.disabled']) assert.ok(c.includes(s), s);
+  assert.match(cloudConfig({ key: 'k', hostKey: 'h', hostPub: 'p', proxy: 'x', uid: 1234 }), /    uid: 1234\n/);
+  for (const s of ['PerSourcePenalties no', 'systemctl disable docker.service docker.socket', 'snapd.seeded.service', 'systemd-networkd-wait-online', 'rm -f /etc/apt/apt.conf.d/90cloud-init-aptproxy', 'cloud-init clean --logs', 'cloud-init.disabled']) assert.ok(c.includes(s), s);
 });
 
 test('a command runs with your JDK only when it is one the VM has', () => {
@@ -108,4 +109,13 @@ test('an `outside` card can send the command to the chat\'s VM instead', async (
     const r = await new Promise((done) => execFile(process.execPath, [bin, './mvnw', 'test'], { cwd: work, env: { ...process.env, CLEARSKY_BROKER_SOCKET: path, CLEARSKY_BROKER_KEY: 'k1' } }, (e, o) => done({ code: e ? e.code : 0, out: o })));
     assert.deepEqual([r.code, r.out, asked, ran], [0, 'in vm\n', [true], ['./mvnw test']]);
   } finally { server.close(); }
+});
+
+test('a VM resumes from its snapshot only on the same devices: every share is always there', () => {
+  const shares = [{ tag: 'work', ro: false, path: '/w' }, { tag: 'jvm', ro: true, path: '/empty' }];
+  const a = vmArgs({ disk: 'd', serial: 's', sshPort: 2222, proxyPort: 3128, qmp: 'q', shares });
+  assert.ok(a.includes('local,path=/w,mount_tag=work,security_model=none'));
+  assert.ok(a.includes('local,path=/empty,mount_tag=jvm,security_model=none,readonly=on'));
+  assert.ok(a.some((x) => x.startsWith('user,id=n0,restrict=on,hostfwd=tcp:127.0.0.1:2222-:22,guestfwd=tcp:10.0.2.100:3128-cmd:socat - TCP:127.0.0.1:3128')));
+  assert.deepEqual(a.slice(-2), ['-qmp', 'unix:q,server=on,wait=off']);
 });
