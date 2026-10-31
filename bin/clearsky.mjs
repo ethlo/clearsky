@@ -958,17 +958,16 @@ async function prFacts(repo, number, chats) {
   const ours = chats.some((c) => (localState.sessionRefs(stateFile)[c.id] || []).some((k) => k.toLowerCase() === `pr:${r}#${number}`)
     || [...c.tickets].some((t) => new RegExp(`(^|[^A-Z0-9])${t}([^0-9]|$)`).test(head))
     || currentBranch(c.cwd) === pr.head?.ref) && chats.some((c) => chatRepos(c).has(r));
-  return { number, ours, ci: await ciOf(repo, pr.head?.sha), draft: !!pr.draft, mergeable: pr.mergeable, base: pr.base?.ref,
+  return { number, ours, ci: await prCi(repo, number).catch(() => null), draft: !!pr.draft, mergeable: pr.mergeable, base: pr.base?.ref,
     approvals: byState('APPROVED'), changesRequested: byState('CHANGES_REQUESTED') };
 }
-// CI on a commit: its check runs and statuses together.
-async function ciOf(repo, sha) {
-  if (!sha) return null;
-  const [runs, status] = await Promise.all([ghGet(`/repos/${repo}/commits/${sha}/check-runs?per_page=100`), ghGet(`/repos/${repo}/commits/${sha}/status`)]);
-  const all = [...(runs.check_runs || []).map((x) => (x.status !== 'completed' ? 'PENDING' : ['success', 'skipped', 'neutral'].includes(x.conclusion) ? 'SUCCESS' : 'FAILURE')),
-    ...(status.statuses || []).map((x) => ({ success: 'SUCCESS', pending: 'PENDING' }[x.state] || 'FAILURE'))];
-  if (!all.length) return null;
-  return all.includes('FAILURE') ? 'FAILURE' : all.includes('PENDING') ? 'PENDING' : 'SUCCESS';
+// CI on the PR's latest commit, as the review queue sees it (ciState in lib/modules/github.mjs).
+async function prCi(repo, number) {
+  const [owner, name] = repo.split('/');
+  const d = await gql(`query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) {
+    commits(last: 1) { nodes { commit { statusCheckRollup { state } checkSuites(first: 20) { nodes { status conclusion workflowRun { event url workflow { name } } } } } } } } } }`,
+  { owner, name, number });
+  return ciState(d.repository.pullRequest);
 }
 async function branchFacts(repo, name) {
   const owner = repo.split('/')[0];

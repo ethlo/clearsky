@@ -203,6 +203,11 @@ test('PR status: who has the ball', async () => {
   assert.deepEqual(myPrStatus(pr(suites('IN_PROGRESS', null)), 'me'), { label: 'CI build running', detail: 'Build', url: 'https://ci/1', owner: 'others', tone: 'wait' });
   assert.equal(label(suites('COMPLETED', 'FAILURE')), 'CI failing');
   assert.equal(label(suites('COMPLETED', 'SUCCESS')), 'Ready for a reviewer');
+  // GitHub's own runs (Copilot's reviewer, code scanning) aren't the repo's CI; a rerun counts by its latest.
+  const run = (event, name, conclusion) => ({ status: 'COMPLETED', conclusion, workflowRun: { event, url: `https://ci/${name}`, workflow: { name } } });
+  const many = (...nodes) => ({ commits: { nodes: [{ commit: { statusCheckRollup: { state: 'SUCCESS' }, checkSuites: { nodes } } }] } });
+  assert.equal(label(many(run('dynamic', 'Copilot', 'FAILURE'), run('dynamic', 'GitHub Advanced Security', 'FAILURE'), run('pull_request', 'Build', 'SUCCESS'))), 'Ready for a reviewer');
+  assert.equal(label(many(run('workflow_dispatch', 'Build', 'FAILURE'), run('workflow_dispatch', 'Build', 'SUCCESS'))), 'Ready for a reviewer');
   // Copilot's reviewer bot comments after every push; that never makes it your move.
   const bot = { __typename: 'Bot', login: 'copilot-pull-request-reviewer' };
   assert.equal(label({ ...asked, reviews: { nodes: [{ state: 'COMMENTED', submittedAt: hoursAgo(0.1), author: bot }] },
