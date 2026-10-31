@@ -239,13 +239,16 @@ async function drawVm() {
     : `<div class="vm-empty">${on ? 'No containers yet' : 'Starts on the next vm command'}</div>`;
   const box = `<div class="vm-box"><div class="vm-box-h">${icon('source', 13)} ${v.vcpus} vCPUs · ${sys}${v.diskBytes ? ` · disk ${gb(v.diskBytes / 1048576)}` : ''}</div>
     <div class="vm-lbl">Docker</div>${ctrs}</div>`;
-  const net = `<div class="vm-tier"><div class="vm-lbl">Network</div><div class="vm-note">Only through ${esc(v.network.via)}; containers can't reach your machine</div>
-    <details><summary>${v.network.hosts.length} hosts it can reach</summary><div class="vm-hosts">${v.network.hosts.map(esc).join(', ')}</div></details></div>`;
+  // The hosts it can reach, grouped by what they're for.
+  const GROUPS = [['Docker', /docker/], ['Maven', /maven|gradle|jfrog|sonatype/], ['GitHub', /github/], ['Ubuntu', /ubuntu/]];
+  const groups = new Map();
+  for (const h of v.network.hosts) { const g = (GROUPS.find(([, re]) => re.test(h)) || ['Other'])[0]; groups.set(g, [...(groups.get(g) || []), h]); }
+  const net = `<div class="vm-tier"><div class="vm-lbl">Network · only via the sandbox's proxy</div>
+    ${[...groups].map(([g, hs]) => `<div class="vm-net"><span>${esc(g)}</span><div>${hs.map((h) => `<code>${esc(h)}</code>`).join('')}</div></div>`).join('')}</div>`;
   const t = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
   const log = `<div class="vm-lbl">Events</div><ol class="vm-log">${v.events.map((e) => `<li class="k-${esc(e.kind)}"><time>${t(e.at)}</time><span>${esc(e.text)}</span></li>`).join('')}</ol>`;
-  const old = el.querySelector('.vm-log'), atEnd = !old || old.scrollTop + old.clientHeight >= old.scrollHeight - 4, open = !!el.querySelector('details[open]');
+  const old = el.querySelector('.vm-log'), atEnd = !old || old.scrollTop + old.clientHeight >= old.scrollHeight - 4;
   el.innerHTML = `<h4>VM</h4>${head}<div class="vm-map">${shares}<div class="vm-arrow"></div>${box}<div class="vm-arrow"></div>${net}</div>${log}`;
-  if (open) el.querySelector('details').open = true;
   const ol = el.querySelector('.vm-log');
   ol.scrollTop = atEnd ? ol.scrollHeight : old.scrollTop;
   const stop = $('#vm-stop');

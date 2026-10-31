@@ -484,6 +484,10 @@ a.ref:hover { border-bottom-style: solid; }
 .vm-ctr.c-running i { background: var(--green); animation: pulse 2s ease-in-out infinite; }
 .vm-ctr.c-exited, .vm-ctr.c-dead { opacity: .65; }
 .vm-ctr.c-exited i, .vm-ctr.c-dead i { background: var(--muted); }
+.vm-net { display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 6px; align-items: baseline; }
+.vm-net > div { display: flex; flex-wrap: wrap; gap: 3px; }
+.vm-net span { color: var(--muted); font-size: 11px; }
+.vm-net code { font-size: 10.5px; padding: 1px 5px; border-radius: 5px; background: var(--surface-2); color: var(--text-2); overflow-wrap: anywhere; }
 .vm-empty { color: var(--muted); font-style: italic; }
 .vm-note { color: var(--text-2); }
 .vm-log { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; font-size: 11.5px; display: flex; flex-direction: column; gap: 2px; border-top: 1px solid var(--line); padding-top: 4px; }
