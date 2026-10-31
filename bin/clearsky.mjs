@@ -986,7 +986,13 @@ function chatRepos(c) {
     const tickets = new Set([...c.tickets, ...refs.filter((k) => k.startsWith('issue:')).map((k) => k.slice(6))]);
     if (!existsSync(join(c.cwd, '.git')) && tickets.size) {
       const sub = (d) => { try { return readdirSync(d, { withFileTypes: true }).filter((e) => e.isDirectory() && !e.name.startsWith('.')).map((e) => join(d, e.name)); } catch { return []; } };
-      const branch = (d) => { try { return (readFileSync(join(d, '.git', 'HEAD'), 'utf8').match(/^ref: refs\/heads\/(.+)/) || [])[1]?.toUpperCase() || ''; } catch { return ''; } };
+      const branch = (d) => {
+        try {
+          // A worktree's .git is a file pointing at its own folder in the main clone.
+          const git = statSync(join(d, '.git')).isFile() ? resolve(d, readFileSync(join(d, '.git'), 'utf8').match(/^gitdir: (.+)$/m)[1].trim()) : join(d, '.git');
+          return (readFileSync(join(git, 'HEAD'), 'utf8').match(/^ref: refs\/heads\/(.+)/) || [])[1]?.toUpperCase() || '';
+        } catch { return ''; }
+      };
       const named = (b) => [...tickets].some((t) => new RegExp(`(^|[^A-Z0-9])${t}([^0-9]|$)`).test(b));
       for (const d of sub(c.cwd).flatMap((d) => (existsSync(join(d, '.git')) ? [d] : sub(d).slice(0, 50))).slice(0, 300)) {
         if (named(branch(d))) for (const r of gitRepos(d) || []) set.add(r);
