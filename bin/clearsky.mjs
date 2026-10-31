@@ -26,7 +26,8 @@ import { VmImage, ChatVm, vmSupport, VM_DOMAINS } from '../lib/vm.mjs';
 import { logWrite, readWrites } from '../lib/agent-log.mjs';
 import { serveBroker, brokerSocket } from '../lib/broker.mjs';
 import { mavenSandbox, sandboxCa } from '../lib/maven.mjs';
-import { githubFilter, REGISTRY_HOSTS } from '../lib/github-gate.mjs';
+import { githubFilter, REGISTRY_HOSTS, SHARED_BRANCH } from '../lib/github-gate.mjs';
+import { githubAdvice, jiraAdvice, outsideAdvice, parseRules, ruleLabel } from '../lib/advice.mjs';
 import { attentionItems, diffAttention, desktopNotify, DbusNotifier } from '../lib/notify.mjs';
 import { loadSources, makeContext, hook, asList } from '../lib/sources.mjs';
 import { pluginItems } from '../lib/items.mjs';
@@ -883,15 +884,23 @@ async function githubAsk(what, { repo, nodes = [], why = null } = {}) {
   const chats = askingChats(repo);
   if (!chats.length) return false;
   const shared = chats.length > 1;
+  const advice = await githubCardAdvice(what, repo, nodes, why, chats).catch(() => null);
+  // A kind of change you said to let through from now on (Settings), when it looks fine.
+  if (advice?.rule && advice.level === 'fine' && gateRules().has(advice.rule)) {
+    logWrite(agentLogFile, { where: 'github', what, target: repo, chats: chats.map(chatRef), decided: `auto (rule ${advice.rule})` });
+    for (const c of chats) c.emit({ type: 'note', text: `GitHub: ${what} (let through: ${ruleLabel(advice.rule)})` });
+    return true;
+  }
   if (chats.length === 1 && chats[0].approved.size) {
     logWrite(agentLogFile, { where: 'github', what, target: repo, chats: chats.map(chatRef), decided: 'allowed with a step' });
     return Promise.resolve(true);
   }
   return new Promise((done) => {
     const id = randomBytes(6).toString('hex');
-    const ev = { type: 'permission', id, title: 'Change GitHub as you', kind: 'execute', detail: what,
-      options: [{ id: 'allow', name: 'Allow', kind: 'allow_once' }, { id: 'deny', name: 'Deny', kind: 'reject_once' }] };
-    const finish = (ok) => {
+    const ev = { type: 'permission', id, title: 'Change GitHub as you', kind: 'execute', detail: what, advice,
+      options: [{ id: 'allow', name: 'Allow', kind: 'allow_once' }, ...ruleOption(advice), { id: 'deny', name: 'Deny', kind: 'reject_once' }] };
+    const finish = (ok, rule = false) => {
+      if (ok && rule && advice?.rule) addGateRule(advice.rule);
       for (const c of chats) { c.waiting.delete(id); c.pending.delete(id); c.shared.delete(id); c.emit({ type: 'permission-done', id }); }
       const target = repo || (what.match(/^git push to (\S+)/) || [])[1] || null;
       // Allowed in the one chat it came from: that repo is part of this chat's work from now on.
@@ -901,12 +910,74 @@ async function githubAsk(what, { repo, nodes = [], why = null } = {}) {
     };
     for (const c of chats) {
       if (c.mode === 'full') return finish(true); // Full: you allowed everything (logged as allowed)
-      c.waiting.set(id, (answer) => finish(answer.optionId === 'allow'));
+      c.waiting.set(id, (answer) => finish(answer.optionId === 'allow' || answer.optionId === 'rule', answer.optionId === 'rule'));
       if (shared) c.shared.add(id); // may not be this chat's: it doesn't mark the chat as needing you
       c.pending.set(id, ev);
       c.emit(ev);
     }
   });
+}
+
+// Kinds of change you let through from now on, from a card's "always" button (Settings → Copilot).
+const gateRules = () => parseRules(process.env.COPILOT_GATE_RULES);
+function addGateRule(rule) {
+  const rules = gateRules();
+  if (rules.has(rule)) return;
+  rules.add(rule);
+  const values = settings.validate({ COPILOT_GATE_RULES: [...rules].join(', ') });
+  settings.writeEnvFile(userEnvFile, values);
+  applySettings(values);
+}
+// The card's "always" button: offered when the advice names a kind of change and, for merges and
+// branch deletes, only when this one looks fine (the rule only ever lets fine ones through).
+const ruleOption = (a) => (a?.rule && (a.level === 'fine' || /^(repo|jira):/.test(a.rule))
+  ? [{ id: 'rule', name: `Allow, and always for ${ruleLabel(a.rule)}`, kind: 'allow_always' }] : []);
+
+// What Clearsky reads from GitHub (as you, read only) to advise on a card (lib/advice.mjs): the
+// PR a merge merges, the branch a delete deletes. Only states and names, never PR text.
+async function githubCardAdvice(what, repo, nodes, why, chats) {
+  const facts = { chatRepos: new Set(chats.flatMap((c) => [...chatRepos(c)])) };
+  let number = Number(what.match(/\/pulls\/(\d+)\/merge\b/)?.[1]) || null;
+  if (!number && /\(mergePullRequest\)$/.test(what)) {
+    const d = await gql('query($ids: [ID!]!) { nodes(ids: $ids) { ... on PullRequest { number repository { nameWithOwner } } } }', { ids: nodes }).catch(() => null);
+    const pr = (d?.nodes || []).find((n) => n?.number);
+    if (pr) { number = pr.number; repo ||= pr.repository.nameWithOwner; }
+    facts.merge = null;
+  }
+  if (number && repo) facts.merge = await prFacts(repo, number, chats).catch(() => null);
+  const branch = why?.match(/^deletes (\S+)$/)?.[1] || what.match(/^DELETE \S+?\/git\/refs\/heads\/(.+)$/)?.[1];
+  if (branch && repo) facts.branch = await branchFacts(repo, decodeURIComponent(branch)).catch(() => null);
+  return githubAdvice(why || '', facts);
+}
+async function prFacts(repo, number, chats) {
+  const [pr, reviews] = await Promise.all([ghGet(`/repos/${repo}/pulls/${number}`), ghGet(`/repos/${repo}/pulls/${number}/reviews?per_page=100`)]);
+  const latest = new Map();
+  for (const r of reviews || []) if (r.user?.login && r.user.login !== pr.user?.login && ['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'].includes(r.state)) latest.set(r.user.login, r.state);
+  const byState = (st) => [...latest].filter(([, v]) => v === st).map(([k]) => k);
+  const r = repo.toLowerCase(), head = String(pr.head?.ref || '').toUpperCase();
+  const ours = chats.some((c) => (localState.sessionRefs(stateFile)[c.id] || []).some((k) => k.toLowerCase() === `pr:${r}#${number}`)
+    || [...c.tickets].some((t) => new RegExp(`(^|[^A-Z0-9])${t}([^0-9]|$)`).test(head))
+    || currentBranch(c.cwd) === pr.head?.ref) && chats.some((c) => chatRepos(c).has(r));
+  return { number, ours, ci: await ciOf(repo, pr.head?.sha), draft: !!pr.draft, mergeable: pr.mergeable, base: pr.base?.ref,
+    approvals: byState('APPROVED'), changesRequested: byState('CHANGES_REQUESTED') };
+}
+// CI on a commit: its check runs and statuses together.
+async function ciOf(repo, sha) {
+  if (!sha) return null;
+  const [runs, status] = await Promise.all([ghGet(`/repos/${repo}/commits/${sha}/check-runs?per_page=100`), ghGet(`/repos/${repo}/commits/${sha}/status`)]);
+  const all = [...(runs.check_runs || []).map((x) => (x.status !== 'completed' ? 'PENDING' : ['success', 'skipped', 'neutral'].includes(x.conclusion) ? 'SUCCESS' : 'FAILURE')),
+    ...(status.statuses || []).map((x) => ({ success: 'SUCCESS', pending: 'PENDING' }[x.state] || 'FAILURE'))];
+  if (!all.length) return null;
+  return all.includes('FAILURE') ? 'FAILURE' : all.includes('PENDING') ? 'PENDING' : 'SUCCESS';
+}
+async function branchFacts(repo, name) {
+  const owner = repo.split('/')[0];
+  const prs = await ghGet(`/repos/${repo}/pulls?state=all&per_page=10&head=${encodeURIComponent(`${owner}:${name}`)}`);
+  return { name, shared: SHARED_BRANCH.test(name), open: (prs || []).find((p) => p.state === 'open')?.number || null,
+    merged: (prs || []).find((p) => p.merged_at)?.number || null };
+}
+function currentBranch(dir) {
+  try { return execFileSync('git', ['-C', dir, 'branch', '--show-current'], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null; } catch { return null; }
 }
 
 // Which working chat a GitHub change came from. srt's proxy can't tell, so narrow it down: chats
@@ -951,6 +1022,7 @@ async function githubScope({ repo, nodes = [] }) {
   if (!repo) return 'Clearsky couldn\'t tell which repo it changes';
   const r = repo.toLowerCase();
   const chats = [...acpChats.values()].filter((c) => c.agent.sandboxed && c.busy);
+  if (gateRules().has(`repo:${r}`)) return null; // you let this repo's everyday changes through (Settings)
   return chats.some((c) => chatRepos(c).has(r)) ? null : `goes to ${repo}, not a repo this chat works on`;
 }
 const chatRef = (c) => ({ id: c.id });
@@ -1086,7 +1158,7 @@ function brokerAsk({ key, tool, argv, cwd, vm = false }) {
   const log = (decided) => jira && logWrite(agentLogFile, { where: 'jira', what: line, target: jira.keys.join(', ') || jira.projects.join(', ') || null, chats: [chatRef(c)], decided });
   if (c.mode === 'full') { log('allowed'); return Promise.resolve(true); } // Full: you allowed everything
   // A Jira change to the tickets of this chat's project goes through, and shows in the chat.
-  if (jira && !jira.bulk && jira.projects.length && jira.projects.every((p) => chatJira(c).has(p))) {
+  if (jira && !jira.bulk && jira.projects.length && jira.projects.every((p) => chatJira(c).has(p) || gateRules().has(`jira:${p}`))) {
     log('auto');
     c.emit({ type: 'note', text: `Jira: ${line}` });
     return Promise.resolve(true);
@@ -1097,11 +1169,13 @@ function brokerAsk({ key, tool, argv, cwd, vm = false }) {
     // The same command again (a test run after a fix) can be allowed for the rest of this chat.
     const same = `${cwd}\n${line}`;
     if (c.allowedRuns?.has(same)) return done(true);
-    const ev = { type: 'permission', id, title, kind: 'execute', detail: `${line}\n(in ${cwd.replace(homedir(), '~')})`,
+    const advice = jira ? jiraAdvice(jira, chatJira(c)) : tool === 'outside' ? outsideAdvice({ vm }) : null;
+    const ev = { type: 'permission', id, title, kind: 'execute', detail: `${line}\n(in ${cwd.replace(homedir(), '~')})`, advice,
       options: [...(vm ? [{ id: 'vm', name: 'Run in the VM instead', kind: 'allow_once' }] : []), { id: 'allow', name: 'Allow', kind: 'allow_once' },
-        { id: 'chat', name: 'Allow this command again in this chat', kind: 'allow_always' }, { id: 'deny', name: 'Deny', kind: 'reject_once' }] };
+        ...(jira ? ruleOption(advice) : [{ id: 'chat', name: 'Allow this command again in this chat', kind: 'allow_always' }]), { id: 'deny', name: 'Deny', kind: 'reject_once' }] };
     c.waiting.set(id, (answer) => {
       c.pending.delete(id);
+      if (answer.optionId === 'rule' && advice?.rule) { addGateRule(advice.rule); answer = { ...answer, optionId: 'allow' }; }
       if (answer.optionId === 'chat') (c.allowedRuns ||= new Set()).add(same);
       if (answer.optionId === 'vm') return done('vm');
       const ok = answer.optionId === 'allow' || answer.optionId === 'chat';
