@@ -82,6 +82,17 @@ test('everyday branch and PR work goes through and is told; what is hard to undo
   assert.equal((await f(req('POST', 'https://api.githubcopilot.com/mcp/', {}))).action, 'deny');
 });
 
+test('a push is checked in the clone it comes from: GitHub hasn\'t got the new commits yet', async () => {
+  const asked = [];
+  const look = { compare: async () => { throw new Error('404'); }, fastForward: async (repo, o, n) => (n === sha('f') ? false : n === sha('c') ? null : true) };
+  const f = githubFilter(async (what) => { asked.push(what); return true; }, { look });
+  assert.equal((await f(push(`${sha('a')} ${sha('b')} refs/heads/feature/abc-1`))).action, 'allow');
+  assert.equal(asked.length, 0, 'a fast-forward goes through even though GitHub can\'t compare it');
+  await f(push(`${sha('a')} ${sha('f')} refs/heads/feature/abc-1`));
+  await f(push(`${sha('a')} ${sha('c')} refs/heads/feature/abc-1`));
+  assert.deepEqual(asked.map((a) => a.replace(/^.*\((.*)\)$/, '$1')), ['force-pushes feature/abc-1', 'a push to feature/abc-1 Clearsky couldn\'t check']);
+});
+
 test('a push to a protected main is GitHub\'s to refuse; writes to other repos ask', async () => {
   const asked = [];
   const look = { compare: async () => ({ status: 'ahead' }), protected: async (repo, b) => repo === 'acme/api' && b === 'main' };

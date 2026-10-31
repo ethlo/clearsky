@@ -997,6 +997,17 @@ async function ghGet(path) {
 }
 const defaultBranches = new Map();
 const githubLook = {
+  // Whether a push only adds commits (old is an ancestor of new), asked of a working chat's clone
+  // of the repo, where the pushed commits are; null when none of them has both.
+  async fastForward(repo, oldSha, newSha) {
+    if (!/^[0-9a-f]{40}$/.test(oldSha) || !/^[0-9a-f]{40}$/.test(newSha)) return null;
+    for (const dir of cloneDirs(repo)) {
+      const code = await new Promise((done) => execFile('git', ['-C', dir, 'merge-base', '--is-ancestor', oldSha, newSha], { timeout: 5000 }, (e) => done(e ? e.code : 0)));
+      if (code === 0) return true;
+      if (code === 1) return false;
+    }
+    return null;
+  },
   compare: (repo, base, head) => ghGet(`/repos/${repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`),
   run: (repo, id) => ghGet(`/repos/${repo}/actions/runs/${id}`),
   protected: async (repo, branch) => !!(await ghGet(`/repos/${repo}/branches/${encodeURIComponent(branch)}`)).protected,
@@ -1050,6 +1061,17 @@ function gitRepos(dir) {
     const out = execFileSync('git', ['-C', dir, 'remote', '-v'], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] });
     return out.split('\n').map((l) => remoteRepo(l.split(/\s+/)[1] || '')).filter(Boolean);
   } catch { return null; }
+}
+// Folders of working chats that are clones of a repo: the chat's own folder, or the clones in it.
+function cloneDirs(repo) {
+  const r = repo?.toLowerCase(), out = [];
+  const sub = (d) => { try { return readdirSync(d, { withFileTypes: true }).filter((e) => e.isDirectory() && !e.name.startsWith('.')).map((e) => join(d, e.name)); } catch { return []; } };
+  for (const c of acpChats.values()) {
+    if (!c.busy) continue;
+    const dirs = existsSync(join(c.cwd, '.git')) ? [c.cwd] : sub(c.cwd).flatMap((d) => (existsSync(join(d, '.git')) ? [d] : sub(d).slice(0, 50))).slice(0, 300);
+    for (const d of dirs) if ((gitRepos(d) || []).includes(r)) out.push(d);
+  }
+  return [...new Set(out)];
 }
 function chatRepos(c) {
   if (!c.known || Date.now() - c.known.at > 60_000) {

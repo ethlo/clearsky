@@ -641,6 +641,7 @@ async function send(text) {
     if (here()) rememberChat();
     setTimeout(loadLinks, 500);
     if (!segs.length) segs.push({ type: 'error', message: 'No answer.' });
+    ended = true; // however it ended: no "last activity" line on it any more
     // Switched to another chat meanwhile: that one owns the panel now.
     if (!here()) return;
     draw();
@@ -653,8 +654,9 @@ async function send(text) {
 
 // Stop a turn on purpose (the Stop button), here or one that went on in the background.
 async function haltTurn(id) {
+  const turn = chat.stop; // only this turn: a message sent meanwhile is a new one, and goes on
   try { await post('/api/copilot/stop', { chat: id }); } catch {}
-  setTimeout(() => { if (chat.session === id && chat.stop) chat.stop(); }, 3000);
+  setTimeout(() => { if (chat.session === id && chat.stop === turn && turn) turn(); }, 3000);
 }
 
 // Back on a chat that is still busy: show its open questions and follow it to the end of the
@@ -694,6 +696,8 @@ async function attachLive(id) {
       draw();
     }
   } catch { /* switched away */ }
+  done = true;
+  if (chat.session === id) draw();
   if (chat.session !== id) return;
   chat.stop = chat.halt = null;
   sendLabel();
