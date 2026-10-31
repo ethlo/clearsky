@@ -21,7 +21,8 @@ import * as copilot from '../lib/copilot.mjs';
 import { AcpAgent, chatEvent } from '../lib/acp.mjs';
 import { sessionEvents, sessionUsage } from '../lib/copilot-events.mjs';
 import { branchesFor } from '../lib/branches.mjs';
-import { sandboxedCommand, sandboxEnded, stopSandbox, githubLogin, DEFAULT_DOMAINS, READ_DEFAULT, parseDomains } from '../lib/sandbox.mjs';
+import { sandboxedCommand, sandboxEnded, stopSandbox, sandboxProxy, githubLogin, DEFAULT_DOMAINS, READ_DEFAULT, parseDomains } from '../lib/sandbox.mjs';
+import { VmImage, ChatVm, vmSupport, VM_DOMAINS } from '../lib/vm.mjs';
 import { serveBroker, brokerSocket } from '../lib/broker.mjs';
 import { mavenSandbox, sandboxCa } from '../lib/maven.mjs';
 import { githubFilter } from '../lib/github-gate.mjs';
@@ -799,7 +800,7 @@ let copilotCommands = null;
 // Ask-mode chats keep a Copilot process running between turns, keyed by Copilot's session id.
 const acpChats = new Map();
 setInterval(() => {
-  for (const [id, c] of acpChats) if (!c.busy && !c.waiting.size && Date.now() - c.lastUsed > 20 * 6e4) { c.agent.close(); acpChats.delete(id); }
+  for (const [id, c] of acpChats) if (!c.busy && !c.waiting.size && Date.now() - c.lastUsed > 20 * 6e4) { c.agent.close(); c.vm?.stop(); acpChats.delete(id); }
 }, 60_000).unref();
 
 // Stop a turn on purpose. Closing the page or switching chats leaves it running.
@@ -831,7 +832,8 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   // In Clearsky's container, the container is the sandbox: Copilot sees only what's mounted
   // (git already goes over https there). The network isn't limited to COPILOT_DOMAINS, though.
   if (process.env.CLEARSKY_IN_CONTAINER === '1') return Object.assign(new AcpAgent(bin, args, { env: copilotEnv() }), { sandboxed: true });
-  const domains = process.env.COPILOT_DOMAINS ? parseDomains(process.env.COPILOT_DOMAINS) : DEFAULT_DOMAINS;
+  // The chats' VMs share the sandbox's proxy, so its hosts include what they need (Docker Hub…).
+  const domains = [...(process.env.COPILOT_DOMAINS ? parseDomains(process.env.COPILOT_DOMAINS) : DEFAULT_DOMAINS), ...(vmSupport().ok ? VM_DOMAINS : [])];
   const keep = join(dirname(stateFile), 'sandbox');
   // Logins stay out here; srt adds them on the way out. srt reads them from Clearsky's own
   // environment, and the sandbox gets stand-ins: Maven's (lib/maven.mjs) and your gh login.
@@ -855,7 +857,7 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   // asks you in this chat. The key tells Clearsky which chat a request comes from.
   const key = randomBytes(16).toString('hex');
   if (process.platform === 'linux') {
-    broker ||= serveBroker({ bins: { acli: config.jira.acli }, allow: assistedAllow, ask: brokerAsk, where: brokerWhere, log: console.log });
+    broker ||= serveBroker({ bins: { acli: config.jira.acli }, allow: assistedAllow, ask: brokerAsk, where: brokerWhere, vm: vmSupport().ok ? vmRun : null, log: console.log });
     Object.assign(env, { CLEARSKY_BROKER_SOCKET: brokerSocket(), CLEARSKY_BROKER_KEY: key });
     env.PATH = `${join(here, '..', 'scripts', 'sandbox-bin')}${delimiter}${env.PATH}`;
   }
@@ -951,6 +953,47 @@ function chatRepo(c) {
   return c.repo;
 }
 
+// Each sandboxed chat's VM (lib/vm.mjs), for `vm <command>`: started on first use, in the git
+// checkout (or folder) the command runs in, and stopped with the chat.
+let vmImage = null;
+async function vmRun({ key, argv, cwd, java, signal }, out, err) {
+  const c = chatByKey(key);
+  if (!c) throw new Error('this chat is closed');
+  const proxy = await sandboxProxy();
+  if (!proxy) throw new Error('the sandbox\'s proxy isn\'t running');
+  if (c.vm && c.vm.state !== 'off' && cwd !== c.vm.cwd && !cwd.startsWith(`${c.vm.cwd}/`)) {
+    c.vm.event(`Moving the VM to ${cwd}`); c.vm.stop(); c.vm = null;
+  }
+  if (!c.vm || c.vm.state === 'off') {
+    let root = cwd;
+    try { root = execFileSync('git', ['-C', cwd, 'rev-parse', '--show-toplevel'], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] }).trim() || cwd; } catch {}
+    vmImage ||= new VmImage({ log: console.log });
+    const old = c.vm?.events || [];
+    c.vm = new ChatVm({ id: randomBytes(4).toString('hex'), cwd: root, image: vmImage, proxy, hosts: sandboxHosts(), log: console.log });
+    c.vm.events.push(...old);
+    bindVm(c);
+  }
+  return c.vm.exec(argv, cwd, out, err, { signal, java: java?.startsWith('/usr/lib/jvm/') ? java : hostJava() });
+}
+// VM events show in the chat as they happen (commands and containers; the rest is in its view).
+function bindVm(c) {
+  const shown = { vm: /^(VM up|Docker ready|Stopping|The VM stopped|Preparing|Downloading|VM image)/, docker: /^(start|die|oom) /, run: /^(done|failed|Stopped)/ };
+  if (c.vm) c.vm.onEvent = (e) => { if (shown[e.kind]?.test(e.text)) c.emit({ type: 'note', text: `VM: ${e.text}` }); };
+}
+// Your default JDK (what `java` is here) for the VM, which has your /usr/lib/jvm in place of its
+// own; else the newest one in there.
+let defaultJava;
+function hostJava() {
+  if (defaultJava === undefined) {
+    try { defaultJava = realpathSync(execFileSync('sh', ['-c', 'command -v java'], { encoding: 'utf8', timeout: 3000 }).trim()).replace(/\/bin\/java$/, ''); } catch { defaultJava = null; }
+    if (!defaultJava?.startsWith('/usr/lib/jvm/')) {
+      try { defaultJava = readdirSync('/usr/lib/jvm').filter((d) => existsSync(`/usr/lib/jvm/${d}/bin/java`)).sort((a, b) => a.localeCompare(b, 'en', { numeric: true })).map((d) => `/usr/lib/jvm/${d}`).pop() || null; } catch { defaultJava = null; }
+    }
+  }
+  return defaultJava;
+}
+const sandboxHosts = () => [...new Set([...(process.env.COPILOT_DOMAINS ? parseDomains(process.env.COPILOT_DOMAINS) : DEFAULT_DOMAINS), ...VM_DOMAINS])];
+
 // The chat a sandbox door request comes from, by the key its Copilot was given.
 const chatByKey = (key) => typeof key === 'string' && key ? [...acpChats.values()].find((c) => c.agent.brokerKey === key) : null;
 function brokerWhere(key) {
@@ -1043,11 +1086,12 @@ const SANDBOX_HINT = 'You run in a sandbox: everything inside it runs without as
   + 'goes through, while a push or any GitHub change (a PR, a comment, a review) waits at the sandbox\'s network until I click Allow, '
   + 'and fails with "declined" if I don\'t. Jira changes with `acli` ask me the same way. Your built-in GitHub tools are off here. '
   + 'There is no Docker in the sandbox. Tests that need it (Testcontainers) fail with errors like "Ryuk is unreachable" or '
-  + '"Could not find a valid Docker environment": run that test command as `outside <command>` (for example '
-  + '`outside ./mvnw verify -pl core`), which runs it on my machine after I OK it. Builds and tests run fine in the sandbox '
-  + '(Maven, its repository and your JDKs are there): always run them normally first, and use `outside` only after a run in '
-  + 'the sandbox failed with one of those Docker errors. Never use it for other failures (fix those, or ask me), and don\'t quote '
-  + 'arguments you don\'t need to.';
+  + '"Could not find a valid Docker environment": run that test command as `vm <command>` (for example `vm ./mvnw verify -pl core`). '
+  + 'It runs in this chat\'s own VM, in the same folder, with Docker and without asking me; the first one starts the VM, and it '
+  + 'stays up for the next ones. If `vm` says there is no VM, use `outside <command>` instead, which runs it on my machine after '
+  + 'I OK it. Builds and tests run fine in the sandbox (Maven, its repository and your JDKs are there): always run them normally '
+  + 'first, and use `vm` only after a run in the sandbox failed with one of those Docker errors. Never use `outside` for other '
+  + 'failures (fix those, or ask me), and don\'t quote arguments you don\'t need to.';
 // What you typed, without the dashboard and references Clearsky added in front.
 const MSG_MARK = '\n\n---\nMy message:\n';
 export function typedPart(text) {
@@ -1315,10 +1359,12 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin })
   const sandbox = !!copilot.PERMISSIONS[options.permission]?.sandbox || process.env.COPILOT_SANDBOX === 'srt';
   const sig = JSON.stringify([args, sandbox, process.env.COPILOT_DOMAINS, process.env.COPILOT_FOLDERS]);
   let c = acpChats.get(chat);
-  if (c && (c.sig !== sig || c.agent.closed)) { resumeId = c.agent.sessionId; c.agent.close(); acpChats.delete(chat); c = null; }
+  let vm = null; // a new Copilot for the same chat keeps its VM
+  if (c && (c.sig !== sig || c.agent.closed)) { resumeId = c.agent.sessionId; vm = c.vm; c.agent.close(); acpChats.delete(chat); c = null; }
   if (!c) {
     const agent = await startAgent(bin, args, cwd, { sandbox });
-    c = { agent, sig, cwd, waiting: new Map(), pending: new Map(), approved: new Set(), running: new Set(), shared: new Set(), emit: () => {}, lastUsed: Date.now() };
+    c = { agent, sig, cwd, vm, waiting: new Map(), pending: new Map(), approved: new Set(), running: new Set(), shared: new Set(), emit: () => {}, lastUsed: Date.now() };
+    bindVm(c);
     const id = await agent.start(cwd, resumeId);
     acpChats.set(id, c);
     // A new chat gets Copilot's own session id; the panel keeps using that from now on.
@@ -1546,7 +1592,7 @@ function restartWhenIdle({ maxWaitMinutes = 60, force = false } = {}) {
     }
     clearInterval(restart.timer);
     console.log('clearsky: restarting');
-    for (const c of acpChats.values()) c.agent.close();
+    for (const c of acpChats.values()) { c.agent.close(); c.vm?.stop(); }
     stopSandbox().catch(() => {});
     restart.server?.close();
     if (process.env.CLEARSKY_SUPERVISED === '1') process.exit(75); // a supervisor (systemd) starts us again
@@ -1598,8 +1644,14 @@ function serve() {
         if (url.pathname === '/api/copilot/close') {
           const { chat } = await readJson(req);
           const c = acpChats.get(String(chat || ''));
-          if (c) { stopCopilot(String(chat)); c.agent.close(); acpChats.delete(String(chat)); }
+          if (c) { stopCopilot(String(chat)); c.agent.close(); c.vm?.stop(); acpChats.delete(String(chat)); }
           return json(res, 200, { closed: !!c });
+        }
+        if (url.pathname === '/api/vm/stop') {
+          const { chat } = await readJson(req);
+          const vm = acpChats.get(String(chat || ''))?.vm;
+          if (vm && vm.state !== 'off') { vm.event('Stopped from Clearsky'); vm.stop(); }
+          return json(res, 200, { stopped: !!vm });
         }
         if (url.pathname === '/api/copilot/stop') {
           const { chat } = await readJson(req);
@@ -1835,6 +1887,16 @@ function serve() {
           sandbox: process.env.COPILOT_SANDBOX === 'srt',
           usage: /^[\w-]{8,64}$/.test(id) ? sessionUsage(join(homedir(), '.copilot'), id) : null,
         });
+      }
+      // A chat's VM, for its view: what runs in it, what it can reach, and what happened.
+      if (url.pathname === '/api/vm') {
+        const vm = acpChats.get(url.searchParams.get('id') || '')?.vm;
+        const support = vmSupport();
+        if (!vm) return json(res, 200, { vm: null, support });
+        await vm.refresh();
+        const v = vm.view();
+        const tilde = (p) => (p.startsWith(homedir()) ? `~${p.slice(homedir().length)}` : p);
+        return json(res, 200, { vm: { ...v, cwd: tilde(v.cwd), shares: v.shares.map(tilde) }, support });
       }
       if (url.pathname === '/api/copilot/sessions') {
         const info = await copilotInfo();
