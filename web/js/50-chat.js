@@ -642,6 +642,8 @@ async function send(text) {
     setTimeout(loadLinks, 500);
     if (!segs.length) segs.push({ type: 'error', message: 'No answer.' });
     ended = true; // however it ended: no "last activity" line on it any more
+    // Steps still open when a turn is stopped didn't finish: say so instead of "pending".
+    if (halted || segs.some((g) => g.type === 'error')) for (const g of segs) if (g.type === 'tool' && !['completed', 'failed'].includes(g.status)) g.status = 'stopped';
     // Switched to another chat meanwhile: that one owns the panel now.
     if (!here()) return;
     draw();
