@@ -94,3 +94,18 @@ test('`vm <command>` runs without asking, and its output comes as it is written'
     assert.match(r.err, /outside/);
   } finally { none.close(); }
 });
+
+test('an `outside` card can send the command to the chat\'s VM instead', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'broker-vm2-'));
+  const path = join(dir, 's', 'broker.sock');
+  const work = join(dir, 'work'); mkdirSync(work);
+  const asked = [], ran = [];
+  const server = serveBroker({ path, where: () => [work], vm: async ({ argv }, out) => { ran.push(argv.join(' ')); out('in vm\n'); return 0; },
+    ask: async (q) => { asked.push(q.vm); return 'vm'; }, run: () => { throw new Error('should not run outside'); } });
+  await new Promise((r) => server.once('listening', r));
+  const bin = fileURLToPath(new URL('../scripts/sandbox-bin/outside', import.meta.url));
+  try {
+    const r = await new Promise((done) => execFile(process.execPath, [bin, './mvnw', 'test'], { cwd: work, env: { ...process.env, CLEARSKY_BROKER_SOCKET: path, CLEARSKY_BROKER_KEY: 'k1' } }, (e, o) => done({ code: e ? e.code : 0, out: o })));
+    assert.deepEqual([r.code, r.out, asked, ran], [0, 'in vm\n', [true], ['./mvnw test']]);
+  } finally { server.close(); }
+});

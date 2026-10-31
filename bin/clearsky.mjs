@@ -1069,7 +1069,7 @@ function brokerWhere(key) {
   return c && [c.cwd, ...copilotFolders().map((d) => d.replace(/^~(?=\/|$)/, homedir()))];
 }
 // Ask in the chat, as for any step Copilot wants to take, and wait for your answer.
-function brokerAsk({ key, tool, argv, cwd }) {
+function brokerAsk({ key, tool, argv, cwd, vm = false }) {
   const c = chatByKey(key);
   if (!c) return Promise.resolve(false);
   const line = [tool, ...argv].map((a) => (/^[\w@%+=:,./-]+$/.test(a) ? a : `'${a.replace(/'/g, `'\\''`)}'`)).join(' ');
@@ -1089,11 +1089,12 @@ function brokerAsk({ key, tool, argv, cwd }) {
     const same = `${cwd}\n${line}`;
     if (c.allowedRuns?.has(same)) return done(true);
     const ev = { type: 'permission', id, title, kind: 'execute', detail: `${line}\n(in ${cwd.replace(homedir(), '~')})`,
-      options: [{ id: 'allow', name: 'Allow', kind: 'allow_once' }, { id: 'chat', name: 'Allow this command again in this chat', kind: 'allow_always' },
-        { id: 'deny', name: 'Deny', kind: 'reject_once' }] };
+      options: [...(vm ? [{ id: 'vm', name: 'Run in the VM instead', kind: 'allow_once' }] : []), { id: 'allow', name: 'Allow', kind: 'allow_once' },
+        { id: 'chat', name: 'Allow this command again in this chat', kind: 'allow_always' }, { id: 'deny', name: 'Deny', kind: 'reject_once' }] };
     c.waiting.set(id, (answer) => {
       c.pending.delete(id);
       if (answer.optionId === 'chat') (c.allowedRuns ||= new Set()).add(same);
+      if (answer.optionId === 'vm') return done('vm');
       const ok = answer.optionId === 'allow' || answer.optionId === 'chat';
       log(ok ? 'allowed' : 'declined');
       // Allowed here: that ticket's project is part of this chat's work from now on.
@@ -1139,6 +1140,8 @@ function openCopilotSessions() {
 }
 
 const CONTEXT_INTRO = 'You are helping me with my work. This is my work dashboard right now:';
+// A chat that goes on in a new Copilot (after a restart of Clearsky) gets the sandbox's current rules again.
+const UPDATE_INTRO = 'How the sandbox works now (this replaces what I said about it before):';
 // Clearsky shows a ```choices block as buttons (web/js/50-chat.js); a click sends the option.
 // PR descriptions are for the human reviewer: after Copilot's review rounds, theirs should be quick.
 const PR_HINT = 'When you open a PR or finish a round of work on one, write (or update with `gh api -X PATCH repos/<owner>/<repo>/pulls/<n> -F body=@<file>`; `gh pr edit` can silently drop the edit) its description '
@@ -1176,7 +1179,7 @@ const SANDBOX_HINT = 'You run in a sandbox: everything inside it runs without as
 const MSG_MARK = '\n\n---\nMy message:\n';
 export function typedPart(text) {
   const at = text.lastIndexOf(MSG_MARK);
-  if (at >= 0 && (text.startsWith(CONTEXT_INTRO) || text.startsWith(REFS_INTRO))) return text.slice(at + MSG_MARK.length);
+  if (at >= 0 && (text.startsWith(CONTEXT_INTRO) || text.startsWith(REFS_INTRO) || text.startsWith(UPDATE_INTRO))) return text.slice(at + MSG_MARK.length);
   if (text.startsWith(CONTEXT_INTRO)) return text.slice(text.lastIndexOf('\n\n---\n\n') + 7); // chats from before the marker
   return text;
 }
@@ -1835,7 +1838,8 @@ function serve() {
           // The first turn carries the dashboard so Copilot knows what you're looking at.
           const sandboxHint = process.env.COPILOT_SANDBOX === 'srt' || body.permission === 'sandboxed' ? `\n\n${SANDBOX_HINT}` : '';
           const folders = foldersHint();
-          const prefix = [!body.resume && `${CONTEXT_INTRO}\n\n${copilotContext()}\n\n${CHOICES_HINT}\n\n${PR_HINT}${folders && `\n\n${folders}`}${sandboxHint}`, refText].filter(Boolean).join('\n\n---\n\n');
+          const update = body.resume && sandboxHint && !acpChats.has(body.session) && `${UPDATE_INTRO}${sandboxHint}`;
+          const prefix = [update, !body.resume && `${CONTEXT_INTRO}\n\n${copilotContext()}\n\n${CHOICES_HINT}\n\n${PR_HINT}${folders && `\n\n${folders}`}${sandboxHint}`, refText].filter(Boolean).join('\n\n---\n\n');
           const prompt = prefix ? `${prefix}${MSG_MARK}${message}` : message;
           // Answers stream back as one JSON event per line: text, tool, permission, done, error.
           res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
