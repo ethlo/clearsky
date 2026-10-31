@@ -129,6 +129,9 @@ test('a failed pull is spotted in dockerd\'s log', () => {
   assert.equal(pullFailure('level=error msg="Handler for POST /v1.44/images/create returned error: Get \\"https://registry.example.com/v2/\\": Forbidden"'),
     'Get "https://registry.example.com/v2/": Forbidden');
   assert.equal(pullFailure('level=info msg="Loading containers: done."'), null);
+  assert.equal(pullFailure('time="x" level=info msg="fetch failed" error="pull access denied, repository does not exist or may require authorization: server message: insufficient_scope: authorization failed" host=registry-1.docker.io'),
+    'pull access denied, repository does not exist or may require authorization: server message: insufficient_scope: authorization failed');
+  assert.equal(pullFailure('level=info msg="fetch failed" error="read tcp: connection reset by peer" host=registry-1.docker.io'), null);
 });
 
 test('Docker Hub is read only: pulls go through, pushes and push logins are refused', async () => {
@@ -151,7 +154,7 @@ test('vmSize: default, overrides, and kept within the machine', () => {
   const host = { cpus: 20, memMb: 63 * 1024 };
   assert.deepEqual(vmSize({}, host), { cpus: Math.min(20, VM_DEFAULT.cpus), memMb: VM_DEFAULT.memMb });
   assert.deepEqual(vmSize({ COPILOT_VM_CPUS: '16', COPILOT_VM_MEMORY_GB: '24' }, host), { cpus: 16, memMb: 24576 });
-  assert.deepEqual(vmSize({ COPILOT_VM_CPUS: '64', COPILOT_VM_MEMORY_GB: '500' }, host), { cpus: 20, memMb: 61 * 1024 });
+  assert.deepEqual(vmSize({ COPILOT_VM_CPUS: '64', COPILOT_VM_MEMORY_GB: '500' }, host), { cpus: 20, memMb: 31.5 * 1024 });
   assert.deepEqual(vmSize({ COPILOT_VM_CPUS: '0', COPILOT_VM_MEMORY_GB: '1' }, host).memMb, 2048);
   assert.equal(vmSize({ COPILOT_VM_CPUS: '0' }, host).cpus, Math.min(20, VM_DEFAULT.cpus));
   assert.equal(vmSize({ COPILOT_VM_MEMORY_GB: '6,5' }, host).memMb, 6656);
