@@ -183,7 +183,10 @@
     <label for="COPILOT_VM_IMAGES">Images the VM copies from your Docker</label>
     <textarea id="COPILOT_VM_IMAGES" data-key="COPILOT_VM_IMAGES" rows="2" spellcheck="false" placeholder="registry.example.com/team/"></textarea>
     <p class="hint">Comma-separated, for private images tests need (say from your company's registry): a whole image like <code>registry.example.com/team/app:main</code>, or a name prefix like <code>registry.example.com/</code> (then the newest tag of each image there). Before each <code>vm</code> command, the ones your own Docker has are copied into the chat's VM if it doesn't have that version yet. Your registry login never goes in the VM. The VM gets what your Docker has: <code>docker pull</code> on your machine when the image changes.</p>
-    <div class="row"><button class="save" data-keys="COPILOT_MODEL,COPILOT_EFFORT,COPILOT_PERMISSION,COPILOT_CWD,COPILOT_FOLDERS,COPILOT_ASSISTED_ALLOW,COPILOT_SANDBOX,COPILOT_SANDBOX_TOKEN,COPILOT_READ,COPILOT_DOMAINS,COPILOT_VM_IMAGES">Save</button><span class="msg"></span></div>
+    <label for="COPILOT_VM_CPUS">VM size: cores and memory (GB)</label>
+    <div class="row"><input id="COPILOT_VM_CPUS" data-key="COPILOT_VM_CPUS" inputmode="numeric" spellcheck="false" style="max-width:8em"> <input id="COPILOT_VM_MEMORY_GB" data-key="COPILOT_VM_MEMORY_GB" aria-label="VM memory in GB" inputmode="decimal" spellcheck="false" style="max-width:8em"></div>
+    <p class="hint">For each chat's VM. Empty uses the default shown: half this machine's cores (up to 12) and a quarter of its memory (4 to 16 GB). Memory the VM doesn't use stays yours. Kept within what this machine has. Applies to the next VM a chat starts; the first one after a change takes about 15 seconds longer (it saves a new snapshot).</p>
+    <div class="row"><button class="save" data-keys="COPILOT_MODEL,COPILOT_EFFORT,COPILOT_PERMISSION,COPILOT_CWD,COPILOT_FOLDERS,COPILOT_ASSISTED_ALLOW,COPILOT_SANDBOX,COPILOT_SANDBOX_TOKEN,COPILOT_READ,COPILOT_DOMAINS,COPILOT_VM_IMAGES,COPILOT_VM_CPUS,COPILOT_VM_MEMORY_GB">Save</button><span class="msg"></span></div>
   </section>
 
   <section>
@@ -318,6 +321,10 @@ function render(s) {
   $('#read-default').textContent = cp.readDefault || '';
   $('#COPILOT_DOMAINS').value = cp.domains || '';
   $('#COPILOT_VM_IMAGES').value = cp.vmImages || '';
+  $('#COPILOT_VM_CPUS').value = cp.vmCpus || '';
+  $('#COPILOT_VM_MEMORY_GB').value = cp.vmMemoryGb || '';
+  $('#COPILOT_VM_CPUS').placeholder = cp.vmDefault ? `${cp.vmDefault.cpus} cores` : 'cores';
+  $('#COPILOT_VM_MEMORY_GB').placeholder = cp.vmDefault ? `${cp.vmDefault.memGb} GB` : 'GB';
   $('#COPILOT_DOMAINS').placeholder = cp.defaultDomains || '';
   // The choices come from Copilot itself (models you've used, its access modes).
   fetch('/api/copilot').then((r) => r.json()).then((i) => {

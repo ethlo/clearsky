@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VmImage, ChatVm } from '../lib/vm.mjs';
+import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VmImage, ChatVm, vmSize, VM_DEFAULT } from '../lib/vm.mjs';
 import { registryWrite, githubFilter } from '../lib/github-gate.mjs';
 import { srtSettings } from '../lib/sandbox.mjs';
 import { needs, serveBroker } from '../lib/broker.mjs';
@@ -145,4 +145,15 @@ test('Docker Hub is read only: pulls go through, pushes and push logins are refu
   assert.ok(s.network.allowedDomains.includes('registry-1.docker.io'));
   assert.ok(!s.network.tlsTerminate.excludeDomains.includes('registry-1.docker.io'));
   assert.ok(s.network.tlsTerminate.excludeDomains.includes('github.com'));
+});
+
+test('vmSize: default, overrides, and kept within the machine', () => {
+  const host = { cpus: 20, memMb: 63 * 1024 };
+  assert.deepEqual(vmSize({}, host), { cpus: Math.min(20, VM_DEFAULT.cpus), memMb: VM_DEFAULT.memMb });
+  assert.deepEqual(vmSize({ COPILOT_VM_CPUS: '16', COPILOT_VM_MEMORY_GB: '24' }, host), { cpus: 16, memMb: 24576 });
+  assert.deepEqual(vmSize({ COPILOT_VM_CPUS: '64', COPILOT_VM_MEMORY_GB: '500' }, host), { cpus: 20, memMb: 61 * 1024 });
+  assert.deepEqual(vmSize({ COPILOT_VM_CPUS: '0', COPILOT_VM_MEMORY_GB: '1' }, host).memMb, 2048);
+  assert.equal(vmSize({ COPILOT_VM_CPUS: '0' }, host).cpus, Math.min(20, VM_DEFAULT.cpus));
+  assert.equal(vmSize({ COPILOT_VM_MEMORY_GB: '6,5' }, host).memMb, 6656);
+  assert.equal(vmSize({ COPILOT_VM_CPUS: 'lots' }, host).cpus, Math.min(20, VM_DEFAULT.cpus));
 });
