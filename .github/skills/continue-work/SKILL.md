@@ -41,7 +41,20 @@ Ask me once whether to go ahead with the checklist, unless I already said to con
 2. Fix failing CI. Run the same checks locally first when you can.
 3. Address unresolved review comments: make the change, or draft a reply explaining why not.
 4. Finish what the ticket still asks for.
-5. When Copilot's review rounds are done (its review is no longer requested and none of its threads are open), run the branch's CI build with tests, as below.
+5. Before opening the PR, and before pushing a larger round of changes to an open one, do a self-review, as below.
+6. When Copilot's review rounds are done (its review is no longer requested and none of its threads are open), run the branch's CI build with tests, as below.
+
+## Self-review before the PR
+
+A proper review by a fresh reviewer that knows only the goal and the code, not this conversation:
+
+- In Clearsky's sandbox, run `review --ticket <KEY>` in the repo (`--goal "<one or two sentences>"` when there's no ticket, `--base <branch>` when the PR won't target the default branch). Clearsky works out the diff and reads the ticket itself, and starts a new Copilot session that can only read the repo.
+- Give it the goal only. Never pass your own reasoning, plans or what you think is risky: the point is a review without them.
+- Without `review` (outside Clearsky's sandbox), start a new Copilot session yourself (`copilot -p`, read only) with only the ticket's summary and description and `git diff <base>...` in the prompt, and nothing from this conversation.
+- Check each finding against the code. Fix the ones that hold up, and note in one line why you skip the others. Run it again after fixing; stop when it says `VERDICT: ready`, or after three rounds, and tell me what's still open.
+- Put the result under "How it was checked": how many self-review rounds, and anything you chose not to fix.
+
+GitHub's Copilot review still runs on the PR afterwards, as before.
 
 ## CI build after the review rounds
 
@@ -60,7 +73,7 @@ Commit in small steps with clear messages, and run the tests before each push. P
 After Copilot's review rounds, a person's review should be quick but still real. When you open the PR, and after each round of work on it, update its description (`gh api -X PATCH repos/<owner>/<repo>/pulls/<n> -F body=@<file>`; `gh pr edit` can silently drop the edit) to:
 
 - **What and why:** the change and the reason, with the ticket key.
-- **How it was checked:** the tests you ran and their result; how many Copilot review rounds, and that their findings are addressed or why not.
+- **How it was checked:** the tests you ran and their result; the self-review rounds before the PR; how many Copilot review rounds, and that their findings are addressed or why not.
 - **For the reviewer:** anything still open, decisions worth a second look, and where the risk is. Say "Nothing open" when that's so.
 
 Facts only, short. If the repo has a PR template, keep its headings and fill them this way.

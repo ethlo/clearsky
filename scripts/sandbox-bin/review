@@ -1,0 +1,4 @@
+#!/usr/bin/env node
+// `review …` in Clearsky's sandbox: a proper review of this branch's change by a fresh Copilot
+// that knows only the goal and the code (lib/review.mjs). Run by Clearsky, read only.
+require('./shim.js').viaClearsky('review', process.argv.slice(2));

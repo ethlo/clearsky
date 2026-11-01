@@ -28,6 +28,7 @@ import { manifest as grafanaManifest, createGrafana, parseInstances, parseTokens
 import { cookieLogin } from '../lib/browser-login.mjs';
 import { redact } from '../lib/redact.mjs';
 import { vpnWatch, checkTarget } from '../lib/vpn.mjs';
+import { parseReviewArgs, changeOf, reviewPrompt, USAGE as REVIEW_USAGE } from '../lib/review.mjs';
 import { serveBroker, brokerSocket } from '../lib/broker.mjs';
 import { mavenSandbox, sandboxCa } from '../lib/maven.mjs';
 import { githubFilter, REGISTRY_HOSTS, GITHUB_LOG_HOSTS, SHARED_BRANCH } from '../lib/github-gate.mjs';
@@ -932,7 +933,7 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   // asks you in this chat. The key tells Clearsky which chat a request comes from.
   const key = randomBytes(16).toString('hex');
   if (process.platform === 'linux') {
-    broker ||= serveBroker({ bins: { acli: config.jira.acli }, allow: assistedAllow, ask: brokerAsk, where: brokerWhere, vm: vmSupport().ok ? vmRun : null, grafana: grafanaRun, log: console.log });
+    broker ||= serveBroker({ bins: { acli: config.jira.acli }, allow: assistedAllow, ask: brokerAsk, where: brokerWhere, vm: vmSupport().ok ? vmRun : null, grafana: grafanaRun, review: reviewRun, log: console.log });
     Object.assign(env, { CLEARSKY_BROKER_SOCKET: brokerSocket(), CLEARSKY_BROKER_KEY: key });
     env.PATH = `${join(here, '..', 'scripts', 'sandbox-bin')}${delimiter}${env.PATH}`;
   }
@@ -1315,6 +1316,67 @@ async function grafanaRun({ key, argv }) {
     return { code: 1, stdout: '', stderr: `grafana: ${e.message}\n` };
   }
 }
+// `review …` from a chat (lib/review.mjs): a proper review by a fresh Copilot, in its own
+// sandbox, that gets only the goal and the code. Clearsky works out the diff and reads the
+// ticket itself, so nothing of the asking chat (its history, its reasoning) goes along. The
+// reviewer may read files in the repo and nothing else: no shell, no edits, no web, no MCPs.
+async function reviewRun({ key, argv, cwd, signal }, out, err) {
+  const c = chatByKey(key);
+  if (!c) { err('Clearsky: this chat is closed.\n'); return 1; }
+  const o = parseReviewArgs(argv);
+  if (o.help) { out(`${REVIEW_USAGE}\n`); return 0; }
+  if (o.error) { err(`review: ${o.error}\n\n${REVIEW_USAGE}\n`); return 2; }
+  const root = (await execFileP('git', ['-C', cwd, 'rev-parse', '--show-toplevel']).catch(() => ({ stdout: '' }))).stdout.trim();
+  if (!root) { err('review: not in a git repository\n'); return 1; }
+  const log = (decided, extra = {}) => logWrite(agentLogFile, { where: 'review', what: ['review', ...argv].join(' '), target: root.replace(homedir(), '~'), chats: [chatRef(c)], decided, ...extra });
+  let change, ticket = null;
+  try { change = await changeOf(root, o.base); } catch (e) { err(`review: ${e.message}\n`); return 1; }
+  if (o.ticket) {
+    try { ticket = await jiraModule.ticketGoal(o.ticket); } catch (e) { err(`review: couldn't read ${o.ticket} (${e.message}); use --goal instead\n`); return 1; }
+  }
+  const info = await copilotInfo();
+  if (!info.available) { err('review: the Copilot CLI isn\'t found\n'); return 1; }
+  err(`Clearsky: a fresh reviewer is reading ${change.branch || 'the change'} against ${change.base}${ticket ? ` for ${ticket.key}` : ''} (it sees only the goal and the code). This takes a few minutes.\n`);
+  const model = process.env.COPILOT_REVIEW_MODEL || process.env.COPILOT_MODEL || undefined;
+  const args = [...copilot.optionArgs({ permission: 'read', model, deny: ['url'] }), '--disable-builtin-mcps'];
+  const agent = await startAgent(info.bin, args, root, { sandbox: true });
+  const inRepo = (pth) => !pth || resolve(root, String(pth)).startsWith(`${root}/`) || resolve(root, String(pth)) === root;
+  agent.onPermission = async (p) => {
+    const once = (p.options || []).find((x) => x.kind === 'allow_once');
+    const no = (p.options || []).find((x) => x.kind === 'reject_once');
+    const ok = once && ['read', 'search', 'think'].includes(p.toolCall?.kind) && inRepo(p.toolCall?.rawInput?.path);
+    return ok ? { outcome: 'selected', optionId: once.optionId } : no ? { outcome: 'selected', optionId: no.optionId } : { outcome: 'cancelled' };
+  };
+  let text = '', steps = 0;
+  agent.onUpdate = (u) => {
+    if (u.sessionUpdate === 'agent_message_chunk' && u.content?.type === 'text') text += u.content.text;
+    if (u.sessionUpdate === 'tool_call') { steps++; if (steps % 10 === 0) err(`Clearsky: the reviewer has read ${steps} things so far…\n`); }
+  };
+  const stop = () => agent.close();
+  signal?.addEventListener('abort', stop);
+  const timer = setTimeout(stop, 20 * 6e4);
+  try {
+    const id = await agent.start(root);
+    localState.setSessionName(stateFile, id, `Review: ${change.branch || 'change'} against ${change.base}`);
+    sessionsCache = null;
+    await agent.prompt(reviewPrompt({ goal: o.goal, ticket, change }));
+    const findings = text.trim();
+    const verdict = findings.match(/VERDICT:\s*(ready|fix first)/i)?.[1]?.toLowerCase() || null;
+    log('reviewed', { verdict });
+    out(`${findings || 'The reviewer gave no answer.'}\n`);
+    if (change.cut) err('(the diff was long, so the reviewer read the rest from the repo)\n');
+    return 0;
+  } catch (e) {
+    log('failed');
+    err(`review: ${signal?.aborted ? 'stopped' : e.message}\n`);
+    return 1;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', stop);
+    agent.close();
+  }
+}
+
 // A question in a chat with Allow and Deny only (asked every time).
 function askInChat(c, { title, detail, advice = null }) {
   return new Promise((done) => {
@@ -1400,7 +1462,10 @@ const SANDBOX_HINT = 'You run in a sandbox: everything inside it runs without as
   + 'stays up for the next ones. Images named in Settings (my private ones) are copied in from my own Docker before each `vm` command; if a test needs a private image the VM can\'t pull, tell me which instead of working around it. It sees only this repo (read-write), my JDKs, and my Maven repository and wrapper downloads (read only: the repository at /host/m2, already Maven\'s fallback repository, and ~/.m2/wrapper; don\'t copy them). If a `vm` run fails for another reason, tell me what failed instead of working around the VM. If `vm` says there is no VM, use `outside <command>` instead, which runs it on my machine after '
   + 'I OK it. Builds and tests run fine in the sandbox (Maven, its repository and your JDKs are there): always run them normally '
   + 'first, and use `vm` only after a run in the sandbox failed with one of those Docker errors. Never use `outside` for other '
-  + 'failures (fix those, or ask me), and don\'t quote arguments you don\'t need to.';
+  + 'failures (fix those, or ask me), and don\'t quote arguments you don\'t need to. '
+  + 'Before you open a pull request, run `review --ticket <KEY>` (or `review --goal "<what it is for>"` without a ticket; `--base <branch>` '
+  + 'when it doesn\'t go to the default branch): a fresh reviewer that sees only the goal and the code reviews your change. Give it the goal only, '
+  + 'never your reasoning. Fix what holds up, say why you skip the rest, and run it again until it says "VERDICT: ready" (three rounds at most).';
 // What you typed, without the dashboard and references Clearsky added in front.
 const MSG_MARK = '\n\n---\nMy message:\n';
 export function typedPart(text) {

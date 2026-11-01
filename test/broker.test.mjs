@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { needs, serveBroker } from '../lib/broker.mjs';
 
 test('which commands go through Clearsky, and which ask', () => {
+  assert.equal(needs('review', ['--ticket', 'ABC-1']), 'run', 'a review only reads');
   assert.equal(needs('acli', ['jira', 'workitem', 'view', 'ABC-1']), 'run');
   assert.equal(needs('acli', ['jira', 'workitem', 'transition', '--key', 'ABC-1', '--status', 'Done']), 'ask');
   assert.equal(needs('acli', ['jira', 'workitem', 'transition', '--key', 'ABC-1'], ['acli jira workitem transition']), 'run');
