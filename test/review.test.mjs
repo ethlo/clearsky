@@ -33,6 +33,7 @@ test('review: the change is the branch against where it left base, uncommitted a
   const p = reviewPrompt({ ticket: { key: 'ABC-1', type: 'Bug', summary: 'Fix it', description: 'Must not crash.' }, change: c });
   assert.match(p, /Ticket ABC-1 \(Bug\): Fix it\n\nMust not crash\./);
   assert.match(p, /VERDICT: ready/);
+  assert.match(p, /New files not yet added to git .*: new.txt/);
   assert.match(p, /feature\/abc-1 against main/);
   git('checkout', '-q', '.'); execFileSync('rm', [join(dir, 'new.txt')]); git('checkout', '-q', 'main');
   await assert.rejects(changeOf(dir, 'main'), /nothing changed/);

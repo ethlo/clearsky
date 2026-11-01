@@ -1340,11 +1340,13 @@ async function reviewRun({ key, argv, cwd, signal }, out, err) {
   const model = process.env.COPILOT_REVIEW_MODEL || process.env.COPILOT_MODEL || undefined;
   const args = [...copilot.optionArgs({ permission: 'read', model, deny: ['url'] }), '--disable-builtin-mcps'];
   const agent = await startAgent(info.bin, args, root, { sandbox: true });
+  const tally = { allowed: 0, denied: 0 };
   const inRepo = (pth) => !pth || resolve(root, String(pth)).startsWith(`${root}/`) || resolve(root, String(pth)) === root;
   agent.onPermission = async (p) => {
     const once = (p.options || []).find((x) => x.kind === 'allow_once');
     const no = (p.options || []).find((x) => x.kind === 'reject_once');
     const ok = once && ['read', 'search', 'think'].includes(p.toolCall?.kind) && inRepo(p.toolCall?.rawInput?.path);
+    tally[ok ? 'allowed' : 'denied']++;
     return ok ? { outcome: 'selected', optionId: once.optionId } : no ? { outcome: 'selected', optionId: no.optionId } : { outcome: 'cancelled' };
   };
   let text = '', steps = 0;
@@ -1362,7 +1364,8 @@ async function reviewRun({ key, argv, cwd, signal }, out, err) {
     await agent.prompt(reviewPrompt({ goal: o.goal, ticket, change }));
     const findings = text.trim();
     const verdict = findings.match(/VERDICT:\s*(ready|fix first)/i)?.[1]?.toLowerCase() || null;
-    log('reviewed', { verdict });
+    log('reviewed', { verdict, steps, ...tally });
+    console.log(`clearsky: review ${verdict || 'no verdict'}, ${steps} steps, ${tally.allowed} allowed, ${tally.denied} denied`);
     out(`${findings || 'The reviewer gave no answer.'}\n`);
     if (change.cut) err('(the diff was long, so the reviewer read the rest from the repo)\n');
     return 0;
