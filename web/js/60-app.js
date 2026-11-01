@@ -84,7 +84,7 @@ $('#copy').onclick = async () => {
   catch { btn.textContent = 'Copy failed'; }
   setTimeout(() => { btn.textContent = 'Copy for Slack'; }, 1500);
 };
-$('#refresh').onclick = () => { previews.clear(); ctxTickets.clear(); if (location.hash === '#standup') loadStandup(true); else loadAll(true); };
+$('#refresh').onclick = () => { previews.clear(); ctxTickets.clear(); readCache.clear(); if (location.hash === '#standup') loadStandup(true); else loadAll(true); };
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-refresh]');
   if (!btn) return;
@@ -161,6 +161,17 @@ function thread(messages, file, title) {
 }
 
 // A source's item read in full, such as a school message, in the work area.
+// Items read in full, kept for this page so going back and forth is instant. Not fetched ahead
+// on hover: a source may count a read as "seen" at its end. Refresh forgets them.
+const readCache = new Map();
+function readDetail(src, key) {
+  const k = `${src}:${key}`;
+  if (!readCache.has(k)) {
+    readCache.set(k, getJson(`/api/source/${encodeURIComponent(src)}/detail?key=${encodeURIComponent(key)}`).catch((e) => { readCache.delete(k); throw e; }));
+    if (readCache.size > 100) readCache.delete(readCache.keys().next().value);
+  }
+  return readCache.get(k);
+}
 async function openReader(src, key, url) {
   curItem = { reader: true, k: `${src}:${key}`, title: 'Loading…' };
   const it = curItem, el = $('#item');
@@ -170,7 +181,7 @@ async function openReader(src, key, url) {
   const open = (u) => `<div class="acts-row">${u ? `<a class="icon-btn primary" href="${esc(u)}" target="_blank" rel="noopener">Open in portal ↗</a>` : ''}<span id="read-toggle"></span></div>`;
   el.innerHTML = `<h2>Loading…</h2>${skeleton(3)}`;
   try {
-    const d = await getJson(`/api/source/${encodeURIComponent(src)}/detail?key=${encodeURIComponent(key)}`);
+    const d = await readDetail(src, key);
     if (curItem !== it) return;
     setTimeout(() => { if (curItem === it) { const i = sourceItem(src, key); if (i?.unread) markRead(src, [i], true); else drawReadToggle(src, key); } });
     const file = (a) => `/api/source/${encodeURIComponent(src)}/attachment?key=${encodeURIComponent(key)}&id=${encodeURIComponent(a.id)}`;

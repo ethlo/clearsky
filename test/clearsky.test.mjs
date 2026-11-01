@@ -347,3 +347,27 @@ test('names sessions started here after what you typed, not the dashboard in fro
     { prs: [{ repo: 'acme/web', number: 9 }], workspace: () => ({ repository: 'acme/web', branch: 'main' }) });
   assert.deepEqual(links, {}, 'the dashboard text links nothing');
 });
+
+test('sources: fresh data as is, older data at once with a new fetch behind it, Refresh waits', async () => {
+  const { source, SOURCES, sourceCache } = await import('../bin/clearsky.mjs');
+  let n = 0, release;
+  SOURCES.swrTest = () => { n++; return n === 1 ? Promise.resolve({ v: 1 }) : new Promise((r) => { release = () => r({ v: n }); }); };
+  try {
+    assert.deepEqual(await source('swrTest'), { v: 1 });
+    assert.deepEqual(await source('swrTest'), { v: 1 });
+    assert.equal(n, 1, 'fresh: no new fetch');
+    sourceCache.get('swrTest').at -= 5 * 6e4;
+    assert.deepEqual(await source('swrTest'), { v: 1 }, 'stale: the kept data, at once');
+    assert.equal(n, 2, 'and a fetch behind it');
+    assert.deepEqual(await source('swrTest'), { v: 1 }, 'still the kept data while that runs');
+    assert.equal(n, 2, 'one fetch at a time');
+    const waited = source('swrTest', true);
+    release();
+    assert.deepEqual(await waited, { v: 2 }, 'Refresh gets the new data');
+    sourceCache.get('swrTest').at -= 60 * 6e4;
+    const old = source('swrTest');
+    await new Promise((r) => setImmediate(r)); // the fetch starts a tick later
+    release();
+    assert.deepEqual(await old, { v: 3 }, 'too old to show: waits');
+  } finally { delete SOURCES.swrTest; sourceCache.delete('swrTest'); }
+});

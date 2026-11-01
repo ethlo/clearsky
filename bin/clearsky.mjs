@@ -346,16 +346,44 @@ function workItemsOf(name, data) {
 const pluginData = async (force) => Object.fromEntries(await Promise.all([...plugins.sources.keys()].map(async (n) => [n, await source(n, force)])));
 const sourceCache = new Map();
 
+// Snappy clicking: fresh data (CLEARSKY_CACHE_SECONDS, 2 min) is served as is; older data is
+// still served at once while a new fetch runs behind it, and the page picks that up when it
+// lands (dataVersion, via /api/attention). Only Refresh, or data over STALE_MAX old, waits.
+const STALE_MAX = 30 * 6e4;
+let dataVersion = 0;
 export function source(name, force) {
   const hit = sourceCache.get(name);
-  if (hit?.pending) return hit.pending;
-  if (!force && hit && Date.now() - hit.at < config.cacheSeconds * 1000) return Promise.resolve(hit.data);
+  if (!force && hit?.data && Date.now() - hit.at < config.cacheSeconds * 1000) return Promise.resolve(hit.data);
+  if (hit?.pending) return !force && hit.data && Date.now() - hit.at < STALE_MAX ? Promise.resolve(hit.data) : hit.pending;
   const pending = (needsVpn(name) ? vpn.check() : Promise.resolve(null)).then((v) => (v?.known && !v.up ? { paused: 'VPN off', why: v.why } : settle(SOURCES[name]()))).then((data) => {
     sourceCache.set(name, { at: Date.now(), data });
+    dataVersion++;
+    saveSourceCache();
     return data;
   });
   sourceCache.set(name, { ...hit, pending });
-  return pending;
+  return !force && hit?.data && Date.now() - hit.at < STALE_MAX ? Promise.resolve(hit.data) : pending;
+}
+
+// The last good data per source, kept across a Restart so the page fills at once (as stale,
+// refreshed behind it). In ~/.config/clearsky, which chats can't see; only `serve` uses it.
+let sourceCacheFile = null, saveTimer = null;
+function loadSourceCache(file) {
+  sourceCacheFile = file;
+  try {
+    for (const [name, e] of Object.entries(JSON.parse(readFileSync(file, 'utf8')))) {
+      if (e?.data && !e.data.error && Date.now() - e.at < STALE_MAX) sourceCache.set(name, { at: e.at, data: e.data });
+    }
+  } catch {}
+}
+function saveSourceCache() {
+  if (!sourceCacheFile || saveTimer) return;
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    const out = Object.fromEntries([...sourceCache].filter(([, e]) => e.data && !e.data.error && !e.data.paused).map(([n, e]) => [n, { at: e.at, data: e.data }]));
+    try { writeFileSync(sourceCacheFile, JSON.stringify(out), { mode: 0o600 }); } catch {}
+  }, 2000);
+  saveTimer.unref?.();
 }
 
 export async function collect(force) {
@@ -659,6 +687,23 @@ export function toMarkdown(d) {
 
 // ---------------------------------------------------------------- server
 
+// An item read in full (a school message, say): kept 5 minutes, and served from the kept copy
+// for up to 30 while a new read runs behind it, so opening it again is instant.
+const detailCache = new Map();
+function sourceDetail(p, key, data, force) {
+  const k = `${p.name}:${key}`, hit = detailCache.get(k), age = hit ? Date.now() - hit.at : Infinity;
+  if (!force && hit?.data && age < 5 * 6e4) return Promise.resolve(hit.data);
+  if (!hit?.pending) {
+    const pending = Promise.resolve(p.detail(key, makeContext(p), data)).then((d) => { detailCache.set(k, { at: Date.now(), data: d }); return d; })
+      .catch((e) => { if (hit?.data) detailCache.set(k, hit); else detailCache.delete(k); throw e; });
+    detailCache.set(k, { ...hit, pending });
+    if (detailCache.size > 300) detailCache.delete(detailCache.keys().next().value);
+    if (!force && hit?.data && age < STALE_MAX) { pending.catch(() => {}); return Promise.resolve(hit.data); }
+    return pending;
+  }
+  return !force && hit.data && age < STALE_MAX ? Promise.resolve(hit.data) : hit.pending;
+}
+
 let standupCache = { at: 0, data: null };
 
 // Hover-card details for one pull request.
@@ -756,6 +801,7 @@ function applySettings(values) {
   }
   Object.assign(config, buildConfig());
   sourceCache.clear();
+  detailCache.clear();
   copilotInfoCache = null;
   standupCache = { at: 0, data: null };
 }
@@ -1912,6 +1958,7 @@ function restartWhenIdle({ maxWaitMinutes = 60, force = false } = {}) {
 function serve() {
   // A bug in a library (srt's proxy, say) shouldn't take the dashboard and every chat down with it.
   process.on('uncaughtException', (e) => console.error(`clearsky: unexpected error, still running: ${e?.stack || e}`));
+  loadSourceCache(join(dirname(userEnvFile), 'sources-cache.json'));
   // Every state-changing request must carry this token and come from this origin, so other
   // websites open in the browser can't change settings or start logins. It's kept across
   // restarts so an open page keeps working.
@@ -2180,7 +2227,7 @@ function serve() {
         if (!key) return json(res, 400, { error: 'key is required' });
         try {
           const data = await source(p.name, false);
-          if (part[2] === 'detail') return json(res, 200, await p.detail(key, makeContext(p), data));
+          if (part[2] === 'detail') return json(res, 200, await sourceDetail(p, key, data, url.searchParams.has('refresh')));
           return sendFile(res, await p.attachment(key, url.searchParams.get('id') || '', makeContext(p), data));
         } catch (e) {
           return json(res, e.auth ? 401 : 502, { error: e.message, ...(e.auth && { needsLogin: true }) });
@@ -2189,9 +2236,12 @@ function serve() {
       const src = url.pathname.match(/^\/api\/source\/(\w+)$/)?.[1];
       if (src) {
         if (!SOURCES[src]) return json(res, 404, { error: 'unknown source' });
-        const data = await source(src, url.searchParams.has('refresh'));
+        // ?wait: the new data once the fetch behind a stale answer lands.
+        const behind = url.searchParams.has('wait') && sourceCache.get(src)?.pending;
+        const data = await (behind || source(src, url.searchParams.has('refresh')));
         const shown = withReads(src, data);
-        return json(res, 200, { ...shown, work: workItemsOf(src, shown), fetchedAt: new Date(sourceCache.get(src)?.at || Date.now()).toISOString() });
+        return json(res, 200, { ...shown, work: workItemsOf(src, shown), fetchedAt: new Date(sourceCache.get(src)?.at || Date.now()).toISOString(),
+          ...(sourceCache.get(src)?.pending && { refreshing: true }) });
       }
       // The app window's manifest and icons (Clearsky in its own window: `clearsky app`).
       const asset = { '/manifest.webmanifest': 'application/manifest+json', '/icon.svg': 'image/svg+xml', '/icon-192.png': 'image/png', '/icon-512.png': 'image/png' }[url.pathname];
@@ -2210,7 +2260,7 @@ function serve() {
       if (url.pathname === '/api/attention') {
         const data = Object.fromEntries(await Promise.all(ATTENTION_SOURCES.map(async (n) => [n, await source(n, false)])));
         const seen = localState.seen(stateFile);
-        return json(res, 200, { lastPoll: poller.lastPoll, notifier: poller.notifier,
+        return json(res, 200, { lastPoll: poller.lastPoll, notifier: poller.notifier, dataVersion,
           items: [...attentionItems(data), ...await pluginAttention(false)].map((it) => ({ ...it, at: seen[it.key]?.stamp === String(it.stamp ?? '') ? seen[it.key].at : null })) });
       }
       if (url.pathname === '/api/copilot') return json(res, 200, { ...await copilotInfo(url.searchParams.has('refresh')), commands: copilotCommands });
@@ -2340,7 +2390,7 @@ async function restartCommand(args) {
   console.log(r.busy && !args.includes('--now') ? `Restarting once Copilot is done (${r.busy} chat${r.busy > 1 ? 's' : ''} working; gives up at ${r.until}).` : 'Restarting now.');
 }
 
-export { findBrowser };
+export { findBrowser, SOURCES, sourceCache };
 
 // Your default browser, as the desktop opens links.
 function openInBrowser(u) {

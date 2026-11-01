@@ -68,12 +68,20 @@ async function getJson(url) {
 
 // Each source loads on its own and re-renders as soon as it arrives.
 const loading = new Set();
+// A stale answer (shown at once) says `refreshing`: the new data follows when it lands.
 function loadSource(name, force) {
   loading.add(name); busy(1); renderToday();
   return getJson(`/api/source/${name}${force ? '?refresh=1' : ''}`)
-    .then((d) => { state[name] = d; if (name === 'jira') loadBranches(); })
+    .then((d) => { state[name] = d; if (name === 'jira') loadBranches(); if (d.refreshing) catchUp(name); })
     .catch((e) => { state[name] = { error: e.message, fetchedAt: new Date().toISOString() }; })
     .finally(() => { loading.delete(name); busy(-1); renderToday(); drawFresh(); });
+}
+const catchingUp = new Set();
+function catchUp(name) {
+  if (catchingUp.has(name)) return;
+  catchingUp.add(name);
+  getJson(`/api/source/${name}?wait=1`).then((d) => { state[name] = d; if (name === 'jira') loadBranches(); renderToday(); drawFresh(); clearTimeout(catchUp.plan); catchUp.plan = setTimeout(loadPlan, 300); })
+    .catch(() => {}).finally(() => catchingUp.delete(name));
 }
 
 // "↻ updated 3m ago" next to the page title; click to refresh everything.
@@ -86,7 +94,7 @@ function drawFresh() {
   }
 }
 setInterval(drawFresh, 30_000);
-document.addEventListener('click', (e) => { if (e.target.closest('[data-fresh]')) { previews.clear(); loadAll(true); drawFresh(); } });
+document.addEventListener('click', (e) => { if (e.target.closest('[data-fresh]')) { previews.clear(); readCache.clear(); loadAll(true); drawFresh(); } });
 
 // The plan is built from every source; the server reuses what it already has cached.
 function loadPlan() {
@@ -160,7 +168,7 @@ function title() {
 async function pollAttention() {
   let a;
   try { a = await getJson('/api/attention'); } catch { return; }
-  const polled = attention.lastPoll && a.lastPoll !== attention.lastPoll;
+  const polled = (attention.lastPoll && a.lastPoll !== attention.lastPoll) || (attention.dataVersion != null && a.dataVersion !== attention.dataVersion);
   attention = { ...a, byKey: new Map(a.items.map((it) => [it.key, it])) };
   notifyButton();
   browserNotify();
