@@ -207,7 +207,7 @@
     <div id="graf-list"></div>
     <label for="VPN_CHECK">VPN check</label>
     <input id="VPN_CHECK" data-key="VPN_CHECK" spellcheck="false" placeholder="the first Grafana's host">
-    <p class="hint">A host only reachable on your work VPN. When it can't be reached, the menu says <b>VPN off</b>, Grafana and the modules listed next pause instead of failing, and Copilot is told to ask you to connect. Clearsky never runs the VPN itself.</p>
+    <p class="hint">A host (or URL) behind your work VPN. Off the VPN it either can't be reached or refuses you with 403, as many work sites do at their load balancer; then the menu says <b>VPN off</b>, Grafana and the modules listed next pause instead of failing, and Copilot is told to ask you to connect. Clearsky never runs the VPN itself.</p>
     <label for="VPN_NEEDED_BY">Modules that need the VPN</label>
     <input id="VPN_NEEDED_BY" data-key="VPN_NEEDED_BY" spellcheck="false" placeholder="for example jira, github">
     <div class="row"><button class="save" data-keys="VPN_CHECK,VPN_NEEDED_BY">Save</button><span class="msg"></span></div>
