@@ -68,11 +68,16 @@ const grafana = createGrafana({ instances: grafanaInstances, tokens: () => parse
 const vpn = vpnWatch({ target: () => checkTarget(process.env, grafanaInstances().map((i) => i.url)) });
 const needsVpn = (name) => String(process.env.VPN_NEEDED_BY || '').split(/[\s,]+/).includes(name);
 // Grafana browser logins kept alive: one read of your own user every 30 minutes while the VPN is on.
-setInterval(async () => {
+// The last result per environment (ok, expired, unreachable) shows in Settings, so a lapsed login
+// is seen before Copilot needs it.
+const grafanaAlive = {};
+async function grafanaKeepAlive() {
   const v = await vpn.check();
   if (v.known && !v.up) return;
-  await grafana.keepAlive().catch(() => {});
-}, 30 * 6e4).unref();
+  Object.assign(grafanaAlive, await grafana.keepAlive().catch(() => ({})));
+}
+setTimeout(grafanaKeepAlive, 60_000).unref();
+setInterval(grafanaKeepAlive, 30 * 6e4).unref();
 loadEnvFile(join(process.cwd(), '.env'));
 loadEnvFile(join(here, '..', '.env'));
 loadEnvFile(userEnvFile);
@@ -2103,6 +2108,7 @@ function serve() {
           } }).catch((e) => ({ error: e.message }));
           if (cookie.error) return json(res, 400, cookie);
           grafanaSessions.set(inst.name, cookie);
+          delete grafanaAlive[inst.name];
           const me = await grafana.call(inst, '/api/user').catch((e) => ({ error: e.message }));
           return json(res, me.error ? 400 : 200, me.error ? me : { ok: true, login: me.login || me.email || null });
         }
@@ -2146,7 +2152,7 @@ function serve() {
       if (url.pathname === '/api/vpn') return json(res, 200, await vpn.check(url.searchParams.has('now')));
       if (url.pathname === '/api/grafana') {
         const tokens = parseTokens(process.env.GRAFANA_TOKENS);
-        return json(res, 200, { instances: grafanaInstances().map((i) => ({ name: i.name, host: new URL(i.url).host, asks: i.asks, login: grafanaSessions.get(i.name)?.at || null, token: !!tokens[i.name] })) });
+        return json(res, 200, { instances: grafanaInstances().map((i) => ({ name: i.name, host: new URL(i.url).host, asks: i.asks, login: grafanaSessions.get(i.name)?.at || null, alive: grafanaAlive[i.name] || null, token: !!tokens[i.name] })) });
       }
       if (url.pathname === '/settings') {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });

@@ -403,9 +403,9 @@ function renderModules(list) {
 async function drawGrafana() {
   let g = { instances: [] }, v = {};
   try { [g, v] = await Promise.all([fetch('/api/grafana').then((r) => r.json()), fetch('/api/vpn').then((r) => r.json())]); } catch {}
-  const n = g.instances.length, ok = g.instances.filter((i) => i.login || i.token).length;
+  const n = g.instances.length, ok = g.instances.filter((i) => i.token || (i.login && i.alive !== 'expired')).length;
   state($('#graf-state'), n && ok === n, !n ? 'not set up' : v.known && !v.up ? 'VPN off' : `${ok} of ${n} logged in`);
-  $('#graf-list').innerHTML = g.instances.map((i) => `<div class="row"><span><b>${esc(i.name)}</b> <small>${esc(i.host)}${i.asks ? ' · asks every time' : ''} · ${i.token ? 'Viewer token' : i.login ? `logged in ${esc(new Date(i.login).toLocaleDateString())}` : 'not logged in'}</small></span>
+  $('#graf-list').innerHTML = g.instances.map((i) => `<div class="row"><span><b>${esc(i.name)}</b> <small>${esc(i.host)}${i.asks ? ' · asks every time' : ''} · ${i.token ? 'Viewer token' : i.login && i.alive === 'expired' ? '<b>login expired</b>' : i.login ? `logged in ${esc(new Date(i.login).toLocaleDateString())}` : 'not logged in'}</small></span>
     <button data-glogin="${esc(i.name)}">${i.login ? 'Log in again' : 'Log in'}</button>${i.login ? `<button data-glogout="${esc(i.name)}">Log out</button>` : ''}<span class="msg"></span></div>`).join('');
 }
 document.addEventListener('click', async (e) => {
