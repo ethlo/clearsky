@@ -63,8 +63,11 @@ test('everyday branch and PR work goes through and is told; what is hard to undo
   assert.ok(await ok(req('POST', 'https://api.github.com/repos/acme/api/pulls', {})));
   assert.ok(await ok(req('POST', 'https://api.github.com/graphql', { query: 'mutation { resolveReviewThread(input: {threadId: "PRRT_abcdef1"}) { x } }' })));
   assert.ok(await ok(req('POST', 'https://api.github.com/repos/acme/api/actions/workflows/build.yaml/dispatches', { ref: 'feature/abc-1' })));
+  assert.ok(await ok(req('POST', 'https://api.github.com/repos/acme/api/git/refs', { ref: 'refs/heads/abc-2', sha: sha('a') })), 'a new branch through the API');
+  assert.equal(told.at(-1), 'create branch abc-2 in acme/api');
+  assert.ok(await ok(req('PATCH', 'https://api.github.com/repos/acme/api/git/refs/heads/abc-2', { sha: sha('b') })), 'moved forward');
   assert.equal(asked.length, 0);
-  assert.equal(told.length, 6, 'each one shows in the chat (not the ref list)');
+  assert.equal(told.length, 8, 'each one shows in the chat (not the ref list)');
   // Asks
   for (const r of [push(`${sha('a')} ${sha('b')} refs/heads/main`), push(`${sha('a')} ${sha('0')} refs/heads/feature/x`), push(`${sha('0')} ${sha('a')} refs/tags/v1.0`),
     push(`${sha('a')} ${sha('f')} refs/heads/feature/x`), push(`${sha('a')} ${sha('b')} refs/heads/v3.1`),
@@ -73,7 +76,7 @@ test('everyday branch and PR work goes through and is told; what is hard to undo
     req('POST', 'https://api.github.com/graphql', { query: 'mutation { mergePullRequest(input: {}) { x } }' }),
     req('POST', 'https://api.github.com/repos/acme/api/actions/runs/5/rerun', {})]) await f(r);
   assert.deepEqual(asked.map((a) => a.replace(/^.*\((.*)\)$/, '$1')), ['pushes to main', 'deletes feature/x', 'pushes tags/v1.0', 'force-pushes feature/x', 'pushes to v3.1',
-    'merges, releases or changes repo settings', 'deletes something', 'repo settings', 'merges, releases or changes repo settings', 'mergePullRequest',
+    'merges into a branch', 'deletes branch x', 'repo settings', 'changes CI secrets or variables', 'mergePullRequest',
     'runs CI on a branch that changes its workflows']);
   answer = false;
   const body = push(`${sha('a')} ${sha('b')} refs/heads/main`);
@@ -121,4 +124,13 @@ test('CI log storage is read only: downloads go through, uploads are refused', a
   assert.equal(up.action, 'deny');
   assert.match(up.reason, /CI log storage is read only/);
   assert.equal(GITHUB_LOG_HOSTS.length, 20);
+});
+
+test('branches and tags through the API say what they do', async () => {
+  const asked = [];
+  const f = githubFilter(async (what) => { asked.push(what); return true; }, { look: {} });
+  await f(req('POST', 'https://api.github.com/repos/acme/api/git/refs', { ref: 'refs/tags/v2.0', sha: 'a' }));
+  await f(req('POST', 'https://api.github.com/repos/acme/api/git/refs', { ref: 'refs/heads/main', sha: 'a' }));
+  await f(req('PATCH', 'https://api.github.com/repos/acme/api/git/refs/heads/abc-2', { sha: 'b', force: true }));
+  assert.deepEqual(asked, ['create tag v2.0 in acme/api (creates tag v2.0)', 'create branch main in acme/api (creates main)', 'move branch abc-2 in acme/api (force-moves abc-2)']);
 });
