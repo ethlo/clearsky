@@ -24,6 +24,10 @@ import { branchesFor } from '../lib/branches.mjs';
 import { sandboxedCommand, sandboxEnded, stopSandbox, sandboxProxy, githubLogin, DEFAULT_DOMAINS, READ_DEFAULT, parseDomains } from '../lib/sandbox.mjs';
 import { VmImage, ChatVm, vmSupport, VM_DOMAINS } from '../lib/vm.mjs';
 import { logWrite, readWrites } from '../lib/agent-log.mjs';
+import { manifest as grafanaManifest, createGrafana, parseInstances, parseTokens, parseCommand, sessionStore, USAGE as GRAFANA_USAGE } from '../lib/modules/grafana.mjs';
+import { cookieLogin } from '../lib/browser-login.mjs';
+import { redact } from '../lib/redact.mjs';
+import { vpnWatch, checkTarget } from '../lib/vpn.mjs';
 import { serveBroker, brokerSocket } from '../lib/broker.mjs';
 import { mavenSandbox, sandboxCa } from '../lib/maven.mjs';
 import { githubFilter, REGISTRY_HOSTS, GITHUB_LOG_HOSTS, SHARED_BRANCH } from '../lib/github-gate.mjs';
@@ -54,6 +58,15 @@ const here = dirname(fileURLToPath(import.meta.url));
 export const userEnvFile = join(homedir(), '.config', 'clearsky', '.env');
 const stateFile = process.env.CLEARSKY_STATE || join(homedir(), '.config', 'clearsky', 'state.json');
 const agentLogFile = join(dirname(stateFile), 'agent-writes.jsonl');
+
+// Grafana (lib/modules/grafana.mjs): your environments and logins stay in your settings, here.
+const grafanaInstances = () => parseInstances(process.env.GRAFANA_INSTANCES, process.env.GRAFANA_ASK);
+const grafanaSessions = sessionStore(join(homedir(), '.config', 'clearsky', 'grafana-sessions.json'));
+const grafana = createGrafana({ instances: grafanaInstances, tokens: () => parseTokens(process.env.GRAFANA_TOKENS), sessions: grafanaSessions });
+// The VPN (lib/vpn.mjs): noticed, never managed. Modules listed in VPN_NEEDED_BY (and Grafana)
+// pause while it's off.
+const vpn = vpnWatch({ target: () => checkTarget(process.env, grafanaInstances().map((i) => i.url)) });
+const needsVpn = (name) => String(process.env.VPN_NEEDED_BY || '').split(/[\s,]+/).includes(name);
 loadEnvFile(join(process.cwd(), '.env'));
 loadEnvFile(join(here, '..', '.env'));
 loadEnvFile(userEnvFile);
@@ -293,6 +306,7 @@ const BUILTIN_MANIFESTS = [
   jiraManifest,
   slackManifest,
   calendarManifest,
+  grafanaManifest,
   { name: 'copilot', label: 'Copilot', area: 'work', secrets: [{ kind: 'cli-login', note: 'none from Clearsky (its tokens are removed from Copilot\'s environment); Copilot keeps its own login in ~/.copilot or the keyring' }],
     hosts: ['*.githubcopilot.com', 'github.com'], clis: ['copilot'], files: ['~/.copilot', 'your Copilot folders'],
     note: 'Settings → Copilot → Sandbox limits it to your folders and listed hosts.' },
@@ -325,7 +339,7 @@ export function source(name, force) {
   const hit = sourceCache.get(name);
   if (hit?.pending) return hit.pending;
   if (!force && hit && Date.now() - hit.at < config.cacheSeconds * 1000) return Promise.resolve(hit.data);
-  const pending = settle(SOURCES[name]()).then((data) => {
+  const pending = (needsVpn(name) ? vpn.check() : Promise.resolve(null)).then((v) => (v?.known && !v.up ? { paused: 'VPN off', why: v.why } : settle(SOURCES[name]()))).then((data) => {
     sourceCache.set(name, { at: Date.now(), data });
     return data;
   });
@@ -861,7 +875,7 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   // asks you in this chat. The key tells Clearsky which chat a request comes from.
   const key = randomBytes(16).toString('hex');
   if (process.platform === 'linux') {
-    broker ||= serveBroker({ bins: { acli: config.jira.acli }, allow: assistedAllow, ask: brokerAsk, where: brokerWhere, vm: vmSupport().ok ? vmRun : null, log: console.log });
+    broker ||= serveBroker({ bins: { acli: config.jira.acli }, allow: assistedAllow, ask: brokerAsk, where: brokerWhere, vm: vmSupport().ok ? vmRun : null, grafana: grafanaRun, log: console.log });
     Object.assign(env, { CLEARSKY_BROKER_SOCKET: brokerSocket(), CLEARSKY_BROKER_KEY: key });
     env.PATH = `${join(here, '..', 'scripts', 'sandbox-bin')}${delimiter}${env.PATH}`;
   }
@@ -1210,6 +1224,56 @@ function brokerAsk({ key, tool, argv, cwd, vm = false }) {
     c.emit(ev);
   });
 }
+
+// `grafana …` from a chat (lib/broker.mjs): checked, VPN noticed, production asked, secrets
+// removed, and every call in the agent log (reads too: they're as you).
+async function grafanaRun({ key, argv }) {
+  const c = chatByKey(key);
+  if (!c) return { code: 1, stdout: '', stderr: 'Clearsky: this chat is closed.\n' };
+  const cmd = parseCommand(argv);
+  if (cmd.error) return { code: 2, stdout: '', stderr: `grafana: ${cmd.error}\n\n${GRAFANA_USAGE}\n` };
+  const line = ['grafana', ...argv].map((a) => (/^[\w@%+=:,./-]+$/.test(a) ? a : `'${a.replace(/'/g, `'\\''`)}'`)).join(' ');
+  const inst = cmd.env && grafana.find(cmd.env);
+  const log = (decided, extra = {}) => logWrite(agentLogFile, { where: 'grafana', what: line, target: inst?.name || null, chats: [chatRef(c)], decided, ...extra });
+  if (inst) {
+    const v = await vpn.check();
+    if (v.known && !v.up) {
+      log('vpn off');
+      return { code: 1, stdout: '', stderr: `Clearsky: Grafana ${inst.name} can't be reached: the VPN looks off (${v.why}). Tell the user to connect the VPN, then try again; don't work around it.\n` };
+    }
+    if (inst.asks && c.mode !== 'full') {
+      const ok = await askInChat(c, { title: `Read Grafana ${inst.name} as you`, detail: line,
+        advice: { level: 'check', text: `Check first: this reads ${inst.name}. Logs there can hold customer data, and secrets Clearsky doesn't know the shape of.` } });
+      if (!ok) { log('declined'); return { code: 1, stdout: '', stderr: `Clearsky: the user declined reading ${inst.name}. Ask what to do instead.\n` }; }
+    }
+  }
+  try {
+    const out = await grafana.run(cmd);
+    const { text, removed } = redact(out);
+    const max = 200_000, cut = text.length > max;
+    log(inst?.asks ? 'allowed' : 'read', { removed });
+    return { code: 0, stdout: `${cut ? text.slice(-max) : text}\n`, stderr: `${removed ? `(Clearsky removed ${removed} secret${removed > 1 ? 's' : ''} from this output)\n` : ''}${cut ? '(output cut to its last 200k characters: narrow the query)\n' : ''}` };
+  } catch (e) {
+    log('failed');
+    return { code: 1, stdout: '', stderr: `grafana: ${e.message}\n` };
+  }
+}
+// A question in a chat with Allow and Deny only (asked every time).
+function askInChat(c, { title, detail, advice = null }) {
+  return new Promise((done) => {
+    const id = randomBytes(6).toString('hex');
+    const ev = { type: 'permission', id, title, kind: 'execute', detail, advice,
+      options: [{ id: 'allow', name: 'Allow', kind: 'allow_once' }, { id: 'deny', name: 'Deny', kind: 'reject_once' }] };
+    c.waiting.set(id, (answer) => { c.pending.delete(id); done(answer.optionId === 'allow'); });
+    c.pending.set(id, ev);
+    c.emit(ev);
+  });
+}
+// What a sandboxed chat is told about Grafana, when you have it set up.
+const grafanaHint = () => {
+  const list = grafanaInstances();
+  return list.length ? ` To read logs and metrics of our environments (${list.map((i) => i.name).join(', ')}), use \`grafana\` (\`grafana help\` lists its commands): it runs LogQL and PromQL read only, through Clearsky, which holds the login; there is no ssh to servers. ${list.some((i) => i.asks) ? `Reading ${list.filter((i) => i.asks).map((i) => i.name).join(', ')} asks me each time, so ask for what you need in one go.` : ''}` : '';
+};
 
 // A short-lived Copilot process, for listing or reading sessions.
 async function withAgent(bin, fn) {
@@ -1975,7 +2039,7 @@ function serve() {
           const options = { model: body.model, effort: body.effort, permission: copilot.PERMISSIONS[body.permission] ? body.permission : 'ask',
             allow: list(body.allow), deny: list(body.deny) };
           // The first turn carries the dashboard so Copilot knows what you're looking at.
-          const sandboxHint = process.env.COPILOT_SANDBOX === 'srt' || body.permission === 'sandboxed' ? `\n\n${SANDBOX_HINT}` : '';
+          const sandboxHint = process.env.COPILOT_SANDBOX === 'srt' || body.permission === 'sandboxed' ? `\n\n${SANDBOX_HINT}${grafanaHint()}` : '';
           const folders = foldersHint();
           // A Copilot command (/compact, say) only works as the whole message: nothing goes in front.
           // The sandbox hint a resumed chat is owed then goes with the next message instead.
@@ -2021,6 +2085,26 @@ function serve() {
           localState.setRead(stateFile, marks);
           return json(res, 200, { ok: true });
         }
+        // Log in to a Grafana in a browser window; the login cookie stays in Clearsky's settings.
+        if (url.pathname === '/api/grafana/login') {
+          const { name } = await readJson(req);
+          const inst = grafana.find(String(name || ''));
+          if (!inst) return json(res, 400, { error: 'no such Grafana environment' });
+          const host = new URL(inst.url).hostname;
+          const cookie = await cookieLogin({ url: `${inst.url}/login`, pick: (cookies) => {
+            const k = cookies.find((x) => x.name === 'grafana_session' && x.value && host.endsWith(x.domain.replace(/^\./, '')));
+            return k && `grafana_session=${k.value}`;
+          } }).catch((e) => ({ error: e.message }));
+          if (cookie.error) return json(res, 400, cookie);
+          grafanaSessions.set(inst.name, cookie);
+          const me = await grafana.call(inst, '/api/user').catch((e) => ({ error: e.message }));
+          return json(res, me.error ? 400 : 200, me.error ? me : { ok: true, login: me.login || me.email || null });
+        }
+        if (url.pathname === '/api/grafana/logout') {
+          const { name } = await readJson(req);
+          if (grafana.find(String(name || ''))) grafanaSessions.set(String(name), null);
+          return json(res, 200, { ok: true });
+        }
         if (url.pathname === '/api/dismiss') {
           return json(res, 200, { dismissed: localState.setDismissed(stateFile, await readJson(req)) });
         }
@@ -2053,6 +2137,11 @@ function serve() {
         return json(res, 404, { error: 'not found' });
       }
       if (url.pathname === '/api/settings') return json(res, 200, await settingsStatus());
+      if (url.pathname === '/api/vpn') return json(res, 200, await vpn.check(url.searchParams.has('now')));
+      if (url.pathname === '/api/grafana') {
+        const tokens = parseTokens(process.env.GRAFANA_TOKENS);
+        return json(res, 200, { instances: grafanaInstances().map((i) => ({ name: i.name, host: new URL(i.url).host, asks: i.asks, login: grafanaSessions.get(i.name)?.at || null, token: !!tokens[i.name] })) });
+      }
       if (url.pathname === '/settings') {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
         return res.end(settingsPage);

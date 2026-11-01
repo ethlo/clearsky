@@ -1,0 +1,85 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { parseInstances, parseTokens, parseCommand, createGrafana, sessionStore, sessionCookie, formatLogs, formatMetrics } from '../lib/modules/grafana.mjs';
+import { redact } from '../lib/redact.mjs';
+import { checkTarget, reachable, vpnWatch } from '../lib/vpn.mjs';
+import { validate } from '../lib/settings.mjs';
+
+test('environments: name=address, and which ones ask every time', () => {
+  const list = parseInstances('test=https://grafana.test.example.com, prod=https://grafana.example.com/  bad,also=ftp://x');
+  assert.deepEqual(list, [{ name: 'test', url: 'https://grafana.test.example.com', asks: false }, { name: 'prod', url: 'https://grafana.example.com', asks: true }]);
+  assert.equal(parseInstances('test=https://a, stage=https://b', 'stage').find((i) => i.name === 'stage').asks, true);
+  assert.deepEqual(parseTokens('test=glsa_abc,prod=glsa_def'), { test: 'glsa_abc', prod: 'glsa_def' });
+  assert.equal(validate({ GRAFANA_INSTANCES: 'test=https://a.example.com\nprod=https://b.example.com' }).GRAFANA_INSTANCES, 'test=https://a.example.com, prod=https://b.example.com');
+  assert.throws(() => validate({ GRAFANA_INSTANCES: 'https://a.example.com' }), /name=https/);
+});
+
+test('commands are checked before anything is asked', () => {
+  assert.deepEqual(parseCommand([]), { cmd: 'list' });
+  assert.equal(parseCommand(['logs', 'test', '{app="api"}', '--since', '2h', '--limit', '50']).opts.from, 'now-2h');
+  assert.equal(parseCommand(['logs', 'test', '{app="api"}', '--limit', '99999']).opts.limit, 2000);
+  assert.match(parseCommand(['logs', 'test']).error, /one query/);
+  assert.match(parseCommand(['logs', 'test', 'x', '--since', 'yesterday']).error, /--since/);
+  assert.match(parseCommand(['delete', 'test']).error, /unknown command/);
+  assert.match(parseCommand(['logs', 'test', 'x', '--header', 'a']).error, /unknown option/);
+});
+
+const frames = {
+  logs: [{ schema: { fields: [{ name: 'labels', type: 'other' }, { name: 'Time', type: 'time' }, { name: 'Line', type: 'string' }] },
+    data: { values: [[{ app: 'api', level: 'error', pod: 'p1' }, { app: 'api' }], [1767225600000, 1767225660000], ['boom password=hunter22', 'ok']] } }],
+  metrics: [{ schema: { fields: [{ name: 'Time', type: 'time' }, { name: 'Value', type: 'number', labels: { job: 'api' } }] }, data: { values: [[1, 2, 3], [0.5, 2, 1.25]] } }],
+};
+
+test('reads go to Grafana as you, read only, and Grafana\'s new login cookie is kept', async () => {
+  const sessions = sessionStore(join(mkdtempSync(join(tmpdir(), 'cs-graf-')), 'g.json'));
+  sessions.set('test', 'grafana_session=old');
+  const calls = [];
+  let expired = true;
+  const fetch = async (url, o) => {
+    calls.push(`${o.method} ${new URL(url).pathname} ${o.headers.Cookie || o.headers.Authorization}`);
+    const res = (status, body, cookie) => ({ ok: status < 300, status, text: async () => JSON.stringify(body), headers: { getSetCookie: () => (cookie ? [`grafana_session=${cookie}; Path=/; HttpOnly`] : []) } });
+    if (url.endsWith('/rotate')) { expired = false; return res(200, {}, 'new'); }
+    if (expired) return res(401, { message: 'unauthorized' });
+    if (url.endsWith('/api/frontend/settings')) return res(200, { datasources: { Loki: { name: 'Loki', uid: 'l1', type: 'loki', isDefault: false }, Prom: { name: 'Prom', uid: 'p1', type: 'prometheus', isDefault: true } } });
+    if (url.endsWith('/api/ds/query')) { const q = JSON.parse(o.body).queries[0]; return res(200, { results: { A: { frames: q.datasource.type === 'loki' ? frames.logs : frames.metrics } } }); }
+    return res(404, {});
+  };
+  const g = createGrafana({ instances: () => parseInstances('test=https://g.example.com,prod=https://p.example.com'), tokens: () => ({ prod: 'glsa_x' }), sessions, fetch });
+  const out = await g.run(parseCommand(['logs', 'test', '{app="api"}']));
+  assert.match(out, /2026-01-01T00:00:00.000Z  \{app=api,level=error,pod=p1\}  boom password=hunter22/);
+  assert.equal(sessions.get('test').cookie, 'grafana_session=new', 'rotated once and kept');
+  assert.ok(calls.every((c) => /^(GET|POST) \/api\/(frontend\/settings|ds\/query|user\/auth-tokens\/rotate) /.test(c)), calls.join('\n'));
+  assert.match(await g.run(parseCommand(['metrics', 'prod', 'up'])), /\{job="api"\}  3 points  min 0.5  max 2  last 1.25/);
+  assert.match(calls.at(-1), /Bearer glsa_x/, 'a Viewer token wins over the login');
+  await assert.rejects(g.run(parseCommand(['logs', 'nope', 'x'])), /no Grafana environment "nope"/);
+  sessions.set('test', null);
+  await assert.rejects(g.run(parseCommand(['logs', 'test', 'x'])), /not logged in/);
+});
+
+test('output: logs oldest first, metrics summarised, secrets removed', () => {
+  assert.match(formatLogs(frames.logs, 1), /ok\n\(1 older lines left out/);
+  assert.match(formatMetrics(frames.metrics, true), /  1970-01-01T00:00:00.003Z  1.25/);
+  assert.equal(sessionCookie(['other=1', 'grafana_session=abc; Path=/']), 'grafana_session=abc');
+  const r = redact('password=hunter22 Authorization: Bearer abc.def https://u:pw@db.example.com token: "s3cr3t" AKIAABCDEFGHIJKLMNOP eyJhbGciOiJIUzI1.eyJzdWIiOiIxMjM0.c2lnbmF0dXJl ghp_abcdefghijklmnopqrstuvwxyz0123456789 level=error');
+  assert.doesNotMatch(r.text, /hunter22|abc\.def|:pw@|s3cr3t|AKIAABCD|eyJzdWIi|ghp_abc/);
+  assert.match(r.text, /level=error/);
+  assert.ok(r.removed >= 7);
+});
+
+test('VPN: checked against a host behind it, and only noticed', async () => {
+  assert.deepEqual(checkTarget({ VPN_CHECK: 'jira.internal.example.com:8443' }), { host: 'jira.internal.example.com', port: 8443 });
+  assert.deepEqual(checkTarget({}, ['https://grafana.test.example.com']), { host: 'grafana.test.example.com', port: 443 });
+  assert.equal(checkTarget({}, []), null);
+  const down = await reachable({ host: 'x.example', port: 443 }, { resolve: async () => { throw new Error('ENOTFOUND'); } });
+  assert.deepEqual(down, { up: false, why: 'x.example doesn\'t resolve' });
+  let n = 0;
+  const w = vpnWatch({ target: () => ({ host: 'h', port: 1 }), probe: async () => { n++; return { up: false, why: 'no' }; } });
+  assert.equal((await w.check()).up, false);
+  await w.check();
+  assert.equal(n, 1, 'checked at most once a minute');
+  await w.check(true);
+  assert.equal(n, 2);
+});

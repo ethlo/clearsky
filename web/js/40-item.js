@@ -184,12 +184,12 @@ async function renderNotes() {
 }
 
 // What Copilot changed as you (GitHub and Jira show it as you; this tells it apart), newest first.
-const DECIDED = { auto: 'went through', allowed: 'you allowed', 'allowed with a step': 'with a step you allowed', declined: 'you declined' };
+const DECIDED = { auto: 'went through', allowed: 'you allowed', 'allowed with a step': 'with a step you allowed', declined: 'you declined', read: 'read', 'vpn off': 'VPN off', failed: 'failed' };
 function changeRows(list, { chats = true } = {}) {
   const name = (id) => recentChats.find((r) => r.id === id)?.title || 'a Copilot chat';
   return `<ul class="notes changes">${list.map((w) => `<li class="d-${esc(w.decided.split(' ')[0])}">
       <span class="when" title="${esc(new Date(w.at).toLocaleString())}">${esc(ago(w.at))}</span>
-      <span class="what"><b>${esc(w.where === 'jira' ? 'Jira' : 'GitHub')}${w.target ? ` · ${esc(w.target)}` : ''}</b><small>${esc(w.what)}</small>
+      <span class="what"><b>${esc({ jira: 'Jira', grafana: 'Grafana (read)' }[w.where] || 'GitHub')}${w.target ? ` · ${esc(w.target)}` : ''}</b><small>${esc(w.what)}${w.removed ? ` · ${w.removed} secret${w.removed > 1 ? 's' : ''} removed` : ''}</small>
         ${chats && w.chats?.length ? `<small>${w.chats.length > 1 ? 'one of: ' : ''}${w.chats.map((c) => esc(name(c.id))).join(', ')}</small>` : ''}</span>
       <span class="kind">${esc(DECIDED[w.decided] || w.decided)}</span></li>`).join('')}</ul>`;
 }

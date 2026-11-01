@@ -459,7 +459,8 @@ function renderList() {
   if ($('#list-q').value !== (listQ[listView] || '')) $('#list-q').value = listQ[listView] || '';
   const by = (f) => live.filter(f);
   const sources = [['GitHub', state.github], ['Jira', state.jira], ['Jira mentions', state.jiraMentions], ['Slack', state.slack]];
-  const errs = sources.filter(([, s]) => s?.error).map(([n, s]) => `<div class="err">${esc(n)}: ${esc(s.error)}</div>`).join('');
+  const errs = sources.filter(([, s]) => s?.error).map(([n, s]) => `<div class="err">${esc(n)}: ${esc(s.error)}</div>`).join('')
+    + sources.filter(([, s]) => s?.paused).map(([n, s]) => `<div class="paused">${esc(n)}: paused, ${esc(s.paused)}</div>`).join('');
   const loading = sources.some(([, s]) => !s);
   const groups = [];
   const group = (title, glyph, items, opts = {}) => groups.push({ title, glyph, items, ...opts });

@@ -346,3 +346,16 @@ function card(el, title, count, body) {
 
 const toneOf = { bad: 'red', warn: 'amber', good: 'green', wait: 'blue', neutral: 'gray' };
 const prRef = (p) => `${p.repo}#${p.number}`;
+
+// VPN off: a badge in the menu, so paused sources and refused Grafana reads make sense
+// (lib/vpn.mjs). Nothing shows when Clearsky has nothing to check it against.
+async function drawVpn() {
+  let v = null;
+  try { v = await (await fetch('/api/vpn', { cache: 'no-store' })).json(); } catch { return; }
+  const b = document.getElementById('vpn-badge');
+  if (!b) return;
+  b.hidden = !(v.known && !v.up);
+  b.title = v.why ? `${v.why} (checked ${new Date(v.at).toLocaleTimeString()})` : '';
+}
+drawVpn();
+setInterval(() => { if (!document.hidden) drawVpn(); }, 60_000);

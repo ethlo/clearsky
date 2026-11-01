@@ -692,3 +692,6 @@ time.at { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nu
 .cp-trim button.x { border: 0; background: none; color: var(--muted); padding: 3px 4px; }
 .hs small .full { color: var(--amber); }
 .msg.me .queued .linkish { font: inherit; background: none; border: 0; padding: 0; color: var(--blue); text-decoration: underline; cursor: pointer; }
+/* VPN off (lib/vpn.mjs), and sources paused for it. */
+.vpn-off { margin: 8px 12px 0; padding: 4px 10px; border-radius: 999px; background: var(--amber-soft); color: var(--amber); border: 1px solid var(--amber); font-size: 12px; font-weight: 600; text-align: center; }
+.paused { color: var(--muted); font-size: 12.5px; padding: 6px 0; }

@@ -17,6 +17,7 @@
 <div class="app">
 <div class="drawer-scrim" id="scrim" hidden></div>
 <aside class="side" id="side" aria-label="Menu">
+  <div class="vpn-off" id="vpn-badge" hidden role="status">VPN off</div>
   <nav class="nav" id="nav">
     <a class="ni" href="#" data-nav="inbox"><span class="ico" data-i="work"></span><span class="lab">Work</span><b id="n-inbox"></b></a>
     <nav class="subnav" id="side-work">
@@ -80,7 +81,7 @@
 
   <!-- A source on its own page, such as School. -->
   <section class="view" id="v-changes" hidden>
-    <header class="vh"><h1>Copilot's changes</h1><span class="sub">what it changed as you on GitHub and Jira, from its sandbox</span><span class="spacer"></span></header>
+    <header class="vh"><h1>Copilot's changes</h1><span class="sub">what it changed as you on GitHub and Jira, and what it read in Grafana, from its sandbox</span><span class="spacer"></span></header>
     <div class="view-b"><div id="changes"></div></div>
   </section>
   <section class="view" id="v-notes" hidden>

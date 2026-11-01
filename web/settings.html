@@ -193,6 +193,27 @@
   </section>
 
   <section>
+    <h2>Grafana <span class="state" id="graf-state"></span></h2>
+    <p class="hint">Lets Copilot read logs and metrics of your environments with <code>grafana logs test '{app="api"} |= "error"'</code> instead of a shell on servers. Read only: Clearsky makes only search and query calls, with your Viewer login, which never goes in the sandbox. Secrets it knows the shape of are removed from what comes back, every call is in <b>Copilot's changes</b>, and the environments below that ask do so in the chat every time.</p>
+    <label for="GRAFANA_INSTANCES">Environments</label>
+    <textarea id="GRAFANA_INSTANCES" data-key="GRAFANA_INSTANCES" rows="3" spellcheck="false" placeholder="test=https://grafana.test.example.com, prod=https://grafana.example.com"></textarea>
+    <p class="hint">One per environment, as <code>name=address</code>. Kept in your settings file only.</p>
+    <label for="GRAFANA_ASK">Ask every time for</label>
+    <input id="GRAFANA_ASK" data-key="GRAFANA_ASK" spellcheck="false" placeholder="every name with “prod”">
+    <label for="GRAFANA_TOKENS">Viewer tokens (optional)</label>
+    <input id="GRAFANA_TOKENS" data-key="GRAFANA_TOKENS" type="password" autocomplete="off" placeholder="leave empty to use your browser login">
+    <p class="hint">Not needed: log in below with your browser instead. If you can create a Grafana service account with the <b>Viewer</b> role, its token (<code>name=glsa_…</code>) is used instead of the login.</p>
+    <div class="row"><button class="save" data-keys="GRAFANA_INSTANCES,GRAFANA_ASK,GRAFANA_TOKENS">Save</button><span class="msg"></span></div>
+    <div id="graf-list"></div>
+    <label for="VPN_CHECK">VPN check</label>
+    <input id="VPN_CHECK" data-key="VPN_CHECK" spellcheck="false" placeholder="the first Grafana's host">
+    <p class="hint">A host only reachable on your work VPN. When it can't be reached, the menu says <b>VPN off</b>, Grafana and the modules listed next pause instead of failing, and Copilot is told to ask you to connect. Clearsky never runs the VPN itself.</p>
+    <label for="VPN_NEEDED_BY">Modules that need the VPN</label>
+    <input id="VPN_NEEDED_BY" data-key="VPN_NEEDED_BY" spellcheck="false" placeholder="for example jira, github">
+    <div class="row"><button class="save" data-keys="VPN_CHECK,VPN_NEEDED_BY">Save</button><span class="msg"></span></div>
+  </section>
+
+  <section>
     <h2>Modules</h2>
     <p class="hint">What each part of Clearsky holds and talks to. Saved secrets are never shown, only whether one is there. Each source gets only its own settings, and a source that lists its hosts can reach only those through Clearsky.</p>
     <table class="mods" id="mods"></table>
@@ -232,7 +253,7 @@
   draw();
 })();
 const CSRF = '__CSRF__';
-const SECRET = new Set(['GITHUB_TOKEN', 'GOOGLE_CALENDAR_ICS', 'SLACK_TOKEN', 'COPILOT_SANDBOX_TOKEN']);
+const SECRET = new Set(['GITHUB_TOKEN', 'GOOGLE_CALENDAR_ICS', 'SLACK_TOKEN', 'COPILOT_SANDBOX_TOKEN', 'GRAFANA_TOKENS']);
 const $ = (s) => document.querySelector(s);
 
 const manifest = {
@@ -309,6 +330,13 @@ function render(s) {
   $('#CLEARSKY_WORKDAYS').value = s.workdays || '';
   $('#CLEARSKY_MENTION_DAYS').value = s.mentionDays || '';
   $('#CLEARSKY_TIME_FORMAT').value = s.timeFormat || '24';
+  const gf = s.grafana || {};
+  $('#GRAFANA_INSTANCES').value = gf.instances || '';
+  $('#GRAFANA_ASK').value = gf.ask || '';
+  $('#GRAFANA_TOKENS').placeholder = gf.tokens ? `${gf.tokens}; paste all again to replace` : 'leave empty to use your browser login';
+  $('#VPN_CHECK').value = gf.vpnCheck || '';
+  $('#VPN_NEEDED_BY').value = gf.vpnNeededBy || '';
+  drawGrafana();
   const cp = s.copilot || {};
   $('#COPILOT_FOLDERS').value = cp.folders || '';
   // In the container, a folder exists only if docker-compose mounts it.
@@ -370,6 +398,27 @@ function renderModules(list) {
     ${m.dbus ? '<div><span class="k">Uses the desktop session bus (D-Bus)</span></div>' : ''}
     ${m.note ? `<div class="k">${esc(m.note)}</div>` : ''}</td></tr>`).join('');
 }
+
+// Each Grafana environment: logged in or not, and the button to log in with your browser.
+async function drawGrafana() {
+  let g = { instances: [] }, v = {};
+  try { [g, v] = await Promise.all([fetch('/api/grafana').then((r) => r.json()), fetch('/api/vpn').then((r) => r.json())]); } catch {}
+  const n = g.instances.length, ok = g.instances.filter((i) => i.login || i.token).length;
+  state($('#graf-state'), n && ok === n, !n ? 'not set up' : v.known && !v.up ? 'VPN off' : `${ok} of ${n} logged in`);
+  $('#graf-list').innerHTML = g.instances.map((i) => `<div class="row"><span><b>${esc(i.name)}</b> <small>${esc(i.host)}${i.asks ? ' · asks every time' : ''} · ${i.token ? 'Viewer token' : i.login ? `logged in ${esc(new Date(i.login).toLocaleDateString())}` : 'not logged in'}</small></span>
+    <button data-glogin="${esc(i.name)}">${i.login ? 'Log in again' : 'Log in'}</button>${i.login ? `<button data-glogout="${esc(i.name)}">Log out</button>` : ''}<span class="msg"></span></div>`).join('');
+}
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-glogin],[data-glogout]');
+  if (!b) return;
+  const msg = b.parentElement.querySelector('.msg');
+  b.disabled = true; msg.textContent = b.dataset.glogin ? 'Log in in the window that opened…' : ''; msg.className = 'msg';
+  try {
+    const r = await post(b.dataset.glogin ? '/api/grafana/login' : '/api/grafana/logout', { name: b.dataset.glogin || b.dataset.glogout });
+    msg.textContent = r.login ? `Logged in as ${r.login}.` : 'Done.'; msg.className = 'msg on';
+    setTimeout(drawGrafana, 1200);
+  } catch (err) { msg.textContent = err.message; msg.className = 'msg bad'; b.disabled = false; }
+});
 
 async function load() {
   render(await (await fetch('/api/settings')).json());
