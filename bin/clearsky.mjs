@@ -2091,7 +2091,7 @@ function serve() {
           const inst = grafana.find(String(name || ''));
           if (!inst) return json(res, 400, { error: 'no such Grafana environment' });
           const host = new URL(inst.url).hostname;
-          const cookie = await cookieLogin({ url: `${inst.url}/login`, pick: (cookies) => {
+          const cookie = await cookieLogin({ url: `${inst.url}/login`, profile: join(homedir(), '.config', 'clearsky', 'browser'), pick: (cookies) => {
             const k = cookies.find((x) => x.name === 'grafana_session' && x.value && host.endsWith(x.domain.replace(/^\./, '')));
             return k && `grafana_session=${k.value}`;
           } }).catch((e) => ({ error: e.message }));
