@@ -67,6 +67,12 @@ const grafana = createGrafana({ instances: grafanaInstances, tokens: () => parse
 // pause while it's off.
 const vpn = vpnWatch({ target: () => checkTarget(process.env, grafanaInstances().map((i) => i.url)) });
 const needsVpn = (name) => String(process.env.VPN_NEEDED_BY || '').split(/[\s,]+/).includes(name);
+// Grafana browser logins kept alive: one read of your own user every 30 minutes while the VPN is on.
+setInterval(async () => {
+  const v = await vpn.check();
+  if (v.known && !v.up) return;
+  await grafana.keepAlive().catch(() => {});
+}, 30 * 6e4).unref();
 loadEnvFile(join(process.cwd(), '.env'));
 loadEnvFile(join(here, '..', '.env'));
 loadEnvFile(userEnvFile);

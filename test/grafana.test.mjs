@@ -83,3 +83,21 @@ test('VPN: checked against a host behind it, and only noticed', async () => {
   await w.check(true);
   assert.equal(n, 2);
 });
+
+test('keep-alive: one read per logged-in environment keeps the rotated cookie; tokens and logged-out ones are left alone', async () => {
+  const sessions = sessionStore(join(mkdtempSync(join(tmpdir(), 'cs-graf-')), 'g.json'));
+  sessions.set('a', 'grafana_session=a1');
+  sessions.set('b', 'grafana_session=b1');
+  const calls = [];
+  const fetch = async (url, o) => {
+    const u = new URL(url);
+    calls.push(`${o.method} ${u.host}${u.pathname}`);
+    const res = (status, cookie) => ({ ok: status < 300, status, text: async () => '{}', headers: { getSetCookie: () => (cookie ? [`grafana_session=${cookie}; Path=/`] : []) } });
+    if (u.host === 'a.example.com') return res(200, 'a2');
+    return res(401);
+  };
+  const g = createGrafana({ instances: () => parseInstances('a=https://a.example.com,b=https://b.example.com,c=https://c.example.com,t=https://t.example.com'), tokens: () => ({ t: 'glsa_x' }), sessions, fetch });
+  assert.deepEqual(await g.keepAlive(), { a: 'ok', b: 'expired' });
+  assert.equal(sessions.get('a').cookie, 'grafana_session=a2');
+  assert.deepEqual(calls, ['GET a.example.com/api/user', 'GET b.example.com/api/user', 'POST b.example.com/api/user/auth-tokens/rotate']);
+});
