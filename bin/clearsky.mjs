@@ -1735,6 +1735,9 @@ const refKey = (r) => (r.kind === 'issue' ? `issue:${r.key}` : `${r.kind}:${r.re
 async function copilotHistory(bin, id, cwd) {
   const messages = await withAgent(bin, (a) => a.history(id, cwd));
   for (const m of messages) if (m.role === 'me') m.text = typedPart(m.text);
+  // Copilot replays steps without times; its log has them.
+  const { times = {} } = sessionEvents(copilotHome(), id);
+  for (const m of messages) for (const g of m.segs || []) if (g.type === 'tool' && times[g.id]) Object.assign(g, times[g.id]);
   return messages;
 }
 

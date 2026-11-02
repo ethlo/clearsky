@@ -21,6 +21,7 @@ test("Copilot's own steps, from its session log", () => {
   const r = parseEvents(log);
   assert.deepEqual(r.branches, ['main', 'feature/ABC-1-x'], 'every branch it started or resumed on');
   assert.deepEqual(r.actions, [{ text: 'pushed', at: '2026-10-29T10:05:03Z' }], 'only steps that succeeded');
+  assert.deepEqual(r.times.a, { start: Date.parse('2026-10-29T10:05:00Z'), end: Date.parse('2026-10-29T10:05:03Z') }, 'when each step ran, for a reopened chat');
 });
 
 test('parseUsage sums model calls once and keeps the latest checkpoint and context', () => {
