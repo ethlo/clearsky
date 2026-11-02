@@ -987,7 +987,7 @@ $('#chat-form').onsubmit = (e) => {
   if (chat.stop && !t.trim()) return chat.halt ? chat.halt() : chat.stop();
   $('#chat-text').value = '';
   if (chat.stop) {
-    const el = addMsg('me', `${esc(t)}<span class="queued">Sends when Copilot is done · <button type="button" class="linkish" data-now>Send now</button></span>`);
+    const el = addMsg('me', `${esc(t)}<span class="queued">Sends when Copilot is done · <button type="button" class="linkish" data-now>Send now</button> · <button type="button" class="linkish" data-unqueue title="Take it back; its text goes back in the box">Cancel</button></span>`);
     el.classList.add('is-queued');
     const q = { text: t, el };
     chat.queued.push(q);
@@ -1013,6 +1013,25 @@ function sendNow(q) {
     chat.stop?.();
   }, 8000);
 }
+// Cancel a waiting message: it's dropped, and its text goes back in the box to change or send later.
+$('#chat-log').addEventListener('click', (e) => {
+  if (!e.target.closest('[data-unqueue]')) return;
+  const q = chat.queued.find((x) => x.el.contains(e.target));
+  if (q) unqueue(q);
+});
+// (A "Send now" already stopping Copilot carries on stopping; the message just isn't sent.)
+function unqueue(q) {
+  chat.queued = chat.queued.filter((x) => x !== q);
+  q.el.remove();
+  const box = $('#chat-text');
+  box.value = box.value.trim() ? `${box.value}\n${q.text}` : q.text;
+  box.focus();
+  sendLabel();
+}
+// ↑ in an empty box takes the last waiting message back, to change it.
+$('#chat-text').addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowUp' && !e.target.value && chat.queued.length) { e.preventDefault(); unqueue(chat.queued.at(-1)); }
+});
 $('#chat-log').addEventListener('click', (e) => {
   if (e.target.closest('[data-now]') == null) return;
   const q = chat.queued.find((x) => x.el.contains(e.target));
