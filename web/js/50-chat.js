@@ -356,26 +356,98 @@ async function drawOutputs() {
     ${links.length ? `<ul class="outs">${links.map((l) => `<li><span class="mi">${icon({ pr: 'pr', branch: 'pr', ci: 'tool', ticket: 'ticket', project: 'ticket', env: 'source', repo: 'pr' }[l.kind] || 'tool', 13)}</span><div>${l.url ? `<a href="${esc(l.url)}" target="_blank" rel="noopener"${ref(l)}>${esc(l.label)}</a>` : `<b>${esc(l.label)}</b>`}${l.acts?.length ? `<small>${esc(l.acts.join(' · '))}</small>` : ''}</div></li>`).join('')}</ul>` : ''}
     ${files.length ? `<ul class="outs files">${files.slice(0, 30).map((f) => `<li class="${f.exists ? '' : 'gone'}"><span class="mi">${icon('clip', 13)}</span><div>${f.exists ? `<button type="button" class="linkish" data-fview="${esc(f.path)}" title="${esc(f.shown)}">${esc(f.name)}</button>` : `<s title="${esc(f.shown)}">${esc(f.name)}</s>`}<small>${esc([FILE_KIND[f.kind] || f.kind, fsize(f.size), f.at && ago(f.at), !f.exists && 'gone'].filter(Boolean).join(' · '))}</small></div></li>`).join('')}</ul>` : ''}`;
 }
-// A file in a box over the page: text and images shown, the rest opened in a new tab.
+// A file in a box over the page: code highlighted with line numbers, what the chat changed in
+// it as a diff (against where its branch left the default branch), images shown, and the rest
+// opened in a new tab. VS Code opens the file itself.
+const HL_KW = new Set(('abstract as assert async await break case catch class const continue def default defer delete do elif else enum export extends ' +
+  'final finally fn for from func function go if impl implements import in instanceof interface is let match module mut namespace new nil none not null ' +
+  'of or override package pass private protected pub public raise readonly record return sealed select self static struct super switch synchronized ' +
+  'this throw throws trait true false try type typeof use val var void when where while with yield None True False').split(' '));
+function hlLang(name) {
+  const ext = (name.match(/\.(\w+)$/)?.[1] || name).toLowerCase();
+  if (/^(sh|bash|zsh|py|rb|ya?ml|toml|properties|conf|cfg|env|ini|dockerfile|makefile|tf|hcl|gitignore)$/.test(ext)) return { line: '#' };
+  if (/^(sql)$/.test(ext)) return { line: '--', block: true };
+  if (/^(html?|xml|vue|svelte|md|markdown|csv|tsv|txt|log)$/.test(ext)) return null;
+  return { line: '//', block: true };
+}
+// Comments, strings, numbers and keywords: enough to read code, small enough to live here.
+function highlight(text, name) {
+  const lang = hlLang(name);
+  if (!lang) return esc(text);
+  const lc = lang.line.replace(/[/#-]/g, (c) => `\\${c}`);
+  const re = new RegExp(`(${lang.block ? '\\/\\*[\\s\\S]*?\\*\\/|' : ''}${lc}[^\\n]*)|("(?:[^"\\\\\\n]|\\\\.)*"|'(?:[^'\\\\\\n]|\\\\.)*'|\`(?:[^\`\\\\]|\\\\.)*\`)|\\b(\\d[\\d_.xXa-fA-FlLuU]*)\\b|(@?[A-Za-z_$][\\w$]*)`, 'g');
+  let out = '', last = 0, m;
+  while ((m = re.exec(text))) {
+    out += esc(text.slice(last, m.index));
+    const [w, com, str, num, id] = m;
+    out += com ? `<span class="hl-c">${esc(com)}</span>` : str ? `<span class="hl-s">${esc(str)}</span>` : num ? `<span class="hl-n">${esc(num)}</span>`
+      : id && id[0] === '@' ? `<span class="hl-a">${esc(id)}</span>` : id && HL_KW.has(id) ? `<span class="hl-k">${esc(id)}</span>`
+      : id && /^[A-Z][a-z]/.test(id) ? `<span class="hl-t">${esc(id)}</span>` : esc(w);
+    last = re.lastIndex;
+  }
+  return out + esc(text.slice(last));
+}
+// Highlighted HTML split into lines, keeping spans that run over a line end (a block comment) open.
+function hlLines(html) {
+  const out = [];
+  let open = [];
+  for (const line of html.split('\n')) {
+    let l = open.join('') + line;
+    for (const t of line.match(/<\/?span[^>]*>/g) || []) { if (t.startsWith('</')) open.pop(); else open.push(t); }
+    out.push(l + '</span>'.repeat(open.length));
+  }
+  return out;
+}
+const codeView = (text, name) => `<div class="code">${hlLines(highlight(text, name)).map((l, i) => `<div class="ln"><i>${i + 1}</i><span>${l || ' '}</span></div>`).join('')}</div>`;
+function diffView(diff, name) {
+  const rows = [];
+  let a = 0, b = 0;
+  for (const line of diff.split('\n')) {
+    const h = line.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@(.*)$/);
+    if (h) { a = Number(h[1]); b = Number(h[2]); rows.push(`<div class="ln hunk"><i></i><i></i><span>${esc(h[3].trim() || '⋯')}</span></div>`); continue; }
+    if (!rows.length || /^\\ No newline/.test(line)) continue; // the header lines, and git's note
+    const k = line[0], body = line.slice(1);
+    const hl = hlLines(highlight(body, name))[0] || ' ';
+    if (k === '+') rows.push(`<div class="ln add"><i></i><i>${b++}</i><span>${hl}</span></div>`);
+    else if (k === '-') rows.push(`<div class="ln del"><i>${a++}</i><i></i><span>${hl}</span></div>`);
+    else rows.push(`<div class="ln"><i>${a++}</i><i>${b++}</i><span>${hl}</span></div>`);
+  }
+  return `<div class="code diff">${rows.join('')}</div>`;
+}
+// vscode://file/… opens the file in VS Code wherever it's installed (Windows paths too).
+const vscodeUrl = (p) => `vscode://file${p.startsWith('/') ? '' : '/'}${encodeURI(p.replace(/\\/g, '/'))}`;
+let fvState = null;
+function drawFview(tab) {
+  const s = fvState, body = $('#fv-body');
+  if (!s) return;
+  s.tab = tab;
+  document.querySelectorAll('[data-fv-tab]').forEach((b) => b.classList.toggle('on', b.dataset.fvTab === tab));
+  if (tab === 'diff') body.innerHTML = diffView(s.diff, s.name);
+  else body.innerHTML = s.text.length > 300_000 ? `${codeView(s.text.slice(0, 300_000), s.name)}<p class="muted">… cut here; open it in VS Code for the rest.</p>` : codeView(s.text, s.name);
+}
+document.addEventListener('click', (e) => { const t = e.target.closest('[data-fv-tab]'); if (t) drawFview(t.dataset.fvTab); });
 document.addEventListener('click', async (e) => {
   const b = e.target.closest('[data-fview]');
   if (!b) return;
   const pth = b.dataset.fview, src = `/api/copilot/file?chat=${encodeURIComponent(chat.session)}&path=${encodeURIComponent(pth)}`;
   const name = pth.split('/').pop();
   if (/\.pdf$/i.test(name)) { window.open(src, '_blank', 'noopener'); return; }
-  $('#fv-name').textContent = name; $('#fv-open').href = src; $('#fview').hidden = false;
+  fvState = null;
+  $('#fv-name').textContent = name; $('#fv-name').title = pth; $('#fv-open').href = src; $('#fv-code').href = vscodeUrl(pth);
+  $('#fv-tabs').hidden = true; $('#fview').hidden = false;
   const body = $('#fv-body');
   if (/\.(png|jpe?g|gif|webp)$/i.test(name)) { body.innerHTML = `<img alt="${esc(name)}" src="${esc(src)}">`; return; }
   body.innerHTML = '<span class="typing">Loading</span>';
   try {
-    const r = await fetch(src);
+    const [r, d] = await Promise.all([fetch(src), getJson(`${src}&diff=1`).catch(() => ({ diff: '' }))]);
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
-    if (!/^text\/plain/.test(r.headers.get('content-type') || '')) { body.innerHTML = `<p>No preview for this kind of file. <a href="${esc(src)}">Download it</a>.</p>`; return; }
-    const t = await r.text();
-    body.innerHTML = `<pre>${esc(t.length > 300_000 ? `${t.slice(0, 300_000)}\n… (cut; open it for the rest)` : t)}</pre>`;
+    if (!/^text\/plain/.test(r.headers.get('content-type') || '')) { body.innerHTML = `<p>No preview for this kind of file. <a href="${esc(vscodeUrl(pth))}">Open it in VS Code</a> or <a href="${esc(src)}">download it</a>.</p>`; return; }
+    fvState = { name, text: await r.text(), diff: d.diff || '' };
+    $('#fv-tabs').hidden = !fvState.diff;
+    drawFview(fvState.diff ? 'diff' : 'file');
   } catch (err) { body.innerHTML = `<div class="err">${esc(err.message)}</div>`; }
 });
-const closeFview = () => { $('#fview').hidden = true; $('#fv-body').innerHTML = ''; };
+const closeFview = () => { $('#fview').hidden = true; $('#fv-body').innerHTML = ''; fvState = null; };
 $('#fv-close').onclick = closeFview;
 $('#fview').addEventListener('click', (e) => { if (e.target.id === 'fview') closeFview(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#fview').hidden) closeFview(); });

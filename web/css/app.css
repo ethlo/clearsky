@@ -795,3 +795,22 @@ time.at { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nu
 .read-ask[hidden] { display: none; }
 .read-ask > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .read-ask button { flex: none; }
+
+/* Code in the file viewer: line numbers, light highlighting, and a diff with added and removed lines. */
+.fv-tabs { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
+.fv-box header .fv-tabs button { font-size: 12px; padding: 3px 10px; color: var(--muted); border-radius: 0; }
+.fv-box header .fv-tabs button.on { background: var(--surface-2); color: var(--text); }
+.fv-box header a { font-size: 12px; color: var(--accent); text-decoration: none; }
+#fv-body .code { font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow: auto; padding: 6px 0; }
+.code .ln { display: flex; white-space: pre; min-width: max-content; }
+.code .ln i { font-style: normal; color: var(--muted); opacity: .6; width: 44px; flex: none; text-align: right; padding-right: 12px; user-select: none; }
+.code .ln > span { padding-right: 16px; }
+.code.diff .ln.add { background: var(--green-soft); }
+.code.diff .ln.del { background: var(--red-soft); }
+.code.diff .ln.add > span::before { content: '+'; color: var(--green); margin-right: 6px; }
+.code.diff .ln.del > span::before { content: '−'; color: var(--red); margin-right: 6px; }
+.code.diff .ln:not(.add):not(.del):not(.hunk) > span::before { content: ' '; margin-right: 6px; }
+.code.diff .ln.hunk { background: var(--accent-soft); color: var(--muted); }
+.hl-c { color: #6a737d; font-style: italic; } .hl-s { color: #0a7d32; } .hl-n { color: #b35900; } .hl-k { color: #a626a4; } .hl-t { color: #1f6feb; } .hl-a { color: #b35900; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .hl-c { color: #8b949e; } :root:not([data-theme="light"]) .hl-s { color: #7ee787; } :root:not([data-theme="light"]) .hl-n, :root:not([data-theme="light"]) .hl-a { color: #ffa657; } :root:not([data-theme="light"]) .hl-k { color: #d2a8ff; } :root:not([data-theme="light"]) .hl-t { color: #79c0ff; } }
+:root[data-theme="dark"] .hl-c { color: #8b949e; } :root[data-theme="dark"] .hl-s { color: #7ee787; } :root[data-theme="dark"] .hl-n, :root[data-theme="dark"] .hl-a { color: #ffa657; } :root[data-theme="dark"] .hl-k { color: #d2a8ff; } :root[data-theme="dark"] .hl-t { color: #79c0ff; }

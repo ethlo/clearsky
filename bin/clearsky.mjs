@@ -743,7 +743,7 @@ function listDir(dir, max = 200) {
   walk(dir, 0);
   return out;
 }
-const TEXT_EXT = /\.(txt|log|md|markdown|json|ya?ml|xml|csv|tsv|java|kt|js|mjs|ts|py|go|rs|sql|sh|properties|toml|ini|diff|patch|html?)$/i;
+const TEXT_EXT = /(\.(txt|log|md|markdown|json|ya?ml|xml|csv|tsv|java|kt|kts|groovy|gradle|scala|js|mjs|cjs|jsx|ts|tsx|py|go|rs|rb|php|c|h|cpp|hpp|cs|swift|sql|sh|bash|zsh|ps1|properties|toml|ini|conf|cfg|env|diff|patch|html?|css|scss|vue|svelte|graphql|proto|tf|hcl)|\/(Dockerfile|Makefile|Jenkinsfile|\.gitignore))$/i;
 const fileType = (p) => (/\.pdf$/i.test(p) ? 'application/pdf' : /\.png$/i.test(p) ? 'image/png' : /\.jpe?g$/i.test(p) ? 'image/jpeg' : /\.gif$/i.test(p) ? 'image/gif' : /\.webp$/i.test(p) ? 'image/webp' : TEXT_EXT.test(p) ? 'text/plain' : 'application/octet-stream');
 // The files that count as this chat's: its own Copilot folders, and what it wrote or you attached.
 function chatFilePaths(id) {
@@ -764,6 +764,17 @@ function chatFile(id, pth) {
     if (!st.isFile() || st.size > 20 * 1024 * 1024) return null;
     return { name: basename(pth), type: fileType(pth), data: readFileSync(pth) };
   } catch { return null; }
+}
+// What changed in a file on its branch: against where the branch left the default branch
+// (origin/HEAD, main or master), uncommitted changes included. Empty outside a git clone.
+async function fileDiff(pth) {
+  const git = (...a) => execFileP('git', ['-C', dirname(pth), ...a], { timeout: 10_000, maxBuffer: 8 * 1024 * 1024 }).then((r) => r.stdout.trim(), () => '');
+  if (!await git('rev-parse', '--is-inside-work-tree')) return { diff: '', base: null };
+  let base = '';
+  for (const ref of ['origin/HEAD', 'origin/main', 'origin/master', 'main', 'master']) if ((base = await git('merge-base', 'HEAD', ref))) break;
+  const diff = await git('diff', '--no-color', '--no-ext-diff', base || 'HEAD', '--', basename(pth));
+  const untracked = !diff && await git('ls-files', '--others', '--exclude-standard', '--', basename(pth));
+  return { diff: diff.slice(0, 2_000_000), base: base ? base.slice(0, 8) : 'HEAD', new: !!untracked };
 }
 // The PRs of branches a chat pushed, looked up as you (read only), kept 5 minutes.
 const branchPrCache = new Map();
@@ -2552,6 +2563,7 @@ function serve() {
         const id = url.searchParams.get('chat') || '', pth = url.searchParams.get('path') || '';
         const file = /^[\w-]{8,64}$/.test(id) && chatFile(id, pth);
         if (!file) return json(res, 404, { error: 'not one of this chat\'s files' });
+        if (url.searchParams.has('diff')) return json(res, 200, await fileDiff(pth));
         return sendFile(res, file);
       }
       if (url.pathname === '/api/links') return json(res, 200, readLinks(linksFile()));

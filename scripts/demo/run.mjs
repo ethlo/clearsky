@@ -8,6 +8,7 @@ import { HOME as home } from './home.mjs';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { github, standup, slack, calendar, ago, ME, standupAt, hhmm, READ_MARKS } from './data.mjs';
@@ -86,7 +87,39 @@ writeFileSync(join(conf, 'agent-writes.jsonl'), log.map((e) => JSON.stringify(e)
 // The files the chat wrote, so its Outputs list them as there.
 const src = join(CHAT.cwd, 'src', 'main', 'java', 'com', 'acme', 'pay', 'refund'), test = src.replace(`${join('src', 'main')}`, join('src', 'test'));
 mkdirSync(src, { recursive: true }); mkdirSync(test, { recursive: true });
-writeFileSync(join(src, 'RefundSplitter.java'), 'package com.acme.pay.refund;\n\n// Splits a refund across the payment methods in proportion; the last part gets what is left.\nfinal class RefundSplitter {}\n');
+// A git clone where the chat changed RefundSplitter on its branch, so the file viewer has a diff.
+const SPLITTER = (fix) => `package com.acme.pay.refund;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.ArrayList;
+import java.util.List;
+
+/** Splits a refund across the payment methods of a split payment, in proportion. */
+final class RefundSplitter {
+    private static final int SCALE = 2;
+
+    List<BigDecimal> split(BigDecimal refund, List<BigDecimal> paid) {
+        BigDecimal total = paid.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+        List<BigDecimal> parts = new ArrayList<>();
+${fix ? `        BigDecimal left = refund;
+        for (int i = 0; i < paid.size(); i++) {
+            // The last part gets what is left, so the parts always add up to the refund.
+            BigDecimal part = i == paid.size() - 1 ? left
+                : refund.multiply(paid.get(i)).divide(total, SCALE, RoundingMode.HALF_EVEN);
+            parts.add(part);
+            left = left.subtract(part);
+        }` : `        for (BigDecimal p : paid) {
+            parts.add(refund.multiply(p).divide(total, SCALE, RoundingMode.HALF_EVEN));
+        }`}
+        return parts;
+    }
+}
+`;
+const git = (...a) => execFileSync('git', ['-C', CHAT.cwd, ...a], { stdio: 'ignore', env: { ...process.env, GIT_AUTHOR_NAME: 'Alex', GIT_AUTHOR_EMAIL: 'alex@example.com', GIT_COMMITTER_NAME: 'Alex', GIT_COMMITTER_EMAIL: 'alex@example.com' } });
+writeFileSync(join(src, 'RefundSplitter.java'), SPLITTER(false));
+try { git('init', '-q', '-b', 'main'); git('add', '-A'); git('commit', '-q', '-m', 'Refunds'); git('checkout', '-q', '-b', 'PAY-412-partial-refunds'); } catch { /* no git: no diff */ }
+writeFileSync(join(src, 'RefundSplitter.java'), SPLITTER(true));
 writeFileSync(join(test, 'RefundSplitterTest.java'), 'package com.acme.pay.refund;\n\nclass RefundSplitterTest {}\n');
 writeFileSync(join(conf, 'agent-files.jsonl'), [
   { at: ago(1.3), where: 'file', what: `${CHAT.cwd}/src/main/java/com/acme/pay/refund/RefundSplitter.java`, kind: 'wrote', chats: chat, decided: 'done' },

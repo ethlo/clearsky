@@ -86,7 +86,7 @@
     <header class="vh"><h1>Copilot's changes</h1><span class="sub">what it changed as you on GitHub and Jira, and what it read in Grafana, from its sandbox</span><span class="spacer"></span></header>
     <div class="view-b"><div id="changes"></div></div>
   </section>
-  <div class="fview" id="fview" hidden><div class="fv-box"><header><b id="fv-name"></b><span class="spacer"></span><a id="fv-open" target="_blank" rel="noopener">Open</a><button type="button" id="fv-close" aria-label="Close">✕</button></header><div id="fv-body"></div></div></div>
+  <div class="fview" id="fview" hidden><div class="fv-box"><header><b id="fv-name"></b><span class="spacer"></span><span class="fv-tabs" id="fv-tabs" hidden><button type="button" data-fv-tab="diff">Changes</button><button type="button" data-fv-tab="file">File</button></span><a id="fv-code" title="Open in VS Code">VS Code</a><a id="fv-open" target="_blank" rel="noopener">Raw</a><button type="button" id="fv-close" aria-label="Close">✕</button></header><div id="fv-body"></div></div></div>
   <section class="view" id="v-links" hidden>
     <header class="vh"><h1 id="links-title">Links</h1><input type="search" id="links-filter" class="links-filter" placeholder="Filter" aria-label="Filter links"><span class="spacer"></span>
       <button type="button" class="icon-btn" id="links-add">Add link</button><button type="button" class="icon-btn" id="links-edit">Edit</button>

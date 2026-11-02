@@ -81,6 +81,7 @@ async function renderItem() {
     ${(() => { const n = nextHtml(it, nextStep(it, rel)); return n ? `<div class="next-row"><span class="lbl-next">Next</span>${n}</div>` : ''; })()}`;
   };
   const acts = () => `<div class="acts-row">${it.url ? `<a class="icon-btn primary" href="${esc(it.url)}" target="_blank" rel="noopener">${where} ↗</a>` : ''}
+    ${it.kind === 'pr' || it.kind === 'review' ? `<a class="icon-btn" href="${esc(it.url.replace('https://github.com/', 'https://github.dev/'))}" target="_blank" rel="noopener" title="The PR in VS Code in the browser: highlighted diffs and a file tree">Review in VS Code (web) ↗</a>` : ''}
     ${it.data?.own && it.data.own.state !== 'read' ? `<button class="icon-btn" data-own-read="${esc(it.url)}" data-oid="${esc(it.data.own.headOid || '')}" title="I've read it, up to the latest commit">${DONE_ICON} Mark read</button>`
       : it.data?.own?.readOid ? `<button class="icon-btn" data-own-read="${esc(it.url)}" data-oid="" title="You marked it read; mark it not read">Mark not read</button>` : ''}
     ${it.kind === 'pr' && !prClosed.has(it.pr) ? `<button class="icon-btn" data-rv-open="${esc(it.data.repo)}#${it.data.number}">${icon('users', 14)} Request review</button>` : ''}
