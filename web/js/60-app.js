@@ -37,6 +37,7 @@ function route() {
   $('#v-src').hidden = !h.startsWith('src-');
   $('#v-notes').hidden = h !== 'notifications';
   $('#v-changes').hidden = h !== 'changes';
+  $('#v-map').hidden = h !== 'map';
   $('#chat').hidden = h !== 'copilot';
   for (const a of document.querySelectorAll('[data-nav]')) a.classList.toggle('on', a.dataset.nav === (h === 'item' ? returnTo : h));
   menu_(false);
@@ -46,6 +47,7 @@ function route() {
   if (h === 'calendar') renderCalendar();
   if (h === 'notifications') renderNotes();
   if (h === 'changes') renderChanges();
+  if (h === 'map') renderMap();
   if (h === 'standup' && !standupData) { renderStandup(); loadStandup(false); }
   if (h.startsWith('src-')) { $('#src-body').innerHTML = ''; renderExtra(); }
   if (h === 'copilot') { showChat(openChatSkip); openChatSkip = false; }

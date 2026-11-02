@@ -29,6 +29,7 @@ import { cookieLogin } from '../lib/browser-login.mjs';
 import { redact } from '../lib/redact.mjs';
 import { vpnWatch, checkTarget } from '../lib/vpn.mjs';
 import { parseReviewArgs, changeOf, reviewPrompt, USAGE as REVIEW_USAGE } from '../lib/review.mjs';
+import { buildMap, buildKind } from '../lib/map.mjs';
 import { serveBroker, brokerSocket } from '../lib/broker.mjs';
 import { mavenSandbox, sandboxCa } from '../lib/maven.mjs';
 import { githubFilter, REGISTRY_HOSTS, GITHUB_LOG_HOSTS, SHARED_BRANCH } from '../lib/github-gate.mjs';
@@ -1328,7 +1329,7 @@ async function reviewRun({ key, argv, cwd, signal }, out, err) {
   if (o.error) { err(`review: ${o.error}\n\n${REVIEW_USAGE}\n`); return 2; }
   const root = (await execFileP('git', ['-C', cwd, 'rev-parse', '--show-toplevel']).catch(() => ({ stdout: '' }))).stdout.trim();
   if (!root) { err('review: not in a git repository\n'); return 1; }
-  const log = (decided, extra = {}) => logWrite(agentLogFile, { where: 'review', what: ['review', ...argv].join(' '), target: root.replace(homedir(), '~'), chats: [chatRef(c)], decided, ...extra });
+  const log = (decided, extra = {}) => logWrite(agentLogFile, { where: 'review', what: ['review', ...argv].join(' '), target: root.replace(homedir(), '~'), repo: [...(gitRepos(root) || [])][0] || null, chats: [chatRef(c)], decided, ...extra });
   let change, ticket = null;
   try { change = await changeOf(root, o.base); } catch (e) { err(`review: ${e.message}\n`); return 1; }
   if (o.ticket) {
@@ -1729,6 +1730,22 @@ function toolDetail(call = {}) {
 const assistedAllow = () => list(process.env.COPILOT_ASSISTED_ALLOW);
 const copilotFolders = () => (process.env.COPILOT_FOLDERS ? list(process.env.COPILOT_FOLDERS) : codeDirs());
 
+// Builds and test runs in a chat, for its map (lib/map.mjs): the command, how it ended and how
+// long it took, logged like the agent's writes. Nothing else about the step is kept.
+function noteBuild(c, u) {
+  const cmd = u.rawInput?.command;
+  if (u.sessionUpdate === 'tool_call' && u.kind === 'execute' && typeof cmd === 'string') {
+    const kind = buildKind(cmd);
+    if (kind) (c.builds ||= new Map()).set(u.toolCallId, { cmd: redact(cmd.replace(/\s+/g, ' ').trim().slice(0, 200)).text, kind, at: Date.now() });
+    return;
+  }
+  const b = c.builds?.get(u.toolCallId);
+  if (!b || u.sessionUpdate !== 'tool_call_update' || !['completed', 'failed'].includes(u.status)) return;
+  c.builds.delete(u.toolCallId);
+  logWrite(agentLogFile, { where: 'build', what: b.cmd, kind: b.kind, target: c.cwd.replace(homedir(), '~'), repo: [...(gitRepos(c.cwd) || [])][0] || null,
+    chats: [chatRef(c)], decided: u.status === 'completed' ? 'passed' : 'failed', ms: Date.now() - b.at });
+}
+
 async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, scope = [] }) {
   // Changing the folders in Settings starts the chat's Copilot again (resuming it) on its next turn.
   const args = [...copilot.optionArgs(options), ...copilot.folderArgs([...copilotFolders(), copilotTmp()])];
@@ -1766,6 +1783,7 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, s
     // A step you allowed has finished: its GitHub changes ask again (see githubAsk).
     if (u.sessionUpdate === 'tool_call_update' && ['completed', 'failed'].includes(u.status)) { c.approved.delete(u.toolCallId); c.running.delete(u.toolCallId); }
     else if (u.sessionUpdate === 'tool_call' || u.sessionUpdate === 'tool_call_update') c.running.add(u.toolCallId);
+    noteBuild(c, u);
     const e = chatEvent(u); if (e && (e.type !== 'text' || e.text)) c.emit(e);
   };
   const autoAllow = copilot.PERMISSIONS[options.permission]?.autoAllow || [];
@@ -2349,6 +2367,28 @@ function serve() {
         });
       }
       // What Copilot changed as you on GitHub and Jira (all chats, or one).
+      // The map of what chats did where (lib/map.mjs): one chat's, or the recent ones'.
+      if (url.pathname === '/api/copilot/map') {
+        const chatId = url.searchParams.get('chat') || null;
+        const writes = readWrites(agentLogFile, { chat: chatId, limit: 3000 });
+        const names = localState.sessionNames(stateFile), titles = new Map((sessionsCache?.data || []).map((x) => [x.id, x.title]));
+        const refs = localState.sessionRefs(stateFile);
+        const scope = (id) => {
+          const c = acpChats.get(id), r = refs[id] || [];
+          return {
+            repos: [...new Set([...(c ? chatRepos(c) : []), ...r.map((k) => k.match(/^(?:pr|gh):([\w.-]+\/[\w.-]+)#/)?.[1]?.toLowerCase()).filter(Boolean)])],
+            tickets: [...new Set([...(c?.tickets || []), ...r.filter((k) => k.startsWith('issue:')).map((k) => k.slice(6))])],
+          };
+        };
+        let chats = buildMap(writes, { scope });
+        if (chatId && !chats.length) {
+          const sc = scope(chatId), n = (kind) => (key) => ({ kind, key, first: null, acts: [], prs: [], branches: [], scope: true });
+          const nodes = [...sc.repos.map(n('repo')), ...sc.tickets.map(n('ticket'))];
+          if (nodes.length) chats = [{ id: chatId, first: null, at: null, shared: 0, nodes }];
+        }
+        for (const ch of chats) Object.assign(ch, { title: names[ch.id] || titles.get(ch.id) || null, live: acpChats.has(ch.id) });
+        return json(res, 200, { chats: chats.slice(0, 40), jira: jiraModule.site || null });
+      }
       if (url.pathname === '/api/agent-log') return json(res, 200, { writes: readWrites(agentLogFile, { chat: url.searchParams.get('chat') || null, limit: Math.min(Number(url.searchParams.get('limit')) || 300, 2000) }) });
       // A chat's VM, for its view: what runs in it, what it can reach, and what happened.
       if (url.pathname === '/api/vm') {

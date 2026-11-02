@@ -695,3 +695,24 @@ time.at { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nu
 /* VPN off (lib/vpn.mjs), and sources paused for it. */
 .vpn-off { margin: 8px 12px 0; padding: 4px 10px; border-radius: 999px; background: var(--amber-soft); color: var(--amber); border: 1px solid var(--amber); font-size: 12px; font-weight: 600; text-align: center; }
 .paused { color: var(--muted); font-size: 12.5px; padding: 6px 0; }
+
+/* Agent map: per chat, what it worked on and what it did there */
+.mapc { padding: 10px 16px 14px; border-bottom: 1px solid var(--line); }
+.map-key { color: var(--muted); font-size: 12px; padding: 8px 16px 0; }
+.mapc .mh { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 6px; }
+.mapc .mh a { font-weight: 600; color: var(--text); text-decoration: none; }
+.mapc .mh a:hover { text-decoration: underline; }
+.mapc .mh small, .mapn small { color: var(--muted); font-size: 12px; }
+.mapn { list-style: none; margin: 0; padding: 0 0 0 4px; border-left: 2px solid var(--line); }
+.mapn .mn { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 6px; padding: 6px 0 6px 8px; font-size: 13px; }
+.mapn .mn.scope b { font-weight: 600; }
+.mapn .mi { color: var(--muted); padding-top: 1px; }
+.mapn b a { color: inherit; }
+.mapn small { overflow-wrap: anywhere; }
+.mapn .acts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 4px; }
+.mapn .acts i { color: var(--muted); font-style: normal; font-size: 11px; }
+.mapn .act, .map-key .act { font-size: 11.5px; padding: 1px 7px; border-radius: 10px; background: var(--gray-soft); color: var(--text-2); white-space: nowrap; }
+.act.good { color: var(--green); }
+.act.bad { color: var(--red); }
+.act.warn { color: var(--amber); }
+.cp-side #cp-map .mapc { padding: 0; border: 0; }

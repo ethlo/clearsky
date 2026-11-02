@@ -201,6 +201,50 @@ async function renderChanges() {
   el.innerHTML = d.writes.length ? changeRows(d.writes) : '<div class="empty">Nothing yet. Comments, pushes, PR edits and Jira changes Copilot makes from its sandbox show up here.</div>';
 }
 
+// The agent map (lib/map.mjs): per chat, each repo, ticket and environment it worked on, with what
+// it did there in order (same acts folded: "pushed ×3"). New ones a chat found along the way show
+// as they come, after what it was started on.
+const MAP_KIND = { repo: ['pr', 'Repo'], ticket: ['ticket', 'Ticket'], project: ['ticket', 'Jira project'], env: ['source', 'Grafana'], folder: ['folder', 'Folder'] };
+const actTone = (a) => (/failed|fix first|declined/.test(a.act) ? 'bad' : /passed|ready|merged/.test(a.act) ? 'good' : a.decided === 'allowed' ? 'warn' : '');
+function foldActs(acts) {
+  const out = [];
+  for (const a of acts) {
+    const last = out.at(-1);
+    const label = a.act + (a.pr ? ` #${a.pr}` : '');
+    if (last && last.label === label) { last.n++; last.at = a.at; last.details.push(a.detail); } else out.push({ ...a, label, n: 1, details: [a.detail] });
+  }
+  return out;
+}
+function mapNode(n, jira) {
+  const [ico, kind] = MAP_KIND[n.kind] || ['tool', n.kind];
+  const href = n.kind === 'repo' ? `https://github.com/${n.key}` : n.kind === 'ticket' && jira ? `${jira.replace(/\/$/, '')}/browse/${n.key}` : null;
+  const name = href ? `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(n.key)}</a>` : esc(n.key);
+  const extra = [n.branches?.length && `branches: ${n.branches.join(', ')}`, n.prs?.length && `PRs: ${n.prs.map((x) => `#${x}`).join(', ')}`].filter(Boolean).join(' · ');
+  const acts = foldActs(n.acts);
+  return `<li class="mn${n.scope ? ' scope' : ''}"><span class="mi">${icon(ico, 14)}</span><div><b>${name}</b> <small>${esc(kind)}${n.scope && !acts.length ? ' · started on, nothing done yet' : n.scope ? ' · started on' : n.first ? ` · from ${esc(ago(n.first))}` : ''}${extra ? ` · ${esc(extra)}` : ''}</small>
+    ${acts.length ? `<div class="acts">${acts.map((a) => `<span class="act ${actTone(a)}" title="${esc([new Date(a.at).toLocaleString(), ...new Set(a.details.filter(Boolean))].join('\n'))}">${esc(a.label)}${a.n > 1 ? ` ×${a.n}` : ''}</span>`).join('<i>›</i>')}</div>` : ''}</div></li>`;
+}
+function mapChat(ch, jira, { head = true } = {}) {
+  const name = ch.title || recentChats.find((r) => r.id === ch.id)?.title || 'A Copilot chat';
+  return `<div class="mapc">${head ? `<div class="mh"><a href="#copilot" data-sid="${esc(ch.id)}">${esc(name)}</a><small>${ch.live ? 'open · ' : ''}${ch.at ? `last ${esc(ago(ch.at))}` : ''}${ch.shared ? ` · ${ch.shared} change${ch.shared > 1 ? 's' : ''} could have been another working chat's` : ''}</small></div>` : ''}
+    <ul class="mapn">${ch.nodes.map((n) => mapNode(n, jira)).join('')}</ul></div>`;
+}
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('.mh [data-sid]');
+  if (!a) return;
+  e.preventDefault();
+  openChat(true, true);
+  openSession(a.dataset.sid);
+});
+async function renderMap() {
+  const el = $('#map');
+  el.innerHTML = skeleton(4);
+  let d;
+  try { d = await getJson('/api/copilot/map'); } catch (e) { el.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  el.innerHTML = d.chats.length ? `<div class="map-key">In order, oldest first. <span class="act good">green</span> passed or ready, <span class="act bad">red</span> failed, <span class="act warn">amber</span> went through after you allowed it. Hover a step for its command and time.</div>${d.chats.map((ch) => mapChat(ch, d.jira)).join('')}`
+    : '<div class="empty">Nothing yet. As Copilot builds, tests, reviews, pushes, comments and moves tickets from its sandbox, each chat\'s map shows here.</div>';
+}
+
 // Done or snoozed from the item page: back to the list.
 document.addEventListener('click', (e) => { if (e.target.closest('[data-back-after]')) setTimeout(back, 0); });
 

@@ -313,11 +313,23 @@ async function drawChanges() {
   el.innerHTML = list.length ? `<h4>Changed as you</h4>${changeRows(list, { chats: false })}<a href="#changes" class="more">All of Copilot's changes</a>` : '';
 }
 
+// This chat's map: the repos and tickets it works on and what it did to each.
+async function drawMap() {
+  const el = $('#cp-map'), id = chat.turns ? chat.session : null;
+  let d = null;
+  if (id) try { d = await getJson(`/api/copilot/map?chat=${encodeURIComponent(id)}`); } catch {}
+  if (id !== (chat.turns ? chat.session : null)) return;
+  const ch = d?.chats?.find((x) => x.id === id);
+  el.hidden = !ch?.nodes.length;
+  el.innerHTML = ch?.nodes.length ? `<h4>Map</h4>${mapChat(ch, d.jira, { head: false })}<a href="#map" class="more">All chats' maps</a>` : '';
+}
+
 function chatSub() {
   drawCtx();
   drawInfo();
   drawVm();
   drawChanges();
+  drawMap();
   if (!$('#chat-title input')) $('#chat-title').textContent = chat.title || (chat.turns ? 'Copilot session' : 'New chat');
   const i = chat.info;
   $('#chat-sub').textContent = !i ? '' : !i.available ? 'Copilot CLI not found' : `${i.permissions[$('#cp-perm').value] || ''}${chat.turns ? ` · ${chat.turns} turn${chat.turns > 1 ? 's' : ''}` : ''}`;
