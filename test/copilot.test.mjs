@@ -39,6 +39,18 @@ test('the chat panel talks to the local Copilot CLI with the chosen options', as
   assert.equal(r.hasToken, false, "Clearsky's tokens aren't passed to Copilot");
   assert.ok(r.flags.includes('--deny-tool') && r.flags.includes('--allow-tool'));
 
+  // A dropped file: uploaded, named in the message, kept in the chat's own folder, and listed
+  // (and readable) in its outputs. A path that wasn't uploaded here isn't named.
+  const up = await (await fetch(`${base}/api/copilot/attach?name=${encodeURIComponent('../notes 1.txt')}`, { method: 'POST', headers: { 'X-Clearsky-Token': csrf }, body: 'hello' })).json();
+  assert.match(up.path, /attachments\/\w+\/notes_1\.txt$/);
+  const attEvs = await events(await ask({ message: 'Read this', session: 'sess-1234', resume: true, permission: 'read', attachments: [up.path, '/etc/passwd'] }));
+  assert.match(info0(attEvs).prompt, new RegExp(`Read this\\n\\nFiles I attached: ${up.path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`));
+  const outs = await (await fetch(`${base}/api/copilot/outputs?chat=sess-1234`)).json();
+  const kept = outs.files.find((f) => f.kind === 'attached');
+  assert.ok(kept && kept.name === 'notes_1.txt' && kept.exists, JSON.stringify(outs.files));
+  assert.equal(await (await fetch(`${base}/api/copilot/file?chat=sess-1234&path=${encodeURIComponent(kept.path)}`)).text(), 'hello');
+  assert.equal((await fetch(`${base}/api/copilot/file?chat=sess-1234&path=${encodeURIComponent('/etc/passwd')}`)).status, 404, 'only the chat\'s own files');
+
   // Every mode runs over ACP, so a step Copilot won't run unattended (here: Full mode, resumed)
   // still reaches the panel as Allow/Deny instead of being refused.
   const fullEvs = [];

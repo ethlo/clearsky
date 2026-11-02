@@ -8,7 +8,7 @@
 
 import { createServer } from 'node:http';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, realpathSync, statSync, readdirSync, rmSync } from 'node:fs';
-import { join, dirname, resolve } from 'node:path';
+import { join, dirname, resolve, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { execFile, execFileSync, spawn } from 'node:child_process';
@@ -60,6 +60,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 export const userEnvFile = join(homedir(), '.config', 'clearsky', '.env');
 const stateFile = process.env.CLEARSKY_STATE || join(homedir(), '.config', 'clearsky', 'state.json');
 const agentLogFile = join(dirname(stateFile), 'agent-writes.jsonl');
+// Files a chat wrote or you attached to it, for its Outputs (see chatOutputs).
+const agentFilesFile = join(dirname(stateFile), 'agent-files.jsonl');
 
 // Grafana (lib/modules/grafana.mjs): your environments and logins stay in your settings, here.
 const grafanaInstances = () => parseInstances(process.env.GRAFANA_INSTANCES, process.env.GRAFANA_ASK);
@@ -685,6 +687,104 @@ export function toMarkdown(d) {
   if (g.assigned?.length) section('GitHub issues assigned to me', g.assigned, (i) =>
     `[${i.repo}#${i.number}](${i.url}) ${i.title}`, null);
   return out.join('\n');
+}
+
+// ---------------------------------------------------------------- chat outputs
+
+const safeName = (n) => String(n).split(/[\\/]/).pop().replace(/[^\w.@+-]+/g, '_').replace(/^\.+/, '').slice(0, 120) || 'file';
+const stagingDir = () => join(copilotTmp(), 'attachments');
+function isStaged(pth) {
+  try { const real = realpathSync(pth); return real.startsWith(`${realpathSync(stagingDir())}/`) && statSync(real).isFile(); } catch { return false; }
+}
+const sessionDir = (id) => join(copilotHome(), 'session-state', id);
+// An attachment is copied into the chat's own Copilot folder (files/), which outlives the scratch folder.
+function keepAttachment(id, pth) {
+  if (!id || !/^[\w-]{8,64}$/.test(id)) return;
+  try {
+    const dir = join(sessionDir(id), 'files');
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    let dest = join(dir, basename(pth));
+    for (let i = 2; existsSync(dest) && i < 100; i++) dest = join(dir, basename(pth).replace(/(\.[^.]*)?$/, `-${i}$1`));
+    writeFileSync(dest, readFileSync(pth), { mode: 0o600 });
+    logWrite(agentFilesFile, { where: 'file', what: dest, kind: 'attached', from: pth, chats: [{ id }], decided: 'done' });
+  } catch { /* the message still names the staged file */ }
+}
+function listDir(dir, max = 200) {
+  const out = [];
+  const walk = (d, depth) => {
+    let ents = [];
+    try { ents = readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const e of ents) {
+      if (out.length >= max) return;
+      const p = join(d, e.name);
+      if (e.isDirectory() && depth < 4) walk(p, depth + 1);
+      else if (e.isFile()) out.push(p);
+    }
+  };
+  walk(dir, 0);
+  return out;
+}
+const TEXT_EXT = /\.(txt|log|md|markdown|json|ya?ml|xml|csv|tsv|java|kt|js|mjs|ts|py|go|rs|sql|sh|properties|toml|ini|diff|patch|html?)$/i;
+const fileType = (p) => (/\.pdf$/i.test(p) ? 'application/pdf' : /\.png$/i.test(p) ? 'image/png' : /\.jpe?g$/i.test(p) ? 'image/jpeg' : /\.gif$/i.test(p) ? 'image/gif' : /\.webp$/i.test(p) ? 'image/webp' : TEXT_EXT.test(p) ? 'text/plain' : 'application/octet-stream');
+// The files that count as this chat's: its own Copilot folders, and what it wrote or you attached.
+function chatFilePaths(id) {
+  const own = ['files', 'research'].flatMap((d) => listDir(join(sessionDir(id), d)).map((p) => ({ path: p, kind: d === 'research' ? 'research' : 'file' })));
+  const logged = readWrites(agentFilesFile, { chat: id, limit: 2000 }).reverse();
+  const by = new Map(own.map((f) => [f.path, f]));
+  for (const e of logged) {
+    if (e.kind === 'deleted') { by.delete(e.what); continue; }
+    by.set(e.what, { path: e.what, kind: e.kind, at: e.at });
+  }
+  return [...by.values()];
+}
+function chatFile(id, pth) {
+  const f = chatFilePaths(id).find((x) => x.path === pth);
+  if (!f) return null;
+  try {
+    const st = statSync(pth);
+    if (!st.isFile() || st.size > 20 * 1024 * 1024) return null;
+    return { name: basename(pth), type: fileType(pth), data: readFileSync(pth) };
+  } catch { return null; }
+}
+// The PRs of branches a chat pushed, looked up as you (read only), kept 5 minutes.
+const branchPrCache = new Map();
+async function branchPrs(repo, branch) {
+  const k = `${repo}:${branch}`, hit = branchPrCache.get(k);
+  if (hit && Date.now() - hit.at < 5 * 6e4) return hit.prs;
+  let prs = [];
+  try {
+    config.github.token ||= await ghCliToken();
+    const r = await fetch(`https://api.github.com/repos/${repo}/pulls?state=all&per_page=5&head=${encodeURIComponent(`${repo.split('/')[0]}:${branch}`)}`, { headers: { Authorization: `Bearer ${config.github.token}`, Accept: 'application/vnd.github+json' }, signal: AbortSignal.timeout(10_000) });
+    if (r.ok) prs = (await r.json()).map((p) => p.number);
+  } catch { /* none known */ }
+  branchPrCache.set(k, { at: Date.now(), prs });
+  return prs;
+}
+async function chatOutputs(id) {
+  const tilde = (p) => (p.startsWith(homedir()) ? `~${p.slice(homedir().length)}` : p);
+  const files = chatFilePaths(id).map((f) => {
+    let st = null;
+    try { st = statSync(f.path); } catch {}
+    return { path: f.path, shown: tilde(f.path), name: basename(f.path), kind: f.kind, at: f.at || (st ? new Date(st.mtimeMs).toISOString() : null), size: st?.size ?? null, exists: !!st, type: st ? fileType(f.path) : null };
+  }).sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 200);
+  const [map] = buildMap(readWrites(agentLogFile, { chat: id, limit: 3000 }));
+  const jira = (jiraModule.site || '').replace(/\/$/, '');
+  const links = [];
+  for (const n of map?.nodes || []) {
+    const acts = [...new Set(n.acts.map((a) => a.act))];
+    const last = n.acts.at(-1)?.at || null;
+    if (n.kind === 'repo') {
+      const prs = new Set(n.prs);
+      for (const b of n.branches) for (const p of await branchPrs(n.key, b)) prs.add(p);
+      for (const p of prs) links.push({ kind: 'pr', label: `${n.key}#${p}`, url: `https://github.com/${n.key}/pull/${p}`, pr: `${n.key}#${p}`, acts: n.acts.filter((a) => a.pr === p).map((a) => a.act), at: last });
+      for (const b of n.branches) links.push({ kind: 'branch', label: `${n.key} · ${b}`, url: `https://github.com/${n.key}/tree/${encodeURIComponent(b).replace(/%2F/g, '/')}`, acts: acts.filter((a) => /push|branch|tests|build|review/.test(a)), at: last });
+      if (n.acts.some((a) => a.act === 'started CI')) links.push({ kind: 'ci', label: `${n.key} · CI runs`, url: `https://github.com/${n.key}/actions`, acts: ['started CI'], at: last });
+      if (!prs.size && !n.branches.length) links.push({ kind: 'repo', label: n.key, url: `https://github.com/${n.key}`, acts, at: last });
+    } else if (n.kind === 'ticket') links.push({ kind: 'ticket', label: n.key, url: jira ? `${jira}/browse/${n.key}` : null, issue: n.key, acts, at: last });
+    else if (n.kind === 'project') links.push({ kind: 'project', label: `Jira ${n.key}`, url: jira ? `${jira}/browse/${n.key}` : null, acts, at: last });
+    else if (n.kind === 'env') links.push({ kind: 'env', label: `Grafana ${n.key}`, url: null, acts, at: last });
+  }
+  return { files, links };
 }
 
 // ---------------------------------------------------------------- server
@@ -1731,6 +1831,22 @@ function toolDetail(call = {}) {
 const assistedAllow = () => list(process.env.COPILOT_ASSISTED_ALLOW);
 const copilotFolders = () => (process.env.COPILOT_FOLDERS ? list(process.env.COPILOT_FOLDERS) : codeDirs());
 
+// Files a chat creates or edits, for its Outputs: the paths only, when the step went through.
+function noteFiles(c, u) {
+  if (u.sessionUpdate === 'tool_call' && ['edit', 'delete', 'move'].includes(u.kind)) {
+    const paths = [...(u.locations || []).map((l) => l?.path), u.rawInput?.path, u.rawInput?.file_path].filter((x) => typeof x === 'string' && x.startsWith('/'));
+    if (paths.length) (c.fileCalls ||= new Map()).set(u.toolCallId, { paths: [...new Set(paths)], kind: u.kind });
+    return;
+  }
+  const f = c.fileCalls?.get(u.toolCallId);
+  if (!f || u.sessionUpdate !== 'tool_call_update') return;
+  if (Array.isArray(u.locations)) for (const l of u.locations) if (typeof l?.path === 'string' && l.path.startsWith('/') && !f.paths.includes(l.path)) f.paths.push(l.path);
+  if (!['completed', 'failed'].includes(u.status)) return;
+  c.fileCalls.delete(u.toolCallId);
+  if (u.status !== 'completed') return;
+  for (const path of f.paths.slice(0, 20)) logWrite(agentFilesFile, { where: 'file', what: path, kind: f.kind === 'delete' ? 'deleted' : 'wrote', chats: [chatRef(c)], decided: 'done' });
+}
+
 // Builds and test runs in a chat, for its map (lib/map.mjs): the command, how it ended and how
 // long it took, logged like the agent's writes. Nothing else about the step is kept.
 function noteBuild(c, u) {
@@ -1785,6 +1901,7 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, s
     if (u.sessionUpdate === 'tool_call_update' && ['completed', 'failed'].includes(u.status)) { c.approved.delete(u.toolCallId); c.running.delete(u.toolCallId); }
     else if (u.sessionUpdate === 'tool_call' || u.sessionUpdate === 'tool_call_update') c.running.add(u.toolCallId);
     noteBuild(c, u);
+    noteFiles(c, u);
     const e = chatEvent(u); if (e && (e.type !== 'text' || e.text)) c.emit(e);
   };
   const autoAllow = copilot.PERMISSIONS[options.permission]?.autoAllow || [];
@@ -2150,11 +2267,24 @@ function serve() {
           resolve(option ? { outcome: 'selected', optionId: String(option) } : { outcome: 'cancelled' });
           return json(res, 200, { ok: true });
         }
+        // A file you drop on the chat: kept where the chat can read it, named in your next message.
+        if (url.pathname === '/api/copilot/attach') {
+          const name = safeName(url.searchParams.get('name') || 'file');
+          const chunks = []; let size = 0;
+          for await (const ch of req) { size += ch.length; if (size > 25 * 1024 * 1024) return json(res, 413, { error: 'at most 25 MB' }); chunks.push(ch); }
+          const dir = join(copilotTmp(), 'attachments', randomBytes(6).toString('hex'));
+          mkdirSync(dir, { recursive: true, mode: 0o700 });
+          const path = join(dir, name);
+          writeFileSync(path, Buffer.concat(chunks), { mode: 0o600 });
+          return json(res, 200, { path, name, size });
+        }
         if (url.pathname === '/api/copilot') {
           const body = await readJson(req);
           const info = await copilotInfo();
           if (!info.available) return json(res, 400, { error: 'GitHub Copilot CLI not found; install it or set COPILOT_BIN' });
-          const message = String(body.message || '').slice(0, 20_000);
+          // Files you attached (uploaded first to /api/copilot/attach): named at the end of the message.
+          const attached = (Array.isArray(body.attachments) ? body.attachments : []).map(String).filter((pth) => isStaged(pth)).slice(0, 10);
+          const message = `${String(body.message || '').slice(0, 20_000)}${attached.length ? `\n\nFiles I attached: ${attached.join(', ')}` : ''}`;
           if (!message.trim()) return json(res, 400, { error: 'empty message' });
           if (!copilot.validModel(body.model)) return json(res, 400, { error: 'bad model name' });
           if (!body.session || !/^[\w-]{8,64}$/.test(body.session)) return json(res, 400, { error: 'bad session' });
@@ -2205,7 +2335,9 @@ function serve() {
           // A new chat about one item is named after it. (Copilot 1.0.105 ignores /rename over ACP, so the name lives here.)
           const itemName = !body.resume && refs.length === 1 ? itemSessionName(refs[0]) : null;
           // Remember which PRs and tickets this session is about, for the links on the page.
+          const kept = new Set();
           const linkRefs = () => {
+            for (const pth of attached) if (!kept.has(`${sessionId}|${pth}`)) { kept.add(`${sessionId}|${pth}`); keepAttachment(sessionId, pth); }
             if (refs.length) localState.addSessionRefs(stateFile, sessionId, refs.map(refKey));
             if (prefix && !body.resume) localState.setSessionTitle(stateFile, sessionId, message.trim().split('\n')[0]);
             if (itemName) localState.setSessionName(stateFile, sessionId, itemName);
@@ -2368,6 +2500,18 @@ function serve() {
         });
       }
       // What Copilot changed as you on GitHub and Jira (all chats, or one).
+      // A chat's outputs: files it made, files you attached, and what it changed elsewhere, linked.
+      if (url.pathname === '/api/copilot/outputs') {
+        const id = url.searchParams.get('chat') || '';
+        if (!/^[\w-]{8,64}$/.test(id)) return json(res, 400, { error: 'bad chat' });
+        return json(res, 200, await chatOutputs(id));
+      }
+      if (url.pathname === '/api/copilot/file') {
+        const id = url.searchParams.get('chat') || '', pth = url.searchParams.get('path') || '';
+        const file = /^[\w-]{8,64}$/.test(id) && chatFile(id, pth);
+        if (!file) return json(res, 404, { error: 'not one of this chat\'s files' });
+        return sendFile(res, file);
+      }
       // The map of what chats did where (lib/map.mjs): one chat's, or the recent ones'.
       if (url.pathname === '/api/copilot/map') {
         const chatId = url.searchParams.get('chat') || null;
