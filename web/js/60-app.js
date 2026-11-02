@@ -55,6 +55,7 @@ function route() {
   if (h.startsWith('src-')) { $('#src-body').innerHTML = ''; renderExtra(); }
   if (h === 'copilot') { showChat(openChatSkip); openChatSkip = false; }
   drawTabs();
+  drawFresh();
 }
 window.addEventListener('hashchange', route);
 function back() { location.hash = `#${returnTo || 'inbox'}`; }

@@ -86,13 +86,22 @@ function catchUp(name) {
     .catch(() => {}).finally(() => catchingUp.delete(name));
 }
 
-// "↻ updated 3m ago" next to the page title; click to refresh everything.
+// "↻ checked 3m ago" next to the page title: when Clearsky last checked what this list shows
+// (GitHub for PRs and reviews, Jira and GitHub for tickets, everything for the inbox), with
+// each source's time on hover. Click to check everything now.
+const FRESH_SOURCES = { prs: ['github'], reviews: ['github'], mentions: ['github', 'jiraMentions', 'slack'], tickets: ['jira', 'github'] };
+const SOURCE_NAME = { github: 'GitHub', jira: 'Jira', jiraMentions: 'Jira mentions', slack: 'Slack', calendar: 'Calendar' };
 function drawFresh() {
-  const times = SOURCES.map((n) => state[n]?.fetchedAt).filter(Boolean).sort();
-  const spinning = SOURCES.some((n) => loading.has(n));
+  const view = typeof listView === 'string' ? listView : 'inbox';
+  const names = (FRESH_SOURCES[view] || SOURCES).filter((n) => state[n] !== undefined || loading.has(n));
+  const times = names.map((n) => state[n]?.fetchedAt).filter(Boolean).sort();
+  const spinning = names.some((n) => loading.has(n) || state[n]?.refreshing);
+  const what = FRESH_SOURCES[view]?.length === 1 ? `${SOURCE_NAME[FRESH_SOURCES[view][0]]} checked` : 'checked';
+  const tip = names.map((n) => `${SOURCE_NAME[n] || n}: ${state[n]?.fetchedAt ? `checked ${ago(state[n].fetchedAt)}` : 'not yet'}`).join('\n');
   for (const b of document.querySelectorAll('[data-fresh]')) {
     b.classList.toggle('spin', spinning);
-    b.innerHTML = `${REFRESH_ICON}<span>${spinning ? 'Refreshing…' : times.length ? `updated ${esc(ago(times[0]))}` : ''}</span>`;
+    b.title = `${tip}\nClick to check everything now`;
+    b.innerHTML = `${REFRESH_ICON}<span>${spinning ? 'Checking…' : times.length ? `${what} ${esc(ago(times[0]))}` : ''}</span>`;
   }
 }
 setInterval(drawFresh, 30_000);

@@ -40,6 +40,13 @@ export const github = {
       reviews: { nodes: [review('anna', 'APPROVED', 1)] }, additions: 64, deletions: 10, changedFiles: 3 }),
     pr({ number: 481, repo: 'acme/payments-api', title: 'PAY-420: Ledger export as CSV', headRefName: 'PAY-420-ledger-csv', ci: 'FAILURE', additions: 150, deletions: 4, changedFiles: 5,
       reviewRequests: { nodes: [user('anna')] } }),
+    // Waiting for review: one asked a while ago with no answer, one with a recent comment.
+    pr({ number: 486, repo: 'acme/payments-api', title: 'PAY-415: Retry webhook delivery with backoff', headRefName: 'PAY-415-webhook-retries', additions: 96, deletions: 20, changedFiles: 4,
+      reviewRequests: { nodes: [user('anna'), user('bob'), user('carla')] }, timelineItems: { nodes: ['anna', 'bob', 'carla'].map((login) => ({ createdAt: ago(100), requestedReviewer: { __typename: 'User', login } })) } }),
+    pr({ number: 1310, repo: 'acme/web-shop', title: 'PAY-422: Show refunds in the order history', headRefName: 'PAY-422-order-history', additions: 120, deletions: 12, changedFiles: 6,
+      reviewRequests: { nodes: [user('anna'), user('carla')] }, reviews: { nodes: [review('bob', 'COMMENTED', 1.5)] },
+      commits: { nodes: [{ commit: { committedDate: ago(4), statusCheckRollup: { state: 'SUCCESS' }, checkSuites: { nodes: [] } } }] },
+      timelineItems: { nodes: ['anna', 'bob', 'carla'].map((login) => ({ createdAt: ago(20), requestedReviewer: { __typename: 'User', login } })) } }),
     pr({ number: 76, repo: 'acme/infra', title: 'Alerts for webhook backlog', headRefName: 'webhook-backlog-alerts', isDraft: true, additions: 40, deletions: 0, changedFiles: 2 }),
   ],
   mentions: [
