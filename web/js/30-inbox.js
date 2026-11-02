@@ -415,11 +415,20 @@ function rowNext(it, rel) {
   const n = nextStep(it, rel);
   return n && !n.wait ? nextHtml(it, n) : '';
 }
+// A PR's title without the ticket key it starts with ("ABC-12: …", "[ABC-12] …") when the
+// Ticket column shows that key anyway.
+function tableTitle(it, rel) {
+  if (!it.pr || $('#list').classList.contains('no-x')) return it.title;
+  const m = it.title.match(/^\[?([A-Z][A-Z0-9_]+-\d+)\]?[:\s-]+\s*(.+)$/);
+  return m && rel.some((x) => x.issue === m[1]) ? m[2] : it.title;
+}
 function tableRow(it, i, rel, chips, acts, fresh) {
   const [lt, tone] = it.label || [];
+  const readCol = !!it.data?.own && !$('#list').classList.contains('no-r');
   const cell = {
     id: `<span class="c c-id id"${refAttrs(it)}>${esc(it.issue || it.ref || '')}</span>`,
-    t: `<span class="c c-t t"><a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.title)}</a>${rowNext(it, rel)}${it.pr && it.step ? `<span class="step">${esc(it.step)}</span>` : ''}${chips}</span>`,
+    // A table keeps a row to its title and next step; the details are on hover and in the other columns.
+    t: `<span class="c c-t t"${it.step ? ` title="${esc(`${it.title}\n${it.step}`)}"` : ''}><a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(tableTitle(it, rel))}</a>${readCol && /^Read /.test(nextStep(it, rel)?.label || '') ? '' : rowNext(it, rel)}${chips}</span>`,
     x: `<span class="c c-x">${rel.slice(0, 3).map((x) => xrefChip(x, !it.pr)).join('')}</span>`,
     b: `<span class="c c-b">${branchCell(branchesOf(it, rel))}</span>`,
     v: `<span class="c c-v${(it.data?.fixVersions || []).some((v) => v.released) && it.data?.statusCategory !== 'done' ? ' warn' : ''}"${it.data?.fixVersions ? ` title="${esc(fixText(it.data))}"` : ''}>${it.data?.fixVersions ? (it.data.fixVersions.length ? esc(it.data.fixVersions.map((v) => v.name).join(', ')) : '<span class="muted">none</span>') : ''}</span>`,
@@ -441,9 +450,10 @@ function ownCell(own, url) {
   const [lt, tone] = own.label;
   const tip = own.state === 'read' ? (own.viaViewed ? 'Every file is ticked Viewed on GitHub.' : own.readOid ? 'You marked this read at its latest commit.' : 'Every commit is yours.')
     : `${own.step}\nWritten by: ${own.writers.join(', ')}`;
-  const mark = own.state !== 'read' ? `<button class="own-read" data-own-read="${esc(url)}" data-oid="${esc(own.headOid || '')}" title="I've read it, up to the latest commit">Mark read</button>`
-    : own.readOid ? `<button class="own-read undo" data-own-read="${esc(url)}" data-oid="" title="Mark as not read">Undo</button>` : '';
-  return `<span class="lbl${tone ? ` ${tone}` : ''}" title="${esc(tip)}">${tone ? '<i></i>' : ''}${esc(lt)}</span>${mark}`;
+  const mark = own.state !== 'read' ? `<button class="own-read" data-own-read="${esc(url)}" data-oid="${esc(own.headOid || '')}" title="Mark read: I've read it, up to the latest commit" aria-label="Mark read">✓</button>`
+    : own.readOid ? `<button class="own-read undo" data-own-read="${esc(url)}" data-oid="" title="Mark as not read" aria-label="Mark as not read">↺</button>` : '';
+  if (!tone) return `<span class="muted" title="${esc(tip)}">${esc(lt)}</span>${mark}`;
+  return `<span class="lbl ${tone}" title="${esc(tip)}"><i></i>${esc(lt)}</span>${mark}`;
 }
 async function markOwnRead(url, oid) {
   await post('/api/read', { marks: [{ key: `prread:${url}`, at: oid || null }] });

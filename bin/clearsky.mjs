@@ -405,7 +405,7 @@ export const prReadKey = (url) => `prread:${url}`;
 function withOwn(data) {
   if (!data?.myPrs) return data;
   const reads = localState.readMarks(stateFile), pushes = chatPushes(readWrites(agentLogFile, { limit: 5000 }));
-  return { ...data, myPrs: data.myPrs.map(({ commits, ...p }) => ({ ...p, own: ownRead({ ...p, commits }, data.login, reads[prReadKey(p.url)], pushes) })) };
+  return { ...data, myPrs: data.myPrs.map(({ commits, ...p }) => ({ ...p, own: ownRead({ ...p, commits }, { login: data.login, name: data.name }, reads[prReadKey(p.url)], pushes) })) };
 }
 
 export async function collect(force) {

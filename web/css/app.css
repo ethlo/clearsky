@@ -192,10 +192,11 @@ kbd { font: 500 10.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace; border:
 .r.tbl .c-s { display: flex; align-items: center; }
 .r.tbl .c-r { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .r.tbl .c-r .lbl { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.own-read { font-size: 11px; padding: 0 6px; flex: none; background: none; border: 1px solid var(--line); border-radius: 10px; color: var(--muted); cursor: pointer; }
+.own-read { font-size: 11px; padding: 0 6px; flex: none; opacity: 0; background: none; border: 1px solid var(--line); border-radius: 10px; color: var(--muted); cursor: pointer; }
 .own-read:hover { color: var(--text); border-color: var(--line-strong); }
-.own-read.undo { opacity: 0; }
-.r:hover .own-read.undo, .own-read.undo:focus { opacity: .7; }
+.r:hover .own-read, .r.sel .own-read, .own-read:focus { opacity: 1; }
+.r:hover .own-read.undo { opacity: .7; }
+#item .own-read, .read-ask .own-read { opacity: 1; }
 .r.tbl:hover .age, .r.tbl.sel .age, .r.tbl:focus-within .age { visibility: hidden; }
 .wt-head { display: grid; grid-template-columns: var(--wcols); gap: 10px; padding: 6px 20px 4px; color: var(--muted); font-size: 11px;
   text-transform: uppercase; letter-spacing: .04em; position: sticky; top: 0; background: var(--bg); z-index: 2; border-bottom: 1px solid var(--line); }

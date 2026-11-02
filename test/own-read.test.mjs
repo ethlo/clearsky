@@ -11,6 +11,7 @@ test('commitWriter tells you, agents and others apart', () => {
   assert.deepEqual(commitWriter(c('a', 't', { message: 'x\n\nCo-Authored-By: Claude <noreply@anthropic.com>' }), 'alex'), { by: 'agent', agent: 'Claude' });
   assert.deepEqual(commitWriter(c('a', 't', { login: 'sam' }), 'alex'), { by: 'other', who: 'sam' });
   assert.deepEqual(commitWriter(c('a', 't', { login: null, name: 'Someone' }), 'alex'), { by: 'other', who: 'Someone' });
+  assert.deepEqual(commitWriter(c('a', 't', { login: null, name: 'Alex Smith' }), { login: 'alex', name: 'Alex Smith' }), { by: 'me' }, 'an email GitHub doesn\'t know, with your name');
 });
 
 test('a commit a Clearsky chat pushed counts as the chat\'s', () => {
