@@ -519,13 +519,24 @@ const sinceNow = (ms) => { const s = Math.max(0, Math.round((Date.now() - ms) / 
 // "Last activity …" under a running answer keeps counting.
 setInterval(() => { for (const el of document.querySelectorAll('.idle[data-at]')) el.querySelector('b').textContent = sinceNow(Number(el.dataset.at)); }, 5000);
 
+const RESUME_WARN = /Warning: (\d+) tool call\(s\) had no recorded result at resume/;
+const RESUME_WARN_ALL = /Warning: \d+ tool call\(s\) had no recorded result at resume\.(?:[^\n]*?Verify the current state before continuing\.)?/;
+
 // One answer is a list of segments: text, tool steps and approval questions, in order.
 function renderAnswer(segs, running = false) {
   // Stopped on an error or a failed step: a nudge sends "Try again" (shown on the last answer only).
   const end = segs.at(-1);
   const stuck = end && (end.type === 'error' || (end.type === 'tool' && end.status === 'failed'));
+  // A chat picked up again after a restart: Copilot marks the steps that were running then as
+  // failed and warns. That's routine (it checks and reruns them), so it reads as a note.
+  const resumed = segs.some((g) => g.type === 'text' && RESUME_WARN.test(g.text));
   return segs.map((g) => {
+    if (g.type === 'text' && RESUME_WARN.test(g.text)) {
+      const n = Number(g.text.match(RESUME_WARN)[1]) || 1;
+      return `<div class="tool s-resumed"><span>${icon('refresh', 13)}</span>Picked up after an interruption: ${n === 1 ? 'a step that was running didn’t finish' : `${n} steps that were running didn’t finish`}, so Copilot checks and runs ${n === 1 ? 'it' : 'them'} again.</div>${md(g.text.replace(RESUME_WARN_ALL, '').trim())}`;
+    }
     if (g.type === 'text') return md(g.text);
+    if (g.type === 'tool' && resumed && g.status === 'failed' && (!g.title || g.title === 'Tool')) return '';
     if (g.type === 'tool') return `<div class="tool s-${esc(g.status || 'pending')}">${stamp(g.start || g.at)}<span>${icon('tool', 13)}</span>${esc(g.title || 'Tool')}<i>${esc((g.status || '').replace('_', ' '))}${g.end && g.start ? ` · ${took(g.start, g.end)}` : ''}</i></div>`.replace(' · </i>', '</i>');
     if (g.type === 'permission') {
       return `<div class="perm"><div class="perm-t">${stamp(g.at)}${esc(g.title)}</div>${g.detail ? `<code>${esc(g.detail)}</code>` : ''}

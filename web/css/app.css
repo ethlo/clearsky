@@ -534,6 +534,7 @@ a.ref:hover { border-bottom-style: solid; }
 .tool.s-failed i { color: var(--red); }
 .tool.s-stopped i { color: var(--amber); }
 .tool.s-completed i { color: var(--green); }
+.tool.s-resumed { color: var(--muted); font-style: italic; }
 .choices { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; max-width: 560px; }
 .choices-q { font-weight: 600; font-size: 13.5px; margin-bottom: 2px; }
 .choice { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; border: 1px solid var(--line-strong); background: var(--surface);
