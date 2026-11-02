@@ -43,3 +43,5 @@ Then stop and wait.
 ## 4. After I pick
 
 Carry on with the usual workflow for the choice: a personal delivery skill if I have one (for example a feature-delivery skill for "ticket, branch, PR"), otherwise `continue-work`. Say which one you're using.
+
+When drafting anything posted as me (comments, replies, PR descriptions), follow the write-like-me skill.

@@ -85,3 +85,5 @@ Facts only, short. If the repo has a PR template, keep its headings and fill the
 - Touch another branch or someone else's PR.
 
 End with what you did, what's still open, and anything that needs me.
+
+When drafting anything posted as me (comments, replies, PR descriptions), follow the write-like-me skill.

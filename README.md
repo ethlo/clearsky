@@ -167,6 +167,8 @@ Sessions show up next to the PR or ticket they are about: one you started from t
 - **review-my-queue:** goes through your review requests, smallest and re-reviews first, and drafts review notes. It never submits a review unless you tell it to.
 - **continue-work:** checks a PR or ticket (CI, conflicts, unresolved review comments, what the ticket still asks for), then carries on with what's left after asking once. It never merges, approves, force-pushes or posts comments without asking. From ✦ on a PR in Clearsky, the chat runs in your local clone of that repository (found under `~/dev`, or `CLEARSKY_CODE_DIRS`).
 
+- **write-like-me:** anything posted as you (review comments, replies, PR descriptions, Jira comments, Slack) in your own voice: short, to the point, no filler. It reads your voice profile, `~/.copilot/voice.md`, if you have one: how you write, with samples of your own comments. That file stays on your machine; Copilot can write it for you from your recent GitHub and Jira comments.
+
 Inside this repo Copilot picks them up automatically. To have them in every repo, copy them to your personal skills folder:
 
 ```sh

@@ -15,3 +15,5 @@ description: Go through the pull requests waiting for my review and draft review
    - **Findings:** concrete issues with `file:line`, ordered by severity. Separate must-fix from nits.
    - **Suggested verdict:** approve, comment or request changes.
 6. Never submit a review, approve, or post comments unless I explicitly say so for that PR. Show drafts only.
+
+When drafting anything posted as me (comments, replies, PR descriptions), follow the write-like-me skill.
