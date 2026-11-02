@@ -420,12 +420,19 @@ function md(text) {
   return out + mdText(rest.slice(0, open.index), last > 0) + (open[1] === 'choices' ? '' : block('', rest.slice(open.index + open[0].length)));
 }
 function mdText(part, afterBlock) {
-  let h = linkify(afterBlock ? part.replace(/^\n/, '') : part, jiraBaseGuess());
+  // "> " lines (a draft comment, a quote from a thread) as one quote, with a Copy button that
+  // copies the quote's own Markdown: code, backticks and all, ready to paste where it's posted.
+  // A quote's body is Markdown of its own, so a ``` block inside it shows as code.
+  const quotes = [];
+  let t = (afterBlock ? part.replace(/^\n/, '') : part).replace(/\n?((?:^> ?.*(?:\n|$))+)\n?/gm, (m, q) => {
+    const raw = q.replace(/\n$/, '').split('\n').map((l) => l.replace(/^> ?/, '')).join('\n').trim();
+    quotes.push(`<blockquote class="quote"><button type="button" class="q-copy" data-copy-quote title="Copy">Copy</button><span class="q-body" data-raw="${esc(raw)}">${md(raw)}</span></blockquote>`);
+    return `\u0000${quotes.length - 1}\u0000`;
+  });
+  let h = linkify(t, jiraBaseGuess());
   h = h.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, (m, pre, url) => `${pre}<a href="${url}" target="_blank" rel="noopener">${url}</a>`);
   h = h.replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>').replace(/^#{1,4} (.+)$/gm, '<b>$1</b>');
-  // "> " lines (a draft comment, a quote from a thread) as one quote, with a Copy button.
-  h = h.replace(/\n?((?:^&gt; ?.*(?:\n|$))+)\n?/gm, (m, q) => `<blockquote class="quote"><button type="button" class="q-copy" data-copy-quote title="Copy">Copy</button><span class="q-body">${
-    q.replace(/\n$/, '').split('\n').map((l) => l.replace(/^&gt; ?/, '')).join('\n').trim()}</span></blockquote>`);
+  h = h.replace(/\u0000(\d+)\u0000/g, (m, i) => quotes[i]);
   return h ? `<span class="txt">${h}</span>` : '';
 }
 // "Question\n- Option | what happens\n- Option (recommended) | …"
@@ -444,7 +451,7 @@ function choicesCard(body) {
 document.addEventListener('click', async (e) => {
   const b = e.target.closest('[data-copy-quote]');
   if (!b) return;
-  try { await navigator.clipboard.writeText(b.parentElement.querySelector('.q-body').innerText); b.textContent = 'Copied'; } catch { b.textContent = 'Select and copy'; }
+  try { await navigator.clipboard.writeText(b.parentElement.querySelector('.q-body').dataset.raw); b.textContent = 'Copied'; } catch { b.textContent = 'Select and copy'; }
   setTimeout(() => { b.textContent = 'Copy'; }, 1500);
 });
 
