@@ -48,6 +48,11 @@ test('ownRead: unread, read, new commits since, and the risky ones', () => {
   assert.equal(read.state, 'read');
   assert.deepEqual(read.label, ['read by you', 'green']);
 
+  const viewed = ownRead({ ...pr, viewed: { files: 3, viewed: 3 } }, 'alex', null);
+  assert.equal(viewed.state, 'read');
+  assert.equal(viewed.viaViewed, true);
+  assert.match(ownRead({ ...pr, viewed: { files: 3, viewed: 1 } }, 'alex', null).step, /1 of 3 files viewed$/);
+
   const rewritten = ownRead(pr, 'alex', 'zzz');
   assert.equal(rewritten.state, 'new');
   assert.match(rewritten.step, /rewritten/);

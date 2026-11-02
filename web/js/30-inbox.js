@@ -439,22 +439,53 @@ function tableRow(it, i, rel, chips, acts, fresh) {
 function ownCell(own, url) {
   if (!own) return '';
   const [lt, tone] = own.label;
-  const tip = own.state === 'read' ? (own.readOid ? 'You marked this read at its latest commit.' : 'Every commit is yours.')
+  const tip = own.state === 'read' ? (own.viaViewed ? 'Every file is ticked Viewed on GitHub.' : own.readOid ? 'You marked this read at its latest commit.' : 'Every commit is yours.')
     : `${own.step}\nWritten by: ${own.writers.join(', ')}`;
   const mark = own.state !== 'read' ? `<button class="own-read" data-own-read="${esc(url)}" data-oid="${esc(own.headOid || '')}" title="I've read it, up to the latest commit">Mark read</button>`
     : own.readOid ? `<button class="own-read undo" data-own-read="${esc(url)}" data-oid="" title="Mark as not read">Undo</button>` : '';
   return `<span class="lbl${tone ? ` ${tone}` : ''}" title="${esc(tip)}">${tone ? '<i></i>' : ''}${esc(lt)}</span>${mark}`;
+}
+async function markOwnRead(url, oid) {
+  await post('/api/read', { marks: [{ key: `prread:${url}`, at: oid || null }] });
+  await loadSource('github');
+  // The PR's page in Clearsky shows the new state too.
+  if (location.hash === '#item' && curItem?.url === url) { curItem = inboxItems().find((x) => x.k === curItem.k) || curItem; renderItem(); }
 }
 document.addEventListener('click', async (e) => {
   const b = e.target.closest('[data-own-read]');
   if (!b) return;
   e.preventDefault(); e.stopPropagation();
   b.disabled = true;
-  try {
-    await post('/api/read', { marks: [{ key: `prread:${b.dataset.ownRead}`, at: b.dataset.oid || null }] });
-    await loadSource('github');
-  } catch (err) { b.disabled = false; $('#status').textContent = `Could not save: ${err.message}`; }
+  try { await markOwnRead(b.dataset.ownRead, b.dataset.oid); readAsk(null); } catch (err) { b.disabled = false; $('#status').textContent = `Could not save: ${err.message}`; }
 }, true);
+
+// Opening one of your unread PRs on GitHub from here (its link, "Read it", Open on GitHub): when
+// you come back to Clearsky, a note asks whether you read it, with Mark read. Clearsky can't see
+// what you read on GitHub, so it asks instead of guessing. Ticking every file Viewed there counts
+// by itself.
+let readPending = null;
+function ownUnreadFor(href) {
+  if (!href) return null;
+  const p = (state.github?.myPrs || []).find((x) => x.own && x.own.state !== 'read' && (href === x.url || href.startsWith(`${x.url}/`)));
+  return p ? { url: p.url, oid: p.own.headOid, title: `${shortRepo(p.repo)} #${p.number} ${p.title}` } : null;
+}
+function readAsk(p) {
+  readPending = null;
+  const el = $('#read-ask');
+  el.hidden = !p;
+  if (!p) return;
+  el.innerHTML = `<span>Did you read <b>${esc(p.title)}</b>?</span><button class="primary" data-own-read="${esc(p.url)}" data-oid="${esc(p.oid || '')}">Mark read</button><button data-read-ask-no>Not yet</button>`;
+}
+document.addEventListener('click', (e) => {
+  if (e.target.closest('[data-read-ask-no]')) return readAsk(null);
+  const a = e.target.closest('a[href^="https://github.com/"]');
+  const n = !a && e.target.closest('[data-next]') && nextStep(listItems.find((x) => x.k === e.target.closest('[data-next]').dataset.next) || curItem || {});
+  const p = ownUnreadFor(a ? a.href : n?.run === 'url' ? n.url : null);
+  if (p) readPending = { ...p, at: Date.now() };
+}, true);
+const backFromGitHub = () => { if (readPending && !document.hidden && Date.now() - readPending.at > 3000) readAsk(readPending); };
+window.addEventListener('focus', backFromGitHub);
+document.addEventListener('visibilitychange', backFromGitHub);
 
 function itemRow(it, i) {
   const [lt, tone] = it.label || [];

@@ -81,6 +81,8 @@ async function renderItem() {
     ${(() => { const n = nextHtml(it, nextStep(it, rel)); return n ? `<div class="next-row"><span class="lbl-next">Next</span>${n}</div>` : ''; })()}`;
   };
   const acts = () => `<div class="acts-row">${it.url ? `<a class="icon-btn primary" href="${esc(it.url)}" target="_blank" rel="noopener">${where} ↗</a>` : ''}
+    ${it.data?.own && it.data.own.state !== 'read' ? `<button class="icon-btn" data-own-read="${esc(it.url)}" data-oid="${esc(it.data.own.headOid || '')}" title="I've read it, up to the latest commit">${DONE_ICON} Mark read</button>`
+      : it.data?.own?.readOid ? `<button class="icon-btn" data-own-read="${esc(it.url)}" data-oid="" title="You marked it read; mark it not read">Mark not read</button>` : ''}
     ${it.kind === 'pr' && !prClosed.has(it.pr) ? `<button class="icon-btn" data-rv-open="${esc(it.data.repo)}#${it.data.number}">${icon('users', 14)} Request review</button>` : ''}
     ${refFromUrl(it.url) ? `<button class="icon-btn" data-ask="${esc(it.url)}" data-title="${esc(it.title)}">${icon('spark', 14)} Copilot on this</button>` : ''}
     ${it.kind === 'linked' ? '' : `<button class="icon-btn" data-mute="${esc(it.k)}">${MUTE_ICON} Snooze</button>
@@ -157,7 +159,7 @@ document.addEventListener('click', async (e) => {
   sendBtn.addEventListener('click', async () => {
     // Asking people to read code under your name that you haven't read yourself.
     const own = (state.github?.myPrs || []).find((p) => p.repo === repo && p.number === Number(number))?.own;
-    if (own && own.state !== 'read' && !confirm(`You haven't read ${own.state === 'new' ? `the ${own.unread} new commit${own.unread > 1 ? 's' : ''}` : 'this PR'} yet (${own.by}, ${own.lines} lines). Ask for review anyway?`)) return;
+    if (own && own.state !== 'read' && !confirm(`You haven't read ${own.state === 'new' ? `the ${own.unread} new commit${own.unread > 1 ? 's' : ''}` : 'this PR'} yet (${own.by}${own.lines ? `, ${own.lines} lines` : ""}). Ask for review anyway?`)) return;
     sendBtn.disabled = true;
     try {
       await post('/api/pr/request-review', { repo, number: Number(number), logins: picked() });

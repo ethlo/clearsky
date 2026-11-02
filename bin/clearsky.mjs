@@ -161,7 +161,9 @@ async function http(url, { headers = {}, body, method } = {}) {
   });
   const text = await res.text();
   if (!res.ok) {
-    const err = new Error(`${res.status} ${res.statusText} from ${new URL(url).host}: ${text.slice(0, 300)}`);
+    // An HTML error page (a gateway's 502) says nothing more than its status.
+    const body = /^\s*</.test(text) ? '' : `: ${text.slice(0, 300)}`;
+    const err = new Error(res.status >= 500 && !body ? `${new URL(url).host} didn't answer (${res.status} ${res.statusText}); trying again at the next refresh` : `${res.status} ${res.statusText} from ${new URL(url).host}${body}`);
     err.status = res.status;
     throw err;
   }

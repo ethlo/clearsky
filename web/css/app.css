@@ -787,3 +787,10 @@ time.at { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nu
 .lk-group.editing li [data-ltitle] { flex: 1 1 180px; }
 .lk-group.editing li [data-lurl] { flex: 2 1 260px; font-family: var(--mono, ui-monospace, monospace); font-size: 12px; }
 @media (max-width: 700px) { .vh #links-import { display: none; } .lk-group.editing li { flex-wrap: wrap; } }
+
+/* "Did you read it?" after coming back from one of your unread PRs on GitHub. */
+.read-ask { position: fixed; right: 20px; bottom: 48px; z-index: 50; display: flex; align-items: center; gap: 10px; max-width: min(560px, calc(100vw - 32px));
+  padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow-lg); font-size: 13px; }
+.read-ask[hidden] { display: none; }
+.read-ask > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.read-ask button { flex: none; }

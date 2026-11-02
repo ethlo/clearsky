@@ -24,6 +24,7 @@ const fake = createServer(async (req, res) => {
   const q = body ? JSON.parse(body).query || '' : '';
   if (req.url === '/graphql') {
     if (q.includes('reviewed: search')) return send({ data: { mine: { nodes: standup.mine }, reviewed: { nodes: standup.reviewed } } });
+    if (q.includes('nodes(ids:')) { const ids = JSON.parse(body).variables.ids; return send({ data: { nodes: ids.map((id) => github.myPrs.find((x) => x.id === id) || null) } }); }
     if (q.includes('reviewRequested: search')) return send({ data: { reviewRequested: { nodes: github.reviewRequested }, myPrs: { nodes: github.myPrs }, mentions: { nodes: github.mentions }, assigned: { nodes: github.assigned } } });
     if (q.includes('assignableUsers')) return send({ data: { viewer: { login: ME }, repository: { assignableUsers: { nodes: ['anna', 'bob', 'carla', 'dev'].map((login) => ({ login, name: login })) }, pullRequest: { author: { login: ME }, suggestedReviewers: [{ reviewer: { login: 'anna', name: 'Anna Berg' } }], reviewRequests: { nodes: [] }, reviews: { nodes: [] } } } } });
     if (q.includes('pullRequest(number')) {

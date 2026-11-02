@@ -12,7 +12,7 @@ export const hhmm = (d) => `${String(d.getHours()).padStart(2, '0')}:${String(d.
 
 const suite = (name, conclusion, status = 'COMPLETED') => ({ status, conclusion, workflowRun: { event: 'pull_request', url: `https://github.com/acme/x/actions/runs/${Math.floor(Math.random() * 1e6)}`, workflow: { name } } });
 export const pr = (o) => ({
-  number: 1, title: 'A change', url: `https://github.com/${o.repo || 'acme/payments-api'}/pull/${o.number || 1}`, state: 'OPEN', isDraft: false,
+  id: `PR_${o.number || 1}`, number: 1, title: 'A change', url: `https://github.com/${o.repo || 'acme/payments-api'}/pull/${o.number || 1}`, state: 'OPEN', isDraft: false,
   createdAt: ago(30), updatedAt: ago(2), reviewDecision: 'REVIEW_REQUIRED', mergeable: 'MERGEABLE', headRefName: 'feature/x',
   additions: 120, deletions: 34, changedFiles: 6, repository: { nameWithOwner: o.repo || 'acme/payments-api' }, author: { login: ME },
   reviews: { nodes: [] }, reviewRequests: { nodes: [] }, reviewThreads: { nodes: [] },
@@ -22,7 +22,7 @@ export const pr = (o) => ({
 });
 // Commits for "read by you": [hoursAgo, who, lines], who = 'me', 'copilot' (Co-authored-by) or a login.
 const COPILOT = '\n\nCo-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>';
-const hist = (number, list) => ({ headRefOid: `${number}c${list.length}`, history: { totalCount: list.length, nodes: list.map(([h, who, lines], i) => ({ commit: {
+const hist = (number, list) => ({ headRefOid: `${number}c${list.length}`, history: { nodes: list.map(([h, who, lines], i) => ({ commit: {
   oid: `${number}c${i + 1}`, committedDate: ago(h), additions: Math.round(lines * 0.8), deletions: Math.round(lines * 0.2),
   message: `Change ${i + 1}${who === 'copilot' ? COPILOT : ''}`, author: { name: who, email: `${who}@example.com`, user: { login: who === 'copilot' || who === 'me' ? ME : who } } } })) } });
 export const READ_MARKS = { 'prread:https://github.com/acme/payments-api/pull/486': '486c3', 'prread:https://github.com/acme/web-shop/pull/1310': '1310c2' };
