@@ -31,7 +31,10 @@ comment, a Slack message) should read as if I wrote it.
    check it: when rewording, the meaning stays the same (a "not really" can flip an answer);
    one hedge at most ("seems" and "likely" together is one too many); what I'll do is a
    decision ("I'll do that as a follow-up"), not an offer.
-5. **Never post it yourself** unless I've asked you to post; show it ready to paste or ready
+5. **Check facts the fast way:** a claim in the draft (a version, where something is logged,
+   what a rule does) is worth checking, but start the lookups that don't depend on each other
+   together, several tool calls in one step, instead of one at a time.
+6. **Never post it yourself** unless I've asked you to post; show it ready to paste or ready
    for me to approve.
 
 To update the profile, ask Copilot to read my recent comments again (GitHub and Jira, with
