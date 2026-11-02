@@ -193,7 +193,12 @@ function runNext(it, btn) {
     if (linked) {
       // Carry on in the chat that already knows this work; the request waits in the box for you to send.
       openChat(true, true);
-      openSession(linked.id, linked.cwd).then(() => { if (n.prompt) { $('#chat-text').value = n.prompt; $('#chat-text').focus(); } });
+      // A one-click step (a merge conflict) is sent at once; it waits its turn if the chat is busy.
+      openSession(linked.id, linked.cwd).then(() => {
+        if (!n.prompt) return;
+        $('#chat-text').value = n.auto ? [n.skill && `/${n.skill}`, n.prompt].filter(Boolean).join(' ') : n.prompt;
+        if (n.auto) $('#chat-form').requestSubmit(); else $('#chat-text').focus();
+      });
       return;
     }
     if (!ref) return;
