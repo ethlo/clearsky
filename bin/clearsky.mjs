@@ -2185,6 +2185,9 @@ function serve() {
   process.on('uncaughtException', (e) => logEvent(`unexpected error, still running: ${e?.stack || e}`));
   logEvent(`started, pid ${process.pid}, by ${process.env.CLEARSKY_STARTED_BY || (process.env.CLEARSKY_SUPERVISED === '1' ? 'systemd' : 'hand or app window')}`, { echo: false });
   delete process.env.CLEARSKY_STARTED_BY;
+  // Errors go to the log file too: a server started from the app window has no terminal.
+  const err0 = console.error.bind(console);
+  console.error = (...a) => { err0(...a); logEvent(a.map(String).join(' ').replace(/^clearsky: /, 'error: ').slice(0, 2000), { echo: false }); };
   for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.once(sig, () => { logEvent(`stopped by ${sig}, ${chatsBusy()} busy chat(s)`, { echo: false }); process.exit(0); });
   loadSourceCache(join(dirname(userEnvFile), 'sources-cache.json'));
   // Every state-changing request must carry this token and come from this origin, so other
