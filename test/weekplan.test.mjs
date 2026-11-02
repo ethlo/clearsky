@@ -58,6 +58,19 @@ test('a plan with times over two lines, cells that touch and prose that names we
     '2026-10-28 Skolen slutter 14.10', '2026-10-29 Skolen slutter 14.10', '2026-10-30 Skolen slutter 14.00']);
 });
 
+test('homework listed under the week, by subject, due the day on the Lekser line', () => {
+  const evs = weekPlanEvents(fixture('ukeplan-7trinn.txt').toString(), { sentAt: '2026-10-23T06:16:37Z', title: 'Uke 44' });
+  const hw = evs.filter((e) => e.kind === 'homework');
+  assert.deepEqual(hw.map((e) => `${e.day} ${e.title}`), [
+    '2026-10-29 Lekse matte: Oppgaver med de fire regneartene.',
+    '2026-10-29 Lekse norsk: Les tegneserien som du har fått utdelt på ark og som ligger i OneNote.',
+    '2026-10-29 Lekse engelsk: English Homework – Verbs',
+    '2026-10-29 Praktisk lekse: Les og snakk om tegneserien med en voksen hjemme.']);
+  assert.ok(hw.every((e) => e.allDay));
+  assert.match(hw[0].details, /to streker under svaret/);
+  assert.match(hw[2].details, /^English Homework – Verbs\nWrite the sentences/);
+});
+
 test('a Word plan reads the same way: cells in columns, the table ends with its last row', async () => {
   const text = await documentText(fixture('ukeplan.docx'), { name: 'Ukeplan.docx' });
   assert.equal(text, docxText(fixture('ukeplan.docx')));
