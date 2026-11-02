@@ -972,7 +972,8 @@ async function githubAsk(what, { repo, nodes = [], why = null } = {}) {
   }
   return new Promise((done) => {
     const id = randomBytes(6).toString('hex');
-    const ev = { type: 'permission', id, title: 'Change GitHub as you', kind: 'execute', detail: what, advice,
+    const title = /\/actions\/(workflows\/[^/]+\/dispatches|runs\/\d+\/rerun)/.test(what) ? 'Start a CI run as you' : 'Change GitHub as you';
+    const ev = { type: 'permission', id, title, kind: 'execute', detail: what, advice,
       options: [{ id: 'allow', name: 'Allow', kind: 'allow_once' }, ...ruleOption(advice), { id: 'deny', name: 'Deny', kind: 'reject_once' }] };
     const finish = (ok, rule = false) => {
       if (ok && rule && advice?.rule) addGateRule(advice.rule);
