@@ -311,13 +311,34 @@ function drawWeek(src, events) {
       <button class="icon-btn" data-wk="${esc(src)}" data-step="-1" aria-label="Previous week">‹</button><button class="icon-btn" data-wk="${esc(src)}" data-step="0">This week</button><button class="icon-btn" data-wk="${esc(src)}" data-step="1" aria-label="Next week">›</button>
       <span class="spacer"></span>${whos.map((w) => `<span class="wk-leg" style="--c:${color(w)}">${esc(w)}</span>`).join('')}</div>
     ${count ? `<div class="wk-grid">${days.map((d) => {
-    // The day's schedule first; homework due that day under it, in a section of its own.
-    const all = on(d), plan = all.filter((e) => e.kind !== 'homework'), hw = all.filter((e) => e.kind === 'homework');
+    // The day's schedule first; under it, the homework to do that day, in a section of its own.
+    const plan = on(d).filter((e) => e.kind !== 'homework'), hw = homeworkOn(events, ymd(d));
     return `<div class="wk-day${ymd(d) === today ? ' today' : ''}"><h3>${d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })}</h3>${plan.map(ev).join('') || '<div class="muted wk-none">—</div>'}${
-      hw.length ? `<div class="wk-hw"><h4>Homework due</h4>${hw.map(ev).join('')}</div>` : ''}</div>`;
+      hw.length ? `<div class="wk-hw"><h4>Homework</h4>${hw.map(ev).join('')}</div>` : ''}</div>`;
   }).join('')}</div>`
       : '<div class="empty">No weekly plan for this week yet.</div>'}</section>`;
 }
+// Homework shows on the days it gets done, not the day it's due: "til tirsdag" the school day
+// before (Friday for Monday), the week's homework every school day up to the due day. Each
+// says when it's due ("for Thu").
+function homeworkOn(events, day) {
+  const local = (iso) => { const x = new Date(iso); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
+  const out = [];
+  for (const e of events) {
+    if (e.kind !== 'homework') continue;
+    const due = new Date(e.start); due.setHours(12, 0, 0, 0);
+    const days = [];
+    for (let t = new Date(due); days.length < 7;) {
+      t.setDate(t.getDate() - 1);
+      if (t.getDay() === 0 || t.getDay() === 6) continue;
+      days.push(local(t));
+      if (e.span !== 'week' || t.getDay() === 1) break;
+    }
+    if (days.includes(day)) out.push({ ...e, what: `${e.what || e.title} · for ${due.toLocaleDateString([], { weekday: 'short' })}` });
+  }
+  return out.sort((a, b) => String(a.start).localeCompare(String(b.start)) || String(a.who).localeCompare(String(b.who)));
+}
+
 // ISO week: the week with that week's Thursday in it, counted from the year's first Thursday.
 function weekNo(d) { const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate() + 3 - ((d.getDay() + 6) % 7))); return 1 + Math.floor((t - Date.UTC(t.getUTCFullYear(), 0, 1)) / 6048e5); }
 document.addEventListener('click', (e) => {
