@@ -33,3 +33,6 @@ comment, a Slack message) should read as if I wrote it.
 
 To update the profile, ask Copilot to read my recent comments again (GitHub and Jira, with
 `gh` and `acli`) and rewrite `~/.copilot/voice.md`: what I do, with a dozen short samples.
+Leave out comments an agent drafted under my name (they read like an agent: "Fixed in <sha>:
+…", "ready for human review after N rounds", sectioned summaries), or the profile learns the
+agent's voice instead of mine. Chat messages I typed are good for tone.
