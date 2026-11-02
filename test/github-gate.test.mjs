@@ -77,7 +77,7 @@ test('everyday branch and PR work goes through and is told; what is hard to undo
     req('POST', 'https://api.github.com/repos/acme/api/actions/runs/5/rerun', {})]) await f(r);
   assert.deepEqual(asked.map((a) => a.replace(/^.*\((.*)\)$/, '$1')), ['pushes to main', 'deletes feature/x', 'pushes tags/v1.0', 'force-pushes feature/x', 'pushes to v3.1',
     'merges into a branch', 'deletes branch x', 'repo settings', 'changes CI secrets or variables', 'mergePullRequest',
-    'runs CI on a branch that changes its workflows']);
+    'a one-off CI run of wf, whose branch changes the workflows: workflows/build.yaml']);
   answer = false;
   const body = push(`${sha('a')} ${sha('b')} refs/heads/main`);
   const no = await f(body);

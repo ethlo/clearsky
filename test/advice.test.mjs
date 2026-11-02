@@ -35,7 +35,7 @@ test('other GitHub questions say why to check, and a repo can become a rule', ()
   assert.match(a.text, /works on acme\/app, not acme\/other \(same owner/);
   assert.match(githubAdvice('pushes to develop').text, /not through a PR/);
   assert.match(githubAdvice('force-pushes feat/x').text, /dropped/);
-  assert.match(githubAdvice('runs CI on a branch that changes its workflows').text, /secrets/);
+  assert.match(githubAdvice('a one-off CI run of x, whose branch changes the workflows: workflows/b.yaml').text, /secrets/);
   assert.match(githubAdvice('deletes something').text, /can't be undone/);
   assert.equal(githubAdvice('merges, releases or changes repo settings', { merge: ready }).level, 'fine');
   assert.equal(githubAdvice('deletes feat/x', { branch: { name: 'feat/x', merged: 1 } }).level, 'fine');
