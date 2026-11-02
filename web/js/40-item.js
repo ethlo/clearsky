@@ -310,7 +310,12 @@ function drawWeek(src, events) {
   el.innerHTML = `<section class="wk"><div class="wk-head"><h2>Week ${weekNo(mon)}</h2>
       <button class="icon-btn" data-wk="${esc(src)}" data-step="-1" aria-label="Previous week">‹</button><button class="icon-btn" data-wk="${esc(src)}" data-step="0">This week</button><button class="icon-btn" data-wk="${esc(src)}" data-step="1" aria-label="Next week">›</button>
       <span class="spacer"></span>${whos.map((w) => `<span class="wk-leg" style="--c:${color(w)}">${esc(w)}</span>`).join('')}</div>
-    ${count ? `<div class="wk-grid">${days.map((d) => `<div class="wk-day${ymd(d) === today ? ' today' : ''}"><h3>${d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })}</h3>${on(d).map(ev).join('') || '<div class="muted wk-none">—</div>'}</div>`).join('')}</div>`
+    ${count ? `<div class="wk-grid">${days.map((d) => {
+    // The day's schedule first; homework due that day under it, in a section of its own.
+    const all = on(d), plan = all.filter((e) => e.kind !== 'homework'), hw = all.filter((e) => e.kind === 'homework');
+    return `<div class="wk-day${ymd(d) === today ? ' today' : ''}"><h3>${d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })}</h3>${plan.map(ev).join('') || '<div class="muted wk-none">—</div>'}${
+      hw.length ? `<div class="wk-hw"><h4>Homework due</h4>${hw.map(ev).join('')}</div>` : ''}</div>`;
+  }).join('')}</div>`
       : '<div class="empty">No weekly plan for this week yet.</div>'}</section>`;
 }
 // ISO week: the week with that week's Thursday in it, counted from the year's first Thursday.

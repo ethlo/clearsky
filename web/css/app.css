@@ -690,6 +690,8 @@ a.ref:hover { border-bottom-style: solid; }
 .wk-ev time { font-size: 12px; color: var(--muted); margin-right: 5px; font-variant-numeric: tabular-nums; }
 .wk-ev.k-ends { background: transparent; font-size: 12px; color: var(--text-2); }
 .wk-ev.k-homework .wk-t::before { content: '✎ '; }
+.wk-hw { margin-top: 8px; padding-top: 6px; border-top: 1px dashed var(--line-strong); }
+.wk-hw h4 { margin: 0 2px 4px; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .wk-none { padding: 4px; }
 @media (max-width: 760px) { .wk-grid { grid-template-columns: 1fr; } .wk-day { min-height: 0; } }
 /* When each line in a chat happened, and how long ago the last one was. */
