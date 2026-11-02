@@ -279,7 +279,7 @@ function applyWcols() {
   el.style.setProperty('--wcols', ['16px', ...cols.filter(([c]) => !off.has(c)).map(([c]) => (c === 't' ? `minmax(${TITLE_MIN}px, 1fr)` : `${wcolWidth(v, c)}px`))].join(' '));
   off.forEach((c) => el.classList.add(`no-${c}`));
 }
-const TITLE_MIN = 260, AUTO_DROP = ['v', 'b', 'p', 'a', 'x', 'u'];
+const TITLE_MIN = 260, AUTO_DROP = ['a', 'v', 'p', 'u', 'b', 'x'];
 let wcolsTimer;
 window.addEventListener('resize', () => { clearTimeout(wcolsTimer); wcolsTimer = setTimeout(() => { if (WORK_COLS[listView]) applyWcols(); }, 100); });
 // Sorting by a column: click a header (again to reverse, a third time for the usual order).
