@@ -119,6 +119,7 @@ test('the refs a push updates', () => {
 test('CI log storage is read only: downloads go through, uploads are refused', async () => {
   const f = githubFilter(async () => true);
   const host = 'https://productionresultssa7.blob.core.windows.net/actions-results/x/logs.txt?sig=abc';
+  assert.ok(GITHUB_LOG_HOSTS.includes('productionresultssa32.blob.core.windows.net'), 'seen in a real run');
   assert.equal((await f(new Request(host))).action, 'allow');
   const up = await f(new Request(host, { method: 'PUT', body: 'code' }));
   assert.equal(up.action, 'deny');
