@@ -147,7 +147,9 @@
     <input id="CLEARSKY_MENTION_DAYS" data-key="CLEARSKY_MENTION_DAYS" inputmode="numeric" placeholder="14">
     <label for="CLEARSKY_TIME_FORMAT">Clock</label>
     <select id="CLEARSKY_TIME_FORMAT" data-key="CLEARSKY_TIME_FORMAT"><option value="24">24-hour (14:30)</option><option value="12">12-hour (2:30 PM)</option></select>
-    <div class="row"><button class="save" data-keys="CLEARSKY_STANDUP_TIME,CLEARSKY_WORKDAYS,CLEARSKY_WORKDAY_END,CLEARSKY_MENTION_DAYS,CLEARSKY_TIME_FORMAT">Save</button><span class="msg"></span></div>
+    <label for="CLEARSKY_POLL_MINUTES">Check GitHub, Jira mentions and Slack every … minutes</label>
+    <input id="CLEARSKY_POLL_MINUTES" data-key="CLEARSKY_POLL_MINUTES" inputmode="numeric" placeholder="3">
+    <div class="row"><button class="save" data-keys="CLEARSKY_STANDUP_TIME,CLEARSKY_WORKDAYS,CLEARSKY_WORKDAY_END,CLEARSKY_MENTION_DAYS,CLEARSKY_TIME_FORMAT,CLEARSKY_POLL_MINUTES">Save</button><span class="msg"></span></div>
   </section>
 
   <section>
@@ -333,6 +335,7 @@ function render(s) {
   $('#CLEARSKY_WORKDAYS').value = s.workdays || '';
   $('#CLEARSKY_MENTION_DAYS').value = s.mentionDays || '';
   $('#CLEARSKY_TIME_FORMAT').value = s.timeFormat || '24';
+  $('#CLEARSKY_POLL_MINUTES').value = s.pollMinutes || '';
   const gf = s.grafana || {};
   $('#GRAFANA_INSTANCES').value = gf.instances || '';
   $('#GRAFANA_ASK').value = gf.ask || '';

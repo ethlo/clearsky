@@ -171,6 +171,14 @@ function looked() {
 }
 // Leaving the page counts as having looked; what arrives while you're away gets a dot.
 document.addEventListener('visibilitychange', () => { if (document.hidden) looked(); else { renderToday(); title(); } });
+// Coming back to the window: PR states change fast (a review, a merge, CI), so GitHub is checked
+// again then when it's over a minute old.
+const backToWindow = () => {
+  const at = Date.parse(state.github?.fetchedAt || 0);
+  if (!document.hidden && !loading.has('github') && Date.now() - at > 60_000) loadSource('github', true);
+};
+document.addEventListener('visibilitychange', backToWindow);
+window.addEventListener('focus', backToWindow);
 window.addEventListener('pagehide', looked);
 function title() {
   const n = attention.items.filter((it) => it.at && Date.parse(it.at) > lastLook).length;

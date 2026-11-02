@@ -2111,13 +2111,13 @@ function withReads(name, data) {
   }) };
 }
 
+// Every CLEARSKY_POLL_MINUTES (3), read again each round so a change in Settings applies at once.
 function startPolling() {
-  const every = Math.max(1, Number(process.env.CLEARSKY_POLL_MINUTES) || 3) * 6e4;
   hasNotifySend().then((n) => { poller.notifier = n; });
-  const tick = () => pollAttention(true).catch((e) => console.error(`clearsky: poll failed: ${e.message}`));
-  setTimeout(tick, 2000).unref?.();
-  poller.timer = setInterval(tick, every);
-  poller.timer.unref?.();
+  const next = (ms) => { clearTimeout(poller.timer); poller.timer = setTimeout(tick, ms); poller.timer.unref?.(); };
+  const tick = () => pollAttention(true).catch((e) => console.error(`clearsky: poll failed: ${e.message}`))
+    .finally(() => next(Math.max(1, Number(process.env.CLEARSKY_POLL_MINUTES) || 3) * 6e4));
+  next(2000);
 }
 
 // Restart without cutting off Copilot: wait until no chat here is working or waiting for an OK,
