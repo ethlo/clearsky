@@ -41,6 +41,7 @@ import { manifest as slackManifest, createSlack, workItems as slackItems } from 
 import { findBrowser, BROWSERS } from '../lib/browser.mjs';
 import { manifest as calendarManifest, createCalendar } from '../lib/modules/calendar.mjs';
 import { readLinks, saveLinks, parseBookmarks, mergeLinks } from '../lib/links.mjs';
+import { logEvent } from '../lib/event-log.mjs';
 import { manifest as githubManifest, createGitHub, workItems as githubItems, PR_FIELDS, ITEM_FIELDS, ciState, isBot, latestReviewsByUser, openThreads, humanReviewers, myPrStatus, reviewerName } from '../lib/modules/github.mjs';
 import { manifest as jiraManifest, createJira, workItems as jiraItems, mentionItems as jiraMentionItems, listOf, fieldsOf, nameOf, commentInfo, excerpt, userId, mapLimit, JIRA_WAITING, jiraMentionsByTicket, mergeJira } from '../lib/modules/jira.mjs';
 
@@ -2146,16 +2147,18 @@ function restartWhenIdle({ maxWaitMinutes = 60, force = false } = {}) {
   restart.pending = { since: new Date().toISOString(), until: new Date(Date.now() + maxWaitMinutes * 6e4).toISOString(), busy: chatsBusy(), force };
   const check = restart.check = () => {
     if (!restart.pending.force && chatsBusy()) {
-      if (Date.now() > Date.parse(restart.pending.until)) { console.log('clearsky: restart given up, Copilot is still working'); clearInterval(restart.timer); restart.pending = null; }
+      if (Date.now() > Date.parse(restart.pending.until)) { logEvent(`restart given up, ${chatsBusy()} chat(s) still working`); clearInterval(restart.timer); restart.pending = null; }
       return;
     }
     clearInterval(restart.timer);
-    console.log('clearsky: restarting');
+    const busyNow = chatsBusy();
+    logEvent(`restarting (${restart.pending.force ? 'Restart now' : 'when idle'}, ${busyNow} busy chat(s) stopped)`);
     for (const c of acpChats.values()) { c.agent.close(); c.vm?.stop(); }
     stopSandbox().catch(() => {});
     restart.server?.close();
     if (process.env.CLEARSKY_SUPERVISED === '1') process.exit(75); // a supervisor (systemd) starts us again
-    spawn(process.execPath, process.argv.slice(1), { detached: true, stdio: 'inherit', env: process.env, cwd: process.cwd() }).unref();
+    spawn(process.execPath, process.argv.slice(1), { detached: true, stdio: 'inherit', cwd: process.cwd(),
+      env: { ...process.env, CLEARSKY_STARTED_BY: `restart (${restart.pending.force ? 'Restart now' : 'when idle'}, ${busyNow} busy)` } }).unref();
     setTimeout(() => process.exit(0), 200);
   };
   restart.timer = setInterval(check, 3000);
@@ -2165,7 +2168,10 @@ function restartWhenIdle({ maxWaitMinutes = 60, force = false } = {}) {
 
 function serve() {
   // A bug in a library (srt's proxy, say) shouldn't take the dashboard and every chat down with it.
-  process.on('uncaughtException', (e) => console.error(`clearsky: unexpected error, still running: ${e?.stack || e}`));
+  process.on('uncaughtException', (e) => logEvent(`unexpected error, still running: ${e?.stack || e}`));
+  logEvent(`started, pid ${process.pid}, by ${process.env.CLEARSKY_STARTED_BY || (process.env.CLEARSKY_SUPERVISED === '1' ? 'systemd' : 'hand or app window')}`, { echo: false });
+  delete process.env.CLEARSKY_STARTED_BY;
+  for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.once(sig, () => { logEvent(`stopped by ${sig}, ${chatsBusy()} busy chat(s)`, { echo: false }); process.exit(0); });
   loadSourceCache(join(dirname(userEnvFile), 'sources-cache.json'));
   // Every state-changing request must carry this token and come from this origin, so other
   // websites open in the browser can't change settings or start logins. It's kept across
@@ -2197,7 +2203,7 @@ function serve() {
         }
         if (url.pathname === '/api/restart') {
           const { maxWaitMinutes, force } = await readJson(req).catch(() => ({}));
-          if (force === true) console.log(`clearsky: restart now, stopping ${chatsBusy()} busy chat(s)`);
+          logEvent(`restart asked (${force === true ? 'Restart now' : 'when idle'}), ${chatsBusy()} busy chat(s)${restart.pending ? ', one already waiting' : ''}`);
           return json(res, 200, { restart: restartWhenIdle({ maxWaitMinutes: Math.min(Math.max(Number(maxWaitMinutes) || 60, 1), 240), force: force === true }) });
         }
         // End a chat's Copilot. Its conversation stays; the next message resumes it in a new one.

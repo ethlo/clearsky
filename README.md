@@ -123,7 +123,7 @@ PRs and tickets link to each other: a PR shows the Jira tickets in its title or 
 
 ## Running it
 
-`clearsky restart` asks the running server to restart once no Copilot chat is working or waiting for your OK, so updating never cuts a turn off; idle chats carry on afterwards. To start Clearsky at login and keep it running, `contrib/clearsky.service` is a systemd user service (instructions inside); it sets `CLEARSKY_SUPERVISED=1`, so a restart hands over to systemd.
+`clearsky restart` asks the running server to restart once no Copilot chat is working or waiting for your OK, so updating never cuts a turn off; idle chats carry on afterwards. To start Clearsky at login and keep it running, `contrib/clearsky.service` is a systemd user service (instructions inside); it sets `CLEARSKY_SUPERVISED=1`, so a restart hands over to systemd. Starts, restarts (with how they were asked for and how many chats were busy), stops and unexpected errors are logged to `~/.cache/clearsky/clearsky.log` (`CLEARSKY_LOG` for another file).
 
 ### In Docker
 
