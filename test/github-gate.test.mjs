@@ -124,7 +124,7 @@ test('CI log storage is read only: downloads go through, uploads are refused', a
   const up = await f(new Request(host, { method: 'PUT', body: 'code' }));
   assert.equal(up.action, 'deny');
   assert.match(up.reason, /CI log storage is read only/);
-  assert.equal(GITHUB_LOG_HOSTS.length, 20);
+  assert.equal(GITHUB_LOG_HOSTS.length, 100);
 });
 
 test('branches and tags through the API say what they do', async () => {
