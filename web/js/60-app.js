@@ -15,7 +15,8 @@ document.addEventListener('click', (e) => {
 // ---------------------------------------------------------------- views
 
 // One view at a time fills the work area. Lists are #inbox, #reviews, #prs, #mentions and
-// #tickets; #item is one thing in full; #copilot is the chat; #calendar, #standup, #src-<name>.
+// #tickets; #item is one thing in full; #copilot is the chat; #calendar, #standup, #src-<name>,
+// #links and #links-personal.
 let current = 'inbox', returnTo = 'inbox', openChatSkip = false;
 function route() {
   let h = location.hash.slice(1) || 'inbox';
@@ -38,6 +39,7 @@ function route() {
   $('#v-notes').hidden = h !== 'notifications';
   $('#v-changes').hidden = h !== 'changes';
   $('#v-map').hidden = h !== 'map';
+  $('#v-links').hidden = h !== 'links' && h !== 'links-personal';
   $('#chat').hidden = h !== 'copilot';
   for (const a of document.querySelectorAll('[data-nav]')) a.classList.toggle('on', a.dataset.nav === (h === 'item' ? returnTo : h));
   menu_(false);
@@ -48,6 +50,7 @@ function route() {
   if (h === 'notifications') renderNotes();
   if (h === 'changes') renderChanges();
   if (h === 'map') renderMap();
+  if (h === 'links' || h === 'links-personal') renderLinks(h === 'links' ? 'work' : 'personal');
   if (h === 'standup' && !standupData) { renderStandup(); loadStandup(false); }
   if (h.startsWith('src-')) { $('#src-body').innerHTML = ''; renderExtra(); }
   if (h === 'copilot') { showChat(openChatSkip); openChatSkip = false; }

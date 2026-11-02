@@ -18,6 +18,7 @@ require('node:fs').mkdirSync(out, { recursive: true });
   await p.goto(`${base}/#map`); await p.waitForTimeout(2500); await shot('6-agent-map');
   await p.goto(`${base}/#changes`); await p.waitForTimeout(2000); await shot('7-copilots-changes');
   await p.goto(`${base}/settings`); await p.waitForTimeout(2500); await p.locator('text=Modules').first().click(); await p.waitForTimeout(800); await shot('8-settings');
+  await p.goto(`${base}/#links`); await p.waitForTimeout(1500); await shot('10-links');
   await p.emulateMedia({ colorScheme: 'dark' });
   await p.goto(`${base}/#inbox`); await p.waitForTimeout(3500); await shot('9-inbox-dark');
   await b.close();

@@ -27,6 +27,7 @@
       <a class="ni" href="#tickets" data-nav="tickets"><span class="ico" data-i="ticket"></span><span class="lab">Tickets</span><b id="n-tickets"></b></a>
     </nav>
     <a class="ni" href="#calendar" data-nav="calendar"><span class="ico" data-i="calendar"></span><span class="lab">Calendar</span><b id="n-calendar"></b></a>
+    <a class="ni" href="#links" data-nav="links"><span class="ico" data-i="link"></span><span class="lab">Links</span></a>
     <a class="ni" href="#standup" data-nav="standup"><span class="ico" data-i="standup"></span><span class="lab">Stand-up</span></a>
     <a class="ni" href="#notifications" data-nav="notifications"><span class="ico" data-i="bell"></span><span class="lab">Notifications</span></a>
     <a class="ni" href="#changes" data-nav="changes"><span class="ico" data-i="spark"></span><span class="lab">Copilot's changes</span></a>
@@ -35,7 +36,7 @@
   <div class="sg">Copilot <button type="button" id="cp-new-side" title="New chat (Alt+N)" aria-label="New chat"><span data-i="plus" data-size="14"></span></button></div>
   <div id="side-cp"></div>
   <div class="sg" id="side-personal-h" hidden>Personal</div>
-  <nav id="side-personal"></nav>
+  <nav id="side-personal"><a class="ni" href="#links-personal" data-nav="links-personal" id="nav-links-personal" hidden><span class="ico" data-i="link"></span><span class="lab">Links</span></a></nav>
   <div class="side-foot">
     <div class="restart-note" id="restart-note" hidden></div>
     <a class="ni" href="/settings"><span class="ico" data-i="settings"></span><span class="lab">Settings</span></a>
@@ -86,6 +87,16 @@
     <div class="view-b"><div id="changes"></div></div>
   </section>
   <div class="fview" id="fview" hidden><div class="fv-box"><header><b id="fv-name"></b><span class="spacer"></span><a id="fv-open" target="_blank" rel="noopener">Open</a><button type="button" id="fv-close" aria-label="Close">✕</button></header><div id="fv-body"></div></div></div>
+  <section class="view" id="v-links" hidden>
+    <header class="vh"><h1 id="links-title">Links</h1><input type="search" id="links-filter" class="links-filter" placeholder="Filter" aria-label="Filter links"><span class="spacer"></span>
+      <button type="button" class="icon-btn" id="links-add">Add link</button><button type="button" class="icon-btn" id="links-edit">Edit</button>
+      <button type="button" class="icon-btn" id="links-import" title="Bookmarks exported from your browser as an HTML file">Import bookmarks</button><input type="file" id="links-file" accept=".html,.htm,text/html" hidden></header>
+    <div class="view-b"><form id="links-form" class="links-form" hidden>
+      <input name="url" type="url" placeholder="https://…" required aria-label="Address"><input name="label" placeholder="Name (optional)" aria-label="Name">
+      <input name="group" placeholder="Group" list="links-groups" aria-label="Group"><datalist id="links-groups"></datalist>
+      <button class="primary" type="submit">Add</button><button class="icon-btn" type="button" id="links-cancel">Cancel</button></form>
+      <div id="links" class="links"></div></div>
+  </section>
   <section class="view" id="v-map" hidden>
     <header class="vh"><h1>Agent map</h1><span class="sub">per chat: every repo, ticket and environment it worked on, and what it did there</span><span class="spacer"></span></header>
     <div class="view-b"><div id="map"></div></div>

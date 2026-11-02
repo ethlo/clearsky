@@ -40,6 +40,7 @@ import { pluginItems } from '../lib/items.mjs';
 import { manifest as slackManifest, createSlack, workItems as slackItems } from '../lib/modules/slack.mjs';
 import { findBrowser, BROWSERS } from '../lib/browser.mjs';
 import { manifest as calendarManifest, createCalendar } from '../lib/modules/calendar.mjs';
+import { readLinks, saveLinks, parseBookmarks, mergeLinks } from '../lib/links.mjs';
 import { manifest as githubManifest, createGitHub, workItems as githubItems, PR_FIELDS, ITEM_FIELDS, ciState, isBot, latestReviewsByUser, openThreads, humanReviewers, myPrStatus, reviewerName } from '../lib/modules/github.mjs';
 import { manifest as jiraManifest, createJira, workItems as jiraItems, mentionItems as jiraMentionItems, listOf, fieldsOf, nameOf, commentInfo, excerpt, userId, mapLimit, JIRA_WAITING, jiraMentionsByTicket, mergeJira } from '../lib/modules/jira.mjs';
 
@@ -325,7 +326,10 @@ const BUILTIN_MANIFESTS = [
   { name: 'copilot', label: 'Copilot', area: 'work', secrets: [{ kind: 'cli-login', note: 'none from Clearsky (its tokens are removed from Copilot\'s environment); Copilot keeps its own login in ~/.copilot or the keyring' }],
     hosts: ['*.githubcopilot.com', 'github.com'], clis: ['copilot'], files: ['~/.copilot', 'your Copilot folders'],
     note: 'Settings → Copilot → Sandbox limits it to your folders and listed hosts.' },
+  { name: 'links', label: 'Links', area: 'work', secrets: [], files: ['~/.config/clearsky/links.json'],
+    note: 'Your favourites, edited in Clearsky. Only http(s) links; Clearsky never opens them itself.' },
 ];
+const linksFile = () => join(dirname(userEnvFile), 'links.json');
 export function moduleManifests(env = process.env) {
   const fromPlugin = (p) => ({ name: p.name, label: p.label, area: p.area, ...(p.manifest || {}),
     secrets: p.manifest?.secrets || Object.entries(p.settings || {}).filter(([, f]) => f.secret).map(([key]) => ({ key, kind: 'token' })) });
@@ -832,11 +836,11 @@ export async function prPreview(repo, number) {
   return data;
 }
 
-async function readJson(req) {
+async function readJson(req, max = 64 * 1024) {
   let body = '';
   for await (const chunk of req) {
     body += chunk;
-    if (body.length > 64 * 1024) throw new Error('request too large');
+    if (body.length > max) throw new Error('request too large');
   }
   return body ? JSON.parse(body) : {};
 }
@@ -2383,6 +2387,18 @@ function serve() {
           if (grafana.find(String(name || ''))) grafanaSessions.set(String(name), null);
           return json(res, 200, { ok: true });
         }
+        // Links (lib/links.mjs): the whole list as you edited it, or bookmarks from a browser's export.
+        if (url.pathname === '/api/links') {
+          const doc = await readJson(req, 1024 * 1024);
+          return json(res, 200, saveLinks(linksFile(), doc));
+        }
+        if (url.pathname === '/api/links/import') {
+          const { html, area } = await readJson(req, 8 * 1024 * 1024);
+          const found = parseBookmarks(String(html || ''), { area: area === 'personal' ? 'personal' : 'work' });
+          const count = found.groups.reduce((n, g) => n + g.links.length, 0);
+          if (!count) return json(res, 400, { error: 'no links found: export your bookmarks as an HTML file from the browser and pick that' });
+          return json(res, 200, { ...saveLinks(linksFile(), mergeLinks(readLinks(linksFile()), found)), imported: count });
+        }
         if (url.pathname === '/api/dismiss') {
           return json(res, 200, { dismissed: localState.setDismissed(stateFile, await readJson(req)) });
         }
@@ -2512,6 +2528,7 @@ function serve() {
         if (!file) return json(res, 404, { error: 'not one of this chat\'s files' });
         return sendFile(res, file);
       }
+      if (url.pathname === '/api/links') return json(res, 200, readLinks(linksFile()));
       // The map of what chats did where (lib/map.mjs): one chat's, or the recent ones'.
       if (url.pathname === '/api/copilot/map') {
         const chatId = url.searchParams.get('chat') || null;

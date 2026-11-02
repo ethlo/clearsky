@@ -260,7 +260,7 @@ function addSourcePanels(list) {
     a.innerHTML = `<span class="ico">${icon(x.area === 'personal' ? 'home' : 'source')}</span><span class="lab">${esc(x.panel.title)}</span><b></b>`;
     $(x.area === 'personal' ? '#side-personal' : '#side-work').append(a);
   }
-  $('#side-personal-h').hidden = !extraSources.some((x) => x.area === 'personal');
+  personalSide();
   route();
 }
 function renderExtra() {
@@ -558,7 +558,7 @@ function place(el) {
   const left = Math.min(Math.max(12, r.left + window.scrollX), window.scrollX + window.innerWidth - w - 12);
   const below = r.bottom + 8 + 260 < window.innerHeight;
   hc.style.left = `${left}px`;
-  hc.style.top = below ? `${r.bottom + window.scrollY + 8}px` : `${r.top + window.scrollY - hc.offsetHeight - 8}px`;
+  hc.style.top = below ? `${r.bottom + 8}px` : `${r.top - hc.offsetHeight - 8}px`;
 }
 
 async function showCard(el) {

@@ -93,6 +93,15 @@ writeFileSync(join(conf, 'agent-files.jsonl'), [
 ].map((e) => JSON.stringify(e)).join('\n') + '\n');
 writeFileSync(join(conf, 'state.json'), JSON.stringify({ sessionNames: Object.fromEntries(SESSIONS.map((s) => [s.sessionId, s.title])), sessionRefs: { [CHAT.id]: ['pr:acme/payments-api#479', 'issue:PAY-412'] } }));
 
+// Links: a few favourites on each side.
+const L = (title, url) => ({ title, url });
+writeFileSync(join(conf, 'links.json'), JSON.stringify({ groups: [
+  { name: 'Daily', area: 'work', links: [L('Payments board', 'https://acme.atlassian.net/jira/software/projects/PAY/boards/12'), L('payments-api', 'https://github.com/acme/payments-api'), L('web-shop', 'https://github.com/acme/web-shop'), L('On-call schedule', 'https://acme.pagerduty.example.com/schedules')] },
+  { name: 'Environments', area: 'work', links: [L('Grafana test', 'https://grafana.test.example.com'), L('Grafana prod', 'https://grafana.example.com'), L('Admin (test)', 'https://admin.test.example.com'), L('Status page', 'https://status.example.com')] },
+  { name: 'Docs', area: 'work', links: [L('Engineering handbook', 'https://handbook.example.com'), L('Payments API reference', 'https://docs.example.com/payments'), L('Runbooks', 'https://acme.atlassian.net/wiki/spaces/OPS/runbooks'), L('Architecture decisions', 'https://github.com/acme/adr')] },
+  { name: 'Home', area: 'personal', links: [L('Bank', 'https://bank.example.no'), L('Football club', 'https://club.example.no'), L('Recipes', 'https://recipes.example.org')] },
+] }), { mode: 0o600 });
+
 const app = spawn(process.execPath, [join(here, '..', '..', 'bin', 'clearsky.mjs'), 'serve', '--port', String(port)], {
   stdio: 'inherit', env: { PATH: process.env.PATH, HOME: home, CLEARSKY_DEMO_HOME: home, CLEARSKY_COPILOT_HOME: copilotHome, TZ: process.env.TZ, LANG: 'en_GB.UTF-8' },
 });
