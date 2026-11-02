@@ -27,7 +27,10 @@ comment, a Slack message) should read as if I wrote it.
    question asked and says what changed ("Fixed in abc123" is a complete reply); a PR
    description follows its own format (the repo's template, or my standard sections) but in
    my voice.
-4. **Before showing a draft,** cut it once more: every sentence I wouldn't miss goes.
+4. **Before showing a draft,** cut it once more: every sentence I wouldn't miss goes. Then
+   check it: when rewording, the meaning stays the same (a "not really" can flip an answer);
+   one hedge at most ("seems" and "likely" together is one too many); what I'll do is a
+   decision ("I'll do that as a follow-up"), not an offer.
 5. **Never post it yourself** unless I've asked you to post; show it ready to paste or ready
    for me to approve.
 
