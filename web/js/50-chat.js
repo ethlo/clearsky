@@ -180,7 +180,7 @@ function drawCtx() {
     ${items}
     <div class="ctx-line ctx-work">${status ? `<span class="ctx-st s-${esc(status)}" title="This chat"><i></i>chat ${esc(STATUS_TEXT[status] || status)}</span>` : ''}</div>
     ${next ? `<div class="ctx-line ctx-next"><span class="lbl-next">Next</span>${next}</div>` : ''}
-    ${chat.cwd ? `<div class="ctx-dir" title="${esc(chat.cwd)}">${icon('folder', 13)} ${esc(chat.cwd.replace(/^\/home\/[^/]+/, '~'))}</div>` : ''}`;
+    ${chat.cwd ? `<div class="ctx-dir" title="${esc(chat.cwd)}">${icon('folder', 13)} ${esc(tilde(chat.cwd))}</div>` : ''}`;
 }
 
 // What this chat runs with: mode and whether it's in the sandbox, model, effort, tokens, folders.
@@ -531,6 +531,11 @@ function renderAnswer(segs, running = false) {
 }
 
 // Reopen a Copilot session (from here, the terminal or an editor) with its conversation so far.
+// A folder with the home folder as ~ (Linux, macOS and Windows alike).
+function tilde(dir = '') {
+  const home = chat.home || (dir.match(/^(\/home\/[^/]+|\/Users\/[^/]+|[A-Za-z]:\\Users\\[^\\]+)/) || [])[1];
+  return home && (dir === home || dir.startsWith(home + '/') || dir.startsWith(home + '\\')) ? `~${dir.slice(home.length)}` : dir;
+}
 async function openSession(id, cwd) {
   detach();
   showHistory(false);
@@ -538,7 +543,7 @@ async function openSession(id, cwd) {
   try {
     const q = cwd ? `?cwd=${encodeURIComponent(cwd)}` : '';
     const h = await getJson(`/api/copilot/sessions/${encodeURIComponent(id)}${q}`);
-    chat.session = h.id; chat.cwd = h.cwd; chat.turns = h.messages.filter((m) => m.role === 'me').length || 1;
+    chat.session = h.id; chat.cwd = h.cwd; chat.home = h.home; chat.turns = h.messages.filter((m) => m.role === 'me').length || 1;
     restoreMode(h.id);
     chat.items = [];
     chat.title = h.title || h.messages.find((m) => m.role === 'me')?.text.trim().split('\n')[0].slice(0, 120) || null;

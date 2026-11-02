@@ -189,7 +189,7 @@ function changeRows(list, { chats = true } = {}) {
   const name = (id) => recentChats.find((r) => r.id === id)?.title || 'a Copilot chat';
   return `<ul class="notes changes">${list.map((w) => `<li class="d-${esc(w.decided.split(' ')[0])}">
       <span class="when" title="${esc(new Date(w.at).toLocaleString())}">${esc(ago(w.at))}</span>
-      <span class="what"><b>${esc({ jira: 'Jira', grafana: 'Grafana (read)' }[w.where] || 'GitHub')}${w.target ? ` · ${esc(w.target)}` : ''}</b><small>${esc(w.what)}${w.removed ? ` · ${w.removed} secret${w.removed > 1 ? 's' : ''} removed` : ''}</small>
+      <span class="what"><b>${esc({ jira: 'Jira', grafana: 'Grafana (read)', build: w.kind === 'test' ? 'Tests' : 'Build', review: 'Self-review' }[w.where] || 'GitHub')}${w.repo || w.target ? ` · ${esc(w.repo || w.target)}` : ''}</b><small>${esc(w.what)}${w.removed ? ` · ${w.removed} secret${w.removed > 1 ? 's' : ''} removed` : ''}</small>
         ${chats && w.chats?.length ? `<small>${w.chats.length > 1 ? 'one of: ' : ''}${w.chats.map((c) => esc(name(c.id))).join(', ')}</small>` : ''}</span>
       <span class="kind">${esc(DECIDED[w.decided] || w.decided)}</span></li>`).join('')}</ul>`;
 }

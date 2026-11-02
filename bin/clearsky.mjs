@@ -528,7 +528,7 @@ export function standupText(s) {
   const commits = (y.github.commits || []).filter((c) => c.count);
   if (commits.length) line(`Commits: ${commits.map((c) => `${c.count} in ${c.repo.split('/')[1]}`).join(', ')}`);
   s.extra?.forEach((x) => x.yesterday.forEach((t) => line(`${x.label}: ${t}`)));
-  y.copilot?.sessions?.forEach((x) => line(`With Copilot: ${x.ticket ? `${x.ticket} ` : ''}${x.title} (${x.repo.split('/')[1]}${x.branch && !/^(main|master)$/.test(x.branch) ? `, ${x.branch}` : ''})`));
+  y.copilot?.sessions?.forEach((x) => line(`With Copilot: ${x.ticket && !String(x.title || '').includes(x.ticket) ? `${x.ticket} ` : ''}${x.title} (${x.repo.split('/')[1]}${x.branch && !/^(main|master)$/.test(x.branch) ? `, ${x.branch}` : ''})`));
   if (out.length === 1) line('Nothing recorded on GitHub, Jira or Copilot.');
   out.push('', '*Today*');
   const before = out.length;
@@ -2566,7 +2566,7 @@ function serve() {
         const busy = !!c?.busy;
         // A chat that only exists in this server so far may not be readable from disk yet.
         const messages = await copilotHistory(info.bin, histId, cwd).catch((e) => { if (c || busy) return []; throw e; });
-        return json(res, 200, { id: histId, cwd, here: !!c, busy, messages, title: localState.sessionNames(stateFile)[histId] || null });
+        return json(res, 200, { id: histId, cwd, home: homedir(), here: !!c, busy, messages, title: localState.sessionNames(stateFile)[histId] || null });
       }
       const attach = url.pathname.match(/^\/api\/copilot\/sessions\/([\w-]{8,64})\/live$/)?.[1];
       if (attach) return attachCopilot(attach, req, res);
