@@ -183,6 +183,11 @@ kbd { font: 500 10.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace; border:
 .r.tbl { grid-template-columns: var(--wcols); gap: 10px; }
 .r.tbl > .c { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .r.tbl .c-x { display: flex; gap: 4px; overflow: hidden; }
+/* The title comes first; the next step gets what's left and shortens, its full text on hover. */
+.r.tbl .c-t { display: flex; align-items: center; gap: 6px; }
+.r.tbl .c-t > a { flex: 1 1 auto; min-width: 90px; overflow: hidden; text-overflow: ellipsis; }
+.r.tbl .c-t > .next { flex: 0 1 auto; min-width: 0; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.r.tbl .c-t > .step, .r.tbl .c-t > .chip { flex: none; }
 .r.tbl .c-b { font: 11.5px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--text-2); }
 .r.tbl .c-s { display: flex; align-items: center; }
 .r.tbl:hover .age, .r.tbl.sel .age, .r.tbl:focus-within .age { visibility: hidden; }

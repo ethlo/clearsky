@@ -153,7 +153,7 @@ function nextStep(it, rel = relatedItems(it, xrefAll.length ? xrefAll : inboxIte
 function nextHtml(it, n = nextStep(it)) {
   if (!n) return '';
   return n.wait ? `<span class="next wait">${icon('wait', 13)} ${esc(n.label)}</span>`
-    : `<button class="next" data-next="${esc(it.k)}" title="${n.run === 'merge' ? `Merge ${esc(n.repo)}#${esc(n.number)} on GitHub` : 'Next step'}">→ ${esc(n.label)}</button>${n.run === 'merge' && n.url ? `<a class="next-ext" href="${esc(n.url)}" target="_blank" rel="noopener" title="Open on GitHub" aria-label="Open on GitHub">↗</a>` : ''}`;
+    : `<button class="next" data-next="${esc(it.k)}" title="${n.run === 'merge' ? `Merge ${esc(n.repo)}#${esc(n.number)} on GitHub` : `Next step: ${esc(n.label)}`}">→ ${esc(n.label)}</button>${n.run === 'merge' && n.url ? `<a class="next-ext" href="${esc(n.url)}" target="_blank" rel="noopener" title="Open on GitHub" aria-label="Open on GitHub">↗</a>` : ''}`;
 }
 // Merging your PR from its next-step button: asks first, then says how it went in place.
 async function mergePr(n, btn) {
@@ -272,9 +272,16 @@ function applyWcols() {
   el.classList.remove(...[...el.classList].filter((c) => c.startsWith('no-')));
   if (!cols) return el.style.removeProperty('--wcols');
   const off = new Set(wprefs(v).hidden);
-  el.style.setProperty('--wcols', ['16px', ...cols.filter(([c]) => !off.has(c)).map(([c]) => (c === 't' ? 'minmax(0, 1fr)' : `${wcolWidth(v, c)}px`))].join(' '));
+  // When the window is too narrow for every column, the least needed ones step aside until the
+  // title has room again (they come back when it widens; Columns still hides them for good).
+  const room = (el.clientWidth || innerWidth) - 40, need = () => cols.filter(([c]) => !off.has(c)).reduce((n, [c]) => n + (c === 't' ? TITLE_MIN : wcolWidth(v, c)) + 10, 26);
+  for (const c of AUTO_DROP) if (need() > room && cols.some(([x]) => x === c)) off.add(c);
+  el.style.setProperty('--wcols', ['16px', ...cols.filter(([c]) => !off.has(c)).map(([c]) => (c === 't' ? `minmax(${TITLE_MIN}px, 1fr)` : `${wcolWidth(v, c)}px`))].join(' '));
   off.forEach((c) => el.classList.add(`no-${c}`));
 }
+const TITLE_MIN = 260, AUTO_DROP = ['v', 'b', 'p', 'a', 'x', 'u'];
+let wcolsTimer;
+window.addEventListener('resize', () => { clearTimeout(wcolsTimer); wcolsTimer = setTimeout(() => { if (WORK_COLS[listView]) applyWcols(); }, 100); });
 // Sorting by a column: click a header (again to reverse, a third time for the usual order).
 // Within each group, so what needs you stays on top.
 const natural = (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
