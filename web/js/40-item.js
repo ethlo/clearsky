@@ -155,6 +155,9 @@ document.addEventListener('click', async (e) => {
   box.addEventListener('change', count);
   count(); // your last pick is ticked already
   sendBtn.addEventListener('click', async () => {
+    // Asking people to read code under your name that you haven't read yourself.
+    const own = (state.github?.myPrs || []).find((p) => p.repo === repo && p.number === Number(number))?.own;
+    if (own && own.state !== 'read' && !confirm(`You haven't read ${own.state === 'new' ? `the ${own.unread} new commit${own.unread > 1 ? 's' : ''}` : 'this PR'} yet (${own.by}, ${own.lines} lines). Ask for review anyway?`)) return;
     sendBtn.disabled = true;
     try {
       await post('/api/pr/request-review', { repo, number: Number(number), logins: picked() });

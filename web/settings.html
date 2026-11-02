@@ -77,9 +77,11 @@
     </div>
     <label for="GITHUB_ORGS">Work organizations (comma-separated; empty means all)</label>
     <input id="GITHUB_ORGS" data-key="GITHUB_ORGS" placeholder="acme">
+    <label for="GITHUB_MY_PRS">Your PRs</label>
+    <select id="GITHUB_MY_PRS" data-key="GITHUB_MY_PRS"><option value="">Only in the work organizations</option><option value="all">Everywhere (also your own repos)</option></select>
     <label for="GITHUB_TOKEN">Or a personal access token instead of the gh login (optional)</label>
     <input id="GITHUB_TOKEN" data-key="GITHUB_TOKEN" type="password" autocomplete="off" placeholder="leave empty to keep">
-    <div class="row"><button class="save" data-keys="GITHUB_ORGS,GITHUB_TOKEN">Save</button><span class="msg"></span></div>
+    <div class="row"><button class="save" data-keys="GITHUB_ORGS,GITHUB_MY_PRS,GITHUB_TOKEN">Save</button><span class="msg"></span></div>
   </section>
 
   <section>
@@ -291,6 +293,7 @@ function render(s) {
   $('#gh-login').textContent = gh.cli === 'logged-in' ? 'Log in again' : 'Log in with GitHub';
   $('#gh-login').className = gh.cli === 'logged-in' ? 'secondary' : '';
   $('#GITHUB_ORGS').value = gh.orgs || '';
+  $('#GITHUB_MY_PRS').value = gh.myPrs || '';
 
   const j = s.jira;
   state($('#jira-state'), j.cli === 'logged-in' ? true : j.cli === 'missing' ? 'bad' : false,

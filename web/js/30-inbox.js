@@ -258,7 +258,7 @@ let listView = 'inbox', listItems = [], selK = null, showWaiting = false;
 // Your PRs and Tickets show as tables: what links to what, and which branch the work is on.
 // Columns can be resized (drag a header edge) and hidden (Columns); that's kept in this browser.
 const WORK_COLS = {
-  prs: [['id', 'PR', 110], ['t', 'Title'], ['x', 'Ticket', 110], ['b', 'Branch', 180], ['s', 'State', 150], ['u', 'Updated', 64]],
+  prs: [['id', 'PR', 110], ['t', 'Title'], ['r', 'Read by you', 150], ['x', 'Ticket', 110], ['b', 'Branch', 180], ['s', 'State', 150], ['u', 'Updated', 64]],
   tickets: [['id', 'Ticket', 96], ['t', 'Title'], ['x', 'Pull requests', 200], ['b', 'Branch', 180], ['v', 'Fix version', 100], ['a', 'Assignee', 120], ['p', 'Priority', 90], ['s', 'State', 120], ['u', 'Updated', 64]],
 };
 const WCOLS_KEY = 'clearsky.work.cols';
@@ -271,7 +271,7 @@ function applyWcols() {
   const el = $('#list'), v = listView, cols = WORK_COLS[v];
   el.classList.remove(...[...el.classList].filter((c) => c.startsWith('no-')));
   if (!cols) return el.style.removeProperty('--wcols');
-  const off = new Set(wprefs(v).hidden);
+  const off = new Set([...wprefs(v).hidden, ...(wcolEmpty[v] || [])]);
   // When the window is too narrow for every column, the least needed ones step aside until the
   // title has room again (they come back when it widens; Columns still hides them for good).
   const room = (el.clientWidth || innerWidth) - 40, need = () => cols.filter(([c]) => !off.has(c)).reduce((n, [c]) => n + (c === 't' ? TITLE_MIN : wcolWidth(v, c)) + 10, 26);
@@ -279,6 +279,8 @@ function applyWcols() {
   el.style.setProperty('--wcols', ['16px', ...cols.filter(([c]) => !off.has(c)).map(([c]) => (c === 't' ? `minmax(${TITLE_MIN}px, 1fr)` : `${wcolWidth(v, c)}px`))].join(' '));
   off.forEach((c) => el.classList.add(`no-${c}`));
 }
+// Columns with nothing to show in any row step aside too (Read by you, before GitHub has told who wrote what).
+const wcolEmpty = {};
 const TITLE_MIN = 260, AUTO_DROP = ['a', 'v', 'p', 'u', 'b', 'x'];
 let wcolsTimer;
 window.addEventListener('resize', () => { clearTimeout(wcolsTimer); wcolsTimer = setTimeout(() => { if (WORK_COLS[listView]) applyWcols(); }, 100); });
@@ -295,7 +297,7 @@ const FILTERS = {
   tickets: [['fix', 'Fix version', (x) => (x.data?.fixVersions?.length ? x.data.fixVersions.map((v) => v.name) : x.data?.fixVersions ? ['(none)'] : [])],
     ['assignee', 'Assignee', (x) => [x.data?.assignee || (x.kind === 'ticket' ? '(unassigned)' : '')]], ['priority', 'Priority', (x) => [x.data?.priority]],
     ['state', 'State', (x) => [x.data?.status || x.label?.[0]]], ['type', 'Type', (x) => [x.data?.type]], ['project', 'Project', (x) => [x.data?.project || x.data?.repo]]],
-  prs: [['state', 'State', (x) => [x.data?.status?.label]], ['repo', 'Repo', (x) => [x.data?.repo]]],
+  prs: [['state', 'State', (x) => [x.data?.status?.label]], ['read', 'Read', (x) => [x.data?.own && (x.data.own.state === 'read' ? 'read' : 'not read')]], ['repo', 'Repo', (x) => [x.data?.repo]]],
 };
 const filterVals = (f, x) => f[2](x).filter(Boolean);
 const passesFilters = (v, x) => (FILTERS[v] || []).every((f) => { const want = wprefs(v).filter?.[f[0]]; return !want || filterVals(f, x).includes(want); });
@@ -334,6 +336,7 @@ function sortKey(it, c) {
     case 'p': return d.priority ? `${PRIORITY_RANK[d.priority.toLowerCase()] ?? 5} ${d.priority}` : null;
     case 's': return it.label ? `${TONE_RANK[it.label[1]] ?? 4} ${it.label[0]}` : null;
     case 'u': return it.at ? Date.parse(it.at) || 0 : null;
+    case 'r': return d.own ? `${{ unread: 0, new: 1, read: 2 }[d.own.state]} ${d.own.label[0]}` : null;
     default: return '';
   }
 }
@@ -424,11 +427,34 @@ function tableRow(it, i, rel, chips, acts, fresh) {
     p: `<span class="c c-p">${it.data?.priority ? `<span class="lbl ${PRIORITY_TONE(it.data.priority)}"><i></i>${esc(it.data.priority)}</span>` : ''}</span>`,
     s: `<span class="c c-s">${lt ? `<span class="lbl${tone ? ` ${tone}` : ''}">${tone ? '<i></i>' : ''}${esc(lt)}</span>` : ''}</span>`,
     u: `<span class="c c-u age">${esc(shortAgo(it.at))}</span>`,
+    r: `<span class="c c-r">${ownCell(it.data?.own, it.url)}</span>`,
   };
   return `<li class="r tbl${it.group === 'waiting' ? ' quiet' : ''}${it.k === selK ? ' sel' : ''}" data-i="${i}" tabindex="-1">
     ${fresh ? '<span class="new-dot" title="New since you last looked" aria-label="New"></span>' : ''}<span class="st ${esc(it.glyph)}"></span>
     ${WORK_COLS[listView].map(([c]) => cell[c]).join('')}${acts}</li>`;
 }
+
+// "Read by you" on one of your PRs (lib/own-read.mjs): who wrote what you haven't read, and a
+// button that marks it read up to its latest commit.
+function ownCell(own, url) {
+  if (!own) return '';
+  const [lt, tone] = own.label;
+  const tip = own.state === 'read' ? (own.readOid ? 'You marked this read at its latest commit.' : 'Every commit is yours.')
+    : `${own.step}\nWritten by: ${own.writers.join(', ')}`;
+  const mark = own.state !== 'read' ? `<button class="own-read" data-own-read="${esc(url)}" data-oid="${esc(own.headOid || '')}" title="I've read it, up to the latest commit">Mark read</button>`
+    : own.readOid ? `<button class="own-read undo" data-own-read="${esc(url)}" data-oid="" title="Mark as not read">Undo</button>` : '';
+  return `<span class="lbl${tone ? ` ${tone}` : ''}" title="${esc(tip)}">${tone ? '<i></i>' : ''}${esc(lt)}</span>${mark}`;
+}
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-own-read]');
+  if (!b) return;
+  e.preventDefault(); e.stopPropagation();
+  b.disabled = true;
+  try {
+    await post('/api/read', { marks: [{ key: `prread:${b.dataset.ownRead}`, at: b.dataset.oid || null }] });
+    await loadSource('github');
+  } catch (err) { b.disabled = false; $('#status').textContent = `Could not save: ${err.message}`; }
+}, true);
 
 function itemRow(it, i) {
   const [lt, tone] = it.label || [];
@@ -478,8 +504,12 @@ function renderList() {
     group('Waiting on others', 'wait', by((x) => x.group === 'waiting'), { hideEmpty: true, fold: !showWaiting });
   } else if (listView === 'reviews') group('Reviews for you', 'rev', by((x) => x.kind === 'review'), { empty: 'No reviews waiting.' });
   else if (listView === 'prs') {
-    group('On your move', 'chg', by((x) => x.kind === 'pr' && x.group === 'needs'), { empty: 'Nothing on your move.' });
-    group('Waiting on others', 'wait', by((x) => x.kind === 'pr' && x.group === 'waiting'), { hideEmpty: true });
+    // Code under your name you haven't read (Copilot's, a colleague's) first, those out for review on top.
+    const unread = (x) => x.kind === 'pr' && x.data?.own && x.data.own.state !== 'read';
+    const risk = (x) => ({ approved: 0, asked: 1 }[x.data.own.risk] ?? 2);
+    group('Not read by you', 'rev', by(unread).sort((a, b) => risk(a) - risk(b)), { hideEmpty: true });
+    group('On your move', 'chg', by((x) => x.kind === 'pr' && x.group === 'needs' && !unread(x)), { empty: 'Nothing on your move.' });
+    group('Waiting on others', 'wait', by((x) => x.kind === 'pr' && x.group === 'waiting' && !unread(x)), { hideEmpty: true });
   } else if (listView === 'mentions') group('Mentions', 'ment', by((x) => x.kind === 'mention'), { empty: 'No new mentions.' });
   else if (listView === 'tickets') {
     group('In progress', 'prog', by((x) => x.kind === 'ticket' && x.glyph === 'prog'), { hideEmpty: true });
@@ -488,6 +518,7 @@ function renderList() {
   }
   listItems = [];
   const inView = { prs: (x) => x.kind === 'pr', tickets: (x) => x.kind === 'ticket' || x.kind === 'issue' }[listView];
+  if (listView === 'prs') wcolEmpty.prs = shown.some((x) => x.data?.own) ? [] : ['r'];
   let html = errs + (WORK_COLS[listView] ? workHead(listView, inView ? shown.filter(inView) : []) : '');
   applyWcols();
   if (q) for (const g of groups) { g.hideEmpty = true; }

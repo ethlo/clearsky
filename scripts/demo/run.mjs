@@ -10,7 +10,7 @@ import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { github, standup, slack, calendar, ago, ME, standupAt, hhmm } from './data.mjs';
+import { github, standup, slack, calendar, ago, ME, standupAt, hhmm, READ_MARKS } from './data.mjs';
 import { CHAT, SESSIONS } from './chat.mjs';
 
 process.env.TZ ||= 'Europe/Oslo'; // the demo's clock, for Clearsky and the made-up meetings alike
@@ -91,7 +91,7 @@ writeFileSync(join(conf, 'agent-files.jsonl'), [
   { at: ago(1.3), where: 'file', what: `${CHAT.cwd}/src/main/java/com/acme/pay/refund/RefundSplitter.java`, kind: 'wrote', chats: chat, decided: 'done' },
   { at: ago(1.2), where: 'file', what: `${CHAT.cwd}/src/test/java/com/acme/pay/refund/RefundSplitterTest.java`, kind: 'wrote', chats: chat, decided: 'done' },
 ].map((e) => JSON.stringify(e)).join('\n') + '\n');
-writeFileSync(join(conf, 'state.json'), JSON.stringify({ sessionNames: Object.fromEntries(SESSIONS.map((s) => [s.sessionId, s.title])), sessionRefs: { [CHAT.id]: ['pr:acme/payments-api#479', 'issue:PAY-412'] } }));
+writeFileSync(join(conf, 'state.json'), JSON.stringify({ sessionNames: Object.fromEntries(SESSIONS.map((s) => [s.sessionId, s.title])), sessionRefs: { [CHAT.id]: ['pr:acme/payments-api#479', 'issue:PAY-412'] }, read: READ_MARKS }));
 
 // Links: a few favourites on each side.
 const L = (title, url) => ({ title, url });

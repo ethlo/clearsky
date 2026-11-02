@@ -20,6 +20,12 @@ export const pr = (o) => ({
   closingIssuesReferences: { nodes: [] }, timelineItems: { nodes: [] }, files: { nodes: (o.paths || ['src/main/java/com/acme/pay/Refunds.java']).map((path) => ({ path })) },
   ...o,
 });
+// Commits for "read by you": [hoursAgo, who, lines], who = 'me', 'copilot' (Co-authored-by) or a login.
+const COPILOT = '\n\nCo-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>';
+const hist = (number, list) => ({ headRefOid: `${number}c${list.length}`, history: { totalCount: list.length, nodes: list.map(([h, who, lines], i) => ({ commit: {
+  oid: `${number}c${i + 1}`, committedDate: ago(h), additions: Math.round(lines * 0.8), deletions: Math.round(lines * 0.2),
+  message: `Change ${i + 1}${who === 'copilot' ? COPILOT : ''}`, author: { name: who, email: `${who}@example.com`, user: { login: who === 'copilot' || who === 'me' ? ME : who } } } })) } });
+export const READ_MARKS = { 'prread:https://github.com/acme/payments-api/pull/486': '486c3', 'prread:https://github.com/acme/web-shop/pull/1310': '1310c2' };
 const user = (login) => ({ requestedReviewer: { __typename: 'User', login } });
 const review = (login, state, h) => ({ state, submittedAt: ago(h), author: { __typename: 'User', login } });
 const thread = (login, resolved = false) => ({ isResolved: resolved, isOutdated: false, comments: { nodes: [{ author: { __typename: 'User', login } }] } });
@@ -35,19 +41,23 @@ export const github = {
   ],
   myPrs: [
     pr({ number: 479, repo: 'acme/payments-api', title: 'PAY-412: Partial refunds for split payments', headRefName: 'PAY-412-partial-refunds', reviewDecision: 'CHANGES_REQUESTED',
-      reviews: { nodes: [review('dev', 'CHANGES_REQUESTED', 3)] }, reviewThreads: { nodes: [thread('dev'), thread('dev'), thread(ME, true)] }, additions: 310, deletions: 45, changedFiles: 9 }),
+      reviews: { nodes: [review('dev', 'CHANGES_REQUESTED', 3)] }, reviewThreads: { nodes: [thread('dev'), thread('dev'), thread(ME, true)] }, additions: 310, deletions: 45, changedFiles: 9,
+      ...hist(479, [[30, 'me', 120], [26, 'copilot', 140], [0.7, 'me', 60]]) }),
     pr({ number: 1301, repo: 'acme/web-shop', title: 'PAY-398: Refund status on the order page', headRefName: 'PAY-398-refund-status', reviewDecision: 'APPROVED',
-      reviews: { nodes: [review('anna', 'APPROVED', 1)] }, additions: 64, deletions: 10, changedFiles: 3 }),
+      reviews: { nodes: [review('anna', 'APPROVED', 1)] }, additions: 64, deletions: 10, changedFiles: 3,
+      ...hist(1301, [[28, 'copilot', 50], [6, 'copilot', 24]]) }),
     pr({ number: 481, repo: 'acme/payments-api', title: 'PAY-420: Ledger export as CSV', headRefName: 'PAY-420-ledger-csv', ci: 'FAILURE', additions: 150, deletions: 4, changedFiles: 5,
-      reviewRequests: { nodes: [user('anna')] } }),
+      reviewRequests: { nodes: [user('anna')] }, ...hist(481, [[9, 'me', 120], [5, 'me', 34]]) }),
     // Waiting for review: one asked a while ago with no answer, one with a recent comment.
     pr({ number: 486, repo: 'acme/payments-api', title: 'PAY-415: Retry webhook delivery with backoff', headRefName: 'PAY-415-webhook-retries', additions: 96, deletions: 20, changedFiles: 4,
-      reviewRequests: { nodes: [user('anna'), user('bob'), user('carla')] }, timelineItems: { nodes: ['anna', 'bob', 'carla'].map((login) => ({ createdAt: ago(100), requestedReviewer: { __typename: 'User', login } })) } }),
+      reviewRequests: { nodes: [user('anna'), user('bob'), user('carla')] }, timelineItems: { nodes: ['anna', 'bob', 'carla'].map((login) => ({ createdAt: ago(100), requestedReviewer: { __typename: 'User', login } })) },
+      ...hist(486, [[104, 'copilot', 80], [102, 'me', 16], [101, 'copilot', 20]]) }),
     pr({ number: 1310, repo: 'acme/web-shop', title: 'PAY-422: Show refunds in the order history', headRefName: 'PAY-422-order-history', additions: 120, deletions: 12, changedFiles: 6,
       reviewRequests: { nodes: [user('anna'), user('carla')] }, reviews: { nodes: [review('bob', 'COMMENTED', 1.5)] },
       commits: { nodes: [{ commit: { committedDate: ago(4), statusCheckRollup: { state: 'SUCCESS' }, checkSuites: { nodes: [] } } }] },
-      timelineItems: { nodes: ['anna', 'bob', 'carla'].map((login) => ({ createdAt: ago(20), requestedReviewer: { __typename: 'User', login } })) } }),
-    pr({ number: 76, repo: 'acme/infra', title: 'Alerts for webhook backlog', headRefName: 'webhook-backlog-alerts', isDraft: true, additions: 40, deletions: 0, changedFiles: 2 }),
+      timelineItems: { nodes: ['anna', 'bob', 'carla'].map((login) => ({ createdAt: ago(20), requestedReviewer: { __typename: 'User', login } })) },
+      ...hist(1310, [[24, 'copilot', 90], [22, 'me', 12], [4, 'copilot', 22], [3.5, 'copilot', 8]]) }),
+    pr({ number: 76, repo: 'acme/infra', title: 'Alerts for webhook backlog', headRefName: 'webhook-backlog-alerts', isDraft: true, additions: 40, deletions: 0, changedFiles: 2, ...hist(76, [[8, 'copilot', 40]]) }),
   ],
   mentions: [
     { __typename: 'Issue', number: 233, title: 'Payouts delayed on Mondays', url: 'https://github.com/acme/payments-api/issues/233', updatedAt: ago(0.5), repository: { nameWithOwner: 'acme/payments-api' }, author: { login: 'erik' }, labels: { nodes: [{ name: 'bug' }] } },

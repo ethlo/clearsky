@@ -42,6 +42,7 @@ import { findBrowser, BROWSERS } from '../lib/browser.mjs';
 import { manifest as calendarManifest, createCalendar } from '../lib/modules/calendar.mjs';
 import { readLinks, saveLinks, parseBookmarks, mergeLinks } from '../lib/links.mjs';
 import { logEvent } from '../lib/event-log.mjs';
+import { ownRead, chatPushes } from '../lib/own-read.mjs';
 import { manifest as githubManifest, createGitHub, workItems as githubItems, PR_FIELDS, ITEM_FIELDS, ciState, isBot, latestReviewsByUser, openThreads, humanReviewers, myPrStatus, reviewerName } from '../lib/modules/github.mjs';
 import { manifest as jiraManifest, createJira, workItems as jiraItems, mentionItems as jiraMentionItems, listOf, fieldsOf, nameOf, commentInfo, excerpt, userId, mapLimit, JIRA_WAITING, jiraMentionsByTicket, mergeJira } from '../lib/modules/jira.mjs';
 
@@ -117,6 +118,7 @@ const buildConfig = (env = process.env) => ({
     api: (env.GITHUB_API_URL || 'https://api.github.com').replace(/\/$/, ''),
     orgs: list(env.GITHUB_ORGS),
     ignoreAuthors: list(env.CLEARSKY_IGNORE_AUTHORS),
+    myPrsEverywhere: env.GITHUB_MY_PRS === 'all',
   },
   jira: {
     acli: env.ACLI_BIN || 'acli',
@@ -395,9 +397,19 @@ function saveSourceCache() {
   saveTimer.unref?.();
 }
 
+// Your PRs with "read by you" (lib/own-read.mjs): your marks, and what Clearsky's chats pushed.
+// The commits themselves stay here; the page gets the summary.
+export const prReadKey = (url) => `prread:${url}`;
+function withOwn(data) {
+  if (!data?.myPrs) return data;
+  const reads = localState.readMarks(stateFile), pushes = chatPushes(readWrites(agentLogFile, { limit: 5000 }));
+  return { ...data, myPrs: data.myPrs.map(({ commits, ...p }) => ({ ...p, own: ownRead({ ...p, commits }, data.login, reads[prReadKey(p.url)], pushes) })) };
+}
+
 export async function collect(force) {
-  const [github, jiraWork, jiraMentions, slack, calendar] = await Promise.all(
+  const [rawGithub, jiraWork, jiraMentions, slack, calendar] = await Promise.all(
     ['github', 'jira', 'jiraMentions', 'slack', 'calendar'].map((n) => source(n, force)));
+  const github = withOwn(rawGithub);
   const jira = mergeJira(jiraWork, jiraMentions);
   const needsMe = (github.myPrs || []).filter((p) => p.status.owner === 'me' && !p.draft);
   const extra = await pluginData(force);
@@ -2480,7 +2492,7 @@ function serve() {
         // ?wait: the new data once the fetch behind a stale answer lands.
         const behind = url.searchParams.has('wait') && sourceCache.get(src)?.pending;
         const data = await (behind || source(src, url.searchParams.has('refresh')));
-        const shown = withReads(src, data);
+        const shown = src === 'github' ? withOwn(data) : withReads(src, data);
         return json(res, 200, { ...shown, work: workItemsOf(src, shown), fetchedAt: new Date(sourceCache.get(src)?.at || Date.now()).toISOString(),
           ...(sourceCache.get(src)?.pending && { refreshing: true }) });
       }
