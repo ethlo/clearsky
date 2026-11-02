@@ -30,5 +30,5 @@ CHAT.updates = [
   say('The self-review found one more thing: the over-refund check compared amounts in different currencies. Fixed, with a test.\n\n**VERDICT: ready** on the second round.'),
   ...tool('git push', 'execute'),
   ...tool('gh pr comment 479 (replies to both threads)', 'execute'),
-  say('Pushed to `PAY-412-partial-refunds` and answered Dev\'s two threads. CI is green. I\'ve also moved PAY-412 to **In Review**.\n\nOne thing for you: the CSV ledger export (PAY-420) has the same rounding pattern. Want me to open a ticket for it?'),
+  say('Pushed to `PAY-412-partial-refunds` and answered Dev\'s two threads. CI is green. My reply on the rounding thread:\n\n> Good catch. The last part now gets whatever is left after the others, so the parts always add up. `RefundSplitterTest` covers 3 × 33.33 and 7 × 14.29.\n>\n> Fixed in a1b2c3d.\n\nI\'ve also moved PAY-412 to **In Review**.\n\nOne thing for you: the CSV ledger export (PAY-420) has the same rounding pattern. Want me to open a ticket for it?'),
 ];

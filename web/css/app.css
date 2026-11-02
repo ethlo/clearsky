@@ -521,6 +521,12 @@ a.ref:hover { border-bottom-style: solid; }
 .msg.cp pre code { background: none; padding: 0; }
 .msg.cp .txt { white-space: pre-wrap; }
 .msg.cp a { color: var(--accent); }
+.msg.cp .quote { display: block; position: relative; margin: 8px 0; padding: 10px 64px 10px 14px; background: var(--surface); border: 1px solid var(--line);
+  border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; color: var(--text); white-space: pre-wrap; line-height: 1.55; box-shadow: var(--shadow, none); }
+.msg.cp .quote .q-copy { position: absolute; top: 6px; right: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+  border-radius: 6px; font-size: 11.5px; padding: 1px 8px; opacity: 0; transition: opacity .12s; }
+.msg.cp .quote:hover .q-copy, .msg.cp .quote .q-copy:focus-visible { opacity: 1; }
+.msg.cp .quote .q-copy:hover { color: var(--text); border-color: var(--line-strong); }
 .msg .err { margin: 0; }
 .tool { display: flex; gap: 8px; align-items: baseline; color: var(--text-2); font-size: 12.5px; padding: 3px 0; }
 .tool span { color: var(--muted); }
