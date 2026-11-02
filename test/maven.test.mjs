@@ -41,3 +41,16 @@ test('the sandbox gets the copy; srt adds the login only for the repository host
   assert.ok(r.network.tlsTerminate.excludeDomains.includes('github.com'));
   assert.deepEqual(r.credentials.envVars, [{ name: 'CLEARSKY_M2_0', mode: 'mask', injectHosts: ['artifacts.acme.example'] }]);
 });
+
+test('settings with no plain login still get a copy for the sandbox, without secrets', async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync, readFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const home = mkdtempSync(join(tmpdir(), 'cs-m2-'));
+  mkdirSync(join(home, '.m2'));
+  writeFileSync(join(home, '.m2', 'settings.xml'), '<settings><servers><server><id>x</id><username>u</username><password>{ENC}</password></server></servers><mirrors><mirror><id>m</id><url>https://repo.example.com</url></mirror></mirrors></settings>');
+  const m = mavenSandbox({ home, out: join(home, 'out'), keep: join(home, 'keep'), run: () => {} });
+  assert.deepEqual(m.credentials, []);
+  const copy = readFileSync(m.settings, 'utf8');
+  assert.ok(!copy.includes('<password>') && copy.includes('repo.example.com'));
+});

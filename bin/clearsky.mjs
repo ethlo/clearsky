@@ -31,7 +31,7 @@ import { vpnWatch, checkTarget } from '../lib/vpn.mjs';
 import { parseReviewArgs, changeOf, reviewPrompt, USAGE as REVIEW_USAGE } from '../lib/review.mjs';
 import { buildMap, buildKind } from '../lib/map.mjs';
 import { serveBroker, brokerSocket } from '../lib/broker.mjs';
-import { mavenSandbox, sandboxCa } from '../lib/maven.mjs';
+import { mavenSandbox, sandboxCa, plainMaven } from '../lib/maven.mjs';
 import { githubFilter, REGISTRY_HOSTS, GITHUB_LOG_HOSTS, SHARED_BRANCH } from '../lib/github-gate.mjs';
 import { githubAdvice, jiraAdvice, outsideAdvice, parseRules, ruleLabel } from '../lib/advice.mjs';
 import { attentionItems, diffAttention, desktopNotify, DbusNotifier } from '../lib/notify.mjs';
@@ -1045,7 +1045,11 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   // Logins stay out here; srt adds them on the way out. srt reads them from Clearsky's own
   // environment, and the sandbox gets stand-ins: Maven's (lib/maven.mjs) and your gh login.
   let maven = null;
-  try { maven = mavenSandbox({ home: homedir(), out: join(dirname(brokerSocket()), 'maven'), keep }); } catch (e) { console.log(`clearsky: Maven logins for the sandbox: ${e.message}`); }
+  try { maven = mavenSandbox({ home: homedir(), out: join(dirname(brokerSocket()), 'maven'), keep }); } catch (e) {
+    console.error(`clearsky: Maven logins for the sandbox: ${e.message}`);
+    // Without the logins, Maven still runs from your local repository with a copy minus secrets.
+    try { maven = plainMaven(readFileSync(join(homedir(), '.m2', 'settings.xml'), 'utf8'), join(dirname(brokerSocket()), 'maven')); } catch { /* no settings */ }
+  }
   if (maven) Object.assign(process.env, maven.env);
   const env = copilotEnv();
   const n = Number(env.GIT_CONFIG_COUNT) || 0;
@@ -1056,7 +1060,7 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   env.GIT_CONFIG_COUNT = String(n + SANDBOX_GIT.length + (github ? 1 : 0));
   if (maven) {
     env.MAVEN_ARGS = `${env.MAVEN_ARGS ? `${env.MAVEN_ARGS} ` : ''}--settings ${maven.settings}`;
-    env.JAVA_TOOL_OPTIONS = `${env.JAVA_TOOL_OPTIONS ? `${env.JAVA_TOOL_OPTIONS} ` : ''}${maven.javaOptions}`;
+    if (maven.javaOptions) env.JAVA_TOOL_OPTIONS = `${env.JAVA_TOOL_OPTIONS ? `${env.JAVA_TOOL_OPTIONS} ` : ''}${maven.javaOptions}`;
   }
   // The real values never go in: srt sets the stand-ins.
   for (const c of [...(github?.credentials || []), ...(maven?.credentials || [])]) delete env[c.name];
@@ -1329,7 +1333,14 @@ async function vmRun({ key, argv, cwd, java, signal }, out, err) {
 // VM events show in the chat as they happen (commands and containers; the rest is in its view).
 function bindVm(c) {
   const shown = { vm: /^(VM up|Docker ready|Stopping|The VM stopped|Preparing|Downloading|VM image)/, docker: /^(start|die|oom) /, run: /^(done|failed|Stopped)/ };
-  if (c.vm) c.vm.onEvent = (e) => { if (shown[e.kind]?.test(e.text)) c.emit({ type: 'note', text: `VM: ${e.text}` }); };
+  // Containers stopped after the tests (Testcontainers kills them: exit 137, its reaper exits 0)
+  // are cleanup, not a crash: one quiet line for them all. Other exits show as they happen.
+  let stopped = 0, timer = null;
+  const cleanup = () => { if (stopped) c.emit({ type: 'note', text: `VM: ${stopped} test container${stopped > 1 ? 's' : ''} stopped` }); stopped = 0; timer = null; };
+  if (c.vm) c.vm.onEvent = (e) => {
+    if (e.kind === 'docker' && /^die .*, exit (137|143)$|^die [^,]*$|^die .*, exit 0$/.test(e.text)) { stopped++; clearTimeout(timer); timer = setTimeout(cleanup, 2000); return; }
+    if (shown[e.kind]?.test(e.text)) c.emit({ type: 'note', text: `VM: ${e.text}` });
+  };
 }
 // Your default JDK (what `java` is here) for the VM, which has your /usr/lib/jvm in place of its
 // own; else the newest one in there.
