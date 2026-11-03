@@ -504,14 +504,83 @@ function mdText(part, afterBlock) {
   const quotes = [];
   let t = (afterBlock ? part.replace(/^\n/, '') : part).replace(/\n?((?:^> ?.*(?:\n|$))+)\n?/gm, (m, q) => {
     const raw = q.replace(/\n$/, '').split('\n').map((l) => l.replace(/^> ?/, '')).join('\n').trim();
-    quotes.push(`<blockquote class="quote"><button type="button" class="q-copy" data-copy-quote title="Copy">Copy</button><span class="q-body" data-raw="${esc(raw)}">${md(raw)}</span></blockquote>`);
-    return `\u0000${quotes.length - 1}\u0000`;
+    quotes.push(`<blockquote class="quote"><button type="button" class="q-copy" data-copy-quote title="Copy">Copy</button><div class="q-body" data-raw="${esc(raw)}">${md(raw)}</div></blockquote>`);
+    return `\n\u0000${quotes.length - 1}\u0000\n`;
   });
-  let h = linkify(t, jiraBaseGuess());
-  h = h.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, (m, pre, url) => `${pre}<a href="${url}" target="_blank" rel="noopener">${url}</a>`);
-  h = h.replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>').replace(/^#{1,4} (.+)$/gm, '<b>$1</b>');
+  let h = mdBlocks(t);
   h = h.replace(/\u0000(\d+)\u0000/g, (m, i) => quotes[i]);
-  return h ? `<span class="txt">${h}</span>` : '';
+  return h ? `<div class="txt md rich">${h}</div>` : '';
+}
+// Inline Markdown: `code`, **bold**, *italic*, ~~strike~~, [text](url), bare URLs, and PR and
+// Jira references (hover cards). Code and links are held aside first so nothing inside them is
+// formatted; everything else is escaped by linkify.
+function mdInline(text) {
+  const keep = [];
+  const hold = (html) => `\u0001${keep.push(html) - 1}\u0001`;
+  let t = text.replace(/`([^`\n]+)`/g, (m, c) => hold(`<code>${esc(c)}</code>`));
+  t = t.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, (m, label, url) => hold(`<a href="${esc(url)}" target="_blank" rel="noopener">${linkify(label, jiraBaseGuess())}</a>`));
+  t = t.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, (m, pre, url) => pre + hold(`<a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a>`));
+  // Emphasis as markers before escaping, so the tags linkify writes are never touched.
+  t = t.replace(/\*\*([^*\n]+)\*\*/g, '\u0002b$1\u0003b').replace(/__([^_\n]+)__/g, '\u0002b$1\u0003b')
+    .replace(/(^|[^\w*])\*(?!\s)([^*\n]+?)\*(?!\w)/g, '$1\u0002i$2\u0003i').replace(/(^|[^\w])_(?!\s)([^_\n]+?)_(?!\w)/g, '$1\u0002i$2\u0003i')
+    .replace(/~~([^~\n]+)~~/g, '\u0002s$1\u0003s');
+  const h = linkify(t, jiraBaseGuess()).replace(/\u0002([bis])/g, '<$1>').replace(/\u0003([bis])/g, '</$1>');
+  return h.replace(/\u0001(\d+)\u0001/g, (m, i) => keep[i]);
+}
+// Block Markdown: headings, lists (nested by indent), tables, rules and paragraphs. A line that
+// is only a held quote (\u0000n\u0000) passes through.
+function mdBlocks(text) {
+  const lines = text.split('\n');
+  const out = [];
+  let para = [];
+  const flush = () => { if (para.length) { out.push(`<p>${para.map(mdInline).join('<br>')}</p>`); para = []; } };
+  const cells = (l) => l.trim().replace(/^\|/, '').replace(/\|$/, '').split(/(?<!\\)\|/).map((c) => c.trim().replace(/\\\|/g, '|'));
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^\u0000\d+\u0000$/.test(line.trim())) { flush(); out.push(line.trim()); continue; }
+    if (!line.trim()) { flush(); continue; }
+    const h = line.match(/^(#{1,6})\s+(.*)$/);
+    if (h) { flush(); const l = Math.min(6, h[1].length + 2); out.push(`<h${l}>${mdInline(h[2])}</h${l}>`); continue; }
+    if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) { flush(); out.push('<hr>'); continue; }
+    // A table: a | row, then a |---| line.
+    if (line.includes('|') && /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/.test(lines[i + 1] || '')) {
+      flush();
+      const head = cells(line);
+      const rows = [];
+      i += 2;
+      while (i < lines.length && lines[i].includes('|') && lines[i].trim()) rows.push(cells(lines[i++]));
+      i--;
+      out.push(`<div class="tbl"><table><tr>${head.map((c) => `<th>${mdInline(c)}</th>`).join('')}</tr>${rows.map((r) => `<tr>${r.map((c) => `<td>${mdInline(c)}</td>`).join('')}</tr>`).join('')}</table></div>`);
+      continue;
+    }
+    // A list: items at an indent; deeper ones nest, and wrapped lines join their item.
+    if (/^\s*([-*+]|\d+[.)])\s+/.test(line)) {
+      flush();
+      const stack = []; // { indent, tag }
+      let html = '';
+      for (; i < lines.length; i++) {
+        const m = lines[i].match(/^(\s*)([-*+]|\d+[.)])\s+(.*)$/);
+        if (!m) {
+          if (lines[i].trim() && /^\s+\S/.test(lines[i]) && stack.length) { html += ` ${mdInline(lines[i].trim())}`; continue; }
+          break;
+        }
+        const indent = m[1].replace(/\t/g, '  ').length, tag = /\d/.test(m[2]) ? 'ol' : 'ul';
+        while (stack.length && indent < stack.at(-1).indent) html += `</li></${stack.pop().tag}>`;
+        const top = stack.at(-1);
+        if (!top || indent > top.indent) { html += `<${tag}${tag === 'ol' && parseInt(m[2], 10) > 1 ? ` start="${parseInt(m[2], 10)}"` : ''}><li>`; stack.push({ indent, tag }); }
+        else if (top.tag !== tag) { html += `</li></${stack.pop().tag}><${tag}><li>`; stack.push({ indent, tag }); }
+        else html += '</li><li>';
+        html += mdInline(m[3].replace(/^\[([ xX])\]\s+/, (x, c) => (c === ' ' ? '☐ ' : '☑ ')));
+      }
+      while (stack.length) html += `</li></${stack.pop().tag}>`;
+      i--;
+      out.push(html);
+      continue;
+    }
+    para.push(line);
+  }
+  flush();
+  return out.join('');
 }
 // "Question\n- Option | what happens\n- Option (recommended) | …"
 function choicesCard(body) {

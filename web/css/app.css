@@ -290,29 +290,29 @@ kbd { font: 500 10.5px/1 ui-monospace, SFMono-Regular, Menlo, monospace; border:
 .item h3 { font-size: 12px; color: var(--muted); font-weight: 600; margin: 18px 0 6px; }
 .item .desc { white-space: pre-wrap; color: var(--text-2); line-height: 1.6; overflow-wrap: anywhere; }
 /* A Jira description with its formatting (lib/jira-rich.mjs). */
-.item .desc.rich { white-space: normal; }
-.desc.rich > :first-child { margin-top: 0; }
-.desc.rich p { margin: 0 0 .7em; }
-.desc.rich h3, .desc.rich h4, .desc.rich h5, .desc.rich h6 { margin: 1.1em 0 .4em; color: var(--text); font-size: 1em; font-weight: 600; }
-.desc.rich h3 { font-size: 1.12em; }
-.desc.rich ul, .desc.rich ol { margin: 0 0 .7em; padding-left: 1.4em; }
-.desc.rich ul.tasks { list-style: none; padding-left: .2em; }
-.desc.rich li > p { margin: 0; }
-.desc.rich code { font-family: var(--mono, ui-monospace, monospace); font-size: .92em; background: var(--surface-2, rgba(127,127,127,.12)); padding: 1px 4px; border-radius: 4px; }
-.desc.rich pre { background: var(--surface-2, rgba(127,127,127,.12)); padding: 10px 12px; border-radius: 8px; overflow: auto; margin: 0 0 .8em; }
-.desc.rich pre code { background: none; padding: 0; white-space: pre; }
-.desc.rich blockquote { margin: 0 0 .8em; padding: 2px 0 2px 12px; border-left: 3px solid var(--line-strong, var(--line)); }
-.desc.rich .panel { margin: 0 0 .8em; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line); background: color-mix(in srgb, var(--accent) 6%, transparent); }
-.desc.rich .panel.p-warning, .desc.rich .panel.p-error { background: color-mix(in srgb, #d97706 10%, transparent); }
-.desc.rich .tbl { overflow-x: auto; margin: 0 0 .8em; }
-.desc.rich table { border-collapse: collapse; font-size: .95em; }
-.desc.rich th, .desc.rich td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; vertical-align: top; }
-.desc.rich th { background: var(--surface-2, rgba(127,127,127,.08)); color: var(--text); font-weight: 600; }
-.desc.rich td > p, .desc.rich th > p { margin: 0; }
-.desc.rich hr { border: 0; border-top: 1px solid var(--line); margin: 1em 0; }
-.desc.rich .mention, .desc.rich .jstatus { font-weight: 550; color: var(--text); }
-.desc.rich .jstatus { font-size: .85em; text-transform: uppercase; letter-spacing: .02em; }
-.desc.rich a { color: var(--accent); }
+.item .rich { white-space: normal; }
+.rich > :first-child { margin-top: 0; }
+.rich p { margin: 0 0 .7em; }
+.rich h3, .rich h4, .rich h5, .rich h6 { margin: 1.1em 0 .4em; color: var(--text); font-size: 1em; font-weight: 600; }
+.rich h3 { font-size: 1.12em; }
+.rich ul, .rich ol { margin: 0 0 .7em; padding-left: 1.4em; }
+.rich ul.tasks { list-style: none; padding-left: .2em; }
+.rich li > p { margin: 0; }
+.rich code { font-family: var(--mono, ui-monospace, monospace); font-size: .92em; background: var(--surface-2, rgba(127,127,127,.12)); padding: 1px 4px; border-radius: 4px; }
+.rich pre { background: var(--surface-2, rgba(127,127,127,.12)); padding: 10px 12px; border-radius: 8px; overflow: auto; margin: 0 0 .8em; }
+.rich pre code { background: none; padding: 0; white-space: pre; }
+.rich blockquote { margin: 0 0 .8em; padding: 2px 0 2px 12px; border-left: 3px solid var(--line-strong, var(--line)); }
+.rich .panel { margin: 0 0 .8em; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.rich .panel.p-warning, .rich .panel.p-error { background: color-mix(in srgb, #d97706 10%, transparent); }
+.rich .tbl { overflow-x: auto; margin: 0 0 .8em; }
+.rich table { border-collapse: collapse; font-size: .95em; }
+.rich th, .rich td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; vertical-align: top; }
+.rich th { background: var(--surface-2, rgba(127,127,127,.08)); color: var(--text); font-weight: 600; }
+.rich td > p, .rich th > p { margin: 0; }
+.rich hr { border: 0; border-top: 1px solid var(--line); margin: 1em 0; }
+.rich .mention, .rich .jstatus { font-weight: 550; color: var(--text); }
+.rich .jstatus { font-size: .85em; text-transform: uppercase; letter-spacing: .02em; }
+.rich a { color: var(--accent); }
 .item .quote { border-left: 2px solid var(--line-strong); padding: 2px 0 2px 12px; color: var(--text); font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .item .cps { display: flex; flex-wrap: wrap; gap: 6px; }
 .msg-r { padding: 12px 14px; margin-top: 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
@@ -892,3 +892,8 @@ a.ref:hover { text-decoration-color: currentColor; }
 #changes .changes .what small + small { flex: 0 1 auto; max-width: 32%; }
 #changes .changes li.open .what { flex-wrap: wrap; white-space: normal; }
 #changes .changes li.open .what small { white-space: normal; flex-basis: 100%; max-width: none; color: var(--text-2); }
+/* Copilot's answers as Markdown blocks (mdBlocks in 50-chat.js), in the .rich style above. */
+.msg.cp .txt.md { white-space: normal; }
+.rich > :last-child { margin-bottom: 0; }
+.msg .rich p:last-child { margin-bottom: 0; }
+.quote .q-body > .txt { margin: 0; }
