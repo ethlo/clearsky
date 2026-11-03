@@ -353,8 +353,7 @@ async function drawOutputs() {
   el.hidden = !files.length && !links.length;
   if (el.hidden) { el.innerHTML = ''; return; }
   const ref = (l) => (l.pr ? ` data-pr="${esc(l.pr)}"` : l.issue ? ` data-issue="${esc(l.issue)}"` : '');
-  el.innerHTML = `<h4>Outputs</h4>
-    ${links.length ? `<ul class="outs">${links.map((l) => `<li><span class="mi">${icon({ pr: 'pr', branch: 'pr', ci: 'tool', ticket: 'ticket', project: 'ticket', env: 'source', repo: 'pr' }[l.kind] || 'tool', 13)}</span><div>${l.url ? `<a href="${esc(l.url)}" target="_blank" rel="noopener"${ref(l)}>${esc(l.label)}</a>` : `<b>${esc(l.label)}</b>`}${l.acts?.length ? `<small>${esc(l.acts.join(' · '))}</small>` : ''}</div></li>`).join('')}</ul>` : ''}
+  el.innerHTML = `${links.length ? `<ul class="outs">${links.map((l) => `<li><span class="mi">${icon({ pr: 'pr', branch: 'pr', ci: 'tool', ticket: 'ticket', project: 'ticket', env: 'source', repo: 'pr' }[l.kind] || 'tool', 13)}</span><div>${l.url ? `<a href="${esc(l.url)}" target="_blank" rel="noopener"${ref(l)}>${esc(l.label)}</a>` : `<b>${esc(l.label)}</b>`}${l.acts?.length ? `<small>${esc(l.acts.join(' · '))}</small>` : ''}</div></li>`).join('')}</ul>` : ''}
     ${files.length ? `<ul class="outs files">${files.slice(0, 30).map((f) => `<li class="${f.exists ? '' : 'gone'}"><span class="mi">${icon('clip', 13)}</span><div>${f.exists ? `<button type="button" class="linkish" data-fview="${esc(f.path)}" title="${esc(f.shown)}">${esc(f.name)}</button>` : `<s title="${esc(f.shown)}">${esc(f.name)}</s>`}<small>${esc([FILE_KIND[f.kind] || f.kind, fsize(f.size), f.at && ago(f.at), !f.exists && 'gone'].filter(Boolean).join(' · '))}</small></div></li>`).join('')}</ul>` : ''}`;
 }
 // A file in a box over the page: code highlighted with line numbers, what the chat changed in
@@ -1206,3 +1205,33 @@ $('#cp-close').onclick = async () => {
   location.hash = '';
   setTimeout(loadLinks, 1500); // once its Copilot has exited
 };
+
+// ---------------------------------------------------------------- the side pane's tabs
+
+// A tab shows when its part has something in it; the one you picked is kept per device.
+let cpTab = (() => { try { return localStorage.getItem('clearsky.cp.tab') || 'about'; } catch { return 'about'; } })();
+function syncTabs() {
+  const panes = [...document.querySelectorAll('.cp-pane')];
+  const has = (p) => [...p.children].some((c) => !c.hidden);
+  const set = (el, hide) => { if (el.hidden !== hide) el.hidden = hide; }; // only real changes, so the observer below settles
+  for (const b of document.querySelectorAll('#cp-tabs [data-pane]')) set(b, !has(panes.find((p) => p.dataset.pane === b.dataset.pane)));
+  const shown = [...document.querySelectorAll('#cp-tabs [data-pane]:not([hidden])')].map((b) => b.dataset.pane);
+  const cur = shown.includes(cpTab) ? cpTab : shown[0];
+  for (const p of panes) set(p, p.dataset.pane !== cur);
+  for (const b of document.querySelectorAll('#cp-tabs [data-pane]')) b.setAttribute('aria-selected', String(b.dataset.pane === cur));
+  // Outputs says how many there are.
+  const n = document.querySelectorAll('#cp-out li').length, ob = $('#cp-tabs [data-pane="out"]');
+  const label = `Outputs${n ? ` <b>${n}</b>` : ''}`;
+  if (ob.innerHTML !== label) ob.innerHTML = label;
+}
+$('#cp-tabs').onclick = (e) => {
+  const b = e.target.closest('[data-pane]');
+  if (!b) return;
+  cpTab = b.dataset.pane;
+  try { localStorage.setItem('clearsky.cp.tab', cpTab); } catch {}
+  syncTabs();
+};
+let tabsQueued = false;
+const tabsWatch = new MutationObserver(() => { if (!tabsQueued) { tabsQueued = true; queueMicrotask(() => { tabsQueued = false; syncTabs(); }); } });
+for (const p of document.querySelectorAll('.cp-pane')) tabsWatch.observe(p, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden'] });
+syncTabs();
