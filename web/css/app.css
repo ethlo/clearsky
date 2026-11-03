@@ -554,7 +554,8 @@ a.ref:hover { border-bottom-style: solid; }
 .tool i { margin-left: auto; font-style: normal; color: var(--muted); font-size: 11.5px; white-space: nowrap; }
 .tool.s-failed i { color: var(--red); }
 .tool.s-stopped i { color: var(--amber); }
-.tool.s-completed i { color: var(--green); }
+.tool.s-completed i { color: var(--muted); }
+.tool i b { color: var(--green); font-weight: 600; margin-right: 5px; }
 .tool.s-resumed { color: var(--muted); font-style: italic; }
 .choices { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; max-width: 560px; }
 .choices-q { font-weight: 600; font-size: 13.5px; margin-bottom: 2px; }
