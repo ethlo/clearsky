@@ -6,7 +6,7 @@ import { createServer } from 'node:http';
 import { mkdtempSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { client, renew, collectFlyt, waiting, readFlyt, flytFile, parseKey, osloTime, sessionFromCookies, jwtExpiry, keyringStore, fileStore, FlytAuthError } from '../lib/flyt.mjs';
+import { client, renew, collectFlyt, waiting, readFlyt, flytFile, parseKey, osloTime, sessionFromCookies, jwtExpiry, keyringStore, fileStore, FlytAuthError, keepAlive } from '../lib/flyt.mjs';
 import { browserLogin, findBrowser } from '../lib/flyt-login.mjs';
 import { checkSource, hook } from '../lib/sources.mjs';
 import flytSource from '../lib/sources/flyt.mjs';
@@ -283,4 +283,18 @@ test('a school login handed over in the file moves into the container keyring, o
   // No keyring at all: the file it is.
   const broken = { async get() { throw new Error('no secret-tool'); } };
   assert.equal(await defaultStore({ ring: broken, file }), file);
+});
+
+test('keep-alive renews a login that is due, and leaves a lost one alone', async () => {
+  const v = await fakeVisma();
+  try {
+    const store = memStore({ session: 'sid', refresh: 'refresh-1', access: 'old', expires: new Date(Date.now() - 1000).toISOString() });
+    assert.equal(await keepAlive({ store, api: v.api }), 'renewed');
+    assert.equal(v.state.renewals, 1);
+    assert.deepEqual(v.state.requests.map((r) => r.url), ['/v1/session', '/v2/children'], 'only the children list: nothing marked read');
+    const lost = memStore({ session: 'sid', refresh: 'refresh-1', expiredAt: '2026-11-01T00:00:00Z' });
+    assert.equal(await keepAlive({ store: lost, api: v.api }), 'not logged in');
+    assert.equal(await keepAlive({ store: memStore(null), api: v.api }), 'not logged in');
+    assert.equal(v.state.requests.length, 2, 'no requests without a login');
+  } finally { v.close(); }
 });

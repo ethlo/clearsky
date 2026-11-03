@@ -365,11 +365,17 @@ const sourceCache = new Map();
 // lands (dataVersion, via /api/attention). Only Refresh, or data over STALE_MAX old, waits.
 const STALE_MAX = 30 * 6e4;
 let dataVersion = 0;
+// Each source's last good answer, however old: shown (marked) when its login is lost.
+const lastGood = new Map();
 export function source(name, force) {
   const hit = sourceCache.get(name);
   if (!force && hit?.data && Date.now() - hit.at < config.cacheSeconds * 1000) return Promise.resolve(hit.data);
   if (hit?.pending) return !force && hit.data && Date.now() - hit.at < STALE_MAX ? Promise.resolve(hit.data) : hit.pending;
   const pending = (needsVpn(name) ? vpn.check() : Promise.resolve(null)).then((v) => (v?.known && !v.up ? { paused: 'VPN off', why: v.why } : settle(SOURCES[name]()))).then((data) => {
+    // Logged out: what was there stays, marked as no longer updating, instead of a blank panel.
+    const good = lastGood.get(name);
+    if (data?.needsLogin && good) data = { ...good.data, notUpdating: `Not logged in, so nothing new is coming in. This is from ${sameDay(new Date(good.at), new Date()) ? '' : `${new Date(good.at).toLocaleDateString()} `}${clock(good.at)}.`, needsLogin: true, staleSince: new Date(good.at).toISOString() };
+    else if (data && !data.error && !data.paused && !data.disabled) lastGood.set(name, { at: Date.now(), data });
     sourceCache.set(name, { at: Date.now(), data });
     dataVersion++;
     saveSourceCache();
@@ -386,7 +392,9 @@ function loadSourceCache(file) {
   sourceCacheFile = file;
   try {
     for (const [name, e] of Object.entries(JSON.parse(readFileSync(file, 'utf8')))) {
-      if (e?.data && !e.data.error && Date.now() - e.at < STALE_MAX) sourceCache.set(name, { at: e.at, data: e.data });
+      if (!e?.data || e.data.error) continue;
+      lastGood.set(name, { at: e.at, data: e.data });
+      if (Date.now() - e.at < STALE_MAX) sourceCache.set(name, { at: e.at, data: e.data });
     }
   } catch {}
 }
@@ -394,7 +402,7 @@ function saveSourceCache() {
   if (!sourceCacheFile || saveTimer) return;
   saveTimer = setTimeout(() => {
     saveTimer = null;
-    const out = Object.fromEntries([...sourceCache].filter(([, e]) => e.data && !e.data.error && !e.data.paused).map(([n, e]) => [n, { at: e.at, data: e.data }]));
+    const out = Object.fromEntries([...lastGood].map(([n, e]) => [n, { at: e.at, data: e.data }]));
     try { writeFileSync(sourceCacheFile, JSON.stringify(out), { mode: 0o600 }); } catch {}
   }, 2000);
   saveTimer.unref?.();
@@ -2263,6 +2271,23 @@ function restartWhenIdle({ maxWaitMinutes = 60, force = false } = {}) {
   return restart.pending;
 }
 
+// Sources with a web login (School) are touched now and then, at random times between 30 minutes
+// and 2 hours apart, so their login doesn't run out while Clearsky sits unwatched.
+export const keepAliveDelay = (rand = Math.random) => Math.round((30 + rand() * 90) * 6e4);
+function keepLoginsAlive() {
+  for (const p of plugins.sources.values()) {
+    if (typeof p.keepAlive !== 'function') continue;
+    const next = () => setTimeout(async () => {
+      if (!p.enabled || p.enabled(process.env)) {
+        try { logEvent(`${p.label}: login kept alive (${await p.keepAlive(makeContext(p))})`, { echo: false }); }
+        catch (e) { logEvent(`${p.label}: keeping the login alive failed: ${e.message}`, { echo: false }); }
+      }
+      next();
+    }, keepAliveDelay()).unref?.();
+    next();
+  }
+}
+
 function serve() {
   // A bug in a library (srt's proxy, say) shouldn't take the dashboard and every chat down with it.
   process.on('uncaughtException', (e) => logEvent(`unexpected error, still running: ${e?.stack || e}`));
@@ -2755,6 +2780,7 @@ function serve() {
     const shown = Number(process.env.CLEARSKY_PUBLIC_PORT) || config.port; // the port on your machine, in a container
     console.log(`clearsky: http://127.0.0.1:${shown}  (settings and logins: http://127.0.0.1:${shown}/settings)`);
     if (process.env.CLEARSKY_POLL_MINUTES !== '0') startPolling();
+    keepLoginsAlive();
     // Only once this server holds the port, so a second Clearsky can't stop the first one's VMs.
     if (vmSupport().ok) {
       const n = reapOrphans().length;

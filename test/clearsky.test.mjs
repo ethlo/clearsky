@@ -371,3 +371,10 @@ test('sources: fresh data as is, older data at once with a new fetch behind it, 
     assert.deepEqual(await old, { v: 3 }, 'too old to show: waits');
   } finally { delete SOURCES.swrTest; sourceCache.delete('swrTest'); }
 });
+
+test('logins are kept alive at random times, 30 minutes to 2 hours apart', async () => {
+  const { keepAliveDelay } = await import('../bin/clearsky.mjs');
+  assert.equal(keepAliveDelay(() => 0), 30 * 6e4);
+  assert.equal(keepAliveDelay(() => 1), 120 * 6e4);
+  assert.equal(keepAliveDelay(() => 0.5), 75 * 6e4);
+});
