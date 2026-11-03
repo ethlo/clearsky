@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VmImage, ChatVm, vmSize, VM_DEFAULT, loginForwarder, loginHead } from '../lib/vm.mjs';
+import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VmImage, ChatVm, reapOrphans, vmSize, VM_DEFAULT, loginForwarder, loginHead } from '../lib/vm.mjs';
 import { registryWrite, githubFilter } from '../lib/github-gate.mjs';
 import { srtSettings } from '../lib/sandbox.mjs';
 import { needs, serveBroker } from '../lib/broker.mjs';
@@ -177,4 +177,18 @@ test('the VM\'s proxy needs no login: Clearsky adds it on the way to srt\'s prox
   assert.match(got, /200 OK[\s\S]*hi/);
   assert.match(seen.join(''), new RegExp(`Proxy-Authorization: Basic ${Buffer.from('u:p@ss').toString('base64')}`));
   fwd.close(); up.close();
+});
+
+test('VMs left running by a Clearsky that was killed are stopped; nothing else is', () => {
+  const proc = mkdtempSync(join(tmpdir(), 'cs-proc-'));
+  const ps = { 101: ['/usr/bin/qemu-system-x86_64', '-drive', 'if=virtio,file=/h/.cache/clearsky/vm/chat-ab12.qcow2'],
+    102: ['qemu-system-x86_64', '-drive', 'file=/other/vm/disk.qcow2'],
+    103: ['/usr/bin/node', '/h/.cache/clearsky/vm/chat-ab12.qcow2'],
+    104: ['/usr/bin/qemu-system-x86_64', '-drive', 'file=/h/.cache/clearsky/vm/snapshot.qcow2'] };
+  for (const [pid, args] of Object.entries(ps)) { mkdirSync(join(proc, pid)); writeFileSync(join(proc, pid, 'cmdline'), `${args.join('\0')}\0`); }
+  mkdirSync(join(proc, 'self'));
+  const killed = [];
+  const out = reapOrphans('/h/.cache/clearsky/vm', { proc, kill: (pid, sig) => killed.push([pid, sig]), self: new Set([{ qemu: { pid: 104 } }]) });
+  assert.deepEqual(out, [101], 'not another QEMU, not a non-QEMU process, not a VM this Clearsky runs');
+  assert.deepEqual(killed, [[101, 'SIGKILL']]);
 });

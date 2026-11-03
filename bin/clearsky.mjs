@@ -22,7 +22,7 @@ import { AcpAgent, chatEvent } from '../lib/acp.mjs';
 import { sessionEvents, sessionUsage } from '../lib/copilot-events.mjs';
 import { branchesFor } from '../lib/branches.mjs';
 import { sandboxedCommand, sandboxEnded, stopSandbox, sandboxProxy, githubLogin, DEFAULT_DOMAINS, READ_DEFAULT, parseDomains } from '../lib/sandbox.mjs';
-import { VmImage, ChatVm, vmSupport, VM_DOMAINS } from '../lib/vm.mjs';
+import { VmImage, ChatVm, vmSupport, VM_DOMAINS, reapOrphans } from '../lib/vm.mjs';
 import { logWrite, readWrites } from '../lib/agent-log.mjs';
 import { manifest as grafanaManifest, createGrafana, parseInstances, parseTokens, parseCommand, sessionStore, USAGE as GRAFANA_USAGE } from '../lib/modules/grafana.mjs';
 import { cookieLogin } from '../lib/browser-login.mjs';
@@ -2716,6 +2716,11 @@ function serve() {
     const shown = Number(process.env.CLEARSKY_PUBLIC_PORT) || config.port; // the port on your machine, in a container
     console.log(`clearsky: http://127.0.0.1:${shown}  (settings and logins: http://127.0.0.1:${shown}/settings)`);
     if (process.env.CLEARSKY_POLL_MINUTES !== '0') startPolling();
+    // Only once this server holds the port, so a second Clearsky can't stop the first one's VMs.
+    if (vmSupport().ok) {
+      const n = reapOrphans().length;
+      if (n) logEvent(`stopped ${n} VM${n > 1 ? 's' : ''} left running by an earlier Clearsky`);
+    }
   });
   server.listen(config.port, config.bind);
 }
