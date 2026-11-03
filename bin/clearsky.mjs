@@ -963,6 +963,7 @@ async function copilotInfo(force) {
     models: ['auto', ...copilot.recentModels().filter((m) => m !== 'auto')],
     efforts: copilot.EFFORTS,
     permissions: Object.fromEntries(Object.entries(copilot.PERMISSIONS).map(([k, v]) => [k, v.label])),
+    permissionHints: Object.fromEntries(Object.entries(copilot.PERMISSIONS).map(([k, v]) => [k, v.hint || ''])),
     // What a new chat starts with (Settings → Copilot); the chat's pickers override them.
     defaults: { model: process.env.COPILOT_MODEL || '', effort: process.env.COPILOT_EFFORT || '', permission: process.env.COPILOT_PERMISSION || '' },
   };

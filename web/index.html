@@ -67,7 +67,7 @@
 
   <!-- One item in full: a PR, a ticket, a mention, a school message. -->
   <section class="view" id="v-item" hidden>
-    <header class="vh"><button class="back" data-back>← Back · Esc</button><span class="sub" id="it-crumb"></span><span class="spacer"></span><button class="nowline" data-nowline></button></header>
+    <header class="vh"><button class="back" data-back title="Back (Esc)" aria-label="Back"><span data-i="back"></span></button><span class="sub" id="it-crumb"></span><span class="spacer"></span><button class="nowline" data-nowline></button></header>
     <div class="view-b"><div class="item" id="item"></div></div>
   </section>
 
@@ -113,12 +113,17 @@
   <!-- Copilot: a chat uses the whole work area, with what it's about on the right. -->
   <section class="view" id="chat" hidden aria-label="Copilot">
     <header class="vh">
-      <button class="back" data-back>← Back · Esc</button>
+      <button class="back" data-back title="Back (Esc)" aria-label="Back"><span data-i="back"></span></button>
       <h1 id="chat-title" title="Click to rename">Copilot</h1>
-      <span class="sub" id="chat-sub"></span>
+      <span class="sub" id="chat-sub" role="status"></span>
       <span class="spacer"></span>
-      <button class="icon-btn small" id="chat-hist-btn" title="Your Copilot sessions, from this app, the terminal or your editor">History</button>
-      <button class="icon-btn small" id="chat-new" title="Start a new conversation (Alt+N)">New chat</button>
+      <span class="vh-acts">
+        <button class="icon-btn small" id="chat-hist-btn" title="All your Copilot sessions: here, in the terminal or your editor"><span data-i="history" data-size="14"></span>History</button>
+        <button class="icon-btn small" id="chat-new" title="New chat (Alt+N)"><span data-i="plus" data-size="14"></span>New</button>
+        <span class="vh-sep" aria-hidden="true"></span>
+        <button class="icon-btn small only" id="cp-restart" type="button" title="Restart this chat's Copilot. Your next message carries on the conversation." aria-label="Restart Copilot"><span data-i="refresh" data-size="14"></span></button>
+        <button class="icon-btn small only" id="cp-close" type="button" title="Close chat (it stays in History)" aria-label="Close chat"><span data-i="x" data-size="14"></span></button>
+      </span>
     </header>
     <div class="cpw">
       <div class="cp-main">
@@ -150,12 +155,7 @@
         <div id="cp-map" hidden></div>
         <div id="cp-changes" hidden></div>
         <div><h4>Skills</h4><div class="chat-skills" id="cp-skills"></div></div>
-        <div><h4>This chat</h4><dl class="cp-info" id="cp-info"></dl>
-          <div class="cp-acts">
-            <button class="chip" id="cp-restart" type="button" title="Start this chat's Copilot again; your next message continues the conversation">Restart</button>
-            <button class="chip" id="cp-close" type="button" title="Stop this chat's Copilot and close the chat; it stays in History">Close chat</button>
-          </div>
-        </div>
+        <div><h4>This chat</h4><dl class="cp-info" id="cp-info"></dl></div>
       </aside>
       <div class="chat-hist" id="chat-hist" hidden>
         <div class="chat-hist-h">

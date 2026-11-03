@@ -123,8 +123,18 @@ svg.i { display: inline-block; vertical-align: -0.15em; flex: none; }
 .vh h1 { font-size: 14.5px; font-weight: 600; margin: 0; letter-spacing: -.005em; white-space: nowrap; }
 .vh .sub { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .vh .spacer { flex: 1; }
-.back { border: 1px solid var(--line); background: var(--surface); color: var(--text-2); border-radius: 7px; height: 26px; padding: 0 8px; font-size: 12.5px; white-space: nowrap; }
-.back:hover { color: var(--text); border-color: var(--line-strong); }
+/* Back: an arrow, the shortcut (Esc) in its tooltip. */
+.back { flex: none; display: inline-grid; place-items: center; width: 28px; height: 28px; padding: 0; margin-left: -6px; border: 0; border-radius: 7px;
+  background: none; color: var(--muted); }
+.back:hover { color: var(--text); background: var(--surface-2); }
+.back:focus-visible, .icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* A view's own actions, at the right of its header. */
+.vh-acts { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.vh-sep { width: 1px; height: 18px; background: var(--line); margin: 0 2px; }
+.icon-btn.only { width: 28px; padding: 0; justify-content: center; }
+.icon-btn.small.only { width: 26px; }
+.icon-btn:disabled { opacity: .45; cursor: default; }
+.icon-btn:disabled:hover { border-color: var(--line); color: var(--text-2); }
 .nowline { color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: 0; background: none; padding: 0; min-width: 0; }
 .nowline b { color: var(--text-2); font-weight: 550; }
 .nowline:hover, .nowline:hover b { color: var(--accent); }
@@ -517,7 +527,6 @@ a.ref:hover { border-bottom-style: solid; }
 .cp-info dt { color: var(--muted); }
 .cp-info dd { margin: 0; overflow-wrap: anywhere; }
 .cp-info summary { cursor: pointer; }
-.cp-acts { display: flex; gap: 6px; margin-top: 10px; }
 .chat-skills { display: flex; flex-wrap: wrap; gap: 6px; }
 .chat-skills:empty::after { content: 'No skills found'; color: var(--muted); }
 .chip { border: 1px solid var(--line); background: var(--surface-2); color: var(--text-2); border-radius: 99px; font: inherit; font-size: 12px;

@@ -64,7 +64,7 @@
 </head>
 <body>
 <div class="set">
-<header class="vh"><button class="back" id="back">← Back · Esc</button><h1>Settings</h1><span class="sub" id="file"></span></header>
+<header class="vh"><button class="back" id="back" title="Back (Esc)" aria-label="Back"><svg class="i" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button><h1>Settings</h1><span class="sub" id="file"></span></header>
 <nav class="tabs" id="tabs" aria-label="Settings"></nav>
 <div class="set-b">
 <main>
@@ -368,7 +368,7 @@ function render(s) {
   fetch('/api/copilot').then((r) => r.json()).then((i) => {
     $('#cp-models').innerHTML = (i.models || []).map((m) => `<option value="${esc(m)}">`).join('');
     $('#COPILOT_EFFORT').innerHTML = `<option value="">Copilot's default</option>${(i.efforts || []).map((e) => `<option>${esc(e)}</option>`).join('')}`;
-    $('#COPILOT_PERMISSION').innerHTML = `<option value="">Ask (approve each step)</option>${Object.entries(i.permissions || {}).filter(([k]) => k !== 'ask').map(([k, l]) => `<option value="${esc(k)}">${esc(l)}</option>`).join('')}`;
+    $('#COPILOT_PERMISSION').innerHTML = Object.entries(i.permissions || {}).map(([k, l]) => `<option value="${k === 'ask' ? '' : esc(k)}">${esc(l)}${i.permissionHints?.[k] ? ` · ${esc(i.permissionHints[k])}` : ''}</option>`).join('');
     $('#COPILOT_EFFORT').value = cp.effort || '';
     $('#COPILOT_PERMISSION').value = cp.permission || '';
   }).catch(() => {});
