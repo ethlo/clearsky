@@ -539,7 +539,10 @@ function addMsg(cls, html) {
 }
 
 // Stop watching the chat on screen (it goes on in the background) before showing another.
+// `chat.view` counts what's on screen: a turn or a session being opened checks it's still the
+// one shown before it touches the panel, so a chat you left can't pull you back to it.
 function detach() {
+  chat.view = (chat.view || 0) + 1;
   chat.stop?.();
   chat.stop = chat.halt = null;
   chat.queued = [];
@@ -638,11 +641,15 @@ function tilde(dir = '') {
 }
 async function openSession(id, cwd) {
   detach();
+  const view = chat.view;
+  chat.session = id; chat.turns = 1; // the list shows it as picked while it loads
+  drawTabs();
   showHistory(false);
   $('#chat-log').innerHTML = '<span class="typing">Opening session</span>';
   try {
     const q = cwd ? `?cwd=${encodeURIComponent(cwd)}` : '';
     const h = await getJson(`/api/copilot/sessions/${encodeURIComponent(id)}${q}`);
+    if (chat.view !== view) return; // you picked another chat meanwhile
     chat.session = h.id; chat.cwd = h.cwd; chat.home = h.home; chat.turns = h.messages.filter((m) => m.role === 'me').length || 1;
     restoreMode(h.id);
     chat.items = [];
@@ -657,6 +664,7 @@ async function openSession(id, cwd) {
     remember(h.id, h.cwd);
     if (h.busy) attachLive(h.id);
   } catch (e) {
+    if (chat.view !== view) return;
     newChat();
     addMsg('cp', `<div class="err">Couldn't open that session: ${esc(e.message)}</div>`);
   }
@@ -804,7 +812,8 @@ async function send(text) {
   // This turn's chat; a new one gets Copilot's own id once it starts.
   const mine = { id: chat.session, title: chat.turns ? null : text.trim().split('\n')[0].slice(0, 120), mode: pickerMode() };
   rememberMode(chat.session, mine.mode);
-  const here = () => chat.session === mine.id;
+  const view = chat.view;
+  const here = () => chat.session === mine.id && chat.view === view;
   let halted = false;
   chat.stop = () => ctrl.abort(); // stop watching (switching chats); the turn goes on
   chat.halt = () => { halted = true; haltTurn(mine.id); };
@@ -864,6 +873,7 @@ async function attachLive(id) {
   out.segs = segs;
   const draw = () => { out.innerHTML = renderAnswer(segs, !done) || '<span class="typing">Still working</span>'; $('#chat-log').scrollTop = $('#chat-log').scrollHeight; drawCtx(); };
   const ctrl = new AbortController();
+  const view = chat.view;
   chat.stop = () => ctrl.abort();
   chat.halt = () => haltTurn(id);
   sendLabel();
@@ -893,9 +903,11 @@ async function attachLive(id) {
       draw();
     }
   } catch { /* switched away */ }
+  // Left for another chat: that one owns the panel now (reopening this one here was what
+  // pulled you back to a busy chat).
+  if (chat.view !== view || chat.session !== id) return;
   done = true;
-  if (chat.session === id) draw();
-  if (chat.session !== id) return;
+  draw();
   chat.stop = chat.halt = null;
   sendLabel();
   if (sendQueued()) return;

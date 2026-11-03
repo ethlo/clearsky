@@ -5,7 +5,7 @@
 // bookmarks add. Every change is saved at once to ~/.config/clearsky/links.json.
 let linksDoc = null, linksArea = 'work', linksEditing = false;
 
-async function loadLinks() {
+async function loadFavLinks() {
   try { linksDoc = await getJson('/api/links'); } catch { linksDoc ??= { groups: [] }; }
   personalSide();
   return linksDoc;
@@ -26,7 +26,7 @@ async function saveLinksDoc() {
 async function renderLinks(area) {
   linksArea = area;
   $('#links-title').textContent = area === 'personal' ? 'Personal links' : 'Links';
-  if (!linksDoc) { $('#links').innerHTML = skeleton(3); await loadLinks(); }
+  if (!linksDoc) { $('#links').innerHTML = skeleton(3); await loadFavLinks(); }
   drawLinks();
 }
 
@@ -163,4 +163,4 @@ $('#links-file').addEventListener('change', async (e) => {
   drawLinks();
 });
 
-loadLinks();
+loadFavLinks();
