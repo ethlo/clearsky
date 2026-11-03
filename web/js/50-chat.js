@@ -490,7 +490,7 @@ function md(text) {
   // Fenced blocks: an opening ```lang line, then everything up to a closing ``` line. One still
   // open (Copilot is mid-answer) shows as code so far.
   const re = /^```([\w-]*)[ \t]*\n([\s\S]*?)^```[ \t]*$/gm;
-  const block = (lang, body) => (lang === 'choices' ? choicesCard(body) : `<pre><code>${esc(body.replace(/\n$/, ''))}</code></pre>`);
+  const block = (lang, body) => (lang === 'choices' ? choicesCard(body) : `<div class="cblock"><button type="button" class="b-copy" data-copy-block title="Copy" aria-label="Copy">${icon('copy', 13)}</button><pre><code>${esc(body.replace(/\n$/, ''))}</code></pre></div>`);
   let out = '', last = 0, m;
   while ((m = re.exec(text))) { out += mdText(text.slice(last, m.index), last > 0); out += block(m[1], m[2]); last = re.lastIndex; }
   const rest = text.slice(last), open = rest.match(/^```([\w-]*)[ \t]*\n/m);
@@ -504,7 +504,7 @@ function mdText(part, afterBlock) {
   const quotes = [];
   let t = (afterBlock ? part.replace(/^\n/, '') : part).replace(/\n?((?:^> ?.*(?:\n|$))+)\n?/gm, (m, q) => {
     const raw = q.replace(/\n$/, '').split('\n').map((l) => l.replace(/^> ?/, '')).join('\n').trim();
-    quotes.push(`<blockquote class="quote"><button type="button" class="q-copy" data-copy-quote title="Copy">Copy</button><div class="q-body" data-raw="${esc(raw)}">${md(raw)}</div></blockquote>`);
+    quotes.push(`<blockquote class="quote"><button type="button" class="q-copy b-copy" data-copy-quote title="Copy" aria-label="Copy">${icon('copy', 13)}</button><div class="q-body" data-raw="${esc(raw)}">${md(raw)}</div></blockquote>`);
     return `\n\u0000${quotes.length - 1}\u0000\n`;
   });
   let h = mdBlocks(t);
@@ -550,7 +550,7 @@ function mdBlocks(text) {
       i += 2;
       while (i < lines.length && lines[i].includes('|') && lines[i].trim()) rows.push(cells(lines[i++]));
       i--;
-      out.push(`<div class="tbl"><table><tr>${head.map((c) => `<th>${mdInline(c)}</th>`).join('')}</tr>${rows.map((r) => `<tr>${r.map((c) => `<td>${mdInline(c)}</td>`).join('')}</tr>`).join('')}</table></div>`);
+      out.push(`<div class="tbl cblock"><button type="button" class="b-copy" data-copy-block title="Copy" aria-label="Copy">${icon('copy', 13)}</button><table><tr>${head.map((c) => `<th>${mdInline(c)}</th>`).join('')}</tr>${rows.map((r) => `<tr>${r.map((c) => `<td>${mdInline(c)}</td>`).join('')}</tr>`).join('')}</table></div>`);
       continue;
     }
     // A list: items at an indent; deeper ones nest, and wrapped lines join their item.
@@ -598,8 +598,10 @@ function choicesCard(body) {
 document.addEventListener('click', async (e) => {
   const b = e.target.closest('[data-copy-quote]');
   if (!b) return;
-  try { await navigator.clipboard.writeText(b.parentElement.querySelector('.q-body').dataset.raw); b.textContent = 'Copied'; } catch { b.textContent = 'Select and copy'; }
-  setTimeout(() => { b.textContent = 'Copy'; }, 1500);
+  let ok = true;
+  try { await navigator.clipboard.writeText(b.parentElement.querySelector('.q-body').dataset.raw); } catch { ok = false; }
+  b.innerHTML = icon(ok ? 'check' : 'copy', 13); b.title = ok ? 'Copied' : 'Select and copy';
+  setTimeout(() => { b.innerHTML = icon('copy', 13); b.title = 'Copy'; }, 1500);
 });
 
 function addMsg(cls, html) {
@@ -710,6 +712,8 @@ function renderAnswer(segs, running = false) {
     if (g.type === 'note') return `<div class="tool">${stamp(g.at)}<span>${icon('folder', 13)}</span>${esc(g.text)}</div>`;
     return '';
   }).join('')
+    // The whole answer, as Markdown (or as formatted text where the paste takes it).
+    + (!running && segs.some((g) => g.type === 'text' && g.text.trim()) ? `<button type="button" class="b-copy ans" data-copy-answer title="Copy the answer" aria-label="Copy the answer">${icon('copy', 13)}</button>` : '')
     + (running && segs.moved ? `<div class="idle" data-at="${segs.moved}">Last activity ${clock(segs.moved)} · <b>${sinceNow(segs.moved)}</b></div>` : '') + (stuck ? `<button class="nudge" data-nudge title="Send Copilot “Try again.”">${icon('refresh', 13)} Nudge</button>` : '');
 }
 
@@ -1318,4 +1322,35 @@ document.addEventListener('click', async (e) => {
   if (!b) return;
   try { await navigator.clipboard.writeText(b.dataset.copyText); b.textContent = 'Copied'; } catch { b.textContent = 'Select and copy'; }
   setTimeout(() => { b.textContent = 'Copy line'; }, 1500);
+});
+
+// Copy icons: on a code block (its code), a table (as a table for Sheets, Jira or Docs, with
+// tab-separated text for plain pastes) and a whole answer (its Markdown, and formatted).
+async function copyRich(html, text) {
+  try {
+    if (window.ClipboardItem && html) await navigator.clipboard.write([new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([text], { type: 'text/plain' }) })]);
+    else await navigator.clipboard.writeText(text);
+    return true;
+  } catch { try { await navigator.clipboard.writeText(text); return true; } catch { return false; } }
+}
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-copy-block], [data-copy-answer]');
+  if (!b) return;
+  e.preventDefault();
+  let ok;
+  if (b.dataset.copyAnswer != null) {
+    const msg = b.closest('.msg');
+    const text = (msg?.segs || []).filter((g) => g.type === 'text').map((g) => g.text).join('\n\n').trim();
+    const html = [...(msg?.querySelectorAll(':scope > .txt') || [])].map((x) => x.innerHTML).join('');
+    ok = await copyRich(html.replace(/<button[^>]*class="b-copy[^"]*"[^>]*>[\s\S]*?<\/button>/g, ''), text);
+  } else {
+    const box = b.parentElement, table = box.querySelector('table');
+    if (table) {
+      const tsv = [...table.rows].map((r) => [...r.cells].map((c) => c.innerText.replace(/\s+/g, ' ').trim()).join('\t')).join('\n');
+      ok = await copyRich(table.outerHTML, tsv);
+    } else ok = await copyRich(null, box.querySelector('code')?.textContent || '');
+  }
+  b.innerHTML = icon(ok ? 'check' : 'copy', 13);
+  b.title = ok ? 'Copied' : 'Select and copy';
+  setTimeout(() => { b.innerHTML = icon('copy', 13); b.title = 'Copy'; }, 1500);
 });

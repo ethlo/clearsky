@@ -900,3 +900,12 @@ a.ref:hover { text-decoration-color: currentColor; }
 /* A source whose login was lost: its last data, with this note above it. */
 .note-stale { margin: 0 0 10px; padding: 6px 10px; border-radius: 7px; font-size: 12.5px; color: var(--text-2); background: color-mix(in srgb, #d97706 10%, transparent); border: 1px solid color-mix(in srgb, #d97706 30%, var(--line)); }
 .note-stale a { color: var(--accent); }
+/* Copy icons on code blocks, tables and whole answers: quiet until you point at them. */
+.cblock { position: relative; }
+.tbl.cblock { width: fit-content; max-width: 100%; }
+.b-copy { display: inline-grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--muted); cursor: pointer; }
+.b-copy:hover { color: var(--text); border-color: var(--line-strong, var(--line)); }
+.cblock > .b-copy { position: absolute; top: 6px; right: 6px; opacity: 0; transition: opacity .12s; z-index: 1; }
+.cblock:hover > .b-copy, .cblock > .b-copy:focus-visible { opacity: 1; }
+.b-copy.ans { margin-top: 6px; opacity: .55; border-color: transparent; background: none; }
+.msg:hover .b-copy.ans, .b-copy.ans:focus-visible { opacity: 1; }
