@@ -851,3 +851,20 @@ time.at { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nu
 .cp-tabs button b { font-weight: 500; color: var(--muted); font-size: 11.5px; margin-left: 2px; }
 .cp-pane { display: flex; flex-direction: column; gap: 16px; }
 .cp-pane[hidden] { display: none; }
+
+/* A PR or ticket named in text (stand-up, chat answers) is a link, not a pill: the composer's
+   .ref chips shouldn't shape it. */
+a.ref { display: inline; border: 0; border-radius: 0; background: none; padding: 0; font-size: inherit; max-width: none;
+  color: var(--accent); font-weight: 500; text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  text-underline-offset: 3px; }
+a.ref:hover { text-decoration-color: currentColor; }
+
+/* Copilot's changes, the full page: one line each (what, where, the command), opened on click. */
+#changes .changes li { grid-template-columns: 64px minmax(0, 1fr) auto; padding: 7px 20px; cursor: pointer; }
+#changes .changes li:hover { background: color-mix(in srgb, var(--surface-2) 60%, transparent); }
+#changes .changes .what { display: flex; align-items: baseline; gap: 12px; white-space: nowrap; }
+#changes .changes .what b { flex: none; }
+#changes .changes .what small { display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1 1 auto; color: var(--muted); }
+#changes .changes .what small + small { flex: 0 1 auto; max-width: 32%; }
+#changes .changes li.open .what { flex-wrap: wrap; white-space: normal; }
+#changes .changes li.open .what small { white-space: normal; flex-basis: 100%; max-width: none; color: var(--text-2); }
