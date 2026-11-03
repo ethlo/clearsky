@@ -91,9 +91,6 @@ svg.i { display: inline-block; vertical-align: -0.15em; flex: none; }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex: none; }
 .dot.busy { background: var(--accent); animation: pulse 1s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: .3; } }
-.seg { display: flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); }
-.seg button { flex: 1; border: 0; background: none; color: var(--text-2); border-radius: 6px; padding: 3px 0; font-size: 12px; }
-.seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: 0 0 0 1px var(--line), var(--shadow); }
 .icon-btn { border: 1px solid var(--line); background: var(--surface); color: var(--text-2); border-radius: 7px; height: 28px;
   padding: 0 9px; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; white-space: nowrap; }
 .icon-btn:hover { border-color: var(--line-strong); color: var(--text); }
@@ -626,6 +623,8 @@ a.ref:hover { border-bottom-style: solid; }
 .cb-sel { font: inherit; font-size: 12.5px; color: var(--text-2); background: none; border: 0; border-radius: 7px; height: 28px; padding: 0 6px; cursor: pointer; max-width: 160px; }
 .cb-sel:hover, .cb-sel:focus { background: var(--surface); color: var(--text); outline: none; }
 .cb-model { width: 11ch; cursor: text; }
+/* The pickers are as wide as what they show (where the browser can), so they read as one row. */
+@supports (field-sizing: content) { .cb-sel { field-sizing: content; min-width: 5ch; } .cb-model { width: auto; } }
 .cb-model::placeholder { color: var(--text-2); }
 .cb-send[data-state="stop"] { background: var(--red-soft); color: var(--red); }
 .cb-send[data-state="stop"] svg { fill: currentColor; stroke: none; width: 10px; height: 10px; }

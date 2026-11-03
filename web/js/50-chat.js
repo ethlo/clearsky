@@ -964,9 +964,13 @@ function showChat(ready) {
 function setTheme(t) {
   if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme;
   try { localStorage.setItem('clearsky.theme', t === 'auto' ? '' : t); } catch {}
-  for (const b of document.querySelectorAll('[data-theme-pick]')) b.setAttribute('aria-pressed', String(b.dataset.themePick === (t || 'auto')));
+  // One button that goes Auto → Light → Dark; it shows the one in use.
+  const cur = t === 'light' || t === 'dark' ? t : 'auto', b = $('#theme');
+  b.dataset.theme = cur;
+  b.innerHTML = icon({ auto: 'contrast', light: 'sun', dark: 'moon' }[cur], 15);
+  b.title = `Theme: ${{ auto: 'follows the system', light: 'light', dark: 'dark' }[cur]} (click to change)`;
 }
-$('#theme').onclick = (e) => { const b = e.target.closest('[data-theme-pick]'); if (b) setTheme(b.dataset.themePick); };
+$('#theme').onclick = () => setTheme({ auto: 'light', light: 'dark', dark: 'auto' }[$('#theme').dataset.theme || 'auto']);
 setTheme(document.documentElement.dataset.theme || 'auto');
 
 // ---------------------------------------------------------------- talk
