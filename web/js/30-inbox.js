@@ -511,8 +511,8 @@ function itemRow(it, i) {
     <button data-done="${esc(it.k)}" data-stamp="${esc(it.stamp ?? '')}" title="Done: hide until there's something new (E)" aria-label="Done">${DONE_ICON}</button></span>`;
   const rel = it.kind === 'session' ? [] : relatedItems(it, xrefAll);
   if (WORK_COLS[listView]) return tableRow(it, i, rel, chips, acts, fresh);
-  // One related ticket or PR at most, and not one the title already names; the rest is on its page.
-  const xrefs = rel.filter((x) => !(it.title || '').includes(x.issue || x.ref)).slice(0, 1).map((x) => xrefChip(x, !it.pr)).join('');
+  // One related ticket or PR at most (it opens here); the rest is on the item's page.
+  const xrefs = rel.slice(0, 1).map((x) => xrefChip(x, !it.pr)).join('');
   return `<li class="r${it.group === 'waiting' ? ' quiet' : ''}${it.k === selK ? ' sel' : ''}" data-i="${i}" tabindex="-1">
     ${fresh ? '<span class="new-dot" title="New since you last looked" aria-label="New"></span>' : ''}<span class="st ${esc(it.glyph)}"></span>
     <span class="id"${refAttrs(it)}>${esc(it.ref || '')}</span>
