@@ -135,10 +135,11 @@ function itemKey(url) {
   const r = refFromUrl(url);
   return r && refKeyOf(r);
 }
-function chip(x) {
+// mini: just a ✦ and its status dot (in a list row); the name is in the tooltip.
+function chip(x, mini) {
   const st = STATUS_TEXT[x.status] || '';
-  return `<button class="cp-chip s-${esc(x.status || 'closed')}" data-sid="${esc(x.id)}" data-cwd="${esc(x.cwd || '')}"
-    title="Copilot session${st ? `, ${st}` : ''}, ${esc(ago(x.updatedAt))}. Click to open it."><i></i><span>${esc(x.title)}</span>${st ? `<b>· ${st}</b>` : ''}</button>`;
+  return `<button class="cp-chip${mini ? ' mini' : ''} s-${esc(x.status || 'closed')}" data-sid="${esc(x.id)}" data-cwd="${esc(x.cwd || '')}"
+    title="Copilot: ${esc(x.title)}${st ? `, ${st}` : ''}, ${esc(ago(x.updatedAt))}. Click to open it."${mini ? ` aria-label="Copilot: ${esc(x.title)}"` : ''}><i></i>${mini ? '✦' : `<span>${esc(x.title)}</span>${st ? `<b>· ${st}</b>` : ''}`}</button>`;
 }
 function sessionChips(url) {
   const list = cpLinks.links[itemKey(url || '')];

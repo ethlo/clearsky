@@ -829,3 +829,15 @@ time.at { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nu
 .hl-c { color: #6a737d; font-style: italic; } .hl-s { color: #0a7d32; } .hl-n { color: #b35900; } .hl-k { color: #a626a4; } .hl-t { color: #1f6feb; } .hl-a { color: #b35900; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .hl-c { color: #8b949e; } :root:not([data-theme="light"]) .hl-s { color: #7ee787; } :root:not([data-theme="light"]) .hl-n, :root:not([data-theme="light"]) .hl-a { color: #ffa657; } :root:not([data-theme="light"]) .hl-k { color: #d2a8ff; } :root:not([data-theme="light"]) .hl-t { color: #79c0ff; } }
 :root[data-theme="dark"] .hl-c { color: #8b949e; } :root[data-theme="dark"] .hl-s { color: #7ee787; } :root[data-theme="dark"] .hl-n, :root[data-theme="dark"] .hl-a { color: #ffa657; } :root[data-theme="dark"] .hl-k { color: #d2a8ff; } :root[data-theme="dark"] .hl-t { color: #79c0ff; }
+
+/* Inbox rows read as text: the title first, then quiet details. Only the status glyph and
+   coloured dots carry colour; nothing in a row has its own box except on hover. */
+.r .t .xref { border: 0; padding: 0; font: inherit; font-size: 12px; color: var(--muted); }
+.r .t .xref:hover { color: var(--accent); }
+.r .lbl { border: 0; padding: 0; font-size: 12px; color: var(--muted); }
+.r .lbl i { margin-right: 1px; }
+.r .t .next { background: none; border-color: transparent; padding: 1px 6px; margin: 0 -6px 0 -2px; font-weight: 550; }
+.r .t .next:hover { background: var(--accent-soft); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+.r .t .step { font-size: 12.5px; }
+.r .id { font-size: 11px; opacity: .85; }
+.cp-chip.mini { padding: 1px 4px; gap: 4px; font-size: 11px; color: var(--muted); background: none; border-color: transparent; }
