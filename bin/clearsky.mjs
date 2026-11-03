@@ -28,6 +28,7 @@ import { manifest as grafanaManifest, createGrafana, parseInstances, parseTokens
 import { cookieLogin } from '../lib/browser-login.mjs';
 import { redact } from '../lib/redact.mjs';
 import { vpnWatch, checkTarget } from '../lib/vpn.mjs';
+import { disclosureLine, DISCLOSE_HINT } from '../lib/disclosure.mjs';
 import { parseReviewArgs, changeOf, reviewPrompt, writeBaseFiles, reviewDecision, USAGE as REVIEW_USAGE } from '../lib/review.mjs';
 import { buildMap, buildKind } from '../lib/map.mjs';
 import { serveBroker, brokerSocket } from '../lib/broker.mjs';
@@ -1078,7 +1079,7 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   // asks you in this chat. The key tells Clearsky which chat a request comes from.
   const key = randomBytes(16).toString('hex');
   if (process.platform === 'linux') {
-    broker ||= serveBroker({ bins: { acli: config.jira.acli }, allow: assistedAllow, ask: brokerAsk, where: brokerWhere, vm: vmSupport().ok ? vmRun : null, grafana: grafanaRun, review: reviewRun, log: console.log });
+    broker ||= serveBroker({ bins: { acli: config.jira.acli }, allow: assistedAllow, ask: brokerAsk, where: brokerWhere, vm: vmSupport().ok ? vmRun : null, grafana: grafanaRun, review: reviewRun, usage: usageRun, log: console.log });
     Object.assign(env, { CLEARSKY_BROKER_SOCKET: brokerSocket(), CLEARSKY_BROKER_KEY: key });
     env.PATH = `${join(here, '..', 'scripts', 'sandbox-bin')}${delimiter}${env.PATH}`;
   }
@@ -1554,6 +1555,16 @@ async function reviewRun({ key, argv, cwd, signal }, out, err) {
   }
 }
 
+// `usage` from a chat: the line for the end of its PR description (lib/disclosure.mjs), from
+// the chat's own session log. Only when you switched it on in Settings → Copilot.
+function usageRun({ key }) {
+  const c = chatByKey(key);
+  if (!c) return { code: 1, stdout: '', stderr: 'Clearsky: this chat is closed.\n' };
+  if (process.env.COPILOT_DISCLOSE !== 'on') return { code: 1, stdout: '', stderr: 'Clearsky: saying what did the work is off (Settings → Copilot); leave the line out.\n' };
+  const u = c.id ? sessionUsage(join(homedir(), '.copilot'), c.id) : null;
+  return { code: 0, stdout: `${disclosureLine(u, c.model)}\n`, stderr: '' };
+}
+
 // A question in a chat with Allow and Deny only (asked every time).
 function askInChat(c, { title, detail, advice = null }) {
   return new Promise((done) => {
@@ -1960,6 +1971,7 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, s
   }
   c.lastUsed = Date.now();
   c.mode = options.permission;
+  c.model = options.model || null;
   // What this chat is about (the items it was started with, the tickets you named): its writes
   // to those go through without asking.
   for (const x of scope) {
@@ -2397,7 +2409,7 @@ function serve() {
           const options = { model: body.model, effort: body.effort, permission: copilot.PERMISSIONS[body.permission] ? body.permission : 'ask',
             allow: list(body.allow), deny: list(body.deny) };
           // The first turn carries the dashboard so Copilot knows what you're looking at.
-          const sandboxHint = process.env.COPILOT_SANDBOX === 'srt' || body.permission === 'sandboxed' ? `\n\n${SANDBOX_HINT}${grafanaHint()}` : '';
+          const sandboxHint = process.env.COPILOT_SANDBOX === 'srt' || body.permission === 'sandboxed' ? `\n\n${SANDBOX_HINT}${grafanaHint()}${process.env.COPILOT_DISCLOSE === 'on' ? ` ${DISCLOSE_HINT}` : ''}` : '';
           const folders = foldersHint();
           // A Copilot command (/compact, say) only works as the whole message: nothing goes in front.
           // The sandbox hint a resumed chat is owed then goes with the next message instead.

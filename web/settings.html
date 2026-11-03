@@ -189,6 +189,9 @@
     <label for="COPILOT_SANDBOX_TOKEN">GitHub token for the sandbox (optional)</label>
     <input id="COPILOT_SANDBOX_TOKEN" data-key="COPILOT_SANDBOX_TOKEN" type="password" autocomplete="off" placeholder="leave empty to use your gh login">
     <p class="hint">Not needed: by default the sandbox uses your <code>gh</code> login. If you can create a fine-grained token (with <b>Copilot Requests</b>), the sandbox uses it instead, for example one that can only read your work repos. Either way it stays out of the sandbox and changes still wait for your Allow.</p>
+    <label for="COPILOT_DISCLOSE">Say what did the work</label>
+    <select id="COPILOT_DISCLOSE" data-key="COPILOT_DISCLOSE"><option value="">Off</option><option value="on">On: last line of the PR description</option></select>
+    <p class="hint">When a sandboxed chat is done, it ends the PR description (and the ticket description, if it wrote that) with a line like <i>Implemented with Copilot (Claude Opus 5.5). 939 credits used.</i> The model and credits come from the chat's own session log, through Clearsky. Applies to chats started after you switch it on.</p>
     <label for="COPILOT_DOMAINS">Hosts a sandboxed Copilot may reach</label>
     <textarea id="COPILOT_DOMAINS" data-key="COPILOT_DOMAINS" rows="2" spellcheck="false"></textarea>
     <p class="hint">Comma-separated, wildcards like <code>*.atlassian.net</code> allowed. Empty means Copilot, GitHub and your Jira site. Add package registries (say <code>repo.maven.apache.org</code>, <code>registry.npmjs.org</code>) if builds need them.</p>
@@ -201,7 +204,7 @@
     <label for="COPILOT_VM_CPUS">VM size: cores and memory (GB)</label>
     <div class="row"><input id="COPILOT_VM_CPUS" data-key="COPILOT_VM_CPUS" inputmode="numeric" spellcheck="false" style="max-width:8em"> <input id="COPILOT_VM_MEMORY_GB" data-key="COPILOT_VM_MEMORY_GB" aria-label="VM memory in GB" inputmode="decimal" spellcheck="false" style="max-width:8em"></div>
     <p class="hint">For each chat's VM. Empty uses the default shown: half this machine's cores (up to 12) and a quarter of its memory (4 to 16 GB). Memory the VM doesn't use stays yours. Kept within this machine: at most all its cores and half its memory. Applies to the next VM a chat starts; the first one after a change takes about 15 seconds longer (it saves a new snapshot).</p>
-    <div class="row"><button class="save" data-keys="COPILOT_MODEL,COPILOT_EFFORT,COPILOT_PERMISSION,COPILOT_CWD,COPILOT_FOLDERS,COPILOT_ASSISTED_ALLOW,COPILOT_SANDBOX,COPILOT_SANDBOX_TOKEN,COPILOT_READ,COPILOT_DOMAINS,COPILOT_VM_IMAGES,COPILOT_GATE_RULES,COPILOT_VM_CPUS,COPILOT_VM_MEMORY_GB">Save</button><span class="msg"></span></div>
+    <div class="row"><button class="save" data-keys="COPILOT_MODEL,COPILOT_EFFORT,COPILOT_PERMISSION,COPILOT_CWD,COPILOT_FOLDERS,COPILOT_ASSISTED_ALLOW,COPILOT_SANDBOX,COPILOT_SANDBOX_TOKEN,COPILOT_DISCLOSE,COPILOT_READ,COPILOT_DOMAINS,COPILOT_VM_IMAGES,COPILOT_GATE_RULES,COPILOT_VM_CPUS,COPILOT_VM_MEMORY_GB">Save</button><span class="msg"></span></div>
   </section>
 
   <section>
@@ -362,6 +365,7 @@ function render(s) {
   $('#COPILOT_ASSISTED_ALLOW').value = cp.assistedAllow || '';
   $('#COPILOT_SANDBOX_TOKEN').placeholder = cp.sandboxToken ? `${cp.sandboxToken}; paste a new one to replace` : 'leave empty to use your gh login';
   $('#COPILOT_SANDBOX').value = cp.sandbox || 'off';
+  $('#COPILOT_DISCLOSE').value = cp.disclose ? 'on' : '';
   $('#COPILOT_READ').value = cp.read || '';
   $('#read-default').textContent = cp.readDefault || '';
   $('#COPILOT_DOMAINS').value = cp.domains || '';

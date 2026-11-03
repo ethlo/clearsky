@@ -29,6 +29,6 @@ test('parseUsage sums model calls once and keeps the latest checkpoint and conte
   const text = [rec('a', 100, 3), rec('b', 200, 7), rec('a', 100, 3),
     JSON.stringify({ type: 'session.usage_checkpoint', data: { totalPremiumRequests: 4 } }),
     JSON.stringify({ type: 'tool.execution_complete', data: { toolTelemetry: { metrics: { context_current_tokens: 900, context_token_limit: 200000 } } } })].join('\n');
-  assert.deepEqual(parseUsage(text), { input: 300, cached: 290, output: 10, calls: 2, premium: 4, context: 900, limit: 200000 });
+  assert.deepEqual(parseUsage(text), { input: 300, cached: 290, output: 10, calls: 2, premium: 4, context: 900, limit: 200000, models: [] });
   assert.equal(parseUsage(''), null);
 });
