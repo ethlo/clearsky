@@ -28,7 +28,7 @@ import { manifest as grafanaManifest, createGrafana, parseInstances, parseTokens
 import { cookieLogin } from '../lib/browser-login.mjs';
 import { redact } from '../lib/redact.mjs';
 import { vpnWatch, checkTarget } from '../lib/vpn.mjs';
-import { parseReviewArgs, changeOf, reviewPrompt, USAGE as REVIEW_USAGE } from '../lib/review.mjs';
+import { parseReviewArgs, changeOf, reviewPrompt, writeBaseFiles, reviewDecision, USAGE as REVIEW_USAGE } from '../lib/review.mjs';
 import { buildMap, buildKind } from '../lib/map.mjs';
 import { serveBroker, brokerSocket } from '../lib/broker.mjs';
 import { mavenSandbox, sandboxCa, plainMaven } from '../lib/maven.mjs';
@@ -1482,14 +1482,22 @@ async function reviewRun({ key, argv, cwd, signal }, out, err) {
   err(`Clearsky: a fresh reviewer is reading ${change.branch || 'the change'} against ${change.base}${ticket ? ` for ${ticket.key}` : ''} (it sees only the goal and the code). This takes a few minutes.\n`);
   const model = process.env.COPILOT_REVIEW_MODEL || process.env.COPILOT_MODEL || undefined;
   const args = [...copilot.optionArgs({ permission: 'read', model, deny: ['url'] }), '--disable-builtin-mcps'];
+  // The changed files as they were before, in a folder the reviewer's sandbox can read.
+  const baseDir = join(copilotTmp(), 'review', randomBytes(6).toString('hex'));
+  const baseFiles = await writeBaseFiles(root, change, baseDir).catch(() => []);
+  const roots = [root, ...(baseFiles.length ? [baseDir] : [])];
   const agent = await startAgent(info.bin, args, root, { sandbox: true });
   const tally = { allowed: 0, denied: 0 };
-  const inRepo = (pth) => !pth || resolve(root, String(pth)).startsWith(`${root}/`) || resolve(root, String(pth)) === root;
+  const refused = [];
+  // Copilot ends its whole turn ("Operation cancelled by user") when a tool call is refused, so
+  // each refusal is said in the asking chat, and the reviewer is told to carry on without it.
   agent.onPermission = async (p) => {
     const once = (p.options || []).find((x) => x.kind === 'allow_once');
     const no = (p.options || []).find((x) => x.kind === 'reject_once');
-    const ok = once && ['read', 'search', 'think'].includes(p.toolCall?.kind) && inRepo(p.toolCall?.rawInput?.path);
+    const d = reviewDecision(p, roots);
+    const ok = once && d.ok;
     tally[ok ? 'allowed' : 'denied']++;
+    if (!ok) { refused.push(d.what); err(`Clearsky: the reviewer asked to ${d.what}; it may only read this repo, so that was refused.\n`); }
     return ok ? { outcome: 'selected', optionId: once.optionId } : no ? { outcome: 'selected', optionId: no.optionId } : { outcome: 'cancelled' };
   };
   let text = '', steps = 0;
@@ -1500,15 +1508,27 @@ async function reviewRun({ key, argv, cwd, signal }, out, err) {
   const stop = () => agent.close();
   signal?.addEventListener('abort', stop);
   const timer = setTimeout(stop, 20 * 6e4);
+  const verdictOf = (t) => t.match(/VERDICT:\s*(ready|fix first)/i)?.[1]?.toLowerCase() || null;
   try {
     const id = await agent.start(root);
     localState.setSessionName(stateFile, id, `Review: ${change.branch || 'change'} against ${change.base}`);
     sessionsCache = null;
-    await agent.prompt(reviewPrompt({ goal: o.goal, ticket, change }));
+    await agent.prompt(reviewPrompt({ goal: o.goal, ticket, change, baseDir, baseFiles }));
+    // Cut short by a refusal: tell it what it can read and let it finish, at most twice.
+    for (let round = 0; round < 2 && !verdictOf(text) && refused.length && !agent.closed && !signal?.aborted; round++) {
+      const seen = refused.length;
+      text += '\n';
+      await agent.prompt(`That was refused: you asked to ${refused.at(-1)}. You may only read and search files in ${roots.join(' and ')}; no commands, no git, no other folders.${baseFiles.length ? ` The changed files as they were before are in ${baseDir}.` : ''} Carry on with the review from what you can read, and finish with the VERDICT line.`);
+      if (refused.length === seen) break;
+    }
     const findings = text.trim();
-    const verdict = findings.match(/VERDICT:\s*(ready|fix first)/i)?.[1]?.toLowerCase() || null;
+    const verdict = verdictOf(findings);
     log('reviewed', { verdict, steps, ...tally });
     console.log(`clearsky: review ${verdict || 'no verdict'}, ${steps} steps, ${tally.allowed} allowed, ${tally.denied} denied`);
+    if (!verdict && refused.length) {
+      out(`${findings ? `${findings}\n\n` : ''}The review didn't finish. The reviewer kept asking for things outside what it may read (${[...new Set(refused)].slice(0, 3).join('; ')}). Run review again; if it happens again, tell the user.\n`);
+      return 1;
+    }
     out(`${findings || 'The reviewer gave no answer.'}\n`);
     if (change.cut) err('(the diff was long, so the reviewer read the rest from the repo)\n');
     return 0;
@@ -1520,6 +1540,7 @@ async function reviewRun({ key, argv, cwd, signal }, out, err) {
     clearTimeout(timer);
     signal?.removeEventListener('abort', stop);
     agent.close();
+    try { rmSync(baseDir, { recursive: true, force: true }); } catch { /* gone */ }
   }
 }
 

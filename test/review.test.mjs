@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { parseReviewArgs, changeOf, reviewPrompt } from '../lib/review.mjs';
+import { parseReviewArgs, changeOf, reviewPrompt, writeBaseFiles, reviewDecision } from '../lib/review.mjs';
 
 test('review: the goal is a ticket or a short sentence, never an essay', () => {
   assert.deepEqual(parseReviewArgs(['--ticket', 'abc-12']), { ticket: 'ABC-12' });
@@ -35,7 +35,28 @@ test('review: the change is the branch against where it left base, uncommitted a
   assert.match(p, /VERDICT: ready/);
   assert.match(p, /New files not yet added to git .*: new.txt/);
   assert.match(p, /feature\/abc-1 against main/);
+  const base = join(mkdtempSync(join(tmpdir(), 'cs-base-')), 'b');
+  assert.deepEqual(await writeBaseFiles(dir, c, base), ['a.txt'], 'new files have no base side');
+  assert.equal(readFileSync(join(base, 'a.txt'), 'utf8'), 'one\n');
+  assert.equal(existsSync(join(base, 'new.txt')), false);
+  const pb = reviewPrompt({ goal: 'g', change: c, baseDir: base, baseFiles: ['a.txt'] });
+  assert.ok(pb.includes(`${base} holds the changed files as they were before`));
   git('checkout', '-q', '.'); execFileSync('rm', [join(dir, 'new.txt')]); git('checkout', '-q', 'main');
   await assert.rejects(changeOf(dir, 'main'), /nothing changed/);
   await assert.rejects(changeOf(dir, 'nope'), /can't find nope/);
+});
+
+test('review: the reviewer reads the repo and the base copies, nothing else', () => {
+  const roots = ['/w/repo', '/t/base'];
+  const ask = (kind, rawInput, extra = {}) => reviewDecision({ toolCall: { kind, rawInput, ...extra } }, roots);
+  assert.equal(ask('read', { path: 'src/a.js' }).ok, true);
+  assert.equal(ask('read', { path: '/w/repo/src/a.js' }).ok, true);
+  assert.equal(ask('read', { path: '/t/base/src/a.js' }).ok, true);
+  assert.equal(ask('search', {}, { locations: [{ path: '/w/repo' }] }).ok, true);
+  const out = ask('read', { path: '/w/main-checkout/src/a.js' });
+  assert.equal(out.ok, false);
+  assert.equal(out.what, 'read /w/main-checkout/src/a.js (outside the repo)');
+  assert.equal(ask('read', { path: '../repo-other/x' }).ok, false);
+  assert.equal(ask('execute', { command: 'git diff main' }, { title: 'git diff main' }).what, 'git diff main');
+  assert.equal(ask('execute', {}).ok, false);
 });
