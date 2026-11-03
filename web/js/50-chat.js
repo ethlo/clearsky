@@ -193,6 +193,7 @@ async function drawInfo(force) {
     drawTrim();
   }
   const d = infoData || {}, i = chat.info || {};
+  const fmtCredits = (n) => String(n >= 10 ? Math.round(n) : Math.round(n * 10) / 10);
   const k = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
   const perm = $('#cp-perm').value;
   const sandbox = d.sandboxed != null ? (d.sandboxed ? 'sandboxed' : 'not sandboxed') : perm === 'sandboxed' || d.sandbox ? 'sandboxed' : 'not sandboxed';
@@ -203,6 +204,8 @@ async function drawInfo(force) {
     ['Model', $('#cp-model').value.trim() || 'Copilot default'],
     ['Effort', $('#cp-effort').selectedOptions[0]?.textContent || 'Balanced'],
     u && ['Tokens', `in ${k(u.input)}${u.input ? ` (${Math.round(100 * u.cached / u.input)}% cached)` : ''} · out ${k(u.output)}${u.premium != null ? ` · ${u.premium} premium` : ''}`],
+    // AI credits so far, split like the line a finished chat puts on its PR and ticket.
+    d.credits && ['Credits', `${fmtCredits(d.credits.total)}${d.credits.parts.filter((p) => p.credits != null).length > 1 ? ` (${d.credits.parts.filter((p) => p.credits != null).map((p) => `${p.kind} ${fmtCredits(p.credits)}`).join(' · ')})` : ''}`],
     u?.context != null && ['Context', `${k(u.context)}${u.limit ? ` of ${k(u.limit)}` : ''}`],
     d.cwd && ['Folder', d.cwd],
     d.folders?.length && ['Can change', d.folders.join(', ')],
@@ -210,7 +213,7 @@ async function drawInfo(force) {
     d.github && ['GitHub', d.github],
     d.hosts && ['Hosts', `<details><summary>${d.hosts.length} allowed</summary>${d.hosts.map(esc).join(', ')}</details>`],
   ].filter(Boolean);
-  $('#cp-info').innerHTML = rows.map(([a, b]) => `<dt>${a}</dt><dd>${a === 'Hosts' ? b : esc(b)}</dd>`).join('');
+  $('#cp-info').innerHTML = rows.map(([a, b]) => `<dt>${a}</dt><dd>${a === 'Hosts' ? b : esc(b)}${a === 'Credits' && d.credits.line ? ` <button type="button" class="linkish" data-copy-text="${esc(d.credits.line)}" title="${esc(d.credits.line)}">Copy line</button>` : ''}</dd>`).join('');
   $('#cp-restart').disabled = !d.running;
   $('#cp-restart').hidden = $('#cp-close').hidden = !chat.turns;
 }
@@ -1239,3 +1242,11 @@ let tabsQueued = false;
 const tabsWatch = new MutationObserver(() => { if (!tabsQueued) { tabsQueued = true; queueMicrotask(() => { tabsQueued = false; syncTabs(); }); } });
 for (const p of document.querySelectorAll('.cp-pane')) tabsWatch.observe(p, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden'] });
 syncTabs();
+
+// A "Copy line" button: copies its text (the credits line, say), ready to paste.
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-copy-text]');
+  if (!b) return;
+  try { await navigator.clipboard.writeText(b.dataset.copyText); b.textContent = 'Copied'; } catch { b.textContent = 'Select and copy'; }
+  setTimeout(() => { b.textContent = 'Copy line'; }, 1500);
+});

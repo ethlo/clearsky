@@ -28,7 +28,7 @@ import { manifest as grafanaManifest, createGrafana, parseInstances, parseTokens
 import { cookieLogin } from '../lib/browser-login.mjs';
 import { redact } from '../lib/redact.mjs';
 import { vpnWatch, checkTarget } from '../lib/vpn.mjs';
-import { disclosureLine, DISCLOSE_HINT } from '../lib/disclosure.mjs';
+import { disclosureLine, disclosureFields, creditSplit, DISCLOSE_HINT } from '../lib/disclosure.mjs';
 import { parseReviewArgs, changeOf, reviewPrompt, writeBaseFiles, reviewDecision, USAGE as REVIEW_USAGE } from '../lib/review.mjs';
 import { buildMap, buildKind } from '../lib/map.mjs';
 import { serveBroker, brokerSocket } from '../lib/broker.mjs';
@@ -1520,8 +1520,10 @@ async function reviewRun({ key, argv, cwd, signal }, out, err) {
   signal?.addEventListener('abort', stop);
   const timer = setTimeout(stop, 20 * 6e4);
   const verdictOf = (t) => t.match(/VERDICT:\s*(ready|fix first)/i)?.[1]?.toLowerCase() || null;
+  let reviewer = null;
   try {
     const id = await agent.start(root);
+    reviewer = id;
     localState.setSessionName(stateFile, id, `Review: ${change.branch || 'change'} against ${change.base}`);
     sessionsCache = null;
     await agent.prompt(reviewPrompt({ goal: o.goal, ticket, change, baseDir, baseFiles }));
@@ -1534,7 +1536,7 @@ async function reviewRun({ key, argv, cwd, signal }, out, err) {
     }
     const findings = text.trim();
     const verdict = verdictOf(findings);
-    log('reviewed', { verdict, steps, ...tally });
+    log('reviewed', { verdict, steps, ...tally, session: reviewer });
     console.log(`clearsky: review ${verdict || 'no verdict'}, ${steps} steps, ${tally.allowed} allowed, ${tally.denied} denied`);
     if (!verdict && refused.length) {
       out(`${findings ? `${findings}\n\n` : ''}The review didn't finish. The reviewer kept asking for things outside what it may read (${[...new Set(refused)].slice(0, 3).join('; ')}). Run review again; if it happens again, tell the user.\n`);
@@ -1544,7 +1546,7 @@ async function reviewRun({ key, argv, cwd, signal }, out, err) {
     if (change.cut) err('(the diff was long, so the reviewer read the rest from the repo)\n');
     return 0;
   } catch (e) {
-    log('failed');
+    log('failed', { session: reviewer });
     err(`review: ${signal?.aborted ? 'stopped' : e.message}\n`);
     return 1;
   } finally {
@@ -1555,14 +1557,27 @@ async function reviewRun({ key, argv, cwd, signal }, out, err) {
   }
 }
 
+// What a chat's work cost, split the way a ticket records it: the chat itself (implementation)
+// and the reviewers it ran with `review` (code review), each from its own session log.
+function chatCredits(id, model = null) {
+  const home = join(homedir(), '.copilot');
+  const ok = (x) => /^[\w-]{8,64}$/.test(x || '');
+  const reviews = readWrites(agentLogFile, { chat: id, limit: 3000 }).filter((e) => e.where === 'review' && ok(e.session)).map((e) => e.session);
+  return creditSplit([
+    { kind: 'implementation', usage: ok(id) ? sessionUsage(home, id) : null, model },
+    ...[...new Set(reviews)].map((r) => ({ kind: 'code review', usage: sessionUsage(home, r), model: process.env.COPILOT_REVIEW_MODEL || null })),
+  ]);
+}
+
 // `usage` from a chat: the line for the end of its PR description (lib/disclosure.mjs), from
-// the chat's own session log. Only when you switched it on in Settings → Copilot.
-function usageRun({ key }) {
+// the chats' own session logs; `usage --fields` gives it as Jira field values too. Only when
+// you switched it on in Settings → Copilot.
+function usageRun({ key, argv = [] }) {
   const c = chatByKey(key);
   if (!c) return { code: 1, stdout: '', stderr: 'Clearsky: this chat is closed.\n' };
   if (process.env.COPILOT_DISCLOSE !== 'on') return { code: 1, stdout: '', stderr: 'Clearsky: saying what did the work is off (Settings → Copilot); leave the line out.\n' };
-  const u = c.id ? sessionUsage(join(homedir(), '.copilot'), c.id) : null;
-  return { code: 0, stdout: `${disclosureLine(u, c.model)}\n`, stderr: '' };
+  const split = chatCredits(c.id, c.model);
+  return { code: 0, stdout: `${argv.includes('--fields') ? disclosureFields(split) : disclosureLine(split)}\n`, stderr: '' };
 }
 
 // A question in a chat with Allow and Deny only (asked every time).
@@ -2601,6 +2616,8 @@ function serve() {
           folders: copilotFolders().map(tilde), read: list(process.env.COPILOT_READ).map(tilde),
           sandbox: process.env.COPILOT_SANDBOX === 'srt',
           usage: /^[\w-]{8,64}$/.test(id) ? sessionUsage(join(homedir(), '.copilot'), id) : null,
+          // What it cost so far, split like the line at the end of a PR (lib/disclosure.mjs).
+          credits: /^[\w-]{8,64}$/.test(id) ? (() => { const sp = chatCredits(id, c?.model); return sp.total != null ? { ...sp, line: disclosureLine(sp) } : null; })() : null,
           // When it last did anything (its log's time), and what it's about: for "start fresh".
           lastAt: /^[\w-]{8,64}$/.test(id) ? (() => { try { return statSync(join(homedir(), '.copilot', 'session-state', id, 'events.jsonl')).mtimeMs; } catch { return null; } })() : null,
           refs: localState.sessionRefs(stateFile)[id] || [],
