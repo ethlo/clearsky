@@ -643,3 +643,10 @@ document.addEventListener('keydown', (e) => {
   $('#list-q').focus();
   $('#list-q').select();
 });
+// On an item's page, E and H do what they do on its row: Done (and back) and Snooze.
+document.addEventListener('keydown', (e) => {
+  if ($('#v-item').hidden || e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.('input, textarea, select, [contenteditable]') || !menu.hidden) return;
+  const k = e.key.toLowerCase();
+  if (k === 'e') { const b = $('#it-acts [data-done]'); if (b) { e.preventDefault(); b.click(); } }
+  else if (k === 'h') { const b = $('#it-acts [data-mute]'); if (b) { e.preventDefault(); openMuteMenu(b); } }
+});

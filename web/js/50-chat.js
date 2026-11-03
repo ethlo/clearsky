@@ -623,7 +623,12 @@ function renderAnswer(segs, running = false) {
     }
     if (g.type === 'text') return md(g.text);
     if (g.type === 'tool' && resumed && g.status === 'failed' && (!g.title || g.title === 'Tool')) return '';
-    if (g.type === 'tool') return `<div class="tool s-${esc(g.status || 'pending')}">${stamp(g.start || g.at)}<span>${icon('tool', 13)}</span>${esc(g.title || 'Tool')}<i>${esc((g.status || '').replace('_', ' '))}${g.end && g.start ? ` · ${took(g.start, g.end)}` : ''}</i></div>`.replace(' · </i>', '</i>');
+    if (g.type === 'tool') {
+      // A finished step is a quiet check; only failed, stopped or running ones say so in words.
+      const done = g.status === 'completed';
+      const said = [done ? '' : (g.status || '').replace('_', ' '), g.end && g.start ? took(g.start, g.end) : ''].filter(Boolean).join(' · ');
+      return `<div class="tool s-${esc(g.status || 'pending')}">${stamp(g.start || g.at)}<span>${icon('tool', 13)}</span>${esc(g.title || 'Tool')}<i>${done ? '<b>✓</b>' : ''}${esc(said)}</i></div>`;
+    }
     if (g.type === 'permission') {
       return `<div class="perm"><div class="perm-t">${stamp(g.at)}${esc(g.title)}</div>${g.detail ? `<code>${esc(g.detail)}</code>` : ''}
         ${g.advice ? `<div class="perm-a a-${g.advice.level === 'fine' ? 'fine' : 'check'}" title="Clearsky's advice, from GitHub's and Jira's facts (not from PR or ticket text). You decide.">${esc(g.advice.text)}</div>` : ''}

@@ -86,8 +86,10 @@ async function renderItem() {
       : it.data?.own?.readOid ? `<button class="icon-btn" data-own-read="${esc(it.url)}" data-oid="" title="You marked it read; mark it not read">Mark not read</button>` : ''}
     ${it.kind === 'pr' && !prClosed.has(it.pr) ? `<button class="icon-btn" data-rv-open="${esc(it.data.repo)}#${it.data.number}">${icon('users', 14)} Request review</button>` : ''}
     ${refFromUrl(it.url) ? `<button class="icon-btn" data-ask="${esc(it.url)}" data-title="${esc(it.title)}">${icon('spark', 14)} Copilot on this</button>` : ''}
-    ${it.kind === 'linked' ? '' : `<button class="icon-btn" data-mute="${esc(it.k)}">${MUTE_ICON} Snooze</button>
-    <button class="icon-btn" data-done="${esc(it.k)}" data-stamp="${esc(it.stamp ?? '')}" data-back-after>${DONE_ICON} Done</button>`}</div>`;
+</div>`;
+  // Snooze and Done sit in the header, where the list's row actions are too.
+  $('#it-acts').innerHTML = it.kind === 'linked' ? '' : `<button class="icon-btn small" data-mute="${esc(it.k)}" title="Snooze (H)">${MUTE_ICON} Snooze</button>
+    <button class="icon-btn small" data-done="${esc(it.k)}" data-stamp="${esc(it.stamp ?? '')}" data-back-after title="Done: hide until there's something new (E)">${DONE_ICON} Done</button>`;
   const cps = sessions.length ? `<h3>Copilot on this</h3><div class="cps">${sessions.map(chip).join('')}</div>` : '';
   const quote = it.quote ? `<h3>${it.src === 'Slack' ? 'Message' : 'Latest mention'}</h3><div class="quote">${esc(it.quote)}</div>` : '';
   const ref = it.pr ? { pr: it.pr } : it.issue ? { issue: it.issue } : null;
@@ -108,7 +110,8 @@ async function renderItem() {
   if (ref.pr) {
     notePrState(ref.pr, d);
     const [label, tone] = prState(d);
-    facts = `<span class="${{ green: 'good', red: 'bad' }[tone] || ''}">${label}</span><span>${esc(d.author)}</span><span>+${d.size.additions} −${d.size.deletions} in ${d.size.files} files</span><span>updated ${esc(ago(d.updatedAt))}</span>`;
+    // The status and when it changed are in the lines above; here, who wrote it and how big it is.
+    facts = `${tone === 'red' && !standsHtml(it, rel) ? `<span class="bad">${label}</span>` : ''}<span>by ${esc(d.author)}</span><span>+${d.size.additions} −${d.size.deletions} in ${d.size.files} files</span>`;
   } else {
     ticketInfo.set(ref.issue, { ...ticketInfo.get(ref.issue), ...d });
     facts = `${d.type ? `<span>${esc(d.type)}</span>` : ''}<span>${d.assignee ? `Assignee: ${esc(d.assignee)}` : 'Unassigned'}</span><span>${esc(fixText(d))}</span>${d.priority ? `<span>${esc(d.priority)} priority</span>` : ''}${d.reporter ? `<span>Reporter: ${esc(d.reporter)}</span>` : ''}`;
@@ -247,7 +250,7 @@ async function renderMap() {
   el.innerHTML = skeleton(4);
   let d;
   try { d = await getJson('/api/copilot/map'); } catch (e) { el.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
-  el.innerHTML = d.chats.length ? `<div class="map-key">In order, oldest first. <span class="act good">green</span> passed or ready, <span class="act bad">red</span> failed, <span class="act warn">amber</span> went through after you allowed it. Hover a step for its command and time.</div>${d.chats.map((ch) => mapChat(ch, d.jira)).join('')}`
+  el.innerHTML = d.chats.length ? `${d.chats.map((ch) => mapChat(ch, d.jira)).join('')}`
     : '<div class="empty">Nothing yet. As Copilot builds, tests, reviews, pushes, comments and moves tickets from its sandbox, each chat\'s map shows here.</div>';
 }
 
@@ -517,8 +520,8 @@ function renderStandup() {
   }
   // What to say, in a few sentences (Copilot writes it from the lists below; Generate asks it).
   const say = `<section class="card su-card su-say"><h2>Say this</h2>
-    <div id="su-say">${sayData?.text ? sayHtml(sayData.text) : sayData?.error ? `<div class="err">${esc(sayData.error)}</div>` : sayData?.loading ? skeleton(3) : '<p class="muted">A few sentences to say, grouped by what the work is for, written by Copilot from the lists below.</p>'}</div>
-    <div class="acts-row"><button class="icon-btn${sayData?.text ? '' : ' primary'}" data-say="${sayData?.text ? 'refresh' : 'go'}" ${sayData?.loading ? 'disabled' : ''}>${sayData?.text ? 'Write it again' : 'Write it'}</button>${sayData?.text ? '<button class="icon-btn" data-say="copy">Copy</button>' : ''}</div></section>`;
+    <div id="su-say">${sayData?.text ? sayHtml(sayData.text) : sayData?.error ? `<div class="err">${esc(sayData.error)}</div>` : sayData?.loading ? skeleton(3) : ''}</div>
+    <div class="acts-row"><button class="icon-btn${sayData?.text ? '' : ' primary'}" data-say="${sayData?.text ? 'refresh' : 'go'}" ${sayData?.loading ? 'disabled' : ''} title="Copilot writes a few sentences from the lists below, grouped by what the work is for">${icon('spark', 14)} ${sayData?.text ? 'Write it again' : 'Write it with Copilot'}</button>${sayData?.text ? '<button class="icon-btn" data-say="copy">Copy</button>' : ''}</div></section>`;
   $('#su-body').innerHTML = say + (errs.length ? `<div class="err">${esc(errs.join(' · '))}</div>` : '') + sections.map((sec) =>
     `<section class="card su-card"><h2>${esc(sec.title)}</h2><ul>${sec.items.map((i) => `<li>${linkify(i, s.jiraBase)}</li>`).join('')}</ul></section>`).join('');
 }

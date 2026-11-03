@@ -67,7 +67,7 @@
 
   <!-- One item in full: a PR, a ticket, a mention, a school message. -->
   <section class="view" id="v-item" hidden>
-    <header class="vh"><button class="back" data-back title="Back (Esc)" aria-label="Back"><span data-i="back"></span></button><span class="sub" id="it-crumb"></span><span class="spacer"></span><button class="nowline" data-nowline></button></header>
+    <header class="vh"><button class="back" data-back title="Back (Esc)" aria-label="Back"><span data-i="back"></span></button><span class="sub" id="it-crumb"></span><span class="spacer"></span><span class="vh-acts" id="it-acts"></span></header>
     <div class="view-b"><div class="item" id="item"></div></div>
   </section>
 
@@ -77,13 +77,13 @@
   </section>
 
   <section class="view" id="v-standup" hidden>
-    <header class="vh"><h1>Stand-up</h1><span class="sub" id="su-sub"></span><span class="spacer"></span><button class="icon-btn primary" id="copy">Copy for Slack</button></header>
+    <header class="vh"><h1>Stand-up</h1><span class="sub" id="su-sub"></span><span class="spacer"></span><button class="icon-btn" id="copy">Copy for Slack</button></header>
     <div class="view-b"><div class="page su" id="su-body"></div></div>
   </section>
 
   <!-- A source on its own page, such as School. -->
   <section class="view" id="v-changes" hidden>
-    <header class="vh"><h1>Copilot's changes</h1><span class="sub">what it changed as you on GitHub and Jira, and what it read in Grafana, from its sandbox</span><span class="spacer"></span></header>
+    <header class="vh"><h1 title="What Copilot changed as you on GitHub and Jira, and what it read in Grafana, from its sandbox">Copilot's changes</h1><span class="spacer"></span></header>
     <div class="view-b"><div id="changes"></div></div>
   </section>
   <div class="fview" id="fview" hidden><div class="fv-box"><header><b id="fv-name"></b><span class="spacer"></span><span class="fv-tabs" id="fv-tabs" hidden><button type="button" data-fv-tab="diff">Changes</button><button type="button" data-fv-tab="file">File</button></span><a id="fv-code" title="Open in VS Code">VS Code</a><a id="fv-open" target="_blank" rel="noopener">Raw</a><button type="button" id="fv-close" aria-label="Close">✕</button></header><div id="fv-body"></div></div></div>
@@ -98,7 +98,7 @@
       <div id="links" class="links"></div></div>
   </section>
   <section class="view" id="v-map" hidden>
-    <header class="vh"><h1>Agent map</h1><span class="sub">per chat: every repo, ticket and environment it worked on, and what it did there</span><span class="spacer"></span></header>
+    <header class="vh"><h1 title="Per chat, oldest first: every repo, ticket and environment Copilot worked on, and what it did there. Green passed or ready, red failed, amber went through after you allowed it. Hover a step for its command and time.">Agent map</h1><span class="spacer"></span></header>
     <div class="view-b"><div id="map"></div></div>
   </section>
   <section class="view" id="v-notes" hidden>
