@@ -651,7 +651,11 @@ async function openSession(id, cwd) {
   detach();
   const view = chat.view;
   chat.session = id; chat.turns = 1; // the list shows it as picked while it loads
-  drawTabs();
+  // Nothing of the chat you were on carries over while this one loads (a real session can
+  // take seconds): its own name if we know it, and an empty side pane.
+  chat.title = recentChats.find((r) => r.id === id)?.title || (cpLinks.live || []).find((x) => x.id === id)?.title || null;
+  chat.items = []; chat.cwd = cwd || null;
+  chatSub();
   showHistory(false);
   $('#chat-log').innerHTML = '<span class="typing">Opening session</span>';
   try {
