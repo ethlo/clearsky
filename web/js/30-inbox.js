@@ -148,12 +148,12 @@ function nextStep(it, rel = relatedItems(it, xrefAll.length ? xrefAll : inboxIte
   const feature = hasSkill('feature-delivery') ? 'feature-delivery' : cont;
   if (chats.some((c) => c.status === 'working')) return { label: 'Copilot is working on it', wait: true };
   if (chats.length) return { label: `Continue the Copilot chat${did ? `: it ${did}` : ''}`, run: 'copilot', skill: cont || feature, prompt: '' };
-  return { label: it.glyph === 'prog' ? 'Pick it up in Copilot: branch, code and PR' : 'Start it in Copilot: branch, code and PR', run: 'copilot', skill: feature, prompt: '' };
+  return { label: it.glyph === 'prog' ? 'Pick it up in Copilot' : 'Start it in Copilot', tip: 'Copilot makes the branch, writes the code and opens the PR', run: 'copilot', skill: feature, prompt: '' };
 }
 function nextHtml(it, n = nextStep(it)) {
   if (!n) return '';
   return n.wait ? `<span class="next wait">${icon('wait', 13)} ${esc(n.label)}</span>`
-    : `<button class="next" data-next="${esc(it.k)}" title="${n.run === 'merge' ? `Merge ${esc(n.repo)}#${esc(n.number)} on GitHub` : `Next step: ${esc(n.label)}`}">→ ${esc(n.label)}</button>${n.run === 'merge' && n.url ? `<a class="next-ext" href="${esc(n.url)}" target="_blank" rel="noopener" title="Open on GitHub" aria-label="Open on GitHub">↗</a>` : ''}`;
+    : `<button class="next" data-next="${esc(it.k)}" title="${n.run === 'merge' ? `Merge ${esc(n.repo)}#${esc(n.number)} on GitHub` : esc(n.tip || `Next step: ${n.label}`)}">→ ${esc(n.label)}</button>${n.run === 'merge' && n.url ? `<a class="next-ext" href="${esc(n.url)}" target="_blank" rel="noopener" title="Open on GitHub" aria-label="Open on GitHub">↗</a>` : ''}`;
 }
 // Merging your PR from its next-step button: asks first, then says how it went in place.
 async function mergePr(n, btn) {
