@@ -28,4 +28,7 @@ test('the session log gives the models and the credits', () => {
   assert.deepEqual(u.models, ['claude-opus-5.5']);
   assert.equal(disclosureLine(u), 'Implemented with Copilot (Claude Opus 5.5). 939 credits used.');
   assert.equal(needs('usage', []), 'run', 'it only reads');
+  const now = [1, 2].map((i) => JSON.stringify({ type: 'session.usage_record', data: { usage: { model: 'claude-opus-5.5', modelDisplayName: 'Claude Opus 5.5', inputTokens: 1, outputTokens: 1,
+    copilotUsage: { totalNanoAiu: 469.5e9 }, accounting: { usageId: `u${i}` } } } })).join('\n');
+  assert.equal(disclosureLine(parseUsage(now)), 'Implemented with Copilot (Claude Opus 5.5). 939 credits used.', 'AI credits, summed over the calls');
 });
