@@ -91,7 +91,9 @@ async function renderItem() {
   $('#it-acts').innerHTML = it.kind === 'linked' ? '' : `<button class="icon-btn small" data-mute="${esc(it.k)}" title="Snooze (H)">${MUTE_ICON} Snooze</button>
     <button class="icon-btn small" data-done="${esc(it.k)}" data-stamp="${esc(it.stamp ?? '')}" data-back-after title="Done: hide until there's something new (E)">${DONE_ICON} Done</button>`;
   const cps = sessions.length ? `<h3>Copilot on this</h3><div class="cps">${sessions.map(chip).join('')}</div>` : '';
-  const quote = it.quote ? `<h3>${it.src === 'Slack' ? 'Message' : 'Latest mention'}</h3><div class="quote">${esc(it.quote)}</div>` : '';
+  // A Jira comment comes as HTML the server built from Jira's own format (lib/jira-rich.mjs).
+  const quote = it.quoteHtml ? `<h3>Latest mention</h3><div class="quote desc rich">${it.quoteHtml}</div>`
+    : it.quote ? `<h3>${it.src === 'Slack' ? 'Message' : 'Latest mention'}</h3><div class="quote">${esc(it.quote)}</div>` : '';
   const ref = it.pr ? { pr: it.pr } : it.issue ? { issue: it.issue } : null;
   let facts = '', body = ref ? `<h3>Details</h3>${skeleton(2)}` : '';
   const draw = () => {
@@ -116,7 +118,10 @@ async function renderItem() {
     ticketInfo.set(ref.issue, { ...ticketInfo.get(ref.issue), ...d });
     facts = `${d.type ? `<span>${esc(d.type)}</span>` : ''}<span>${d.assignee ? `Assignee: ${esc(d.assignee)}` : 'Unassigned'}</span><span>${esc(fixText(d))}</span>${d.priority ? `<span>${esc(d.priority)} priority</span>` : ''}${d.reporter ? `<span>Reporter: ${esc(d.reporter)}</span>` : ''}`;
   }
-  body = d.description ? `<h3>Description</h3><div class="desc">${esc(d.description)}</div>` : '';
+  // A ticket's description comes as HTML the server built from Jira's own format (every tag its
+  // own, text escaped); a PR's is plain text.
+  body = d.descriptionHtml ? `<h3>Description</h3><div class="desc rich">${d.descriptionHtml}</div>`
+    : d.description ? `<h3>Description</h3><div class="desc">${esc(d.description)}</div>` : '';
   draw();
 }
 // Ask people to review your PR: a list of everyone who can, GitHub's suggestions first, with
