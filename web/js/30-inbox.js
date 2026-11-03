@@ -505,13 +505,14 @@ document.addEventListener('visibilitychange', backFromGitHub);
 function itemRow(it, i) {
   const [lt, tone] = it.label || [];
   const fresh = it.kind !== 'session' && isNew(it.k, it.stamp);
-  const chips = it.url ? (cpLinks.links[itemKey(it.url)] || []).slice(0, 1).map(chip).join('') : '';
+  const chips = it.url ? (cpLinks.links[itemKey(it.url)] || []).slice(0, 1).map((x) => chip(x, !WORK_COLS[listView])).join('') : '';
   const acts = it.kind === 'session' ? '' : `<span class="ra">${refFromUrl(it.url) ? `<button class="ask" data-ask="${esc(it.url)}" data-title="${esc(it.title)}" title="Copilot on this (A)" aria-label="Copilot on this">✦</button>` : ''}
     <button data-mute="${esc(it.k)}" title="Snooze (H)" aria-label="Snooze">${MUTE_ICON}</button>
     <button data-done="${esc(it.k)}" data-stamp="${esc(it.stamp ?? '')}" title="Done: hide until there's something new (E)" aria-label="Done">${DONE_ICON}</button></span>`;
   const rel = it.kind === 'session' ? [] : relatedItems(it, xrefAll);
   if (WORK_COLS[listView]) return tableRow(it, i, rel, chips, acts, fresh);
-  const xrefs = rel.slice(0, 3).map((x) => xrefChip(x, !it.pr)).join('');
+  // One related ticket or PR at most, and not one the title already names; the rest is on its page.
+  const xrefs = rel.filter((x) => !(it.title || '').includes(x.issue || x.ref)).slice(0, 1).map((x) => xrefChip(x, !it.pr)).join('');
   return `<li class="r${it.group === 'waiting' ? ' quiet' : ''}${it.k === selK ? ' sel' : ''}" data-i="${i}" tabindex="-1">
     ${fresh ? '<span class="new-dot" title="New since you last looked" aria-label="New"></span>' : ''}<span class="st ${esc(it.glyph)}"></span>
     <span class="id"${refAttrs(it)}>${esc(it.ref || '')}</span>
