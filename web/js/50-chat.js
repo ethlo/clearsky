@@ -199,6 +199,7 @@ async function drawInfo(force) {
   const u = d.usage;
   const rows = [
     ['Mode', `${i.permissions?.[perm] || perm} · ${sandbox}`],
+    chat.turns && ['Turns', String(chat.turns)],
     ['Model', $('#cp-model').value.trim() || 'Copilot default'],
     ['Effort', $('#cp-effort').selectedOptions[0]?.textContent || 'Balanced'],
     u && ['Tokens', `in ${k(u.input)}${u.input ? ` (${Math.round(100 * u.cached / u.input)}% cached)` : ''} · out ${k(u.output)}${u.premium != null ? ` · ${u.premium} premium` : ''}`],
@@ -211,7 +212,7 @@ async function drawInfo(force) {
   ].filter(Boolean);
   $('#cp-info').innerHTML = rows.map(([a, b]) => `<dt>${a}</dt><dd>${a === 'Hosts' ? b : esc(b)}</dd>`).join('');
   $('#cp-restart').disabled = !d.running;
-  $('.cp-acts').hidden = !chat.turns;
+  $('#cp-restart').hidden = $('#cp-close').hidden = !chat.turns;
 }
 
 // This chat's VM (`vm <command>`): what Copilot has running in it, what it can reach, and its log.
@@ -472,7 +473,10 @@ function chatSub() {
   drawOutputs();
   if (!$('#chat-title input')) $('#chat-title').textContent = chat.title || (chat.turns ? 'Copilot session' : 'New chat');
   const i = chat.info;
-  $('#chat-sub').textContent = !i ? '' : !i.available ? 'Copilot CLI not found' : `${i.permissions[$('#cp-perm').value] || ''}${chat.turns ? ` · ${chat.turns} turn${chat.turns > 1 ? 's' : ''}` : ''}`;
+  // The header keeps to the title; mode and turns are in the composer and under This chat.
+  $('#chat-sub').textContent = i && !i.available ? 'Copilot CLI not found' : '';
+  const hint = i?.permissionHints?.[$('#cp-perm').value];
+  $('#cp-perm').title = hint ? `What Copilot may do without asking: ${hint}` : 'What Copilot may do without asking';
 }
 
 const jiraBaseGuess = () => standupData?.jiraBase || (state.jira?.assigned?.[0]?.url || '').replace(/\/browse\/.*$/, '') || '';
@@ -578,7 +582,7 @@ async function loadCopilotInfo() {
   const i = chat.info;
   $('#cp-models').innerHTML = (i.models || []).map((m) => `<option value="${esc(m)}">`).join('');
   $('#cp-effort').innerHTML = `<option value="">Balanced</option>${(i.efforts || []).map((e) => `<option>${esc(e)}</option>`).join('')}`;
-  $('#cp-perm').innerHTML = Object.entries(i.permissions || {}).map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join('');
+  $('#cp-perm').innerHTML = Object.entries(i.permissions || {}).map(([k, l]) => `<option value="${k}" title="${esc(i.permissionHints?.[k] || '')}">${esc(l)}</option>`).join('');
   pickDefaults();
   $('#cp-skills').innerHTML = (i.skills || []).map((sk) =>
     `<button class="chip" data-skill="${esc(sk.name)}" title="${esc(sk.description)}">${esc(sk.name)}</button>`).join('');
