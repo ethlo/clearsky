@@ -539,7 +539,6 @@ export function standupText(s) {
   const y = s.yesterday, t = s.today;
   const line = (x) => out.push(`- ${x}`);
   out.push(`*Yesterday* (since ${s.sinceLabel})`);
-  y.github.merged?.forEach((p) => line(`Merged ${p.repo}#${p.number}: ${p.title}`));
   y.jira.done?.forEach((i) => line(`Finished ${i.key}: ${i.summary}`));
   y.github.opened?.forEach((p) => line(`Opened ${p.draft ? 'draft ' : ''}${p.repo}#${p.number}: ${p.title}`));
   y.github.reviewed?.forEach((p) => line(`Reviewed ${p.repo}#${p.number} by ${p.author} (${verdictText[p.verdict] || p.verdict})`));
@@ -549,6 +548,13 @@ export function standupText(s) {
   s.extra?.forEach((x) => x.yesterday.forEach((t) => line(`${x.label}: ${t}`)));
   y.copilot?.sessions?.forEach((x) => line(`With Copilot: ${x.ticket && !String(x.title || '').includes(x.ticket) ? `${x.ticket} ` : ''}${x.title} (${x.repo.split('/')[1]}${x.branch && !/^(main|master)$/.test(x.branch) ? `, ${x.branch}` : ''})`));
   if (out.length === 1) line('Nothing recorded on GitHub, Jira or Copilot.');
+  // What testers can pick up (merged since the last stand-up) and what's still in review.
+  const merged = y.github.merged || [], inReview = t.inReview || [];
+  if (merged.length || inReview.length) {
+    out.push('', '*Merged and in review*');
+    merged.forEach((p) => line(`Merged, ready to test: ${p.repo}#${p.number} ${p.title}`));
+    inReview.forEach((p) => line(`In review: ${p.repo}#${p.number} ${p.title} (${p.approvals?.length ? 'approved, not merged yet' : p.pendingReviewers?.length ? `waiting for ${p.pendingReviewers.join(', ')}` : String(p.status?.label || 'waiting').toLowerCase()})`));
+  }
   out.push('', '*Today*');
   const before = out.length;
   t.inProgress.forEach((i) => line(`Continue ${i.key}: ${i.summary}`));
@@ -570,7 +576,8 @@ const SAY_PROMPT = `This is my stand-up, as a list from my GitHub, Jira and Copi
 first person, spoken and plain, 4 to 7 short sentences in three short paragraphs (yesterday, today, blockers).
 Group the work by what it's for (the feature or problem), not ticket by ticket; name a ticket key only when it helps
 people find it, and leave out repo names, PR numbers and statuses unless they matter (say "it's in review" rather
-than a status). Don't invent anything that isn't in the list. If there are no blockers, say so in a few words.
+than a status). Say plainly what is merged and ready to test, and what is still in review, since testers listen for that.
+Don't invent anything that isn't in the list. If there are no blockers, say so in a few words.
 Answer with the text only, no headings or bullets.
 
 `;
@@ -630,6 +637,8 @@ export async function standup(work, since = previousStandup()) {
     inProgress: (w.jira.assigned || []).filter((i) => i.statusCategory === 'indeterminate').slice(0, 5),
     reviews: w.github.reviewRequested || [],
     myPrs: (w.github.myPrs || []).filter((p) => p.status.owner === 'me' && !p.draft),
+    // Out for review, waiting on others: not merged, so not ready to test yet.
+    inReview: (w.github.myPrs || []).filter((p) => p.status.owner !== 'me' && !p.draft),
     meetings: (w.plan?.agenda || []).filter((e) => sameDay(new Date(e.start), new Date()) && e.title !== 'Stand-up'),
   };
   const days = (iso) => (Date.now() - Date.parse(iso)) / 864e5;

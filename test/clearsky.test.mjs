@@ -172,7 +172,7 @@ test('stand-up: yesterday from GitHub and Jira, today from the queue', async () 
   assert.deepEqual(s.yesterday.github.reviewed.map((p) => [p.number, p.verdict]), [[8, 'APPROVED']]);
   assert.deepEqual(s.yesterday.github.commits, [{ repo: 'acme/api', count: 3 }], 'my recent commits on my PRs');
   assert.deepEqual(s.yesterday.jira.touched.map((i) => i.key), ['OPS-9']);
-  assert.match(s.text, /Merged acme\/api#5: Shipped thing/);
+  assert.match(s.text, /\*Merged and in review\*\n- Merged, ready to test: acme\/api#5 Shipped thing/);
   assert.match(s.text, /Reviewed acme\/web#8 by anna \(approved\)/);
   assert.match(s.text, /Worked on OPS-9: Pager rotation \(In Review\)/);
   assert.match(s.text, /\*Today\*\n- Continue OPS-1: Rotate certs/);
