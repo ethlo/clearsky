@@ -147,13 +147,26 @@
         </form>
       </div>
       <aside class="cp-side">
-        <div class="chat-ctx" id="chat-ctx" hidden></div>
-        <div class="vm" id="cp-vm" hidden></div>
-        <div id="cp-out" hidden></div>
-        <div id="cp-map" hidden></div>
-        <div id="cp-changes" hidden></div>
-        <div><h4>Skills</h4><div class="chat-skills" id="cp-skills"></div></div>
-        <div><h4>This chat</h4><dl class="cp-info" id="cp-info"></dl></div>
+        <!-- One part at a time: what it's about, what it made, what it did, and how it runs. -->
+        <nav class="cp-tabs" id="cp-tabs" role="tablist" aria-label="About this chat">
+          <button type="button" role="tab" data-pane="about">About</button>
+          <button type="button" role="tab" data-pane="out">Outputs</button>
+          <button type="button" role="tab" data-pane="act">Activity</button>
+          <button type="button" role="tab" data-pane="cfg">Chat</button>
+        </nav>
+        <div class="cp-pane" data-pane="about" role="tabpanel">
+          <div class="chat-ctx" id="chat-ctx" hidden></div>
+          <div class="vm" id="cp-vm" hidden></div>
+        </div>
+        <div class="cp-pane" data-pane="out" role="tabpanel"><div id="cp-out" hidden></div></div>
+        <div class="cp-pane" data-pane="act" role="tabpanel">
+          <div id="cp-map" hidden></div>
+          <div id="cp-changes" hidden></div>
+        </div>
+        <div class="cp-pane" data-pane="cfg" role="tabpanel">
+          <div><h4>This chat</h4><dl class="cp-info" id="cp-info"></dl></div>
+          <div><h4>Skills</h4><div class="chat-skills" id="cp-skills"></div></div>
+        </div>
       </aside>
       <div class="chat-hist" id="chat-hist" hidden>
         <div class="chat-hist-h">

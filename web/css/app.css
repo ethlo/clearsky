@@ -841,3 +841,13 @@ time.at { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nu
 .r .t .step { font-size: 12.5px; }
 .r .id { font-size: 11px; opacity: .85; }
 .cp-chip.mini { padding: 1px 4px; gap: 4px; font-size: 11px; color: var(--muted); background: none; border-color: transparent; }
+
+/* The chat's side pane: tabs, one part at a time. */
+.cp-side { padding-top: 0; }
+.cp-tabs { display: flex; gap: 2px; margin: 0 -16px; padding: 0 12px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--surface); z-index: 1; flex: none; }
+.cp-tabs button { border: 0; background: none; color: var(--muted); font-size: 12.5px; font-weight: 550; padding: 11px 6px 10px; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.cp-tabs button:hover { color: var(--text); }
+.cp-tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+.cp-tabs button b { font-weight: 500; color: var(--muted); font-size: 11.5px; margin-left: 2px; }
+.cp-pane { display: flex; flex-direction: column; gap: 16px; }
+.cp-pane[hidden] { display: none; }
