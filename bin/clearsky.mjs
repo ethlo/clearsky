@@ -28,6 +28,7 @@ import { manifest as grafanaManifest, createGrafana, parseInstances, parseTokens
 import { cookieLogin } from '../lib/browser-login.mjs';
 import { redact } from '../lib/redact.mjs';
 import { vpnWatch, checkTarget } from '../lib/vpn.mjs';
+import { checkFolder } from '../lib/chat-folders.mjs';
 import { disclosureLine, disclosureFields, creditSplit, DISCLOSE_HINT } from '../lib/disclosure.mjs';
 import { parseReviewArgs, changeOf, reviewPrompt, writeBaseFiles, reviewDecision, USAGE as REVIEW_USAGE } from '../lib/review.mjs';
 import { buildMap, buildKind } from '../lib/map.mjs';
@@ -1046,14 +1047,17 @@ const SANDBOX_GIT = [['url.https://github.com/.insteadOf', 'git@github.com:'], [
   ['credential.https://github.com.helper', '']];
 // What the sandbox may read besides your folders: Settings → Copilot → Also readable, and
 // Clearsky's own folder (its acli for the sandbox).
-const sandboxOpts = (cwd) => ({ cwd, folders: [...copilotFolders(), copilotTmp()], home: homedir(), read: [...list(process.env.COPILOT_READ), join(here, '..')] });
+// Folders added to one chat in its side panel (lib/chat-folders.mjs), as absolute paths.
+const folderNotes = new Map(); // chat → what to tell its Copilot about a folder you added
+const chatFolders = (id) => (id ? (localState.sessionFolders(stateFile)[id] || []).filter(isDir) : []);
+const sandboxOpts = (cwd, extra = []) => ({ cwd, folders: [...copilotFolders(), ...extra, copilotTmp()], home: homedir(), read: [...list(process.env.COPILOT_READ), join(here, '..')] });
 let broker = null;
 function ghToken() {
   try { return execFileSync('gh', ['auth', 'token'], { timeout: 10_000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null; } catch { return null; }
 }
 // Start Copilot, inside the sandbox (srt, run by Clearsky itself) when the mode or Settings →
 // Copilot says so.
-async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBOX === 'srt' } = {}) {
+async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBOX === 'srt', folders = [] } = {}) {
   if (!sandbox) return new AcpAgent(bin, args, { env: copilotEnv() });
   // In Clearsky's container, the container is the sandbox: Copilot sees only what's mounted
   // (git already goes over https there). The network isn't limited to COPILOT_DOMAINS, though.
@@ -1092,7 +1096,7 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
     env.PATH = `${join(here, '..', 'scripts', 'sandbox-bin')}${delimiter}${env.PATH}`;
   }
   // Copilot's built-in GitHub tools would change GitHub past the gate: off.
-  const s = await sandboxedCommand(bin, [...args, '--disable-builtin-mcps', '--acp'], { ...sandboxOpts(cwd), domains, maven, github, ca: sandboxCa(keep),
+  const s = await sandboxedCommand(bin, [...args, '--disable-builtin-mcps', '--acp'], { ...sandboxOpts(cwd, folders), domains, maven, github, ca: sandboxCa(keep),
     // Read only, so the proxy reads them: CI logs (with GitHub on), Docker Hub (with the VM).
     inspect: [...(github ? GITHUB_LOG_HOSTS : []), ...(vmSupport().ok ? REGISTRY_HOSTS : [])] },
     { filterRequest: githubFilter(githubAsk, { told: githubTold, look: githubLook, scope: githubScope }) });
@@ -1296,7 +1300,7 @@ function cloneDirs(repo) {
   const r = repo?.toLowerCase(), out = [];
   const sub = (d) => { try { return readdirSync(d, { withFileTypes: true }).filter((e) => e.isDirectory() && !e.name.startsWith('.')).map((e) => join(d, e.name)); } catch { return []; } };
   const clones = (root) => (existsSync(join(root, '.git')) ? [root] : sub(root).flatMap((d) => (existsSync(join(d, '.git')) ? [d] : sub(d).slice(0, 50))).slice(0, 300));
-  const roots = [...[...acpChats.values()].filter((c) => c.busy).map((c) => c.cwd), ...copilotFolders().map((d) => d.replace(/^~(?=\/|$)/, homedir()))];
+  const roots = [...[...acpChats.values()].filter((c) => c.busy).flatMap((c) => [c.cwd, ...chatFolders(c.id)]), ...copilotFolders().map((d) => d.replace(/^~(?=\/|$)/, homedir()))];
   for (const root of new Set(roots)) for (const d of clones(root)) if ((gitRepos(d) || []).includes(r)) out.push(d);
   return [...new Set(out)];
 }
@@ -1403,7 +1407,7 @@ function chatJira(c) {
 const chatByKey = (key) => typeof key === 'string' && key ? [...acpChats.values()].find((c) => c.agent.brokerKey === key) : null;
 function brokerWhere(key) {
   const c = chatByKey(key);
-  return c && [c.cwd, ...copilotFolders().map((d) => d.replace(/^~(?=\/|$)/, homedir()))];
+  return c && [c.cwd, ...copilotFolders().map((d) => d.replace(/^~(?=\/|$)/, homedir())), ...chatFolders(c.id)];
 }
 // Ask in the chat, as for any step Copilot wants to take, and wait for your answer.
 function brokerAsk({ key, tool, argv, cwd, vm = false }) {
@@ -1974,7 +1978,9 @@ function noteBuild(c, u) {
 
 async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, scope = [] }) {
   // Changing the folders in Settings starts the chat's Copilot again (resuming it) on its next turn.
-  const args = [...copilot.optionArgs(options), ...copilot.folderArgs([...copilotFolders(), copilotTmp()])];
+  // Changing a chat's own folders (its side panel) does the same.
+  const extra = chatFolders(chat);
+  const args = [...copilot.optionArgs(options), ...copilot.folderArgs([...copilotFolders(), ...extra, copilotTmp()])];
   // Sandboxed mode always runs in srt; the others when Settings → Copilot → Sandbox says so.
   const sandbox = !!copilot.PERMISSIONS[options.permission]?.sandbox || process.env.COPILOT_SANDBOX === 'srt';
   const sig = JSON.stringify([args, sandbox, process.env.COPILOT_DOMAINS, process.env.COPILOT_FOLDERS]);
@@ -1983,7 +1989,7 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, s
   let keep = {};
   if (c && (c.sig !== sig || c.agent.closed)) { resumeId = c.agent.sessionId; keep = { vm: c.vm, repos: c.repos, jira: c.jira, tickets: c.tickets }; c.agent.close(); acpChats.delete(chat); c = null; }
   if (!c) {
-    const agent = await startAgent(bin, args, cwd, { sandbox });
+    const agent = await startAgent(bin, args, cwd, { sandbox, folders: extra });
     c = { agent, sig, cwd, vm: keep.vm || null, repos: keep.repos || new Set(), jira: keep.jira || new Set(), tickets: keep.tickets || new Set(), waiting: new Map(), pending: new Map(), approved: new Set(), running: new Set(), shared: new Set(), emit: () => {}, lastUsed: Date.now() };
     bindVm(c);
     const id = await agent.start(cwd, resumeId);
@@ -2349,6 +2355,24 @@ function serve() {
           return json(res, 200, { stopped: stopCopilot(String(chat || '')) });
         }
         // Your own name for a Copilot session; it wins over the title Copilot gave it.
+        // A folder added to (or taken off) one chat, from its side panel. Its Copilot starts again
+        // with it on the next message, resuming the same session.
+        if (url.pathname === '/api/copilot/folders') {
+          const { chat: id, add, remove } = await readJson(req);
+          if (!/^[\w-]{8,64}$/.test(String(id || ''))) return json(res, 400, { error: 'bad chat' });
+          let list = localState.sessionFolders(stateFile)[id] || [];
+          if (add) {
+            const r = checkFolder(add, homedir());
+            if (r.error) return json(res, 400, { error: r.error });
+            if (!list.includes(r.path)) {
+              list = [...list, r.path];
+              folderNotes.set(id, `I added ${r.path.replace(homedir(), '~')} to this chat: you can read and change files there now, and review, vm and outside work there too.`);
+            }
+          }
+          if (remove) list = list.filter((f) => f !== String(remove).replace(/^~(?=\/|$)/, homedir()));
+          localState.setSessionFolders(stateFile, id, list);
+          return json(res, 200, { folders: list.map((f) => f.replace(homedir(), '~')) });
+        }
         if (url.pathname === '/api/copilot/rename') {
           const { id, title } = await readJson(req);
           if (!/^[\w-]{8,64}$/.test(String(id || '')) || typeof title !== 'string' || !title.trim()) return json(res, 400, { error: 'bad session or title' });
@@ -2456,7 +2480,10 @@ function serve() {
           const command = /^\/(compact|clear|context|usage|model)\b/.test(message.trim());
           const owed = body.resume && sandboxHint && (!acpChats.has(body.session) || hintOwed.has(body.session));
           if (command) { if (owed) hintOwed.add(body.session); } else hintOwed.delete(body.session);
-          const update = !command && owed && `${UPDATE_INTRO}${sandboxHint}`;
+          // Folders you added to this chat since its last message: say so once.
+          const note = !command && folderNotes.get(body.session);
+          if (note) folderNotes.delete(body.session);
+          const update = !command && (owed || note) && `${UPDATE_INTRO}${owed ? sandboxHint : ''}${note ? `\n\n${note}` : ''}`;
           const prefix = command ? '' : [update, !body.resume && `${CONTEXT_INTRO}\n\n${copilotContext()}\n\n${CHOICES_HINT}\n\n${PR_HINT}${folders && `\n\n${folders}`}${sandboxHint}`, refText].filter(Boolean).join('\n\n---\n\n');
           const prompt = prefix ? `${prefix}${MSG_MARK}${message}` : message;
           // Answers stream back as one JSON event per line: text, tool, permission, done, error.
@@ -2638,7 +2665,7 @@ function serve() {
         return json(res, 200, {
           running: !!c && !c.agent.closed, busy: !!c?.busy, sandboxed: c ? !!c.agent.sandboxed : null, hosts: c?.agent.hosts || null, github: c?.agent.github || null,
           cwd: c?.cwd ? tilde(c.cwd) : null,
-          folders: copilotFolders().map(tilde), read: list(process.env.COPILOT_READ).map(tilde),
+          folders: copilotFolders().map(tilde), read: list(process.env.COPILOT_READ).map(tilde), chatFolders: chatFolders(id).map(tilde),
           sandbox: process.env.COPILOT_SANDBOX === 'srt',
           usage: /^[\w-]{8,64}$/.test(id) ? sessionUsage(join(homedir(), '.copilot'), id) : null,
           // What it cost so far, split like the line at the end of a PR (lib/disclosure.mjs).

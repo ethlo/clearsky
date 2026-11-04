@@ -210,10 +210,12 @@ async function drawInfo(force) {
     d.cwd && ['Folder', d.cwd],
     d.folders?.length && ['Can change', d.folders.join(', ')],
     d.read?.length && ['Can read', d.read.join(', ')],
+    // Folders for this chat only: added here, on top of Settings → Copilot.
+    chat.turns && ['This chat', `${(d.chatFolders || []).map((f) => `<span class="cf">${esc(f)}<button type="button" class="x" data-folder-off="${esc(f)}" title="Take ${esc(f)} off this chat" aria-label="Remove">✕</button></span>`).join('')}<form class="cf-add" data-folder-form><input name="f" placeholder="~/dev/another-repo" spellcheck="false" aria-label="Folder to add to this chat"><button type="submit" class="linkish" title="This chat may read and change files there; review, vm and outside work there too. It applies from your next message.">Add folder</button></form>`],
     d.github && ['GitHub', d.github],
     d.hosts && ['Hosts', `<details><summary>${d.hosts.length} allowed</summary>${d.hosts.map(esc).join(', ')}</details>`],
   ].filter(Boolean);
-  $('#cp-info').innerHTML = rows.map(([a, b]) => `<dt>${a}</dt><dd>${a === 'Hosts' ? b : esc(b)}${a === 'Credits' && d.credits.line ? ` <button type="button" class="linkish" data-copy-text="${esc(d.credits.line)}" title="${esc(d.credits.line)}">Copy line</button>` : ''}</dd>`).join('');
+  $('#cp-info').innerHTML = rows.map(([a, b]) => `<dt>${a}</dt><dd>${a === 'Hosts' || a === 'This chat' ? b : esc(b)}${a === 'Credits' && d.credits.line ? ` <button type="button" class="linkish" data-copy-text="${esc(d.credits.line)}" title="${esc(d.credits.line)}">Copy line</button>` : ''}</dd>`).join('');
   $('#cp-restart').disabled = !d.running;
   $('#cp-restart').hidden = $('#cp-close').hidden = !chat.turns;
 }
@@ -1353,4 +1355,25 @@ document.addEventListener('click', async (e) => {
   b.innerHTML = icon(ok ? 'check' : 'copy', 13);
   b.title = ok ? 'Copied' : 'Select and copy';
   setTimeout(() => { b.innerHTML = icon('copy', 13); b.title = 'Copy'; }, 1500);
+});
+
+// Add a folder to the chat on screen, or take one off (its side panel).
+document.addEventListener('submit', async (e) => {
+  const f = e.target.closest('[data-folder-form]');
+  if (!f) return;
+  e.preventDefault();
+  const input = f.elements.f, path = input.value.trim();
+  if (!path) return input.focus();
+  try {
+    await post('/api/copilot/folders', { chat: chat.session, add: path });
+    input.value = '';
+    $('#chat-sub').textContent = `Added ${path}: it applies from your next message.`;
+  } catch (err) { input.setCustomValidity(err.message); input.reportValidity(); setTimeout(() => input.setCustomValidity(''), 4000); return; }
+  drawInfo(true);
+});
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-folder-off]');
+  if (!b) return;
+  try { await post('/api/copilot/folders', { chat: chat.session, remove: b.dataset.folderOff }); } catch {}
+  drawInfo(true);
 });

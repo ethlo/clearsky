@@ -909,3 +909,8 @@ a.ref:hover { text-decoration-color: currentColor; }
 .cblock:hover > .b-copy, .cblock > .b-copy:focus-visible { opacity: 1; }
 .b-copy.ans { margin-top: 6px; opacity: .55; border-color: transparent; background: none; }
 .msg:hover .b-copy.ans, .b-copy.ans:focus-visible { opacity: 1; }
+/* A chat's own folders, in its side panel. */
+#cp-info .cf { display: inline-flex; align-items: center; gap: 4px; margin: 0 6px 4px 0; padding: 1px 4px 1px 8px; border: 1px solid var(--line); border-radius: 6px; font-size: 12px; }
+#cp-info .cf .x { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 0 2px; }
+#cp-info .cf-add { display: flex; gap: 6px; margin-top: 2px; }
+#cp-info .cf-add input { flex: 1; min-width: 0; font: inherit; font-size: 12px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); }
