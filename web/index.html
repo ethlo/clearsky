@@ -26,6 +26,7 @@
       <a class="ni" href="#mentions" data-nav="mentions"><span class="ico" data-i="at"></span><span class="lab">Mentions</span><b id="n-mentions"></b></a>
       <a class="ni" href="#tickets" data-nav="tickets"><span class="ico" data-i="ticket"></span><span class="lab">Tickets</span><b id="n-tickets"></b></a>
     </nav>
+    <a class="ni" href="#builds" data-nav="builds"><span class="ico" data-i="build"></span><span class="lab">Builds</span><b id="n-builds"></b></a>
     <a class="ni" href="#calendar" data-nav="calendar"><span class="ico" data-i="calendar"></span><span class="lab">Calendar</span><b id="n-calendar"></b></a>
     <a class="ni" href="#links" data-nav="links"><span class="ico" data-i="link"></span><span class="lab">Links</span></a>
     <a class="ni" href="#standup" data-nav="standup"><span class="ico" data-i="standup"></span><span class="lab">Stand-up</span></a>
@@ -80,6 +81,11 @@
   </section>
 
   <!-- A source on its own page, such as School. -->
+  <section class="view" id="v-builds" hidden>
+    <header class="vh"><h1 title="How each repo's main branch builds now, and the newest artifact and release it made. Pick the repos in Settings → GitHub.">Builds</h1><span class="spacer"></span>
+      <div class="vh-acts"><button type="button" class="icon-btn" id="builds-refresh" title="Check again" aria-label="Check again"><span data-i="refresh" data-size="14"></span></button></div></header>
+    <div class="view-b"><div class="page" id="builds"></div></div>
+  </section>
   <section class="view" id="v-changes" hidden>
     <header class="vh"><h1 title="What Copilot changed as you on GitHub and Jira, and what it read in Grafana, from its sandbox">Copilot's changes</h1><span class="spacer"></span></header>
     <div class="view-b"><div id="changes"></div></div>

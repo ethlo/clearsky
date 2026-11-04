@@ -6,12 +6,14 @@ import { fileURLToPath } from 'node:url';
 
 // The page's scripts are joined into one, so two top-level functions with the same name don't
 // fail: the later one quietly replaces the other (that once stopped the chat list's live dots).
-test('web/js: no two top-level functions share a name', () => {
+// Two top-level const/let with the same name are worse: the whole script stops loading.
+test('web/js: no two top-level names are declared twice', () => {
   const dir = join(dirname(fileURLToPath(import.meta.url)), '..', 'web', 'js');
   const seen = new Map(), dupes = [];
   for (const f of readdirSync(dir).filter((x) => x.endsWith('.js')).sort()) {
-    for (const m of readFileSync(join(dir, f), 'utf8').matchAll(/^(?:async\s+)?function\s+([\w$]+)/gm)) {
-      if (seen.has(m[1])) dupes.push(`${m[1]} in ${seen.get(m[1])} and ${f}`); else seen.set(m[1], f);
+    for (const m of readFileSync(join(dir, f), 'utf8').matchAll(/^(?:(?:async\s+)?function\s+([\w$]+)|(?:const|let|var)\s+([\w$]+))/gm)) {
+      const n = m[1] || m[2];
+      if (seen.has(n)) dupes.push(`${n} in ${seen.get(n)} and ${f}`); else seen.set(n, f);
     }
   }
   assert.deepEqual(dupes, []);

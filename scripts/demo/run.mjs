@@ -24,6 +24,20 @@ const fake = createServer(async (req, res) => {
   const send = (o, type = 'application/json') => { res.writeHead(200, { 'Content-Type': type }); res.end(typeof o === 'string' ? o : JSON.stringify(o)); };
   const q = body ? JSON.parse(body).query || '' : '';
   if (req.url === '/graphql') {
+    if (q.includes('defaultBranchRef')) {
+      // Builds: made-up main branches, one failing and one still building.
+      const repos = [...q.matchAll(/(r\d+): repository\(owner: "([^"]+)", name: "([^"]+)"\)/g)];
+      const look = { 'payments-api': ['SUCCESS', 'v2.14.0', 'Round split refunds once'], 'web-shop': ['FAILURE', 'v5.3.1', 'Show refund status on orders'], infra: ['PENDING', null, 'Bump the base image'] };
+      return send({ data: Object.fromEntries(repos.map(([, alias, owner, name], i) => {
+        const [state, tag, title] = look[name] || ['SUCCESS', null, 'Update dependencies'];
+        const checks = [{ __typename: 'CheckRun', name: 'build', status: state === 'PENDING' ? 'IN_PROGRESS' : 'COMPLETED', conclusion: state === 'PENDING' ? null : state, detailsUrl: `https://github.com/${owner}/${name}/actions/runs/${900 + i}` }];
+        return [alias, { nameWithOwner: `${owner}/${name}`, url: `https://github.com/${owner}/${name}`,
+          defaultBranchRef: { name: 'main', target: { oid: `abc${i}def0123`, abbreviatedOid: `abc${i}def`, committedDate: new Date(Date.now() - (i + 1) * 36e5).toISOString(), messageHeadline: title,
+            url: `https://github.com/${owner}/${name}/commit/abc${i}def`, author: { user: { login: ['anna', 'bob', ME][i % 3] } }, statusCheckRollup: { state, contexts: { nodes: checks } } } },
+          latestRelease: tag ? { tagName: tag, name: tag, publishedAt: new Date(Date.now() - (i + 2) * 864e5).toISOString(), url: `https://github.com/${owner}/${name}/releases/tag/${tag}` } : null,
+          refs: { nodes: tag ? [{ name: tag }] : [{ name: 'v0.9.2' }] } }];
+      })) });
+    }
     if (q.includes('reviewed: search')) return send({ data: { mine: { nodes: standup.mine }, reviewed: { nodes: standup.reviewed } } });
     if (q.includes('nodes(ids:')) { const ids = JSON.parse(body).variables.ids; return send({ data: { nodes: ids.map((id) => github.myPrs.find((x) => x.id === id) || null) } }); }
     if (q.includes('reviewRequested: search')) return send({ data: { reviewRequested: { nodes: github.reviewRequested }, myPrs: { nodes: github.myPrs }, mentions: { nodes: github.mentions }, assigned: { nodes: github.assigned } } });
@@ -43,6 +57,13 @@ const fake = createServer(async (req, res) => {
       channel: m.channel ? { name: m.channel, is_im: false } : { is_im: true }, permalink: `https://acme.slack.com/archives/C${i}/p${i}` })) } });
   }
   if (req.url === '/calendar.ics') return send(calendar(), 'text/calendar');
+  const arts = req.url.match(/^\/repos\/[^/]+\/([^/]+)\/actions\/artifacts/);
+  if (arts) {
+    const i = { 'payments-api': 0, 'web-shop': 1, infra: 2 }[arts[1]] ?? 3;
+    return send({ artifacts: i === 2 ? [] : [{ name: `${arts[1]}-dist`, size_in_bytes: 18_400_000 + i * 3e6, created_at: new Date(Date.now() - (i + 1) * 36e5 - 6e5).toISOString(), expired: false,
+      workflow_run: { id: 900 + i, head_branch: 'main', head_sha: i === 1 ? 'f00ba47c' : `abc${i}def0` } },
+    { name: `${arts[1]}-dist`, size_in_bytes: 1e6, created_at: new Date().toISOString(), expired: false, workflow_run: { id: 1, head_branch: 'feature-x', head_sha: '1234567' } }] });
+  }
   if (req.url.startsWith('/repos/')) return send([]);
   res.writeHead(404); res.end();
 });

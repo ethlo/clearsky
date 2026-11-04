@@ -38,6 +38,7 @@ function route() {
   $('#v-src').hidden = !h.startsWith('src-');
   $('#v-notes').hidden = h !== 'notifications';
   $('#v-changes').hidden = h !== 'changes';
+  $('#v-builds').hidden = h !== 'builds';
   $('#v-map').hidden = h !== 'map';
   $('#v-links').hidden = h !== 'links' && h !== 'links-personal';
   $('#chat').hidden = h !== 'copilot';
@@ -49,6 +50,7 @@ function route() {
   if (h === 'calendar') renderCalendar();
   if (h === 'notifications') renderNotes();
   if (h === 'changes') renderChanges();
+  if (h === 'builds') loadBuilds(false);
   if (h === 'map') renderMap();
   if (h === 'links' || h === 'links-personal') renderLinks(h === 'links' ? 'work' : 'personal');
   if (h === 'standup' && !standupData) { renderStandup(); loadStandup(false); }

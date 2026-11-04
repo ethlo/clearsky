@@ -29,6 +29,7 @@ import { cookieLogin } from '../lib/browser-login.mjs';
 import { redact } from '../lib/redact.mjs';
 import { vpnWatch, checkTarget } from '../lib/vpn.mjs';
 import { checkFolder } from '../lib/chat-folders.mjs';
+import { buildRepos } from '../lib/builds.mjs';
 import { disclosureLine, disclosureFields, creditSplit, DISCLOSE_HINT } from '../lib/disclosure.mjs';
 import { parseReviewArgs, changeOf, reviewPrompt, writeBaseFiles, reviewDecision, USAGE as REVIEW_USAGE } from '../lib/review.mjs';
 import { buildMap, buildKind } from '../lib/map.mjs';
@@ -856,6 +857,7 @@ function sourceDetail(p, key, data, force) {
 }
 
 let standupCache = { at: 0, data: null };
+let buildsCache = { at: 0, data: null };
 
 // Hover-card details for one pull request.
 const prCache = new Map();
@@ -2758,6 +2760,16 @@ function serve() {
       if (issueKey) return json(res, 200, await issuePreview(issueKey));
       const prsFor = url.pathname.match(/^\/api\/issue\/([A-Z][A-Z0-9_]+-\d+)\/prs$/)?.[1];
       if (prsFor) return json(res, 200, await ghModule.ticketPrs(prsFor));
+      // Builds: each repo's main branch, its checks and its newest artifact and release.
+      if (url.pathname === '/api/builds') {
+        const fresh = buildsCache.data && Date.now() - buildsCache.at < 2 * 6e4 && !url.searchParams.has('refresh');
+        if (!fresh) {
+          const gh = await source('github', false).catch(() => null);
+          const repos = buildRepos(process.env.GITHUB_BUILD_REPOS, gh);
+          buildsCache = { at: Date.now(), data: { repos: await ghModule.builds(repos), named: !!process.env.GITHUB_BUILD_REPOS, checkedAt: new Date().toISOString() } };
+        }
+        return json(res, 200, buildsCache.data);
+      }
       if (url.pathname === '/api/pr') {
         const repo = url.searchParams.get('repo') || '', number = url.searchParams.get('number') || '';
         if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !/^\d+$/.test(number)) return json(res, 400, { error: 'bad PR reference' });

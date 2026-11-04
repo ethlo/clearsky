@@ -61,6 +61,7 @@ svg.i { display: inline-block; vertical-align: -0.15em; flex: none; }
 .ni .lab { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ni b { font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12.5px; }
 .ni b.hot { color: var(--accent); font-weight: 600; }
+.ni b.hot.red { color: var(--red, #dc2626); }
 .ni.cp { align-items: flex-start; }
 /* The chat on screen stands out from the others: an accent bar and a tinted background. */
 .ni.cp { position: relative; }
@@ -914,3 +915,17 @@ a.ref:hover { text-decoration-color: currentColor; }
 #cp-info .cf .x { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 0 2px; }
 #cp-info .cf-add { display: flex; gap: 6px; margin-top: 2px; }
 #cp-info .cf-add input { flex: 1; min-width: 0; font: inherit; font-size: 12px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); }
+/* Builds: one row per repo's main branch. */
+.builds { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.build { display: grid; grid-template-columns: 14px 1fr auto; gap: 10px; align-items: start; padding: 12px 14px; border-top: 1px solid var(--line); }
+.build:first-child { border-top: 0; }
+.build .dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 6px; background: var(--line-strong, var(--line)); }
+.build .dot.green { background: var(--green, #16a34a); } .build .dot.red { background: var(--red, #dc2626); } .build .dot.amber { background: #d97706; animation: pulse 1.2s ease-in-out infinite; }
+.build .b-branch { color: var(--muted); font-size: 12px; }
+.build .b-check { font-size: 12px; margin-left: 6px; }
+.build .b-sub, .build .b-meta { color: var(--muted); font-size: 12.5px; margin-top: 3px; overflow-wrap: anywhere; }
+.build .b-out { text-align: right; font-size: 13px; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; min-width: 200px; max-width: 340px; }
+.build .b-out .b-meta { margin-top: 0; }
+.build a { color: inherit; } .build a:hover { color: var(--accent); }
+.b-foot { color: var(--muted); font-size: 12px; margin-top: 8px; }
+@media (max-width: 720px) { .build { grid-template-columns: 14px 1fr; } .build .b-out { grid-column: 2; text-align: left; align-items: flex-start; min-width: 0; max-width: none; } }
