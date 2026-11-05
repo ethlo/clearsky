@@ -29,6 +29,7 @@ import { cookieLogin } from '../lib/browser-login.mjs';
 import { redact } from '../lib/redact.mjs';
 import { vpnWatch, checkTarget } from '../lib/vpn.mjs';
 import { checkFolder } from '../lib/chat-folders.mjs';
+import { sshHosts } from '../lib/ssh-hosts.mjs';
 import { buildRepos } from '../lib/builds.mjs';
 import { disclosureLine, disclosureFields, creditSplit, DISCLOSE_HINT } from '../lib/disclosure.mjs';
 import { parseReviewArgs, changeOf, reviewPrompt, writeBaseFiles, reviewDecision, USAGE as REVIEW_USAGE } from '../lib/review.mjs';
@@ -2761,6 +2762,10 @@ function serve() {
       const prsFor = url.pathname.match(/^\/api\/issue\/([A-Z][A-Z0-9_]+-\d+)\/prs$/)?.[1];
       if (prsFor) return json(res, 200, await ghModule.ticketPrs(prsFor));
       // Builds: each repo's main branch, its checks and its newest artifact and release.
+      if (url.pathname === '/api/servers') {
+        const file = join(homedir(), '.ssh', 'config');
+        return json(res, 200, { hosts: sshHosts(file), file: existsSync(file) ? file : null });
+      }
       if (url.pathname === '/api/builds') {
         const fresh = buildsCache.data && Date.now() - buildsCache.at < 2 * 6e4 && !url.searchParams.has('refresh');
         if (!fresh) {

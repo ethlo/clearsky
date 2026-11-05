@@ -39,6 +39,7 @@ function route() {
   $('#v-notes').hidden = h !== 'notifications';
   $('#v-changes').hidden = h !== 'changes';
   $('#v-builds').hidden = h !== 'builds';
+  $('#v-servers').hidden = h !== 'servers';
   $('#v-map').hidden = h !== 'map';
   $('#v-links').hidden = h !== 'links' && h !== 'links-personal';
   $('#chat').hidden = h !== 'copilot';
@@ -51,6 +52,7 @@ function route() {
   if (h === 'notifications') renderNotes();
   if (h === 'changes') renderChanges();
   if (h === 'builds') loadBuilds(false);
+  if (h === 'servers') loadServers();
   if (h === 'map') renderMap();
   if (h === 'links' || h === 'links-personal') renderLinks(h === 'links' ? 'work' : 'personal');
   if (h === 'standup' && !standupData) { renderStandup(); loadStandup(false); }

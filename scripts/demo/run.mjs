@@ -73,6 +73,40 @@ const base = `http://127.0.0.1:${fake.address().port}`;
 // A home folder of its own: settings, the agent's log, and Copilot's session folders.
 const conf = join(home, '.config', 'clearsky');
 mkdirSync(conf, { recursive: true });
+// A small SSH config for the Servers page: two customers behind jump servers.
+mkdirSync(join(home, '.ssh', 'config.d'), { recursive: true });
+writeFileSync(join(home, '.ssh', 'config'), 'Include ~/.ssh/config.d/*\n\nHost *\n  ServerAliveInterval 30\n');
+writeFileSync(join(home, '.ssh', 'config.d', 'acme'), `Host acme-jump
+  HostName jump.acme.example.com
+  User alex
+
+Host acme-test-* acme-dr-*
+  ProxyJump acme-jump
+  User ops
+
+# Test environment, gets the snapshots first
+Host acme-test-core
+  HostName 10.20.1.10
+Host acme-test-clickhouse
+  HostName 10.20.1.20
+# Disaster recovery, used for load tests
+Host acme-dr-core
+  HostName 10.30.1.10
+Host acme-dr-clickhouse
+  HostName 10.30.1.20
+  LocalForward 8123 localhost:8123
+`);
+writeFileSync(join(home, '.ssh', 'config.d', 'globex'), `Host globex-bastion
+  HostName bastion.globex.example.net
+  Port 2222
+
+Host globex-prod-api globex-prod-db
+  ProxyJump globex-bastion
+Host globex-prod-api
+  HostName 172.16.4.11
+Host globex-prod-db
+  HostName 172.16.4.12
+`);
 writeFileSync(join(conf, '.env'), [
   'GITHUB_TOKEN=demo', `GITHUB_API_URL=${base}`, 'GITHUB_ORGS=acme', `ACLI_BIN=${join(here, 'acli.mjs')}`, 'JIRA_URL=https://acme.atlassian.net', 'JIRA_ACCOUNT_ID=me-1',
   'SLACK_TOKEN=demo', `SLACK_API_URL=${base}/slack`, `GOOGLE_CALENDAR_ICS=${base}/calendar.ics`, 'CLEARSKY_POLL_MINUTES=0', `CLEARSKY_STANDUP_TIME=${hhmm(standupAt())}`, 'CLEARSKY_NOTIFY=off',
