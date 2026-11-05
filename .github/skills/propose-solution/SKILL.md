@@ -42,6 +42,6 @@ Then stop and wait.
 
 ## 4. After I pick
 
-Carry on with the usual workflow for the choice: a personal delivery skill if I have one (for example a feature-delivery skill for "ticket, branch, PR"), otherwise `continue-work`. Say which one you're using.
+Carry on with the usual workflow for the choice: a personal delivery skill if I have one (for example a feature-delivery skill for "ticket, branch, PR"), otherwise `continue-work`. Say which one you're using. A new branch starts from the fix version's release branch (`1.2.4` → `v1.2`); when that isn't clear, ask me which branch to start from, as continue-work describes.
 
 When drafting anything posted as me (comments, replies, PR descriptions), follow the write-like-me skill.

@@ -12,6 +12,16 @@ The item is the PR or Jira ticket I attached or named. With none, use the curren
 - For a PR, find the local checkout of its repository: the current folder if it is that repo, otherwise look under `~/dev/` (for example `~/dev/acme/<repo>`). If there is none, ask me where it is, or whether to work from GitHub only.
 - In the checkout, fetch and switch to the PR's branch (`gh pr checkout <number>`). If I have uncommitted changes there, stop and ask.
 - For a ticket, read it with `acli jira workitem view <KEY> --json` and find its PR: search `gh pr list --search <KEY>` in the likely repos, or the branch named after the key.
+- If the ticket has no branch yet, start one as in "Which branch to start from" below.
+
+## Which branch to start from
+
+A new branch starts from the release branch of the ticket's fix version, not from the default branch. Our release branches are named after the minor version: fix version `1.2.4` starts from `v1.2`.
+
+- Read the fix version (`acli jira workitem view <KEY> --fields fixVersions --json`) and check the branch exists (`git ls-remote --heads origin v1.2`).
+- If there's exactly one fix version and its branch exists, start from it (`git fetch origin v1.2 && git switch -c <branch> origin/v1.2`) and say which branch you used.
+- Otherwise ask me which branch to start from: no fix version, more than one, a version without a matching branch, or no ticket at all. Name what you found and suggest one. Don't fall back to the default branch on your own.
+- The PR targets that same branch, and the self-review gets it as `--base`.
 
 ## 2. Check the status
 
@@ -48,7 +58,7 @@ Ask me once whether to go ahead with the checklist, unless I already said to con
 
 A proper review by a fresh reviewer that knows only the goal and the code, not this conversation:
 
-- In Clearsky's sandbox, run `review --ticket <KEY>` in the repo (`--goal "<one or two sentences>"` when there's no ticket, `--base <branch>` when the PR won't target the default branch). Clearsky works out the diff and reads the ticket itself, and starts a new Copilot session that can only read the repo.
+- In Clearsky's sandbox, run `review --ticket <KEY>` in the repo (`--goal "<one or two sentences>"` when there's no ticket, `--base <branch>` when the PR targets a release branch such as `v1.2` rather than the default branch). Clearsky works out the diff and reads the ticket itself, and starts a new Copilot session that can only read the repo.
 - Give it the goal only. Never pass your own reasoning, plans or what you think is risky: the point is a review without them.
 - Without `review` (outside Clearsky's sandbox), start a new Copilot session yourself (`copilot -p`, read only) with only the ticket's summary and description and `git diff <base>...` in the prompt, and nothing from this conversation.
 - Check each finding against the code. Fix the ones that hold up, and note in one line why you skip the others. Run it again after fixing; stop when it says `VERDICT: ready`, or after three rounds, and tell me what's still open.
