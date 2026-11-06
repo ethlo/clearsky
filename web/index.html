@@ -143,9 +143,9 @@
         <div class="chat-refs" id="cp-refs"></div>
         <form class="chat-in" id="chat-form">
           <div class="cbox">
-            <textarea id="chat-text" rows="2" placeholder="Ask a follow-up. Type @ to add a PR or ticket, / for skills." aria-label="Message (Enter sends, Shift+Enter for a new line)"></textarea>
+            <textarea id="chat-text" rows="2" placeholder="Ask a follow-up. Type @ to add a PR, ticket or file, / for skills." aria-label="Message (Enter sends, Shift+Enter for a new line)"></textarea>
             <div class="cbar">
-              <button class="cb-btn" id="cp-ref-add" type="button" title="Give Copilot a PR or Jira ticket to work with (@)" aria-label="Add a PR or ticket"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg></button>
+              <button class="cb-btn" id="cp-ref-add" type="button" title="Give Copilot a PR, Jira ticket or file on disk to work with (@). Files go in as a path, so they cost no context until Copilot reads them" aria-label="Add a PR, ticket or file"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg></button>
               <button class="cb-btn" id="cp-attach" type="button" title="Attach files (or drop them on the chat)" aria-label="Attach files"><svg viewBox="0 0 16 16"><path d="M13.5 7.5 8 13a3.5 3.5 0 0 1-5-5l6-6a2.3 2.3 0 0 1 3.3 3.3L6.4 11.2a1.2 1.2 0 0 1-1.7-1.7L10 4.2"/></svg></button>
               <input type="file" id="cp-file" multiple hidden>
               <select class="cb-sel" id="cp-perm" title="What Copilot may do without asking"></select>

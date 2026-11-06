@@ -29,6 +29,7 @@ import { cookieLogin } from '../lib/browser-login.mjs';
 import { redact } from '../lib/redact.mjs';
 import { vpnWatch, checkTarget } from '../lib/vpn.mjs';
 import { checkFolder } from '../lib/chat-folders.mjs';
+import { fileRoots, checkFileRef, findFiles, fileRefLine } from '../lib/file-refs.mjs';
 import { sshHosts } from '../lib/ssh-hosts.mjs';
 import { buildRepos } from '../lib/builds.mjs';
 import { disclosureLine, disclosureFields, creditSplit, DISCLOSE_HINT } from '../lib/disclosure.mjs';
@@ -1053,6 +1054,9 @@ const SANDBOX_GIT = [['url.https://github.com/.insteadOf', 'git@github.com:'], [
 // Folders added to one chat in its side panel (lib/chat-folders.mjs), as absolute paths.
 const folderNotes = new Map(); // chat → what to tell its Copilot about a folder you added
 const chatFolders = (id) => (id ? (localState.sessionFolders(stateFile)[id] || []).filter(isDir) : []);
+// What a chat can read, for the files you point it at with @ (lib/file-refs.mjs): its folder,
+// Settings → Copilot's folders (read-write and read only) and the folders added to it.
+const chatReadRoots = (id, cwd) => fileRoots([cwd || acpChats.get(id)?.cwd || copilotCwd(), ...copilotFolders(), ...list(process.env.COPILOT_READ), ...chatFolders(id)], homedir());
 const sandboxOpts = (cwd, extra = []) => ({ cwd, folders: [...copilotFolders(), ...extra, copilotTmp()], home: homedir(), read: [...list(process.env.COPILOT_READ), join(here, '..')] });
 let broker = null;
 function ghToken() {
@@ -2446,7 +2450,16 @@ function serve() {
           if (!info.available) return json(res, 400, { error: 'GitHub Copilot CLI not found; install it or set COPILOT_BIN' });
           // Files you attached (uploaded first to /api/copilot/attach): named at the end of the message.
           const attached = (Array.isArray(body.attachments) ? body.attachments : []).map(String).filter((pth) => isStaged(pth)).slice(0, 10);
-          const message = `${String(body.message || '').slice(0, 20_000)}${attached.length ? `\n\nFiles I attached: ${attached.join(', ')}` : ''}`;
+          // Files on disk you pointed at with @: only their paths go in, Copilot reads them itself.
+          const pointRoots = chatReadRoots(body.session, body.cwd && isDir(body.cwd) ? body.cwd : null);
+          const pointed = [];
+          for (const f of (Array.isArray(body.files) ? body.files : []).slice(0, 20)) {
+            const r = checkFileRef(f, { roots: pointRoots, home: homedir(), cwd: body.cwd });
+            if (r.error) return json(res, 400, { error: r.error });
+            if (!pointed.some((x) => x.path === r.path)) pointed.push(r);
+          }
+          const tail = [attached.length && `Files I attached: ${attached.join(', ')}`, fileRefLine(pointed, homedir())].filter(Boolean).join('\n');
+          const message = `${String(body.message || '').slice(0, 20_000)}${tail ? `\n\n${tail}` : ''}`;
           if (!message.trim()) return json(res, 400, { error: 'empty message' });
           if (!copilot.validModel(body.model)) return json(res, 400, { error: 'bad model name' });
           if (!body.session || !/^[\w-]{8,64}$/.test(body.session)) return json(res, 400, { error: 'bad session' });
@@ -2503,6 +2516,7 @@ function serve() {
           const kept = new Set();
           const linkRefs = () => {
             for (const pth of attached) if (!kept.has(`${sessionId}|${pth}`)) { kept.add(`${sessionId}|${pth}`); keepAttachment(sessionId, pth); }
+            for (const f of pointed) if (!f.dir && !kept.has(`${sessionId}|${f.path}`)) { kept.add(`${sessionId}|${f.path}`); logWrite(agentFilesFile, { where: 'file', what: f.path, kind: 'pointed', chats: [{ id: sessionId }], decided: 'done' }); }
             if (refs.length) localState.addSessionRefs(stateFile, sessionId, refs.map(refKey));
             if (prefix && !body.resume) localState.setSessionTitle(stateFile, sessionId, message.trim().split('\n')[0]);
             if (itemName) localState.setSessionName(stateFile, sessionId, itemName);
@@ -2660,6 +2674,13 @@ function serve() {
           items: [...attentionItems(data), ...await pluginAttention(false)].map((it) => ({ ...it, at: seen[it.key]?.stamp === String(it.stamp ?? '') ? seen[it.key].at : null })) });
       }
       if (url.pathname === '/api/copilot') return json(res, 200, { ...await copilotInfo(url.searchParams.has('refresh')), commands: copilotCommands });
+      // Files and folders for the @ picker: names under the chat's folders, or a path's entries.
+      if (url.pathname === '/api/copilot/files') {
+        const id = url.searchParams.get('chat') || '';
+        const cwd = url.searchParams.get('cwd') || '';
+        const dir = cwd && isDir(cwd) ? cwd : null;
+        return json(res, 200, { files: findFiles(url.searchParams.get('q') || '', { roots: chatReadRoots(id, dir), home: homedir(), cwd: dir || acpChats.get(id)?.cwd || copilotCwd() }) });
+      }
       // What one chat runs with, for the panel beside it.
       if (url.pathname === '/api/copilot/chat') {
         const id = url.searchParams.get('id') || '';
