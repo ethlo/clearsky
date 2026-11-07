@@ -4,10 +4,10 @@
 // a fake acli and Copilot (this folder), in a throw-away home folder, so nothing of yours is
 // read or touched and nothing leaves this machine.
 
-import { HOME as home } from './home.mjs';
+import { HOME as home, MADE } from './home.mjs';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -192,10 +192,12 @@ writeFileSync(join(conf, 'links.json'), JSON.stringify({ groups: [
 ] }), { mode: 0o600 });
 
 const app = spawn(process.execPath, [join(here, '..', '..', 'bin', 'clearsky.mjs'), 'serve', '--port', String(port)], {
-  stdio: 'inherit', env: { PATH: process.env.PATH, HOME: home, CLEARSKY_DEMO_HOME: home, CLEARSKY_COPILOT_HOME: copilotHome, TZ: process.env.TZ, LANG: 'en_GB.UTF-8' },
+  stdio: 'inherit', env: { PATH: process.env.PATH, HOME: home, CLEARSKY_DEMO: '1', CLEARSKY_DEMO_HOME: home, CLEARSKY_COPILOT_HOME: copilotHome, TZ: process.env.TZ, LANG: 'en_GB.UTF-8' },
 });
 console.log(`Clearsky demo: http://127.0.0.1:${port}  (made-up data in ${home}; Ctrl+C stops it)`);
-const stop = () => { app.kill(); fake.close(); process.exit(0); };
+// The made-up home folder goes when the demo does (Ctrl+C, or Leave demo in its menu).
+const tidy = () => { if (MADE) try { rmSync(home, { recursive: true, force: true }); } catch {} };
+const stop = () => { app.kill(); fake.close(); tidy(); process.exit(0); };
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);
-app.on('exit', () => { fake.close(); process.exit(0); });
+app.on('exit', () => { fake.close(); setTimeout(() => { tidy(); process.exit(0); }, 100); });

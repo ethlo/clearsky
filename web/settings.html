@@ -160,6 +160,9 @@
     <label for="CLEARSKY_POLL_MINUTES">Check GitHub, Jira mentions and Slack every … minutes</label>
     <input id="CLEARSKY_POLL_MINUTES" data-key="CLEARSKY_POLL_MINUTES" inputmode="numeric" placeholder="3">
     <div class="row"><button class="save" data-keys="CLEARSKY_STANDUP_TIME,CLEARSKY_WORKDAYS,CLEARSKY_WORKDAY_END,CLEARSKY_MENTION_DAYS,CLEARSKY_TIME_FORMAT,CLEARSKY_POLL_MINUTES">Save</button><span class="msg"></span></div>
+    <h3>Demo</h3>
+    <p class="hint">Clearsky with made-up data, in a new tab: for showing it to others without your own work on screen. Nothing of yours is read or shown, and it stops when you click Leave demo in its menu.</p>
+    <div class="row"><button class="secondary" id="demo-start" type="button">Try with demo data</button><span class="msg" id="demo-msg"></span></div>
   </section>
 
   <section>
@@ -290,6 +293,16 @@ async function post(path, body) {
   if (!res.ok) throw new Error(data.error || res.statusText);
   return data;
 }
+
+// Try with demo data: the demo opens in a tab of its own (the tab is opened first, so the
+// browser doesn't take it for a pop-up).
+$('#demo-start').onclick = async () => {
+  const tab = window.open('about:blank', '_blank');
+  $('#demo-msg').textContent = 'Starting the demo…';
+  try { const d = await post('/api/demo/start'); if (tab) tab.location = d.url; else location.href = d.url; $('#demo-msg').textContent = ''; }
+  catch (e) { tab?.close(); $('#demo-msg').textContent = e.message; }
+};
+if (document.querySelector('meta[name=demo]')) { $('#demo-start').disabled = true; $('#demo-msg').textContent = 'This is the demo.'; }
 
 function state(el, on, text) {
   el.textContent = text;

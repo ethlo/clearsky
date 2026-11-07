@@ -46,6 +46,7 @@ import { findBrowser, BROWSERS } from '../lib/browser.mjs';
 import { manifest as calendarManifest, createCalendar } from '../lib/modules/calendar.mjs';
 import { readLinks, saveLinks, parseBookmarks, mergeLinks } from '../lib/links.mjs';
 import { logEvent } from '../lib/event-log.mjs';
+import { startDemo, demoPort, isDemo } from '../lib/demo.mjs';
 import { ownRead, chatPushes } from '../lib/own-read.mjs';
 import { manifest as githubManifest, createGitHub, workItems as githubItems, PR_FIELDS, ITEM_FIELDS, ciState, isBot, latestReviewsByUser, openThreads, humanReviewers, myPrStatus, reviewerName } from '../lib/modules/github.mjs';
 import { manifest as jiraManifest, createJira, workItems as jiraItems, mentionItems as jiraMentionItems, listOf, fieldsOf, nameOf, commentInfo, excerpt, userId, mapLimit, JIRA_WAITING, jiraMentionsByTicket, mergeJira } from '../lib/modules/jira.mjs';
@@ -2234,12 +2235,15 @@ function busyChats() {
 }
 // The page: web/index.html with web/css/app.css and web/js/*.js (in name order, one shared
 // scope) put inline, so it stays one request and works offline.
+// The demo's pages say so: a "Demo data" badge with Leave demo, so nobody takes it for real.
+const demoMark = (html) => (isDemo() ? html.replace('<meta name="theme-color"', '<meta name="demo" content="1">\n<meta name="theme-color"') : html);
+
 export function buildPage(csrf, web = join(here, '..', 'web')) {
   const css = readFileSync(join(web, 'css', 'app.css'), 'utf8');
   const js = readdirSync(join(web, 'js')).filter((n) => n.endsWith('.js')).sort()
     .map((n) => readFileSync(join(web, 'js', n), 'utf8')).join('\n');
-  return readFileSync(join(web, 'index.html'), 'utf8').replace('__CSRF__', csrf)
-    .replace('/*__CSS__*/', () => css).replace('/*__JS__*/', () => js);
+  return demoMark(readFileSync(join(web, 'index.html'), 'utf8').replace('__CSRF__', csrf)
+    .replace('/*__CSS__*/', () => css).replace('/*__JS__*/', () => js));
 }
 
 // Whether Clearsky's files changed since this process started (a pull), so a restart would update it.
@@ -2312,7 +2316,7 @@ function serve() {
   // restarts so an open page keeps working.
   const csrf = localToken(join(dirname(userEnvFile), 'csrf'));
   const page = buildPage(csrf);
-  const settingsPage = readFileSync(join(here, '..', 'web', 'settings.html'), 'utf8').replace('__CSRF__', csrf)
+  const settingsPage = demoMark(readFileSync(join(here, '..', 'web', 'settings.html'), 'utf8')).replace('__CSRF__', csrf)
     .replace('/*__CSS__*/', () => readFileSync(join(here, '..', 'web', 'css', 'app.css'), 'utf8'));
   // A container publishes its port to another one on the host (CLEARSKY_PUBLIC_PORT), and the
   // browser then names that port.
@@ -2579,6 +2583,18 @@ function serve() {
           settings.writeEnvFile(userEnvFile, values);
           if (values.CALENDAR_HIDDEN) process.env.CALENDAR_HIDDEN = values.CALENDAR_HIDDEN; else delete process.env.CALENDAR_HIDDEN;
           return json(res, 200, { hidden: [...now] });
+        }
+        // Try with demo data: the demo on a port of its own; the page opens it in a new tab.
+        if (url.pathname === '/api/demo/start') {
+          if (isDemo()) return json(res, 400, { error: 'this is the demo already' });
+          try { const d = await startDemo(); return json(res, 200, { url: d.url }); } catch (e) { return json(res, 500, { error: e.message }); }
+        }
+        // Leave demo: the demo stops itself (and its made-up home folder goes with it).
+        if (url.pathname === '/api/demo/stop') {
+          if (!isDemo()) return json(res, 400, { error: 'not the demo' });
+          json(res, 200, { ok: true });
+          setTimeout(() => process.exit(0), 200);
+          return;
         }
         if (url.pathname === '/api/login/github') return json(res, 200, await settings.githubLogin());
         if (url.pathname === '/api/login/jira') return json(res, 200, await settings.jiraLogin(config.jira.acli));
@@ -2969,7 +2985,15 @@ async function dockerCommand([sub = 'up', ...rest]) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
   const args = process.argv.slice(2);
   if (args.includes('-h') || args.includes('--help')) {
-    console.log('usage: clearsky [--json] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky app [--port N] | clearsky docker [up|start|down|logs|login|mounts] [--port N] | clearsky school-handover | clearsky jira-debug');
+    console.log('usage: clearsky [--json] | clearsky try [--port N] [--no-open] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky app [--port N] | clearsky docker [up|start|down|logs|login|mounts] [--port N] | clearsky school-handover | clearsky jira-debug');
+  } else if (args[0] === 'try') {
+    // Clearsky with made-up data, in this terminal: Ctrl+C stops it.
+    const p = args.indexOf('--port');
+    const port = p > -1 ? Number(args[p + 1]) : demoPort();
+    const d = await startDemo({ port, foreground: true });
+    if (d.already) console.log(`The demo is already running: ${d.url}`);
+    if (!args.includes('--no-open')) openInBrowser(d.url);
+    if (d.child) await new Promise((r) => d.child.once('exit', r));
   } else if (args[0] === 'standup') {
     const s = await standup();
     console.log(args.includes('--json') ? JSON.stringify(s, null, 2) : s.text);

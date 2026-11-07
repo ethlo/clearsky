@@ -944,3 +944,12 @@ a.ref:hover { text-decoration-color: currentColor; }
 .srv-copy { color: var(--muted); font-size: 12px; text-align: right; opacity: 0; }
 .srv:hover .srv-copy, .srv:focus-visible .srv-copy { opacity: 1; }
 @media (max-width: 720px) { .srv { grid-template-columns: 1fr 48px; } .srv-where, .srv-how { grid-column: 1; } .srv-copy { grid-row: 1; grid-column: 2; opacity: 1; } }
+
+/* The demo (`clearsky try`): a badge at the top of the menu, and the page after Leave demo. */
+.demo-badge { margin: 8px 12px 0; padding: 4px 6px 4px 10px; border-radius: 999px; background: var(--accent-soft, var(--surface-2)); color: var(--accent); border: 1px solid var(--accent);
+  font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.demo-badge span { flex: 1; }
+.demo-badge button { font: inherit; font-weight: 500; font-size: 11.5px; color: var(--accent); background: none; border: 0; cursor: pointer; padding: 0 4px; }
+.demo-badge button:hover { text-decoration: underline; }
+.demo-left { max-width: 520px; margin: 15vh auto; padding: 0 16px; color: var(--text); }
+.demo-left a { color: var(--accent); }
