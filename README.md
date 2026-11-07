@@ -25,6 +25,8 @@ This opens Clearsky with made-up data (a company called Acme, its PRs, tickets, 
 
 ## Setup
 
+The first time you open Clearsky it shows a **welcome page** (`/welcome`): what this machine has (Node, git, gh, acli, Copilot, the sandbox, a calendar), with the install command for your OS next to anything missing, buttons to log in to GitHub and Jira through their CLIs, and your work organizations picked from your gh login. `clearsky doctor` prints the same check in a terminal. No tokens are needed.
+
 Requires Node 22+ and the [Atlassian CLI](https://developer.atlassian.com/cloud/acli/guides/install-acli/) (`acli`), logged in with `acli jira auth login --web`.
 
 One command installs or updates everything:

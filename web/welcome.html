@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#2563eb">
+<meta name="csrf" content="__CSRF__">
+<title>Welcome to Clearsky</title>
+<script>try { const t = localStorage.getItem('clearsky.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch {}</script>
+<style>
+/*__CSS__*/
+</style>
+<style>
+  /* Welcome: three steps on one page, in the app's look. */
+  html, body { height: auto; min-height: 100%; overflow: auto; }
+  body { background: var(--surface); }
+  .wel { max-width: 720px; margin: 0 auto; padding: 32px 24px 48px; }
+  @media (max-width: 520px) { .wel { padding: 20px 16px 32px; } }
+  .wel h1 { font-size: 22px; margin: 0 0 4px; }
+  .wel > p { color: var(--text-2); margin: 0 0 20px; }
+  .step { border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; margin: 14px 0; background: var(--bg); }
+  .step h2 { font-size: 15px; margin: 0 0 8px; display: flex; gap: 8px; align-items: center; }
+  .step h2 .n { width: 22px; height: 22px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); display: inline-grid; place-items: center; font-size: 12px; }
+  .step p { color: var(--text-2); margin: 6px 0; font-size: 13.5px; }
+  .chk { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 2px 8px; padding: 7px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
+  .chk:first-child { border-top: 0; }
+  .chk .m { font-weight: 700; }
+  .chk.ok .m { color: var(--green); } .chk.bad .m { color: var(--red); } .chk.meh .m { color: var(--muted); }
+  .chk small { color: var(--muted); }
+  .chk .fix { grid-column: 2; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .chk code { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--surface-2); border-radius: 5px; padding: 2px 6px; }
+  .wrow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+  button, .btn { font: inherit; font-size: 13px; font-weight: 500; color: var(--text); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 7px; height: 30px; padding: 0 12px;
+    display: inline-flex; align-items: center; cursor: pointer; text-decoration: none; }
+  button.primary { background: var(--text); border-color: var(--text); color: var(--bg); }
+  button.small { height: 24px; padding: 0 8px; font-size: 12px; }
+  button:disabled { opacity: .6; cursor: default; }
+  label { display: block; font-size: 12.5px; color: var(--text-2); font-weight: 500; margin: 12px 0 4px; }
+  .wrow input[type=text] { flex: 1; min-width: 200px; width: auto; }
+  input[type=text] { width: 100%; font: inherit; font-size: 13.5px; padding: 6px 9px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); color: var(--text); }
+  .orgs { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+  .orgs label { display: flex; gap: 6px; align-items: center; margin: 0; font-size: 13.5px; color: var(--text); font-weight: 400; }
+  .msg { font-size: 13px; color: var(--text-2); }
+  .code { font: 600 18px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wel">
+  <h1>Welcome to Clearsky</h1>
+  <p>One page with what needs you at work. Three steps and you're in. It uses the logins of the tools you already have, so there are no tokens to make.</p>
+
+  <section class="step" id="s-try">
+    <h2>Just looking?</h2>
+    <p>See Clearsky with made-up data first. Nothing of yours is read.</p>
+    <div class="wrow"><button type="button" id="try">Try with demo data</button><span class="msg" id="try-msg"></span></div>
+  </section>
+
+  <section class="step">
+    <h2><span class="n">1</span>What's on this machine</h2>
+    <div id="checks"><p>Checking…</p></div>
+    <div class="wrow"><button type="button" id="recheck">Check again</button><span class="msg" id="ready"></span></div>
+  </section>
+
+  <section class="step">
+    <h2><span class="n">2</span>Log in</h2>
+    <p>With the GitHub CLI and the Atlassian CLI, in your browser. Clearsky keeps no passwords.</p>
+    <div class="wrow"><button type="button" id="gh-login">Log in to GitHub</button><span class="msg" id="gh-msg"></span></div>
+    <div class="wrow"><button type="button" id="jira-login">Log in to Atlassian (Jira)</button><span class="msg" id="jira-msg"></span></div>
+  </section>
+
+  <section class="step">
+    <h2><span class="n">3</span>Your work</h2>
+    <p id="team-intro">If your team has a team pack (a file or git repo with the team's setup), join it and skip the rest.</p>
+    <label for="team">Team pack (a git repo, an https link or a file)</label>
+    <div class="wrow" style="margin-top:0"><input type="text" id="team" placeholder="https://github.com/acme/clearsky-team.git" spellcheck="false"><button type="button" id="team-join">Join</button></div>
+    <div class="msg" id="team-msg"></div>
+    <label>Work organizations on GitHub</label>
+    <div class="orgs" id="orgs"></div>
+    <input type="text" id="orgs-text" placeholder="acme, acme-labs" spellcheck="false" aria-label="Work organizations, comma-separated">
+    <p id="jira-site"></p>
+    <label for="standup">Daily stand-up at</label>
+    <input type="text" id="standup" placeholder="09:45">
+    <label for="workdays">Workdays</label>
+    <input type="text" id="workdays" placeholder="Mon-Fri">
+    <div class="wrow"><button type="button" class="primary" id="save">Open Clearsky</button><a class="btn" href="/settings">All settings</a><span class="msg" id="save-msg"></span></div>
+  </section>
+</div>
+<script>
+const CSRF = '__CSRF__';
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+async function post(path, body) {
+  const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Clearsky-Token': CSRF }, body: JSON.stringify(body || {}) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+let picked = null;
+function drawChecks(d) {
+  $('#checks').innerHTML = d.checks.map((c) => {
+    const cls = c.ok ? 'ok' : c.need === 'required' ? 'bad' : 'meh';
+    const fix = c.ok ? '' : c.fix?.command ? `<div class="fix"><code>${esc(c.fix.command)}</code><button class="small" type="button" data-copy="${esc(c.fix.command)}">Copy</button>${c.fix.url ? `<a href="${esc(c.fix.url)}" target="_blank" rel="noopener">How to</a>` : ''}</div>`
+      : c.fix?.url ? `<div class="fix"><a href="${esc(c.fix.url)}" target="_blank" rel="noopener">How to install</a></div>` : c.login ? '<div class="fix"><small>Log in under step 2.</small></div>' : '';
+    return `<div class="chk ${cls}"><span class="m">${c.ok ? '✓' : c.need === 'required' ? '✗' : '·'}</span><span>${esc(c.label)} <small>· ${esc(c.detail)}${c.ok || c.need === 'required' ? '' : ` · ${esc(c.need)}`}</small></span>${fix}</div>`;
+  }).join('');
+  $('#ready').textContent = d.ready ? 'Everything Clearsky needs is here.' : 'Something required (✗) is missing.';
+  const gh = d.checks.find((c) => c.id === 'gh'), acli = d.checks.find((c) => c.id === 'acli');
+  $('#gh-login').textContent = gh?.ok ? 'Log in to GitHub again' : 'Log in to GitHub';
+  $('#gh-login').disabled = /not installed/.test(gh?.detail || '');
+  $('#gh-msg').textContent = gh?.ok ? gh.detail : '';
+  $('#jira-login').textContent = acli?.ok ? 'Log in to Atlassian again' : 'Log in to Atlassian (Jira)';
+  $('#jira-login').disabled = /not installed/.test(acli?.detail || '');
+  $('#jira-msg').textContent = acli?.ok ? acli.detail : '';
+  // Organizations: the ones gh knows you're in, ticked as saved (or all, the first time).
+  const saved = (d.values.GITHUB_ORGS || '').split(',').map((x) => x.trim()).filter(Boolean);
+  const orgs = d.suggestions.orgs || [];
+  picked ??= new Set(saved.length ? saved : orgs.length === 1 ? orgs : []);
+  $('#orgs').innerHTML = orgs.map((o) => `<label><input type="checkbox" value="${esc(o)}"${picked.has(o) ? ' checked' : ''}> ${esc(o)}</label>`).join('');
+  $('#orgs-text').hidden = orgs.length > 0;
+  if (!orgs.length) $('#orgs-text').value ||= saved.join(', ');
+  $('#jira-site').textContent = d.suggestions.jiraSite ? `Jira: ${d.suggestions.jiraSite}, from your Atlassian login.` : 'Jira: log in under step 2 and the site is found by itself.';
+  $('#standup').value ||= d.values.CLEARSKY_STANDUP_TIME || '';
+  $('#workdays').value ||= d.values.CLEARSKY_WORKDAYS || '';
+}
+async function check() {
+  $('#recheck').disabled = true;
+  try { drawChecks(await (await fetch('/api/doctor')).json()); } catch (e) { $('#checks').innerHTML = `<p>${esc(e.message)}</p>`; }
+  $('#recheck').disabled = false;
+}
+$('#recheck').onclick = check;
+document.addEventListener('change', (e) => { if (e.target.closest('#orgs')) { if (e.target.checked) picked.add(e.target.value); else picked.delete(e.target.value); } });
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-copy]');
+  if (!b) return;
+  try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = 'Copied'; } catch { b.textContent = 'Copy failed'; }
+  setTimeout(() => { b.textContent = 'Copy'; }, 1500);
+});
+
+$('#gh-login').onclick = async () => {
+  $('#gh-msg').textContent = 'Starting…';
+  try { const r = await post('/api/login/github'); $('#gh-msg').innerHTML = `Enter <span class="code">${esc(r.code)}</span> at <a href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.url)}</a>, then Check again.`; }
+  catch (e) { $('#gh-msg').textContent = e.message; }
+};
+$('#jira-login').onclick = async () => {
+  $('#jira-msg').textContent = 'Starting…';
+  try { const r = await post('/api/login/jira'); $('#jira-msg').innerHTML = r.url ? `Finish in <a href="${esc(r.url)}" target="_blank" rel="noopener">the Atlassian login</a>, then Check again.` : 'Finish in the browser window that opened, then Check again.'; }
+  catch (e) { $('#jira-msg').textContent = e.message; }
+};
+$('#try').onclick = async () => {
+  const tab = window.open('about:blank', '_blank');
+  $('#try-msg').textContent = 'Starting the demo…';
+  try { const d = await post('/api/demo/start'); if (tab) tab.location = d.url; else location.href = d.url; $('#try-msg').textContent = ''; }
+  catch (e) { tab?.close(); $('#try-msg').textContent = e.message; }
+};
+$('#team-join').onclick = async () => {
+  const from = $('#team').value.trim();
+  if (!from) return;
+  $('#team-msg').textContent = 'Joining…';
+  try {
+    const r = await post('/api/team/join', { from });
+    $('#team-msg').textContent = `Joined ${r.name}: ${r.summary}`;
+    picked = null; check();
+  } catch (e) { $('#team-msg').textContent = e.message; }
+};
+$('#save').onclick = async () => {
+  const orgs = $('#orgs-text').hidden ? [...picked] : $('#orgs-text').value.split(',').map((x) => x.trim()).filter(Boolean);
+  const values = { GITHUB_ORGS: orgs.join(',') };
+  if ($('#standup').value.trim()) values.CLEARSKY_STANDUP_TIME = $('#standup').value.trim();
+  if ($('#workdays').value.trim()) values.CLEARSKY_WORKDAYS = $('#workdays').value.trim();
+  $('#save-msg').textContent = '';
+  try { await post('/api/settings', values); location.href = '/'; } catch (e) { $('#save-msg').textContent = e.message; }
+};
+if (document.querySelector('meta[name=demo]')) $('#s-try').hidden = true;
+check();
+</script>
+</body>
+</html>

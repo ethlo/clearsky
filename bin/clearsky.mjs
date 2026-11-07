@@ -47,6 +47,8 @@ import { manifest as calendarManifest, createCalendar } from '../lib/modules/cal
 import { readLinks, saveLinks, parseBookmarks, mergeLinks } from '../lib/links.mjs';
 import { logEvent } from '../lib/event-log.mjs';
 import { startDemo, demoPort, isDemo } from '../lib/demo.mjs';
+import { checks as doctorChecks, suggestions as doctorSuggestions, doctorText, ready as doctorReady } from '../lib/doctor.mjs';
+import { edsCalendars } from '../lib/eds.mjs';
 import { ownRead, chatPushes } from '../lib/own-read.mjs';
 import { manifest as githubManifest, createGitHub, workItems as githubItems, PR_FIELDS, ITEM_FIELDS, ciState, isBot, latestReviewsByUser, openThreads, humanReviewers, myPrStatus, reviewerName } from '../lib/modules/github.mjs';
 import { manifest as jiraManifest, createJira, workItems as jiraItems, mentionItems as jiraMentionItems, listOf, fieldsOf, nameOf, commentInfo, excerpt, userId, mapLimit, JIRA_WAITING, jiraMentionsByTicket, mergeJira } from '../lib/modules/jira.mjs';
@@ -930,6 +932,12 @@ async function loginStatus() {
       running: run?.state === 'running', error: run?.state === 'error' ? run.message : null };
   }));
 }
+
+// `clearsky doctor` and the welcome page: what this machine has for Clearsky.
+const machineChecks = () => doctorChecks({ acliBin: config.jira.acli, copilotBin: copilot.findCopilot(process.env.COPILOT_BIN),
+  calendars: () => (process.platform === 'linux' ? edsCalendars() : []), browser: () => { try { return findBrowser(); } catch { return null; } } });
+// Nothing set up yet: no settings file of your own and no organizations from anywhere else.
+const firstRun = () => !existsSync(userEnvFile) && !process.env.GITHUB_ORGS && !isDemo();
 
 const settingsStatus = async () => ({ ...await settings.status(config, { path: userEnvFile }), logins: await loginStatus() });
 
@@ -2316,6 +2324,8 @@ function serve() {
   // restarts so an open page keeps working.
   const csrf = localToken(join(dirname(userEnvFile), 'csrf'));
   const page = buildPage(csrf);
+  const welcomePage = demoMark(readFileSync(join(here, '..', 'web', 'welcome.html'), 'utf8')).replaceAll('__CSRF__', csrf)
+    .replace('/*__CSS__*/', () => readFileSync(join(here, '..', 'web', 'css', 'app.css'), 'utf8'));
   const settingsPage = demoMark(readFileSync(join(here, '..', 'web', 'settings.html'), 'utf8')).replace('__CSRF__', csrf)
     .replace('/*__CSS__*/', () => readFileSync(join(here, '..', 'web', 'css', 'app.css'), 'utf8'));
   // A container publishes its port to another one on the host (CLEARSKY_PUBLIC_PORT), and the
@@ -2617,6 +2627,16 @@ function serve() {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
         return res.end(settingsPage);
       }
+      // The first-run welcome: what this machine has, the logins, and your work, in three steps.
+      if (url.pathname === '/welcome') {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+        return res.end(welcomePage);
+      }
+      if (url.pathname === '/api/doctor') {
+        const [list, hints] = await Promise.all([machineChecks(), doctorSuggestions({ acliBin: config.jira.acli })]);
+        return json(res, 200, { checks: list, ready: doctorReady(list), suggestions: hints, platform: process.platform,
+          values: { GITHUB_ORGS: process.env.GITHUB_ORGS || '', CLEARSKY_STANDUP_TIME: process.env.CLEARSKY_STANDUP_TIME || '', CLEARSKY_WORKDAYS: process.env.CLEARSKY_WORKDAYS || '' } });
+      }
       if (url.pathname === '/api/standup/say') {
         if (!standupCache.data) standupCache = { at: Date.now(), data: await standup(await collect(false)) };
         // ?cached=1: what was written for this stand-up already, without asking Copilot.
@@ -2821,6 +2841,8 @@ function serve() {
         return res.end(JSON.stringify(data));
       }
       if (url.pathname === '/' || url.pathname === '/index.html') {
+        // The very first start, with nothing set up yet: the welcome page first.
+        if (firstRun()) { res.writeHead(302, { Location: '/welcome' }); return res.end(); }
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         return res.end(page);
       }
@@ -2985,7 +3007,7 @@ async function dockerCommand([sub = 'up', ...rest]) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
   const args = process.argv.slice(2);
   if (args.includes('-h') || args.includes('--help')) {
-    console.log('usage: clearsky [--json] | clearsky try [--port N] [--no-open] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky app [--port N] | clearsky docker [up|start|down|logs|login|mounts] [--port N] | clearsky school-handover | clearsky jira-debug');
+    console.log('usage: clearsky [--json] | clearsky try [--port N] [--no-open] | clearsky doctor [--json] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky app [--port N] | clearsky docker [up|start|down|logs|login|mounts] [--port N] | clearsky school-handover | clearsky jira-debug');
   } else if (args[0] === 'try') {
     // Clearsky with made-up data, in this terminal: Ctrl+C stops it.
     const p = args.indexOf('--port');
@@ -2994,6 +3016,10 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.a
     if (d.already) console.log(`The demo is already running: ${d.url}`);
     if (!args.includes('--no-open')) openInBrowser(d.url);
     if (d.child) await new Promise((r) => d.child.once('exit', r));
+  } else if (args[0] === 'doctor') {
+    const list = await machineChecks();
+    console.log(args.includes('--json') ? JSON.stringify(list, null, 2) : doctorText(list));
+    process.exitCode = doctorReady(list) ? 0 : 1;
   } else if (args[0] === 'standup') {
     const s = await standup();
     console.log(args.includes('--json') ? JSON.stringify(s, null, 2) : s.text);
