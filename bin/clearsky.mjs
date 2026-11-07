@@ -50,6 +50,8 @@ import { startDemo, demoPort, isDemo } from '../lib/demo.mjs';
 import { checks as doctorChecks, suggestions as doctorSuggestions, doctorText, ready as doctorReady } from '../lib/doctor.mjs';
 import { edsCalendars } from '../lib/eds.mjs';
 import { joinPack, joinSummary, readTeam, exportPack, TEAM_KEYS } from '../lib/team.mjs';
+import { readHandoffs, saveHandoffs, addHandoff, nextHandoff, settleAfterRestart, handoffPrompt, handoffResult, updateHandoff } from '../lib/handoff.mjs';
+import { srtInstalled } from '../lib/doctor.mjs';
 import { ownRead, chatPushes } from '../lib/own-read.mjs';
 import { manifest as githubManifest, createGitHub, workItems as githubItems, PR_FIELDS, ITEM_FIELDS, ciState, isBot, latestReviewsByUser, openThreads, humanReviewers, myPrStatus, reviewerName } from '../lib/modules/github.mjs';
 import { manifest as jiraManifest, createJira, workItems as jiraItems, mentionItems as jiraMentionItems, listOf, fieldsOf, nameOf, commentInfo, excerpt, userId, mapLimit, JIRA_WAITING, jiraMentionsByTicket, mergeJira } from '../lib/modules/jira.mjs';
@@ -2605,6 +2607,27 @@ function serve() {
           if (values.CALENDAR_HIDDEN) process.env.CALENDAR_HIDDEN = values.CALENDAR_HIDDEN; else delete process.env.CALENDAR_HIDDEN;
           return json(res, 200, { hidden: [...now] });
         }
+        // Hand-offs: add one (now, or from a time such as your next meeting), start one now, cancel.
+        if (url.pathname === '/api/handoffs') {
+          const body = await readJson(req);
+          let list = readHandoffs(handoffFile());
+          if (body.action === 'add') {
+            const r = addHandoff(list, body.ref, { after: body.after });
+            saveHandoffs(handoffFile(), r.list);
+            setTimeout(() => handoffs.check?.(), 100);
+            return json(res, 200, { handoff: r.handoff, already: r.already, handoffs: r.list });
+          }
+          const h = list.find((x) => x.id === body.id);
+          if (!h) return json(res, 404, { error: 'no such hand-off' });
+          if (body.action === 'start' && h.status === 'queued') list = updateHandoff(list, h.id, { after: null });
+          else if (body.action === 'retry' && ['failed', 'stopped', 'blocked', 'cancelled'].includes(h.status)) list = updateHandoff(list, h.id, { status: 'queued', after: null, note: '' });
+          else if (body.action === 'cancel' && h.status === 'queued') list = updateHandoff(list, h.id, { status: 'cancelled' });
+          else if (body.action === 'forget' && !['working', 'needs-you'].includes(h.status)) list = list.filter((x) => x.id !== h.id);
+          else return json(res, 400, { error: `can't ${body.action} a hand-off that is ${h.status}` });
+          saveHandoffs(handoffFile(), list);
+          setTimeout(() => handoffs.check?.(), 100);
+          return json(res, 200, { handoffs: list });
+        }
         // Join a team pack, or fetch the one you joined again (from: empty).
         if (url.pathname === '/api/team/join') {
           const { from } = await readJson(req);
@@ -2652,6 +2675,7 @@ function serve() {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
         return res.end(welcomePage);
       }
+      if (url.pathname === '/api/handoffs') return json(res, 200, { handoffs: readHandoffs(handoffFile()), sandbox: isDemo() || await srtInstalled() });
       if (url.pathname === '/api/team') return json(res, 200, { team: readTeam(dirname(userEnvFile)) });
       if (url.pathname === '/api/doctor') {
         const [list, hints] = await Promise.all([machineChecks(), doctorSuggestions({ acliBin: config.jira.acli })]);
@@ -2884,6 +2908,7 @@ function serve() {
     console.log(`clearsky: http://127.0.0.1:${shown}  (settings and logins: http://127.0.0.1:${shown}/settings)`);
     if (process.env.CLEARSKY_POLL_MINUTES !== '0') startPolling();
     keepLoginsAlive();
+    startHandoffs(csrf);
     // Only once this server holds the port, so a second Clearsky can't stop the first one's VMs.
     if (vmSupport().ok) {
       const n = reapOrphans().length;
@@ -2891,6 +2916,73 @@ function serve() {
     }
   });
   server.listen(config.port, config.bind);
+}
+
+// ---------------------------------------------------------------- hand-offs
+
+// Hand-offs (lib/handoff.mjs): one at a time, each an ordinary Copilot chat in the sandbox,
+// started the way the page starts one (a POST to /api/copilot on this server), so it gets the
+// same folders, worktree, sandbox and doors.
+const handoffFile = () => join(dirname(userEnvFile), 'handoffs.json');
+const handoffs = { running: null, timer: null };
+function changeHandoff(id, patch) { saveHandoffs(handoffFile(), updateHandoff(readHandoffs(handoffFile()), id, patch)); }
+
+async function handoffCheck(csrf) {
+  if (handoffs.running) return;
+  const h = nextHandoff(readHandoffs(handoffFile()));
+  if (!h) return;
+  handoffs.running = h.id;
+  // The demo has no real Copilot or sandbox: it acts one out, so a hand-off can be shown.
+  if (isDemo()) {
+    changeHandoff(h.id, { status: 'working', startedAt: new Date().toISOString(), note: '' });
+    setTimeout(() => { changeHandoff(h.id, { status: 'done', endedAt: new Date().toISOString(), pr: 'https://github.com/acme/payments-api/pull/479', note: 'Demo data: a real hand-off ends with its own draft PR.' }); handoffs.running = null; }, 8000);
+    return;
+  }
+  try {
+    const info = await copilotInfo();
+    if (!info.available) throw new Error('GitHub Copilot CLI not found');
+    if (!(await srtInstalled())) throw new Error('hand-offs run only in the sandbox: install srt (see the welcome page)');
+    changeHandoff(h.id, { status: 'working', startedAt: new Date().toISOString(), note: '' });
+    logEvent(`hand-off started: ${h.label}`);
+    const res = await fetch(`http://127.0.0.1:${config.port}/api/copilot`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Clearsky-Token': csrf },
+      body: JSON.stringify({ session: `handoff-${h.id}-${randomBytes(4).toString('hex')}`, refs: [h.ref], permission: 'sandboxed',
+        model: process.env.COPILOT_MODEL || undefined, effort: process.env.COPILOT_EFFORT || undefined,
+        message: handoffPrompt(h, { skills: (info.skills || []).map((x) => x.name) }) }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+    // Follow the answer as it streams: its chat, when it waits for an OK, and its last words.
+    let text = '', buf = '', failed = null;
+    const dec = new TextDecoder();
+    for await (const chunk of res.body) {
+      buf += dec.decode(chunk, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
+        let e; try { e = JSON.parse(line); } catch { continue; }
+        if (e.type === 'session') changeHandoff(h.id, { session: e.id });
+        else if (e.type === 'cwd') changeHandoff(h.id, { cwd: e.cwd });
+        else if (e.type === 'text') text += e.text || '';
+        else if (e.type === 'tool') text += '\n';
+        else if (e.type === 'permission') changeHandoff(h.id, { status: 'needs-you', note: 'Waiting for your OK in the chat.' });
+        else if (e.type === 'permission-done') changeHandoff(h.id, { status: 'working', note: '' });
+        else if (e.type === 'error') failed = e.message;
+      }
+    }
+    const r = failed && !text.trim() ? { status: 'failed', pr: null, note: failed } : handoffResult(text);
+    changeHandoff(h.id, { ...r, endedAt: new Date().toISOString() });
+    logEvent(`hand-off ${r.status}: ${h.label}${r.pr ? ` (${r.pr})` : ''}`);
+  } catch (e) {
+    changeHandoff(h.id, { status: 'failed', note: e.message, endedAt: new Date().toISOString() });
+  } finally {
+    handoffs.running = null;
+  }
+}
+function startHandoffs(csrf) {
+  saveHandoffs(handoffFile(), settleAfterRestart(readHandoffs(handoffFile())));
+  handoffs.check = () => handoffCheck(csrf).catch((e) => logEvent(`hand-off error: ${e.message}`));
+  handoffs.timer = setInterval(handoffs.check, 30_000);
+  handoffs.timer.unref();
 }
 
 // `clearsky restart`: ask the running server to restart once Copilot is idle.

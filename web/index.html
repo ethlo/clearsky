@@ -32,6 +32,7 @@
     <a class="ni" href="#links" data-nav="links"><span class="ico" data-i="link"></span><span class="lab">Links</span></a>
     <a class="ni" href="#standup" data-nav="standup"><span class="ico" data-i="standup"></span><span class="lab">Stand-up</span></a>
     <a class="ni" href="#notifications" data-nav="notifications"><span class="ico" data-i="bell"></span><span class="lab">Notifications</span></a>
+    <a class="ni" href="#handoffs" data-nav="handoffs" title="PRs and tickets you handed to Copilot to work on by itself"><span class="ico" data-i="handoff"></span><span class="lab">Hand-offs</span><b id="n-handoffs"></b></a>
     <a class="ni" href="#changes" data-nav="changes"><span class="ico" data-i="spark"></span><span class="lab">Copilot's changes</span></a>
     <a class="ni" href="#map" data-nav="map"><span class="ico" data-i="map"></span><span class="lab">Agent map</span></a>
   </nav>
@@ -92,6 +93,10 @@
     <header class="vh"><h1 title="How each repo's main branch builds now, and the newest artifact and release it made. Pick the repos in Settings → GitHub.">Builds</h1><span class="spacer"></span>
       <div class="vh-acts"><button type="button" class="icon-btn" id="builds-refresh" title="Check again" aria-label="Check again"><span data-i="refresh" data-size="14"></span></button></div></header>
     <div class="view-b"><div class="page" id="builds"></div></div>
+  </section>
+  <section class="view" id="v-handoffs" hidden>
+    <header class="vh"><h1 title="PRs and tickets you handed to Copilot (✦ on a row → Hand off). It works on them one at a time, in the sandbox, and ends with a draft PR or a note on what it needs from you.">Hand-offs</h1><span class="sub" id="ho-sub"></span><span class="spacer"></span></header>
+    <div class="view-b"><div class="page" id="handoffs"></div></div>
   </section>
   <section class="view" id="v-changes" hidden>
     <header class="vh"><h1 title="What Copilot changed as you on GitHub and Jira, and what it read in Grafana, from its sandbox">Copilot's changes</h1><span class="spacer"></span></header>

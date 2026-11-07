@@ -974,3 +974,13 @@ a.ref:hover { text-decoration-color: currentColor; }
 .ob-none { color: var(--muted); padding: 14px 10px; font-size: 13.5px; }
 .ob-foot { display: flex; gap: 14px; padding: 7px 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11.5px; }
 @media (max-width: 520px) { .ob-r { grid-template-columns: minmax(0, 1fr); gap: 0; } .ob-k, .ob-s { display: none; } .ob-scrim { padding-top: 8vh; } }
+
+/* Hand-offs: what Copilot works on by itself, one row each. */
+.ho-r { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.ho-r:first-child { border-top: 0; }
+.ho-m { flex: 1; min-width: 0; }
+.ho-t { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ho-t a { color: var(--accent); margin-right: 4px; }
+.ho-s { color: var(--muted); font-size: 12.5px; margin-top: 3px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.ho-a { display: flex; gap: 6px; flex: none; align-items: center; }
+@media (max-width: 640px) { .ho-r { flex-direction: column; align-items: stretch; } .ho-a { flex-wrap: wrap; } }

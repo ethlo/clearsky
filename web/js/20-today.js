@@ -39,6 +39,8 @@ menu.addEventListener('click', (e) => {
   if (rs) { menu.hidden = true; openChat(true, true); return openSession(rs.dataset.resume, rs.dataset.cwd); }
   const sk = e.target.closest('[data-run]');
   if (sk) { menu.hidden = true; startCopilotOn({ ...refFromUrl(menu.dataset.ask), title: menu.dataset.title }, sk.dataset.run); }
+  const ho = e.target.closest('[data-handoff]');
+  if (ho) { menu.hidden = true; handOff({ ...refFromUrl(menu.dataset.ask), title: menu.dataset.title }, ho.dataset.handoff || null); }
 });
 
 // ✦ on a PR or ticket: ask about it, or run one of your skills on it in a new chat.
@@ -53,6 +55,7 @@ async function openAskMenu(btn) {
     menu.innerHTML = `<div class="menu-h">Copilot on ${esc(refLabel(ref))}</div>
       ${linked.map((x) => `<button role="menuitem" data-resume="${esc(x.id)}" data-cwd="${esc(x.cwd || '')}">↩ Continue: ${esc(x.title.slice(0, 50))}${STATUS_TEXT[x.status] ? ` (${STATUS_TEXT[x.status]})` : ''}</button>`).join('')}
       <button role="menuitem" data-run="">${linked.length ? 'New chat: ask a question…' : 'Ask a question…'}</button>
+      ${handoffMenu()}
       ${skills.length ? `<div class="menu-h">Run a skill</div>${skills.map((sk) => `<button role="menuitem" data-run="${esc(sk.name)}" title="${esc(sk.description || '')}">/${esc(sk.name)}</button>`).join('')}`
         : chat.info ? '' : '<div class="menu-h">Loading skills…</div>'}`;
   };

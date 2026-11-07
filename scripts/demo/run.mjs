@@ -182,6 +182,17 @@ writeFileSync(join(conf, 'agent-files.jsonl'), [
 ].map((e) => JSON.stringify(e)).join('\n') + '\n');
 writeFileSync(join(conf, 'state.json'), JSON.stringify({ sessionNames: Object.fromEntries(SESSIONS.map((s) => [s.sessionId, s.title])), sessionRefs: { [CHAT.id]: ['pr:acme/payments-api#479', 'issue:PAY-412'] }, read: READ_MARKS }));
 
+// Hand-offs: one Copilot finished with a draft PR, one that needs a decision, and one waiting
+// for tomorrow's first meeting (far enough ahead that the demo never tries to start it).
+writeFileSync(join(conf, 'handoffs.json'), JSON.stringify([
+  { id: 'demo01', ref: { kind: 'issue', key: 'PAY-420', title: 'Ledger export as CSV' }, label: 'PAY-420', status: 'done', addedAt: ago(5), startedAt: ago(4.9), endedAt: ago(4.1),
+    session: CHAT.id, cwd: CHAT.cwd, pr: 'https://github.com/acme/payments-api/pull/481', note: '' },
+  { id: 'demo02', ref: { kind: 'gh', repo: 'acme/payments-api', number: 230, title: 'Flaky test: RefundServiceIT' }, label: 'acme/payments-api#230', status: 'blocked', addedAt: ago(3), startedAt: ago(2.9), endedAt: ago(2.5),
+    note: 'The test needs a running Postgres; should it move to Testcontainers or be tagged as an integration test?' },
+  { id: 'demo03', ref: { kind: 'issue', key: 'PAY-422', title: 'Show refunds in the order history' }, label: 'PAY-422', status: 'queued', addedAt: ago(0.2),
+    after: new Date(Date.now() + 20 * 36e5).toISOString() },
+]), { mode: 0o600 });
+
 // Links: a few favourites on each side.
 const L = (title, url) => ({ title, url });
 writeFileSync(join(conf, 'links.json'), JSON.stringify({ groups: [

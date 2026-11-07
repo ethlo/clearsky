@@ -176,6 +176,10 @@ A chat uses the whole work area, with what it's about (linked PRs and tickets, f
 
 Sessions show up next to the PR or ticket they are about: one you started from that row or attached it to, one running in a checkout of the PR's branch, or one with the PR or ticket key in its title or branch. A dot shows if it is working (green), waiting for you (blue) or needs your OK (amber), and a click reopens it; the ✦ menu also offers **↩ Continue**. Any session that is working or waiting, linked or not, is listed under **Copilot now** at the top of Work, and one waiting for you counts in its number.
 
+## Hand-offs
+
+✦ on a PR, GitHub issue or ticket → **Work on it now, by itself** (or **From my next meeting**) hands it to Copilot. It works on hand-offs one at a time, always in the sandbox: on a feature branch, with the tests and a `review` before it opens anything, and it opens the PR as a draft. It never merges, approves, closes or deletes. The sandbox's doors still decide what leaves your machine, so a step that needs your OK waits for it in the chat. **Hand-offs** in the menu shows each one with its chat and how it ended: a draft PR (which then waits under Your PRs as not read by you), or a sentence on what it needs from you. They're kept in `~/.config/clearsky/handoffs.json`; a restart stops the one running, and its chat can carry on.
+
 ## Copilot skills
 
 `.github/skills/` contains these skills for GitHub Copilot (agent mode in VS Code and the Copilot CLI):
