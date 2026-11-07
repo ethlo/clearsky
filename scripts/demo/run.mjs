@@ -4,10 +4,10 @@
 // a fake acli and Copilot (this folder), in a throw-away home folder, so nothing of yours is
 // read or touched and nothing leaves this machine.
 
-import { HOME as home } from './home.mjs';
+import { HOME as home, MADE } from './home.mjs';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -182,6 +182,17 @@ writeFileSync(join(conf, 'agent-files.jsonl'), [
 ].map((e) => JSON.stringify(e)).join('\n') + '\n');
 writeFileSync(join(conf, 'state.json'), JSON.stringify({ sessionNames: Object.fromEntries(SESSIONS.map((s) => [s.sessionId, s.title])), sessionRefs: { [CHAT.id]: ['pr:acme/payments-api#479', 'issue:PAY-412'] }, read: READ_MARKS }));
 
+// Hand-offs: one Copilot finished with a draft PR, one that needs a decision, and one waiting
+// for tomorrow's first meeting (far enough ahead that the demo never tries to start it).
+writeFileSync(join(conf, 'handoffs.json'), JSON.stringify([
+  { id: 'demo01', ref: { kind: 'issue', key: 'PAY-420', title: 'Ledger export as CSV' }, label: 'PAY-420', status: 'done', addedAt: ago(5), startedAt: ago(4.9), endedAt: ago(4.1),
+    session: CHAT.id, cwd: CHAT.cwd, pr: 'https://github.com/acme/payments-api/pull/481', note: '' },
+  { id: 'demo02', ref: { kind: 'gh', repo: 'acme/payments-api', number: 230, title: 'Flaky test: RefundServiceIT' }, label: 'acme/payments-api#230', status: 'blocked', addedAt: ago(3), startedAt: ago(2.9), endedAt: ago(2.5),
+    note: 'The test needs a running Postgres; should it move to Testcontainers or be tagged as an integration test?' },
+  { id: 'demo03', ref: { kind: 'issue', key: 'PAY-422', title: 'Show refunds in the order history' }, label: 'PAY-422', status: 'queued', addedAt: ago(0.2),
+    after: new Date(Date.now() + 20 * 36e5).toISOString() },
+]), { mode: 0o600 });
+
 // Links: a few favourites on each side.
 const L = (title, url) => ({ title, url });
 writeFileSync(join(conf, 'links.json'), JSON.stringify({ groups: [
@@ -192,10 +203,12 @@ writeFileSync(join(conf, 'links.json'), JSON.stringify({ groups: [
 ] }), { mode: 0o600 });
 
 const app = spawn(process.execPath, [join(here, '..', '..', 'bin', 'clearsky.mjs'), 'serve', '--port', String(port)], {
-  stdio: 'inherit', env: { PATH: process.env.PATH, HOME: home, CLEARSKY_DEMO_HOME: home, CLEARSKY_COPILOT_HOME: copilotHome, TZ: process.env.TZ, LANG: 'en_GB.UTF-8' },
+  stdio: 'inherit', env: { PATH: process.env.PATH, HOME: home, CLEARSKY_DEMO: '1', CLEARSKY_DEMO_HOME: home, CLEARSKY_COPILOT_HOME: copilotHome, TZ: process.env.TZ, LANG: 'en_GB.UTF-8' },
 });
 console.log(`Clearsky demo: http://127.0.0.1:${port}  (made-up data in ${home}; Ctrl+C stops it)`);
-const stop = () => { app.kill(); fake.close(); process.exit(0); };
+// The made-up home folder goes when the demo does (Ctrl+C, or Leave demo in its menu).
+const tidy = () => { if (MADE) try { rmSync(home, { recursive: true, force: true }); } catch {} };
+const stop = () => { app.kill(); fake.close(); tidy(); process.exit(0); };
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);
-app.on('exit', () => { fake.close(); process.exit(0); });
+app.on('exit', () => { fake.close(); setTimeout(() => { tidy(); process.exit(0); }, 100); });

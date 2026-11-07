@@ -38,6 +38,7 @@ function route() {
   $('#v-src').hidden = !h.startsWith('src-');
   $('#v-notes').hidden = h !== 'notifications';
   $('#v-changes').hidden = h !== 'changes';
+  $('#v-handoffs').hidden = h !== 'handoffs';
   $('#v-builds').hidden = h !== 'builds';
   $('#v-servers').hidden = h !== 'servers';
   $('#v-map').hidden = h !== 'map';
@@ -51,6 +52,7 @@ function route() {
   if (h === 'calendar') renderCalendar();
   if (h === 'notifications') renderNotes();
   if (h === 'changes') renderChanges();
+  if (h === 'handoffs') loadHandoffs();
   if (h === 'builds') loadBuilds(false);
   if (h === 'servers') loadServers();
   if (h === 'map') renderMap();

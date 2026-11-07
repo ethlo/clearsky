@@ -46,6 +46,12 @@ import { findBrowser, BROWSERS } from '../lib/browser.mjs';
 import { manifest as calendarManifest, createCalendar } from '../lib/modules/calendar.mjs';
 import { readLinks, saveLinks, parseBookmarks, mergeLinks } from '../lib/links.mjs';
 import { logEvent } from '../lib/event-log.mjs';
+import { startDemo, demoPort, isDemo } from '../lib/demo.mjs';
+import { checks as doctorChecks, suggestions as doctorSuggestions, doctorText, ready as doctorReady } from '../lib/doctor.mjs';
+import { edsCalendars } from '../lib/eds.mjs';
+import { joinPack, joinSummary, readTeam, exportPack, TEAM_KEYS } from '../lib/team.mjs';
+import { readHandoffs, saveHandoffs, addHandoff, nextHandoff, settleAfterRestart, handoffPrompt, handoffResult, updateHandoff } from '../lib/handoff.mjs';
+import { srtInstalled } from '../lib/doctor.mjs';
 import { ownRead, chatPushes } from '../lib/own-read.mjs';
 import { manifest as githubManifest, createGitHub, workItems as githubItems, PR_FIELDS, ITEM_FIELDS, ciState, isBot, latestReviewsByUser, openThreads, humanReviewers, myPrStatus, reviewerName } from '../lib/modules/github.mjs';
 import { manifest as jiraManifest, createJira, workItems as jiraItems, mentionItems as jiraMentionItems, listOf, fieldsOf, nameOf, commentInfo, excerpt, userId, mapLimit, JIRA_WAITING, jiraMentionsByTicket, mergeJira } from '../lib/modules/jira.mjs';
@@ -929,6 +935,22 @@ async function loginStatus() {
       running: run?.state === 'running', error: run?.state === 'error' ? run.message : null };
   }));
 }
+
+// Join a team pack (lib/team.mjs): settings through the settings file, links and skills too.
+function joinTeam(from) {
+  return joinPack(from, {
+    confDir: dirname(userEnvFile), skillsDir: join(homedir(), '.copilot', 'skills'),
+    readEnv: () => Object.fromEntries(TEAM_KEYS.map((k) => [k, process.env[k] || ''])),
+    writeEnv: (v) => { settings.writeEnvFile(userEnvFile, v); applySettings(v); },
+    validate: settings.validate, readLinks: () => readLinks(linksFile()), saveLinks: (d) => saveLinks(linksFile(), d),
+  });
+}
+
+// `clearsky doctor` and the welcome page: what this machine has for Clearsky.
+const machineChecks = () => doctorChecks({ acliBin: config.jira.acli, copilotBin: copilot.findCopilot(process.env.COPILOT_BIN),
+  calendars: () => (process.platform === 'linux' ? edsCalendars() : []), browser: () => { try { return findBrowser(); } catch { return null; } } });
+// Nothing set up yet: no settings file of your own and no organizations from anywhere else.
+const firstRun = () => !existsSync(userEnvFile) && !process.env.GITHUB_ORGS && !isDemo();
 
 const settingsStatus = async () => ({ ...await settings.status(config, { path: userEnvFile }), logins: await loginStatus() });
 
@@ -2234,12 +2256,15 @@ function busyChats() {
 }
 // The page: web/index.html with web/css/app.css and web/js/*.js (in name order, one shared
 // scope) put inline, so it stays one request and works offline.
+// The demo's pages say so: a "Demo data" badge with Leave demo, so nobody takes it for real.
+const demoMark = (html) => (isDemo() ? html.replace('<meta name="theme-color"', '<meta name="demo" content="1">\n<meta name="theme-color"') : html);
+
 export function buildPage(csrf, web = join(here, '..', 'web')) {
   const css = readFileSync(join(web, 'css', 'app.css'), 'utf8');
   const js = readdirSync(join(web, 'js')).filter((n) => n.endsWith('.js')).sort()
     .map((n) => readFileSync(join(web, 'js', n), 'utf8')).join('\n');
-  return readFileSync(join(web, 'index.html'), 'utf8').replace('__CSRF__', csrf)
-    .replace('/*__CSS__*/', () => css).replace('/*__JS__*/', () => js);
+  return demoMark(readFileSync(join(web, 'index.html'), 'utf8').replace('__CSRF__', csrf)
+    .replace('/*__CSS__*/', () => css).replace('/*__JS__*/', () => js));
 }
 
 // Whether Clearsky's files changed since this process started (a pull), so a restart would update it.
@@ -2312,7 +2337,9 @@ function serve() {
   // restarts so an open page keeps working.
   const csrf = localToken(join(dirname(userEnvFile), 'csrf'));
   const page = buildPage(csrf);
-  const settingsPage = readFileSync(join(here, '..', 'web', 'settings.html'), 'utf8').replace('__CSRF__', csrf)
+  const welcomePage = demoMark(readFileSync(join(here, '..', 'web', 'welcome.html'), 'utf8')).replaceAll('__CSRF__', csrf)
+    .replace('/*__CSS__*/', () => readFileSync(join(here, '..', 'web', 'css', 'app.css'), 'utf8'));
+  const settingsPage = demoMark(readFileSync(join(here, '..', 'web', 'settings.html'), 'utf8')).replace('__CSRF__', csrf)
     .replace('/*__CSS__*/', () => readFileSync(join(here, '..', 'web', 'css', 'app.css'), 'utf8'));
   // A container publishes its port to another one on the host (CLEARSKY_PUBLIC_PORT), and the
   // browser then names that port.
@@ -2580,6 +2607,48 @@ function serve() {
           if (values.CALENDAR_HIDDEN) process.env.CALENDAR_HIDDEN = values.CALENDAR_HIDDEN; else delete process.env.CALENDAR_HIDDEN;
           return json(res, 200, { hidden: [...now] });
         }
+        // Hand-offs: add one (now, or from a time such as your next meeting), start one now, cancel.
+        if (url.pathname === '/api/handoffs') {
+          const body = await readJson(req);
+          let list = readHandoffs(handoffFile());
+          if (body.action === 'add') {
+            const r = addHandoff(list, body.ref, { after: body.after });
+            saveHandoffs(handoffFile(), r.list);
+            setTimeout(() => handoffs.check?.(), 100);
+            return json(res, 200, { handoff: r.handoff, already: r.already, handoffs: r.list });
+          }
+          const h = list.find((x) => x.id === body.id);
+          if (!h) return json(res, 404, { error: 'no such hand-off' });
+          if (body.action === 'start' && h.status === 'queued') list = updateHandoff(list, h.id, { after: null });
+          else if (body.action === 'retry' && ['failed', 'stopped', 'blocked', 'cancelled'].includes(h.status)) list = updateHandoff(list, h.id, { status: 'queued', after: null, note: '' });
+          else if (body.action === 'cancel' && h.status === 'queued') list = updateHandoff(list, h.id, { status: 'cancelled' });
+          else if (body.action === 'forget' && !['working', 'needs-you'].includes(h.status)) list = list.filter((x) => x.id !== h.id);
+          else return json(res, 400, { error: `can't ${body.action} a hand-off that is ${h.status}` });
+          saveHandoffs(handoffFile(), list);
+          setTimeout(() => handoffs.check?.(), 100);
+          return json(res, 200, { handoffs: list });
+        }
+        // Join a team pack, or fetch the one you joined again (from: empty).
+        if (url.pathname === '/api/team/join') {
+          const { from } = await readJson(req);
+          const src = String(from || readTeam(dirname(userEnvFile))?.from || '').trim();
+          if (!src) return json(res, 400, { error: 'give the team pack: a git repo, an https link or a file' });
+          if (isDemo()) return json(res, 400, { error: 'not in the demo' });
+          try { const r = await joinTeam(src); return json(res, 200, { name: r.name, summary: joinSummary(r), result: r }); }
+          catch (e) { return json(res, 400, { error: e.message }); }
+        }
+        // Try with demo data: the demo on a port of its own; the page opens it in a new tab.
+        if (url.pathname === '/api/demo/start') {
+          if (isDemo()) return json(res, 400, { error: 'this is the demo already' });
+          try { const d = await startDemo(); return json(res, 200, { url: d.url }); } catch (e) { return json(res, 500, { error: e.message }); }
+        }
+        // Leave demo: the demo stops itself (and its made-up home folder goes with it).
+        if (url.pathname === '/api/demo/stop') {
+          if (!isDemo()) return json(res, 400, { error: 'not the demo' });
+          json(res, 200, { ok: true });
+          setTimeout(() => process.exit(0), 200);
+          return;
+        }
         if (url.pathname === '/api/login/github') return json(res, 200, await settings.githubLogin());
         if (url.pathname === '/api/login/jira') return json(res, 200, await settings.jiraLogin(config.jira.acli));
         const login = url.pathname.match(/^\/api\/source\/([a-z][a-z0-9-]+)\/login$/);
@@ -2600,6 +2669,18 @@ function serve() {
       if (url.pathname === '/settings') {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
         return res.end(settingsPage);
+      }
+      // The first-run welcome: what this machine has, the logins, and your work, in three steps.
+      if (url.pathname === '/welcome') {
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+        return res.end(welcomePage);
+      }
+      if (url.pathname === '/api/handoffs') return json(res, 200, { handoffs: readHandoffs(handoffFile()), sandbox: isDemo() || await srtInstalled() });
+      if (url.pathname === '/api/team') return json(res, 200, { team: readTeam(dirname(userEnvFile)) });
+      if (url.pathname === '/api/doctor') {
+        const [list, hints] = await Promise.all([machineChecks(), doctorSuggestions({ acliBin: config.jira.acli })]);
+        return json(res, 200, { checks: list, ready: doctorReady(list), suggestions: hints, platform: process.platform,
+          values: { GITHUB_ORGS: process.env.GITHUB_ORGS || '', CLEARSKY_STANDUP_TIME: process.env.CLEARSKY_STANDUP_TIME || '', CLEARSKY_WORKDAYS: process.env.CLEARSKY_WORKDAYS || '' } });
       }
       if (url.pathname === '/api/standup/say') {
         if (!standupCache.data) standupCache = { at: Date.now(), data: await standup(await collect(false)) };
@@ -2805,6 +2886,8 @@ function serve() {
         return res.end(JSON.stringify(data));
       }
       if (url.pathname === '/' || url.pathname === '/index.html') {
+        // The very first start, with nothing set up yet: the welcome page first.
+        if (firstRun()) { res.writeHead(302, { Location: '/welcome' }); return res.end(); }
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
         return res.end(page);
       }
@@ -2825,6 +2908,7 @@ function serve() {
     console.log(`clearsky: http://127.0.0.1:${shown}  (settings and logins: http://127.0.0.1:${shown}/settings)`);
     if (process.env.CLEARSKY_POLL_MINUTES !== '0') startPolling();
     keepLoginsAlive();
+    startHandoffs(csrf);
     // Only once this server holds the port, so a second Clearsky can't stop the first one's VMs.
     if (vmSupport().ok) {
       const n = reapOrphans().length;
@@ -2832,6 +2916,73 @@ function serve() {
     }
   });
   server.listen(config.port, config.bind);
+}
+
+// ---------------------------------------------------------------- hand-offs
+
+// Hand-offs (lib/handoff.mjs): one at a time, each an ordinary Copilot chat in the sandbox,
+// started the way the page starts one (a POST to /api/copilot on this server), so it gets the
+// same folders, worktree, sandbox and doors.
+const handoffFile = () => join(dirname(userEnvFile), 'handoffs.json');
+const handoffs = { running: null, timer: null };
+function changeHandoff(id, patch) { saveHandoffs(handoffFile(), updateHandoff(readHandoffs(handoffFile()), id, patch)); }
+
+async function handoffCheck(csrf) {
+  if (handoffs.running) return;
+  const h = nextHandoff(readHandoffs(handoffFile()));
+  if (!h) return;
+  handoffs.running = h.id;
+  // The demo has no real Copilot or sandbox: it acts one out, so a hand-off can be shown.
+  if (isDemo()) {
+    changeHandoff(h.id, { status: 'working', startedAt: new Date().toISOString(), note: '' });
+    setTimeout(() => { changeHandoff(h.id, { status: 'done', endedAt: new Date().toISOString(), pr: 'https://github.com/acme/payments-api/pull/479', note: 'Demo data: a real hand-off ends with its own draft PR.' }); handoffs.running = null; }, 8000);
+    return;
+  }
+  try {
+    const info = await copilotInfo();
+    if (!info.available) throw new Error('GitHub Copilot CLI not found');
+    if (!(await srtInstalled())) throw new Error('hand-offs run only in the sandbox: install srt (see the welcome page)');
+    changeHandoff(h.id, { status: 'working', startedAt: new Date().toISOString(), note: '' });
+    logEvent(`hand-off started: ${h.label}`);
+    const res = await fetch(`http://127.0.0.1:${config.port}/api/copilot`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Clearsky-Token': csrf },
+      body: JSON.stringify({ session: `handoff-${h.id}-${randomBytes(4).toString('hex')}`, refs: [h.ref], permission: 'sandboxed',
+        model: process.env.COPILOT_MODEL || undefined, effort: process.env.COPILOT_EFFORT || undefined,
+        message: handoffPrompt(h, { skills: (info.skills || []).map((x) => x.name) }) }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `HTTP ${res.status}`);
+    // Follow the answer as it streams: its chat, when it waits for an OK, and its last words.
+    let text = '', buf = '', failed = null;
+    const dec = new TextDecoder();
+    for await (const chunk of res.body) {
+      buf += dec.decode(chunk, { stream: true });
+      let nl;
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        const line = buf.slice(0, nl); buf = buf.slice(nl + 1);
+        let e; try { e = JSON.parse(line); } catch { continue; }
+        if (e.type === 'session') changeHandoff(h.id, { session: e.id });
+        else if (e.type === 'cwd') changeHandoff(h.id, { cwd: e.cwd });
+        else if (e.type === 'text') text += e.text || '';
+        else if (e.type === 'tool') text += '\n';
+        else if (e.type === 'permission') changeHandoff(h.id, { status: 'needs-you', note: 'Waiting for your OK in the chat.' });
+        else if (e.type === 'permission-done') changeHandoff(h.id, { status: 'working', note: '' });
+        else if (e.type === 'error') failed = e.message;
+      }
+    }
+    const r = failed && !text.trim() ? { status: 'failed', pr: null, note: failed } : handoffResult(text);
+    changeHandoff(h.id, { ...r, endedAt: new Date().toISOString() });
+    logEvent(`hand-off ${r.status}: ${h.label}${r.pr ? ` (${r.pr})` : ''}`);
+  } catch (e) {
+    changeHandoff(h.id, { status: 'failed', note: e.message, endedAt: new Date().toISOString() });
+  } finally {
+    handoffs.running = null;
+  }
+}
+function startHandoffs(csrf) {
+  saveHandoffs(handoffFile(), settleAfterRestart(readHandoffs(handoffFile())));
+  handoffs.check = () => handoffCheck(csrf).catch((e) => logEvent(`hand-off error: ${e.message}`));
+  handoffs.timer = setInterval(handoffs.check, 30_000);
+  handoffs.timer.unref();
 }
 
 // `clearsky restart`: ask the running server to restart once Copilot is idle.
@@ -2969,7 +3120,31 @@ async function dockerCommand([sub = 'up', ...rest]) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
   const args = process.argv.slice(2);
   if (args.includes('-h') || args.includes('--help')) {
-    console.log('usage: clearsky [--json] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky app [--port N] | clearsky docker [up|start|down|logs|login|mounts] [--port N] | clearsky school-handover | clearsky jira-debug');
+    console.log('usage: clearsky [--json] | clearsky try [--port N] [--no-open] | clearsky doctor [--json] | clearsky join [<team pack>] | clearsky team export [--name N] [--links] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky app [--port N] | clearsky docker [up|start|down|logs|login|mounts] [--port N] | clearsky school-handover | clearsky jira-debug');
+  } else if (args[0] === 'try') {
+    // Clearsky with made-up data, in this terminal: Ctrl+C stops it.
+    const p = args.indexOf('--port');
+    const port = p > -1 ? Number(args[p + 1]) : demoPort();
+    const d = await startDemo({ port, foreground: true });
+    if (d.already) console.log(`The demo is already running: ${d.url}`);
+    if (!args.includes('--no-open')) openInBrowser(d.url);
+    if (d.child) await new Promise((r) => d.child.once('exit', r));
+  } else if (args[0] === 'join') {
+    // clearsky join <git repo | https link | file>; without one, fetch the pack you joined again.
+    const from = args[1] || readTeam(dirname(userEnvFile))?.from;
+    if (!from) { console.error('usage: clearsky join <git repo | https://…/clearsky-team.json | file>'); process.exitCode = 2; }
+    else {
+      try { const r = await joinTeam(from); console.log(`Joined ${r.name}: ${joinSummary(r)}`); }
+      catch (e) { console.error(`clearsky: ${e.message}`); process.exitCode = 1; }
+    }
+  } else if (args[0] === 'team' && args[1] === 'export') {
+    // A team pack from your own settings (and, with --links, your work links), to share.
+    const n = args.indexOf('--name');
+    console.log(JSON.stringify(exportPack({ name: n > -1 ? args[n + 1] : 'Team', links: args.includes('--links') ? readLinks(linksFile()) : null }), null, 2));
+  } else if (args[0] === 'doctor') {
+    const list = await machineChecks();
+    console.log(args.includes('--json') ? JSON.stringify(list, null, 2) : doctorText(list));
+    process.exitCode = doctorReady(list) ? 0 : 1;
   } else if (args[0] === 'standup') {
     const s = await standup();
     console.log(args.includes('--json') ? JSON.stringify(s, null, 2) : s.text);

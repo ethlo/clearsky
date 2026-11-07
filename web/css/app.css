@@ -944,3 +944,43 @@ a.ref:hover { text-decoration-color: currentColor; }
 .srv-copy { color: var(--muted); font-size: 12px; text-align: right; opacity: 0; }
 .srv:hover .srv-copy, .srv:focus-visible .srv-copy { opacity: 1; }
 @media (max-width: 720px) { .srv { grid-template-columns: 1fr 48px; } .srv-where, .srv-how { grid-column: 1; } .srv-copy { grid-row: 1; grid-column: 2; opacity: 1; } }
+
+/* The demo (`clearsky try`): a badge at the top of the menu, and the page after Leave demo. */
+.demo-badge { margin: 8px 12px 0; padding: 4px 6px 4px 10px; border-radius: 999px; background: var(--accent-soft, var(--surface-2)); color: var(--accent); border: 1px solid var(--accent);
+  font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.demo-badge span { flex: 1; }
+.demo-badge button { font: inherit; font-weight: 500; font-size: 11.5px; color: var(--accent); background: none; border: 0; cursor: pointer; padding: 0 4px; }
+.demo-badge button:hover { text-decoration: underline; }
+.demo-left { max-width: 520px; margin: 15vh auto; padding: 0 16px; color: var(--text); }
+.demo-left a { color: var(--accent); }
+
+/* One box (Ctrl/Cmd-K): find anything, do anything. */
+.ob-open { margin: 10px 12px 2px; display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px 0 10px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface); color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer; text-align: left; }
+.ob-open:hover { border-color: var(--line-strong); color: var(--text-2); }
+.ob-open span { flex: 1; }
+.ob-open kbd, .ob-foot kbd { font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; background: var(--surface-2); color: var(--text-2); }
+.ob-scrim { position: fixed; inset: 0; z-index: 60; background: rgb(0 0 0 / .28); display: flex; justify-content: center; align-items: flex-start; padding: 12vh 16px 16px; }
+.ob-scrim[hidden] { display: none; }
+.ob { width: min(640px, 100%); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 12px; box-shadow: 0 18px 50px rgb(0 0 0 / .25); overflow: hidden; display: flex; flex-direction: column; max-height: 70vh; }
+.ob input { border: 0; border-bottom: 1px solid var(--line); padding: 14px 16px; font: inherit; font-size: 15px; background: transparent; color: var(--text); outline: none; width: 100%; box-sizing: border-box; }
+.ob-list { overflow-y: auto; padding: 6px; }
+.ob-r { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; gap: 10px; align-items: baseline; width: 100%; text-align: left; border: 0; background: none; color: var(--text);
+  font: inherit; font-size: 13.5px; padding: 7px 10px; border-radius: 7px; cursor: pointer; }
+.ob-r.sel, .ob-r:hover { background: var(--accent-soft); }
+.ob-k { color: var(--muted); font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+.ob-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ob-s { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.ob-none { color: var(--muted); padding: 14px 10px; font-size: 13.5px; }
+.ob-foot { display: flex; gap: 14px; padding: 7px 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11.5px; }
+@media (max-width: 520px) { .ob-r { grid-template-columns: minmax(0, 1fr); gap: 0; } .ob-k, .ob-s { display: none; } .ob-scrim { padding-top: 8vh; } }
+
+/* Hand-offs: what Copilot works on by itself, one row each. */
+.ho-r { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.ho-r:first-child { border-top: 0; }
+.ho-m { flex: 1; min-width: 0; }
+.ho-t { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ho-t a { color: var(--accent); margin-right: 4px; }
+.ho-s { color: var(--muted); font-size: 12.5px; margin-top: 3px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.ho-a { display: flex; gap: 6px; flex: none; align-items: center; }
+@media (max-width: 640px) { .ho-r { flex-direction: column; align-items: stretch; } .ho-a { flex-wrap: wrap; } }

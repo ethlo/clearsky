@@ -4,5 +4,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-if (!process.env.CLEARSKY_DEMO_HOME) process.env.CLEARSKY_DEMO_HOME = mkdtempSync(join(tmpdir(), 'clearsky-demo-'));
+// MADE: this run made the folder, so it may remove it when the demo stops (never one you gave it).
+export const MADE = !process.env.CLEARSKY_DEMO_HOME;
+if (MADE) process.env.CLEARSKY_DEMO_HOME = mkdtempSync(join(tmpdir(), 'clearsky-demo-'));
 export const HOME = process.env.CLEARSKY_DEMO_HOME;

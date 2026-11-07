@@ -15,7 +15,17 @@ One page that shows what needs your attention at work:
 
 It is a single Node script with no dependencies. It runs on your machine, talks to GitHub, Jira and Slack with your own tokens, and keeps no data anywhere.
 
+## Try it first
+
+```sh
+clearsky try          # or: node bin/clearsky.mjs try
+```
+
+This opens Clearsky with made-up data (a company called Acme, its PRs, tickets, meetings and a Copilot chat) on http://127.0.0.1:7790. It needs no logins. Nothing of yours is read or shown, so it's also the way to show Clearsky to others. **Leave demo** in its menu, or Ctrl+C, stops it and removes its data. Settings → General → **Try with demo data** starts the same demo from the page.
+
 ## Setup
+
+The first time you open Clearsky it shows a **welcome page** (`/welcome`): what this machine has (Node, git, gh, acli, Copilot, the sandbox, a calendar), with the install command for your OS next to anything missing, buttons to log in to GitHub and Jira through their CLIs, and your work organizations picked from your gh login. `clearsky doctor` prints the same check in a terminal. No tokens are needed.
 
 Requires Node 22+ and the [Atlassian CLI](https://developer.atlassian.com/cloud/acli/guides/install-acli/) (`acli`), logged in with `acli jira auth login --web`.
 
@@ -66,6 +76,10 @@ The easiest way to set all of this up is the Settings page: run `clearsky serve`
 
 The config is read from `./.env`, then the repo's `.env`, then `~/.config/clearsky/.env`. Real environment variables override all of them.
 
+### Team packs
+
+If your team shares a setup, join it: `clearsky join <git repo, https link or file>` (or paste it on the welcome page, or in Settings → General). It fills in the organizations, stand-up time, Copilot defaults, links and skills the team agreed on, and keeps anything you set yourself. Tokens and the sandbox's doors are never part of a pack. See [docs/team-pack.md](docs/team-pack.md).
+
 ## Use
 
 ```sh
@@ -80,6 +94,7 @@ clearsky jira-debug   # raw acli output, if Jira data looks wrong
 The page has a menu on the left and one work area beside it:
 - **Work** is one list, grouped by what it needs from you: **Copilot now** (every open Copilot session, from here, a terminal or VS Code), **Needs you** (reviews, your PRs on your move, mentions), **Your tickets**, and **Waiting on others** (folded into one line). **Reviews**, **Your PRs**, **Mentions** and **Tickets** in the menu show just that part.
 - Click a row (or press ↵) to open it in full in the work area: the PR, ticket or message with its details, a link to open it on GitHub, Jira or Slack, and the Copilot sessions about it. A Copilot session opens as its chat. Esc goes back. Ctrl-click a title to go straight to the source.
+- **Ctrl+K** (⌘K on a Mac), or **Find anything** at the top of the menu, opens one box to find anything: PRs, tickets, mentions, Copilot chats, links, today's and tomorrow's meetings, servers, pages, Settings tabs, skills and a few commands. Paste a ticket key, `org/repo#12` or a link to open it even when it isn't in your lists. It searches what the page already has, so nothing extra is fetched.
 - J/K move through the list, E marks the selected item done, H snoozes it, A opens the Copilot menu for it, O opens it on its site.
 - **Done** (✓) hides an item until something new happens on it (a commit, review, comment or status change). Jira mentions are grouped per ticket, so marking one done hides the ticket until someone mentions you there again.
 - **Snooze** (the clock) hides it for an hour, until tomorrow's stand-up, a week, or a date you pick, even if there's new activity. "Show N done, N snoozed" at the bottom of the list brings them back.
@@ -160,6 +175,10 @@ A chat uses the whole work area, with what it's about (linked PRs and tickets, f
 **History** lists your Copilot sessions as Copilot itself knows them, whether you started them here, in a terminal or in your editor, with ones open elsewhere marked. Click one to see the conversation and carry on with it. The chat you had open comes back after a page reload. Click a chat's title to rename it (the name is kept in Clearsky). A chat you start with ✦ on a ticket, PR or GitHub issue is named after it ("ABC-6519 · Fix capture timeout") in Clearsky. A PR, the Jira key in its title or branch, and the GitHub issues it closes count as one piece of work, so ✦ on any of them offers **Continue** on it before a new chat. A message you send while Copilot is still working waits and goes when the turn ends; Enter on an empty box, or **Stop**, stops the turn.
 
 Sessions show up next to the PR or ticket they are about: one you started from that row or attached it to, one running in a checkout of the PR's branch, or one with the PR or ticket key in its title or branch. A dot shows if it is working (green), waiting for you (blue) or needs your OK (amber), and a click reopens it; the ✦ menu also offers **↩ Continue**. Any session that is working or waiting, linked or not, is listed under **Copilot now** at the top of Work, and one waiting for you counts in its number.
+
+## Hand-offs
+
+✦ on a PR, GitHub issue or ticket → **Work on it now, by itself** (or **From my next meeting**) hands it to Copilot. It works on hand-offs one at a time, always in the sandbox: on a feature branch, with the tests and a `review` before it opens anything, and it opens the PR as a draft. It never merges, approves, closes or deletes. The sandbox's doors still decide what leaves your machine, so a step that needs your OK waits for it in the chat. **Hand-offs** in the menu shows each one with its chat and how it ended: a draft PR (which then waits under Your PRs as not read by you), or a sentence on what it needs from you. They're kept in `~/.config/clearsky/handoffs.json`; a restart stops the one running, and its chat can carry on.
 
 ## Copilot skills
 
