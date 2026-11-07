@@ -492,12 +492,12 @@ function md(text) {
   // Fenced blocks: an opening ```lang line, then everything up to a closing ``` line. One still
   // open (Copilot is mid-answer) shows as code so far.
   const re = /^```([\w-]*)[ \t]*\n([\s\S]*?)^```[ \t]*$/gm;
-  const block = (lang, body) => (lang === 'choices' ? choicesCard(body) : `<div class="cblock"><button type="button" class="b-copy" data-copy-block title="Copy" aria-label="Copy">${icon('copy', 13)}</button><pre><code>${esc(body.replace(/\n$/, ''))}</code></pre></div>`);
+  const block = (lang, body) => (lang === 'choices' ? choicesCard(body) : lang === 'remember' ? rememberCard(body) : `<div class="cblock"><button type="button" class="b-copy" data-copy-block title="Copy" aria-label="Copy">${icon('copy', 13)}</button><pre><code>${esc(body.replace(/\n$/, ''))}</code></pre></div>`);
   let out = '', last = 0, m;
   while ((m = re.exec(text))) { out += mdText(text.slice(last, m.index), last > 0); out += block(m[1], m[2]); last = re.lastIndex; }
   const rest = text.slice(last), open = rest.match(/^```([\w-]*)[ \t]*\n/m);
   if (!open) return out + mdText(rest, last > 0);
-  return out + mdText(rest.slice(0, open.index), last > 0) + (open[1] === 'choices' ? '' : block('', rest.slice(open.index + open[0].length)));
+  return out + mdText(rest.slice(0, open.index), last > 0) + (open[1] === 'choices' || open[1] === 'remember' ? '' : block('', rest.slice(open.index + open[0].length)));
 }
 function mdText(part, afterBlock) {
   // "> " lines (a draft comment, a quote from a thread) as one quote, with a Copy button that
@@ -595,6 +595,68 @@ function choicesCard(body) {
   });
   return `<div class="choices">${q ? `<div class="choices-q">${esc(q)}</div>` : ''}${opts.map((o) => `<button class="choice${o.rec ? ' rec' : ''}" data-choice="${esc(o.label)}">
     <b>${esc(o.label)}${o.rec ? ' <i>recommended</i>' : ''}</b>${o.why ? `<span>${esc(o.why)}</span>` : ''}</button>`).join('')}</div>`;
+}
+
+// Copilot's long-term memory (lib/memory.mjs). A ```remember block is a note it suggests:
+// "repo: owner/name" (optional), then one note per line. Saved only when you press Save.
+let memoryText = '';
+const loadMemory = () => getJson('/api/copilot/memory').then((m) => { memoryText = m.text || ''; }).catch(() => {});
+loadMemory();
+const MEM_SKIP_KEY = 'clearsky.copilot.memorySkipped';
+const memSkipped = () => { try { return JSON.parse(localStorage.getItem(MEM_SKIP_KEY) || '[]'); } catch { return []; } };
+const noteText = (l) => l.replace(/\s+/g, ' ').trim().replace(/^[-*]\s+/, '');
+function parseRemember(body) {
+  let repo = null;
+  const lines = [];
+  for (const raw of body.split('\n')) {
+    const m = raw.match(/^\s*repo:\s*(\S+)\s*$/i);
+    if (m && !lines.length && !repo) { repo = /^[\w.-]+\/[\w.-]+$/.test(m[1]) ? m[1] : null; continue; }
+    const l = noteText(raw);
+    if (l) lines.push(l);
+  }
+  return { repo, lines: lines.slice(0, 10) };
+}
+const memHas = (l) => memoryText.split('\n').some((x) => noteText(x) === l);
+const memKey = ({ repo, lines }) => `${repo || ''}|${lines.join('\n')}`;
+function rememberCard(body) {
+  const note = parseRemember(body);
+  if (!note.lines.length) return '';
+  const marks = memSkipped(); // what you did with a card: its key when skipped, "saved:" and its key when saved as edited
+  const state = note.lines.every(memHas) || marks.includes(`saved:${memKey(note)}`) ? 'Saved to memory' : marks.includes(memKey(note)) ? 'Skipped' : '';
+  return `<div class="remember" data-remember-body="${esc(body)}"><div class="remember-t">${icon('bookmark', 13)} Remember${note.repo ? ` for ${esc(note.repo)}` : ' in every chat'}?</div>
+    <ul>${note.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
+    <div class="remember-b">${state ? `<span class="remember-done">${esc(state)}</span>`
+      : '<button type="button" class="r-save" data-remember="save">Save</button><button type="button" data-remember="edit">Edit</button><button type="button" data-remember="skip">Skip</button>'}</div></div>`;
+}
+async function rememberClick(b) {
+  const card = b.closest('.remember'), body = card.dataset.rememberBody, note = parseRemember(body);
+  const done = (t) => { card.querySelector('.remember-b').innerHTML = `<span class="remember-done">${esc(t)}</span>`; };
+  const act = b.dataset.remember;
+  const mark = (k) => { try { localStorage.setItem(MEM_SKIP_KEY, JSON.stringify([...memSkipped(), k].slice(-200))); } catch {} };
+  if (act === 'skip') { mark(memKey(note)); return done('Skipped'); }
+  if (act === 'edit') {
+    card.querySelector('ul').outerHTML = `<textarea class="remember-edit" rows="${Math.min(8, note.lines.length + 1)}" aria-label="Notes to remember, one per line">${esc(note.lines.join('\n'))}</textarea>`;
+    card.querySelector('.remember-b').innerHTML = '<button type="button" class="r-save" data-remember="save">Save</button><button type="button" data-remember="cancel">Cancel</button>';
+    card.querySelector('textarea').focus();
+    return;
+  }
+  if (act === 'cancel') { card.outerHTML = rememberCard(body); return; }
+  const edited = card.querySelector('textarea');
+  const lines = edited ? edited.value.split('\n').map(noteText).filter(Boolean) : note.lines;
+  if (!lines.length) return done('Skipped');
+  card.querySelectorAll('button').forEach((x) => { x.disabled = true; });
+  try {
+    const r = await post('/api/copilot/memory', { lines, repo: note.repo });
+    memoryText = r.text ?? memoryText;
+    if (edited) { mark(`saved:${memKey(note)}`); edited.outerHTML = `<ul>${lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>`; }
+    card.querySelector('.remember-err')?.remove();
+    done(r.added ? 'Saved to memory' : 'Already in memory');
+  } catch (err) {
+    card.querySelectorAll('button').forEach((x) => { x.disabled = false; });
+    let m = card.querySelector('.remember-err');
+    if (!m) { m = document.createElement('div'); m.className = 'remember-err'; card.append(m); }
+    m.textContent = err.message;
+  }
 }
 
 document.addEventListener('click', async (e) => {
@@ -1040,6 +1102,8 @@ async function attachLive(id) {
 
 // Approve or deny a step Copilot asked about (Ask mode).
 $('#chat-log').addEventListener('click', async (e) => {
+  const rb = e.target.closest('[data-remember]');
+  if (rb) { rememberClick(rb); return; }
   const ch = e.target.closest('[data-choice]');
   if (ch && !chat.stop) {
     ch.closest('.choices').querySelectorAll('button').forEach((x) => { x.disabled = true; x.classList.toggle('picked', x === ch); });
