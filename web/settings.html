@@ -160,6 +160,9 @@
     <label for="CLEARSKY_POLL_MINUTES">Check GitHub, Jira mentions and Slack every … minutes</label>
     <input id="CLEARSKY_POLL_MINUTES" data-key="CLEARSKY_POLL_MINUTES" inputmode="numeric" placeholder="3">
     <div class="row"><button class="save" data-keys="CLEARSKY_STANDUP_TIME,CLEARSKY_WORKDAYS,CLEARSKY_WORKDAY_END,CLEARSKY_MENTION_DAYS,CLEARSKY_TIME_FORMAT,CLEARSKY_POLL_MINUTES">Save</button><span class="msg"></span></div>
+    <h3>Team pack</h3>
+    <p class="hint" id="team-now">Your team's shared setup (organizations, stand-up time, links, Copilot skills), from a git repo, an https link or a file the team keeps. Settings you changed yourself are kept. <code>clearsky team export</code> makes one from your settings.</p>
+    <div class="row"><input id="team-from" placeholder="https://github.com/acme/clearsky-team.git" spellcheck="false" style="flex:1;min-width:220px"><button class="secondary" id="team-join" type="button">Join</button><span class="msg" id="team-msg"></span></div>
     <h3>Set-up check</h3>
     <p class="hint">What this machine has for Clearsky (gh, acli, Copilot, the sandbox, a calendar) and how to get what's missing: <a href="/welcome">the welcome page</a>, or <code>clearsky doctor</code> in a terminal.</p>
     <h3>Demo</h3>
@@ -304,6 +307,20 @@ $('#demo-start').onclick = async () => {
   try { const d = await post('/api/demo/start'); if (tab) tab.location = d.url; else location.href = d.url; $('#demo-msg').textContent = ''; }
   catch (e) { tab?.close(); $('#demo-msg').textContent = e.message; }
 };
+// Team pack: join one, or fetch the one you joined again (Update).
+async function drawTeam() {
+  const t = (await (await fetch('/api/team')).json()).team;
+  if (!t) return;
+  $('#team-from').value = t.from;
+  $('#team-join').textContent = 'Update';
+  $('#team-msg').textContent = `${t.name}, fetched ${new Date(t.at).toLocaleDateString()}`;
+}
+$('#team-join').onclick = async () => {
+  $('#team-msg').textContent = 'Fetching…';
+  try { const r = await post('/api/team/join', { from: $('#team-from').value.trim() }); $('#team-msg').textContent = `${r.name}: ${r.summary}`; $('#team-join').textContent = 'Update'; load(); }
+  catch (e) { $('#team-msg').textContent = e.message; }
+};
+drawTeam().catch(() => {});
 if (document.querySelector('meta[name=demo]')) { $('#demo-start').disabled = true; $('#demo-msg').textContent = 'This is the demo.'; }
 
 function state(el, on, text) {

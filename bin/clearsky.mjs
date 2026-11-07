@@ -49,6 +49,7 @@ import { logEvent } from '../lib/event-log.mjs';
 import { startDemo, demoPort, isDemo } from '../lib/demo.mjs';
 import { checks as doctorChecks, suggestions as doctorSuggestions, doctorText, ready as doctorReady } from '../lib/doctor.mjs';
 import { edsCalendars } from '../lib/eds.mjs';
+import { joinPack, joinSummary, readTeam, exportPack, TEAM_KEYS } from '../lib/team.mjs';
 import { ownRead, chatPushes } from '../lib/own-read.mjs';
 import { manifest as githubManifest, createGitHub, workItems as githubItems, PR_FIELDS, ITEM_FIELDS, ciState, isBot, latestReviewsByUser, openThreads, humanReviewers, myPrStatus, reviewerName } from '../lib/modules/github.mjs';
 import { manifest as jiraManifest, createJira, workItems as jiraItems, mentionItems as jiraMentionItems, listOf, fieldsOf, nameOf, commentInfo, excerpt, userId, mapLimit, JIRA_WAITING, jiraMentionsByTicket, mergeJira } from '../lib/modules/jira.mjs';
@@ -931,6 +932,16 @@ async function loginStatus() {
     return { name: p.name, label: p.label, button: p.login.label || 'Log in', loggedIn: !!st.loggedIn, detail: st.detail || '',
       running: run?.state === 'running', error: run?.state === 'error' ? run.message : null };
   }));
+}
+
+// Join a team pack (lib/team.mjs): settings through the settings file, links and skills too.
+function joinTeam(from) {
+  return joinPack(from, {
+    confDir: dirname(userEnvFile), skillsDir: join(homedir(), '.copilot', 'skills'),
+    readEnv: () => Object.fromEntries(TEAM_KEYS.map((k) => [k, process.env[k] || ''])),
+    writeEnv: (v) => { settings.writeEnvFile(userEnvFile, v); applySettings(v); },
+    validate: settings.validate, readLinks: () => readLinks(linksFile()), saveLinks: (d) => saveLinks(linksFile(), d),
+  });
 }
 
 // `clearsky doctor` and the welcome page: what this machine has for Clearsky.
@@ -2594,6 +2605,15 @@ function serve() {
           if (values.CALENDAR_HIDDEN) process.env.CALENDAR_HIDDEN = values.CALENDAR_HIDDEN; else delete process.env.CALENDAR_HIDDEN;
           return json(res, 200, { hidden: [...now] });
         }
+        // Join a team pack, or fetch the one you joined again (from: empty).
+        if (url.pathname === '/api/team/join') {
+          const { from } = await readJson(req);
+          const src = String(from || readTeam(dirname(userEnvFile))?.from || '').trim();
+          if (!src) return json(res, 400, { error: 'give the team pack: a git repo, an https link or a file' });
+          if (isDemo()) return json(res, 400, { error: 'not in the demo' });
+          try { const r = await joinTeam(src); return json(res, 200, { name: r.name, summary: joinSummary(r), result: r }); }
+          catch (e) { return json(res, 400, { error: e.message }); }
+        }
         // Try with demo data: the demo on a port of its own; the page opens it in a new tab.
         if (url.pathname === '/api/demo/start') {
           if (isDemo()) return json(res, 400, { error: 'this is the demo already' });
@@ -2632,6 +2652,7 @@ function serve() {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
         return res.end(welcomePage);
       }
+      if (url.pathname === '/api/team') return json(res, 200, { team: readTeam(dirname(userEnvFile)) });
       if (url.pathname === '/api/doctor') {
         const [list, hints] = await Promise.all([machineChecks(), doctorSuggestions({ acliBin: config.jira.acli })]);
         return json(res, 200, { checks: list, ready: doctorReady(list), suggestions: hints, platform: process.platform,
@@ -3007,7 +3028,7 @@ async function dockerCommand([sub = 'up', ...rest]) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
   const args = process.argv.slice(2);
   if (args.includes('-h') || args.includes('--help')) {
-    console.log('usage: clearsky [--json] | clearsky try [--port N] [--no-open] | clearsky doctor [--json] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky app [--port N] | clearsky docker [up|start|down|logs|login|mounts] [--port N] | clearsky school-handover | clearsky jira-debug');
+    console.log('usage: clearsky [--json] | clearsky try [--port N] [--no-open] | clearsky doctor [--json] | clearsky join [<team pack>] | clearsky team export [--name N] [--links] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky app [--port N] | clearsky docker [up|start|down|logs|login|mounts] [--port N] | clearsky school-handover | clearsky jira-debug');
   } else if (args[0] === 'try') {
     // Clearsky with made-up data, in this terminal: Ctrl+C stops it.
     const p = args.indexOf('--port');
@@ -3016,6 +3037,18 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.a
     if (d.already) console.log(`The demo is already running: ${d.url}`);
     if (!args.includes('--no-open')) openInBrowser(d.url);
     if (d.child) await new Promise((r) => d.child.once('exit', r));
+  } else if (args[0] === 'join') {
+    // clearsky join <git repo | https link | file>; without one, fetch the pack you joined again.
+    const from = args[1] || readTeam(dirname(userEnvFile))?.from;
+    if (!from) { console.error('usage: clearsky join <git repo | https://…/clearsky-team.json | file>'); process.exitCode = 2; }
+    else {
+      try { const r = await joinTeam(from); console.log(`Joined ${r.name}: ${joinSummary(r)}`); }
+      catch (e) { console.error(`clearsky: ${e.message}`); process.exitCode = 1; }
+    }
+  } else if (args[0] === 'team' && args[1] === 'export') {
+    // A team pack from your own settings (and, with --links, your work links), to share.
+    const n = args.indexOf('--name');
+    console.log(JSON.stringify(exportPack({ name: n > -1 ? args[n + 1] : 'Team', links: args.includes('--links') ? readLinks(linksFile()) : null }), null, 2));
   } else if (args[0] === 'doctor') {
     const list = await machineChecks();
     console.log(args.includes('--json') ? JSON.stringify(list, null, 2) : doctorText(list));

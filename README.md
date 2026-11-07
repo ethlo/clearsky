@@ -76,6 +76,10 @@ The easiest way to set all of this up is the Settings page: run `clearsky serve`
 
 The config is read from `./.env`, then the repo's `.env`, then `~/.config/clearsky/.env`. Real environment variables override all of them.
 
+### Team packs
+
+If your team shares a setup, join it: `clearsky join <git repo, https link or file>` (or paste it on the welcome page, or in Settings → General). It fills in the organizations, stand-up time, Copilot defaults, links and skills the team agreed on, and keeps anything you set yourself. Tokens and the sandbox's doors are never part of a pack. See [docs/team-pack.md](docs/team-pack.md).
+
 ## Use
 
 ```sh
