@@ -23,6 +23,7 @@ import { sessionEvents, sessionUsage } from '../lib/copilot-events.mjs';
 import { branchesFor } from '../lib/branches.mjs';
 import { sandboxedCommand, sandboxEnded, stopSandbox, sandboxProxy, githubLogin, DEFAULT_DOMAINS, READ_DEFAULT, parseDomains } from '../lib/sandbox.mjs';
 import { VmImage, ChatVm, vmSupport, VM_DOMAINS, reapOrphans } from '../lib/vm.mjs';
+import { VmQueue } from '../lib/vm-queue.mjs';
 import { logWrite, readWrites } from '../lib/agent-log.mjs';
 import { manifest as grafanaManifest, createGrafana, parseInstances, parseTokens, parseCommand, sessionStore, USAGE as GRAFANA_USAGE } from '../lib/modules/grafana.mjs';
 import { cookieLogin } from '../lib/browser-login.mjs';
@@ -1382,11 +1383,30 @@ async function vmRun({ key, argv, cwd, java, signal }, out, err) {
     c.vm.events.push(...old);
     bindVm(c);
   }
-  return c.vm.exec(argv, cwd, out, err, { signal, java: java?.startsWith('/usr/lib/jvm/') ? java : hostJava() });
+  // In line for a VM when other chats' VMs fill the places (Settings → Copilot → VMs at the same
+  // time): the command, the chat and the VM's view all say where it is.
+  const vm = c.vm;
+  vm.onStop ||= () => vmQueue.drop(vm, 'this chat\'s VM was stopped while it waited');
+  vm.queue ||= () => vmQueue.view(vm);
+  const { waited, ms } = await vmQueue.enter(vm, {
+    signal,
+    evict: () => { vm.event('Stopping the VM: another chat is waiting for one. It starts again on the next vm command'); vm.stop(); },
+    notify: ({ position, limit }) => {
+      const text = `Waiting for a VM: ${ordinal(position)} in line (${limit} at a time)`;
+      vm.event(text);
+      err(`Clearsky: ${text}. Other chats' builds run first; this command starts on its own.\n`);
+    },
+  });
+  if (waited) vm.event(`Got a VM after ${Math.round(ms / 1000)}s in line`);
+  try {
+    return await vm.exec(argv, cwd, out, err, { signal, java: java?.startsWith('/usr/lib/jvm/') ? java : hostJava() });
+  } finally { vmQueue.leave(vm); }
 }
+const vmQueue = new VmQueue();
+const ordinal = (n) => `${n}${[, 'st', 'nd', 'rd'][n % 100 >> 3 ^ 1 && n % 10] || 'th'}`;
 // VM events show in the chat as they happen (commands and containers; the rest is in its view).
 function bindVm(c) {
-  const shown = { vm: /^(VM up|Docker ready|Stopping|The VM stopped|Preparing|Downloading|VM image)/, docker: /^(start|die|oom) /, run: /^(done|failed|Stopped)/ };
+  const shown = { vm: /^(VM up|Docker ready|Stopping|The VM stopped|Preparing|Downloading|VM image|Waiting for a VM|Got a VM)/, docker: /^(start|die|oom) /, run: /^(done|failed|Stopped)/ };
   // Containers stopped after the tests (Testcontainers kills them: exit 137, its reaper exits 0)
   // are cleanup, not a crash: one quiet line for them all. Other exits show as they happen.
   let stopped = 0, timer = null;
@@ -2387,7 +2407,7 @@ function serve() {
         if (url.pathname === '/api/vm/stop') {
           const { chat } = await readJson(req);
           const vm = acpChats.get(String(chat || ''))?.vm;
-          if (vm && vm.state !== 'off') { vm.event('Stopped from Clearsky'); vm.stop(); }
+          if (vm && (vm.state !== 'off' || vm.queue?.().position)) { vm.event('Stopped from Clearsky'); vm.stop(); }
           return json(res, 200, { stopped: !!vm });
         }
         if (url.pathname === '/api/copilot/stop') {
@@ -2624,6 +2644,7 @@ function serve() {
           const values = settings.validate(await readJson(req));
           settings.writeEnvFile(userEnvFile, values);
           applySettings(values);
+          vmQueue.pump(); // more VMs at once: whoever waits starts now
           return json(res, 200, await settingsStatus());
         }
         // Show or hide one calendar's events; saved like a setting, without refetching everything.

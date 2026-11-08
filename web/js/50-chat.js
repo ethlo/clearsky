@@ -281,15 +281,20 @@ async function drawVm() {
   const on = v.state === 'running', gb = (mb) => `${(mb / 1024).toFixed(1)} GB`;
   const up = v.startedAt ? Math.round((Date.now() - Date.parse(v.startedAt)) / 6e4) : null;
   const sys = v.system ? `${gb(v.system.memUsedMb)} of ${gb(v.system.memTotalMb)}` : gb(v.memMb);
-  const head = `<div class="vm-h"><span class="vm-st s-${esc(v.state)}"><i></i>VM ${esc(v.state === 'running' ? 'running' : v.state === 'starting' ? 'starting' : 'stopped')}</span>
+  // Waiting in line for a VM (Settings → Copilot → VMs at the same time): where, and of how many.
+  const qd = v.queue?.position ? v.queue : null;
+  const st = qd ? 'queued' : v.state;
+  const head = `<div class="vm-h"><span class="vm-st s-${esc(st)}"><i></i>VM ${esc(qd ? 'waiting' : v.state === 'running' ? 'running' : v.state === 'starting' ? 'starting' : 'stopped')}</span>
+    ${qd ? `<span class="vm-sub" title="${esc(`${qd.limit} VM${qd.limit === 1 ? '' : 's'} at a time (Settings → Copilot). Starts on its own when it's this chat's turn.`)}">${qd.position === 1 ? 'next in line' : `${qd.position - 1} ahead`} · ${qd.running} running</span>` : ''}
     ${on && up != null ? `<span class="vm-sub">up ${up < 1 ? '<1' : up} min · ${v.commands} run${v.commands === 1 ? '' : 's'}</span>` : ''}
-    ${v.state !== 'off' ? '<button class="chip" id="vm-stop" type="button" title="Stop this chat\'s VM; the next vm command starts a fresh one">Stop</button>' : ''}</div>`;
+    ${qd ? '<button class="chip" id="vm-stop" type="button" title="Leave the line: the waiting vm command stops">Leave line</button>'
+      : v.state !== 'off' ? '<button class="chip" id="vm-stop" type="button" title="Stop this chat\'s VM; the next vm command starts a fresh one">Stop</button>' : ''}</div>`;
   const shares = `<div class="vm-tier"><div class="vm-lbl">Shared in</div>${v.shares.map((s) => `<div class="vm-share">${icon('folder', 12)} ${esc(s)}</div>`).join('')}</div>`;
   const ctrs = v.containers.length
     ? v.containers.map((c) => `<div class="vm-ctr c-${esc(c.state)}" title="${esc(`${c.image}\n${c.status}${c.ports ? `\n${c.ports}` : ''}`)}"><i></i><b>${esc(c.name)}</b><span>${esc(c.image)}</span>
         ${c.state === 'running' && (c.cpu || c.mem) ? `<em>${esc([c.cpu, (c.mem || '').split(' / ')[0]].filter(Boolean).join(' · '))}</em>` : `<em>${esc(c.status || c.state)}</em>`}
         ${c.ports ? `<small>${esc(c.ports.replace(/0\.0\.0\.0:|\[::\]:/g, '').split(', ').filter((x, i, a) => a.indexOf(x) === i).join(', '))}</small>` : ''}</div>`).join('')
-    : `<div class="vm-empty">${on ? 'No containers yet' : 'Starts on the next vm command'}</div>`;
+    : `<div class="vm-empty">${on ? 'No containers yet' : qd ? 'Starts when it\'s this chat\'s turn' : 'Starts on the next vm command'}</div>`;
   const box = `<div class="vm-box"><div class="vm-box-h">${icon('source', 13)} ${v.vcpus} vCPUs · ${sys}${v.diskBytes ? ` · disk ${gb(v.diskBytes / 1048576)}` : ''}</div>
     <div class="vm-lbl">Docker</div>${ctrs}</div>`;
   // The hosts it can reach, grouped by what they're for.
