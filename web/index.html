@@ -16,6 +16,7 @@
 <body>
 <div class="app">
 <div class="drawer-scrim" id="scrim" hidden></div>
+<div class="col-grip" id="grip-side" data-col="side" role="separator" aria-orientation="vertical" aria-label="Menu width" tabindex="0" title="Drag to resize the menu. Double-click resets it."></div>
 <aside class="side" id="side" aria-label="Menu">
   <div class="vpn-off" id="vpn-badge" hidden role="status">VPN off</div>
   <nav class="nav" id="nav">
@@ -136,6 +137,7 @@
       <span class="vh-acts">
         <button class="icon-btn small" id="chat-hist-btn" title="All your Copilot sessions: here, in the terminal or your editor"><span data-i="history" data-size="14"></span>History</button>
         <button class="icon-btn small" id="chat-new" title="New chat (Alt+N)"><span data-i="plus" data-size="14"></span>New</button>
+        <button class="icon-btn small" id="cp-details" type="button" title="What this chat is about, what it made and what it did, across the whole width" aria-pressed="false"><span data-i="panel" data-size="14"></span>Details</button>
         <span class="vh-sep" aria-hidden="true"></span>
         <button class="icon-btn small only" id="cp-restart" type="button" title="Restart this chat's Copilot. Your next message carries on the conversation." aria-label="Restart Copilot"><span data-i="refresh" data-size="14"></span></button>
         <button class="icon-btn small only" id="cp-close" type="button" title="Close chat (it stays in History)" aria-label="Close chat"><span data-i="x" data-size="14"></span></button>
@@ -164,13 +166,16 @@
           </div>
         </form>
       </div>
+      <div class="col-grip" id="grip-cp" data-col="cp" role="separator" aria-orientation="vertical" aria-label="Side pane width" tabindex="0" title="Drag to resize the side pane. Double-click resets it."></div>
       <aside class="cp-side">
         <!-- One part at a time: what it's about, what it made, what it did, and how it runs. -->
         <nav class="cp-tabs" id="cp-tabs" role="tablist" aria-label="About this chat">
+          <button type="button" class="cp-conv" id="cp-conv" title="Back to the conversation (Esc)"><span data-i="back" data-size="14"></span>Conversation</button>
           <button type="button" role="tab" data-pane="about">About</button>
           <button type="button" role="tab" data-pane="out">Outputs</button>
           <button type="button" role="tab" data-pane="act">Activity</button>
           <button type="button" role="tab" data-pane="cfg">Chat</button>
+          <button type="button" class="cp-wide" id="cp-wide" title="Show in the main column (Alt+D)" aria-label="Show in the main column" aria-pressed="false"><span data-i="expand" data-size="14"></span></button>
         </nav>
         <div class="cp-pane" data-pane="about" role="tabpanel">
           <div class="chat-ctx" id="chat-ctx" hidden></div>

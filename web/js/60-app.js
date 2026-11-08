@@ -74,6 +74,7 @@ window.addEventListener('keydown', (e) => {
   if (!menu.hidden || evPop?.isConnected || hc.classList.contains('on') || document.querySelector('#cp-refs .ref-pick')) return;
   if ($('#side').classList.contains('open')) { menu_(false); return; }
   if (!$('#chat-hist').hidden) { showHistory(false); e.preventDefault(); return; }
+  if (!$('#chat').hidden && cpIsWide() && !e.target.closest?.('input, select, textarea')) { cpWide(false); e.preventDefault(); return; }
   const t = e.target;
   if (t.closest?.('input, select') || (t.id === 'chat-text' && t.value)) return;
   if (current === 'inbox') { document.querySelectorAll('#list .r.sel').forEach((x) => x.classList.remove('sel')); selK = null; return; }

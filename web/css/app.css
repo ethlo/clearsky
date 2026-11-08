@@ -38,7 +38,7 @@ button { font: inherit; cursor: pointer; }
 /* Layout: a menu on the left, and one work area that takes the rest of the width.
    Opening anything (an item, a Copilot chat, the calendar) uses the whole work area. */
 html, body { height: 100%; overflow: hidden; } /* the work area scrolls, not the page */
-.app { display: grid; grid-template-columns: 236px minmax(0, 1fr); height: 100%; }
+.app { display: grid; grid-template-columns: var(--side-w, 236px) minmax(0, 1fr); height: 100%; position: relative; }
 .work { background: var(--surface); min-width: 0; height: 100%; overflow: hidden; display: flex; flex-direction: column; }
 .view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .view-b { flex: 1; min-height: 0; overflow-y: auto; }
@@ -473,11 +473,11 @@ a.ref:hover { border-bottom-style: solid; }
 .hc .foot a { color: var(--accent); font-weight: 550; }
 
 /* Copilot: the chat on the left, what it's about and its settings on the right */
-.cpw { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 300px; position: relative; }
+.cpw { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) var(--cp-w, 300px); position: relative; }
 .cp-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .cp-side { border-left: 1px solid var(--line); overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; font-size: 12.5px; }
 .cp-side h4 { margin: 0 0 6px; font-size: 11.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-@media (max-width: 1000px) { .cpw { grid-template-columns: minmax(0, 1fr); } .cp-side { display: none; } }
+@media (max-width: 1000px) { .cpw { grid-template-columns: minmax(0, 1fr); } .cpw:not(.wide) .cp-side { display: none; } }
 .chat-log, .cp-main .chat-refs, .cp-main .chat-in { width: 100%; max-width: 860px; margin: 0 auto; }
 .chat-ctx { display: flex; flex-direction: column; gap: 6px; }
 .chat-ctx .ctx-line { display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--text-2); flex-wrap: wrap; }
@@ -889,6 +889,38 @@ time.at { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nu
 .cp-tabs button b { font-weight: 500; color: var(--muted); font-size: 11.5px; margin-left: 2px; }
 .cp-pane { display: flex; flex-direction: column; gap: 16px; }
 .cp-pane[hidden] { display: none; }
+.cp-tabs .cp-wide { margin-left: auto; padding: 8px 4px; color: var(--muted); align-self: center; border-bottom: 0; margin-bottom: 0; border-radius: 6px; display: inline-flex; }
+.cp-tabs .cp-wide:hover { background: var(--surface-2); }
+.cp-tabs .cp-conv { display: none; align-items: center; gap: 4px; margin-right: 10px; }
+#cp-details { display: none; }
+@media (max-width: 1000px) { #cp-details { display: inline-flex; } .cp-tabs .cp-wide { display: none; } }
+#cp-details[aria-pressed="true"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+
+/* "Show in the main column": the side pane's tabs take the whole width, the conversation one tab away. */
+.cpw.wide { grid-template-columns: minmax(0, 1fr); }
+.cpw.wide .cp-main, .cpw.wide #grip-cp { display: none; }
+.cpw.wide .cp-side { display: flex; border-left: 0; padding: 0 0 40px; font-size: 13.5px; --gut: max(24px, calc((100% - 960px) / 2)); }
+.cpw.wide .cp-tabs { margin: 0; padding: 0 var(--gut); }
+.cpw.wide .cp-tabs .cp-conv { display: inline-flex; }
+.cpw.wide .cp-tabs button { font-size: 13.5px; padding: 12px 8px 11px; }
+.cpw.wide .cp-tabs .cp-wide { padding: 8px 6px; }
+.cpw.wide .cp-pane { padding: 6px var(--gut) 0; }
+.cpw.wide .cp-pane[data-pane="about"]:not([hidden]) { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 20px 32px; align-items: start; }
+.cpw.wide .cp-pane[data-pane="act"]:not([hidden]) { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr)); gap: 20px 32px; align-items: start; }
+.cpw.wide .cp-pane[data-pane="cfg"]:not([hidden]) { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 20px 32px; align-items: start; }
+.cpw.wide #cp-changes .changes li { grid-template-columns: 90px minmax(0, 1fr) auto; gap: 12px; padding: 8px 0; font-size: 13px; }
+
+/* Column edges you can drag: the menu's right edge and the chat's side pane's left edge. */
+.col-grip { position: absolute; top: 0; bottom: 0; width: 9px; z-index: 5; cursor: col-resize; touch-action: none; }
+.col-grip::after { content: ""; position: absolute; top: 0; bottom: 0; left: 4px; width: 1px; background: transparent; transition: background .12s; }
+.col-grip:hover::after, .col-grip:focus-visible::after, .col-grip.drag::after { background: var(--accent); width: 2px; left: 3.5px; }
+.col-grip:focus-visible { outline: none; }
+#grip-side { left: calc(var(--side-w, 236px) - 5px); }
+#grip-cp { right: calc(var(--cp-w, 300px) - 4px); }
+body.col-drag { cursor: col-resize; user-select: none; }
+body.col-drag iframe { pointer-events: none; }
+@media (max-width: 860px) { #grip-side { display: none; } }
+@media (max-width: 1000px) { #grip-cp { display: none; } }
 
 /* A PR or ticket named in text (stand-up, chat answers) is a link, not a pill: the composer's
    .ref chips shouldn't shape it. */
@@ -961,7 +993,8 @@ a.ref:hover { text-decoration-color: currentColor; }
 /* The demo (`clearsky try`): a badge at the top of the menu, and the page after Leave demo. */
 .demo-badge { margin: 8px 12px 0; padding: 4px 6px 4px 10px; border-radius: 999px; background: var(--accent-soft, var(--surface-2)); color: var(--accent); border: 1px solid var(--accent);
   font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
-.demo-badge span { flex: 1; }
+.demo-badge span { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.demo-badge button { white-space: nowrap; }
 .demo-badge button { font: inherit; font-weight: 500; font-size: 11.5px; color: var(--accent); background: none; border: 0; cursor: pointer; padding: 0 4px; }
 .demo-badge button:hover { text-decoration: underline; }
 .demo-left { max-width: 520px; margin: 15vh auto; padding: 0 16px; color: var(--text); }
@@ -971,7 +1004,7 @@ a.ref:hover { text-decoration-color: currentColor; }
 .ob-open { margin: 10px 12px 2px; display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px 0 10px; border: 1px solid var(--line); border-radius: 8px;
   background: var(--surface); color: var(--muted); font: inherit; font-size: 12.5px; cursor: pointer; text-align: left; }
 .ob-open:hover { border-color: var(--line-strong); color: var(--text-2); }
-.ob-open span { flex: 1; }
+.ob-open span { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ob-open kbd, .ob-foot kbd { font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; background: var(--surface-2); color: var(--text-2); }
 .ob-scrim { position: fixed; inset: 0; z-index: 60; background: rgb(0 0 0 / .28); display: flex; justify-content: center; align-items: flex-start; padding: 12vh 16px 16px; }
 .ob-scrim[hidden] { display: none; }
