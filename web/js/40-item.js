@@ -20,7 +20,7 @@ function whyLine(it) {
   if (it.kind === 'review') return `${esc(d.author)} asked for your ${d.rerequested ? 're-review' : 'review'} ${esc(ago(d.requestedAt))}${d.viaTeam ? ' (via your team)' : ''}.`;
   if (it.kind === 'pr') return `${esc(d.status.label)}${d.status.detail ? `: ${esc(d.status.detail)}` : ''}.${prMeta(d) ? ` ${esc(prMeta(d))[0].toUpperCase()}${esc(prMeta(d)).slice(1)}.` : ''} Updated ${esc(ago(d.updatedAt))}.`;
   if (it.kind === 'mention') return it.src === 'Jira' ? `${esc(d.people.join(', '))} mentioned you ${esc(ago(d.at))}${d.count > 1 ? `, ${d.count} times` : ''}.${d.status ? ` Ticket is ${esc(d.status)}.` : ''}`
-    : it.src === 'Slack' ? `${esc(d.by)} mentioned you in ${esc(d.channel)} ${esc(ago(d.at))}.` : `You were mentioned. Updated ${esc(ago(d.updatedAt))}.`;
+    : d.why ? `${esc(d.why.replace(/\.$/, ''))} ${esc(ago(d.at))}.` : `You were mentioned. Updated ${esc(ago(d.updatedAt))}.`;
   if (it.kind === 'ticket') return `Assigned to ${esc(d.assignee || 'you')} · ${esc([d.status, d.type, fixText(d), d.priority && `${d.priority} priority`, d.due && `due ${d.due}`].filter(Boolean).join(' · '))}.`;
   return esc(it.step || '');
 }
@@ -69,7 +69,7 @@ function standsHtml(it, rel) {
 async function renderItem() {
   const it = curItem, el = $('#item');
   if (!it) return;
-  const where = { GitHub: 'Open on GitHub', Jira: 'Open in Jira', Slack: 'Open in Slack' }[it.src] || 'Open';
+  const where = { GitHub: 'Open on GitHub', Jira: 'Open in Jira' }[it.src] || it.data?.open || 'Open';
   const sessions = cpLinks.links[itemKey(it.url || '')] || [];
   $('#it-crumb').textContent = `${it.src || ''}${it.ref ? ` · ${it.ref}` : ''}`;
   const rel = it.kind === 'session' ? [] : relatedItems(it, inboxItems());
@@ -93,7 +93,7 @@ async function renderItem() {
   const cps = sessions.length ? `<h3>Copilot on this</h3><div class="cps">${sessions.map(chip).join('')}</div>` : '';
   // A Jira comment comes as HTML the server built from Jira's own format (lib/jira-rich.mjs).
   const quote = it.quoteHtml ? `<h3>Latest mention</h3><div class="quote desc rich">${it.quoteHtml}</div>`
-    : it.quote ? `<h3>${it.src === 'Slack' ? 'Message' : 'Latest mention'}</h3><div class="quote">${esc(it.quote)}</div>` : '';
+    : it.quote ? `<h3>${esc(it.data?.quoteLabel || 'Latest mention')}</h3><div class="quote">${esc(it.quote)}</div>` : '';
   const ref = it.pr ? { pr: it.pr } : it.issue ? { issue: it.issue } : null;
   let facts = '', body = ref ? `<h3>Details</h3>${skeleton(2)}` : '';
   const draw = () => {
@@ -272,6 +272,11 @@ document.addEventListener('click', (e) => { if (e.target.closest('[data-back-aft
 let extraSources = [];
 function addSourcePanels(list) {
   extraSources = list.filter((x) => x.panel);
+  // A work plugin whose rows need you (Slack) feeds the mentions list, its freshness and refresh.
+  for (const x of extraSources) {
+    SOURCE_NAME[x.name] = x.panel.title;
+    if (x.area === 'work' && x.panel.zone === 'needs' && !FRESH_SOURCES.mentions.includes(x.name)) { FRESH_SOURCES.mentions.push(x.name); PANEL_SOURCES['c-mentions'].push(x.name); }
+  }
   for (const x of extraSources) {
     if (document.querySelector(`[data-nav="src-${x.name}"]`)) continue;
     const a = document.createElement('a');

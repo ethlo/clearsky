@@ -185,6 +185,17 @@ test('School, once part of Clearsky, is a plugin now: added for you if it was se
   assert.deepEqual(readRegistry(q.registry).plugins, {});
 });
 
+test('a source that becomes a plugin later (Slack) is offered once to lists from before', async () => {
+  const p = paths();
+  mkdirSync(join(p.registry, '..'), { recursive: true });
+  // A list from before `offered`: School was offered then, and you removed it since.
+  writeFileSync(p.registry, JSON.stringify({ plugins: {} }));
+  assert.deepEqual(migrateBundled({ FLYT_SCHOOL_KEY: 'x', SLACK_TOKEN: 'xoxp-1' }, { paths: p }), ['slack']);
+  assert.deepEqual(Object.keys(readRegistry(p.registry).plugins), ['slack']);
+  removePlugin('slack', { paths: p });
+  assert.deepEqual(migrateBundled({ SLACK_TOKEN: 'xoxp-1' }, { paths: p }), []);
+});
+
 test('every plugin that ships with Clearsky has a valid manifest and loads', async () => {
   const p = paths();
   for (const n of readdirSync(BUNDLED)) {

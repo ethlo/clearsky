@@ -2,7 +2,7 @@
 // The server joins web/js/*.js in name order into one script in index.html, so they share one scope.
 
 const REFRESH_MS = 5 * 60 * 1000;
-let SOURCES = ['github', 'jira', 'jiraMentions', 'slack', 'calendar'];
+let SOURCES = ['github', 'jira', 'jiraMentions', 'calendar'];
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -100,8 +100,8 @@ function catchUp(name) {
 // "↻ checked 3m ago" next to the page title: when Clearsky last checked what this list shows
 // (GitHub for PRs and reviews, Jira and GitHub for tickets, everything for the inbox), with
 // each source's time on hover. Click to check everything now.
-const FRESH_SOURCES = { prs: ['github'], reviews: ['github'], mentions: ['github', 'jiraMentions', 'slack'], tickets: ['jira', 'github'] };
-const SOURCE_NAME = { github: 'GitHub', jira: 'Jira', jiraMentions: 'Jira mentions', slack: 'Slack', calendar: 'Calendar' };
+const FRESH_SOURCES = { prs: ['github'], reviews: ['github'], mentions: ['github', 'jiraMentions'], tickets: ['jira', 'github'] };
+const SOURCE_NAME = { github: 'GitHub', jira: 'Jira', jiraMentions: 'Jira mentions', calendar: 'Calendar' }; // plugins add theirs
 function drawFresh() {
   const view = typeof listView === 'string' ? listView : 'inbox';
   const names = (FRESH_SOURCES[view] || SOURCES).filter((n) => state[n] !== undefined || loading.has(n));
@@ -277,7 +277,7 @@ function view() {
   };
   hiddenCount = 0;
   V = { g: keep(state.github, 'reviewRequested', 'myPrs', 'mentions', 'assigned'), j: keep(state.jira, 'assigned'),
-    jm: keep(state.jiraMentions, 'tickets'), sl: keep(state.slack, 'mentions') };
+    jm: keep(state.jiraMentions, 'tickets') };
 }
 
 async function post(url, body) {
@@ -363,7 +363,7 @@ function rows(id, items, render, limit = 8) {
 
 // Which sources feed each panel, for its refresh button.
 const PANEL_SOURCES = { plan: ['calendar'], 'c-review': ['github'], 'c-prs': ['github'], 'c-waiting': ['github'],
-  'c-mentions': ['github', 'jiraMentions', 'slack'], 'c-left': ['jira', 'github'] };
+  'c-mentions': ['github', 'jiraMentions'], 'c-left': ['jira', 'github'] };
 const REFRESH_ICON = icon('refresh', 14);
 
 function refreshButton(id) {

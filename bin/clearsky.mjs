@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// clearsky: one view of what needs your attention on GitHub, Jira and Slack.
+// clearsky: one view of what needs your attention on GitHub and Jira, and in what plugins add (Slack, School…).
 // Zero dependencies, Node 22+. See README.md.
 //
 //   clearsky              print a Markdown summary
@@ -45,7 +45,6 @@ import { loadSources, makeContext, hook, asList } from '../lib/sources.mjs';
 import { loadPlugins, migrateBundled, pluginPaths, listPlugins, preparePlugin, removePlugin, updatePlugin } from '../lib/plugins.mjs';
 import { sandboxedSource, srtCli } from '../lib/plugin-sandbox.mjs';
 import { pluginItems } from '../lib/items.mjs';
-import { manifest as slackManifest, createSlack, workItems as slackItems } from '../lib/modules/slack.mjs';
 import { findBrowser, BROWSERS } from '../lib/browser.mjs';
 import { manifest as calendarManifest, createCalendar } from '../lib/modules/calendar.mjs';
 import { readLinks, saveLinks, parseBookmarks, mergeLinks } from '../lib/links.mjs';
@@ -150,10 +149,6 @@ const buildConfig = (env = process.env) => ({
   workdayEnd: env.CLEARSKY_WORKDAY_END || '17:00',
   standupTime: env.CLEARSKY_STANDUP_TIME || '09:45', // daily stand-up (local time)
   workdays: parseWorkdays(env.CLEARSKY_WORKDAYS || 'Mon-Fri'),
-  slack: {
-    token: env.SLACK_TOKEN, // optional; user token (xoxp-) with search:read
-    api: (env.SLACK_API_URL || 'https://slack.com/api').replace(/\/$/, ''),
-  },
 });
 const config = buildConfig();
 
@@ -172,7 +167,7 @@ const plugins = await loadSources([process.env.CLEARSKY_SOURCES_DIR || join(home
   plugins.errors.push(...added.errors);
 }
 for (const e of plugins.errors) console.error(`clearsky: ${e}`);
-for (const p of plugins.sources.values()) settings.addFields(p.settings);
+for (const p of plugins.sources.values()) settings.addFields(p.settings, p.label);
 
 // ---------------------------------------------------------------- helpers
 
@@ -211,10 +206,8 @@ const { acli, jiraSearch, jiraComments, jiraSite, browseUrl, jiraDebug } = jiraM
 const fetchJiraWork = jiraModule.fetchWork, fetchJiraMentions = jiraModule.fetchMentions;
 export const issuePreview = (key) => jiraModule.issuePreview(key);
 
-// ---------------------------------------------------------------- Slack and Calendar (lib/modules)
+// ---------------------------------------------------------------- Calendar (lib/modules)
 
-const slackModule = createSlack({ config, http, daysAgoIso });
-const fetchSlack = slackModule.fetch;
 const fetchCalendar = createCalendar({ config }).fetch;
 
 // ---------------------------------------------------------------- Now / Next
@@ -240,7 +233,7 @@ function reviewMinutes(p) {
 // and up to three tasks that fit it, most urgent first.
 export function planNow(d, now = Date.now(), dismissedItems = localState.dismissed(stateFile), mutedItems = localState.muted(stateFile, now),
   doneAt = localState.doneAt(stateFile)) {
-  const g = d.github || {}, j = d.jira || {}, s = d.slack || {}, cal = d.calendar || {};
+  const g = d.github || {}, j = d.jira || {}, cal = d.calendar || {};
   // Calendars you hid (from the agenda) neither show nor take your time.
   const hidden = hiddenCalendars();
   const calendars = [...new Set((cal.events || []).map((e) => e.calendar).filter(Boolean))]
@@ -273,8 +266,8 @@ export function planNow(d, now = Date.now(), dismissedItems = localState.dismiss
   const candidates = [
     ...(g.myPrs || []).filter((p) => p.status.label === 'Ready to merge')
       .map((p) => ({ title: `Merge ${p.repo}#${p.number}`, detail: p.title, url: p.url, stamp: p.stamp, minutes: 5, why: 'approved and green' })),
-    ...(s.mentions || []).filter((m) => recent(m.at, 24))
-      .map((m) => ({ title: `Reply to ${m.by} in ${m.channel}`, detail: m.excerpt, url: m.url, stamp: m.stamp, minutes: 5, why: 'Slack mention' })),
+    // What plugins put forward (their plan() hook), such as replying to a Slack mention.
+    ...(d.extraTasks || []),
     ...(j.tickets || jiraMentionsByTicket(j.mentions)).filter((t) => recent(t.at, 48))
       .map((t) => ({ key: t.dismissKey, title: `Answer ${t.by} on ${t.key}`, detail: t.excerpt, url: t.url, stamp: t.stamp, minutes: 10, why: 'Jira mention' })),
     ...[...(g.reviewRequested || [])].filter((p) => !p.draft)
@@ -335,7 +328,7 @@ export function planNow(d, now = Date.now(), dismissedItems = localState.dismiss
 
 
 // Each source is fetched and cached on its own, so the page can show whatever is ready.
-const SOURCES = { github: fetchGitHub, jira: fetchJiraWork, jiraMentions: fetchJiraMentions, slack: fetchSlack, calendar: fetchCalendar };
+const SOURCES = { github: fetchGitHub, jira: fetchJiraWork, jiraMentions: fetchJiraMentions, calendar: fetchCalendar };
 for (const p of plugins.sources.values()) {
   SOURCES[p.name] = async () => {
     if (p.enabled && !p.enabled(process.env)) return { disabled: true };
@@ -350,7 +343,6 @@ for (const p of plugins.sources.values()) {
 const BUILTIN_MANIFESTS = [
   githubManifest,
   jiraManifest,
-  slackManifest,
   calendarManifest,
   grafanaManifest,
   { name: 'copilot', label: 'Copilot', area: 'work', secrets: [{ kind: 'cli-login', note: 'none from Clearsky (its tokens are removed from Copilot\'s environment); Copilot keeps its own login in ~/.copilot or the keyring' }],
@@ -371,7 +363,7 @@ export function moduleManifests(env = process.env) {
 }
 
 // Each source's data as rows of the one item model (lib/items.mjs).
-const WORK_ITEMS = { github: githubItems, jira: jiraItems, jiraMentions: jiraMentionItems, slack: slackItems };
+const WORK_ITEMS = { github: githubItems, jira: jiraItems, jiraMentions: jiraMentionItems };
 function workItemsOf(name, data) {
   try {
     if (WORK_ITEMS[name]) return WORK_ITEMS[name](data);
@@ -443,8 +435,8 @@ function withOwn(data) {
 }
 
 export async function collect(force) {
-  const [rawGithub, jiraWork, jiraMentions, slack, calendar] = await Promise.all(
-    ['github', 'jira', 'jiraMentions', 'slack', 'calendar'].map((n) => source(n, force)));
+  const [rawGithub, jiraWork, jiraMentions, calendar] = await Promise.all(
+    ['github', 'jira', 'jiraMentions', 'calendar'].map((n) => source(n, force)));
   const github = withOwn(rawGithub);
   const jira = mergeJira(jiraWork, jiraMentions);
   const needsMe = (github.myPrs || []).filter((p) => p.status.owner === 'me' && !p.draft);
@@ -453,25 +445,30 @@ export async function collect(force) {
   const more = [...plugins.sources.values()].flatMap((p) => (extra[p.name]?.error || extra[p.name]?.disabled ? []
     : asList(hook(p, 'events', extra[p.name])).map((e) => ({ ...e, calendar: e.calendar || p.label }))));
   const cal = more.length ? { ...calendar, events: [...(calendar.events || []), ...more] } : calendar;
+  // Tasks plugins suggest for the next free slot (their plan() hook), work ones only.
+  const ok = (p) => !(extra[p.name]?.error || extra[p.name]?.disabled || extra[p.name]?.paused);
+  const extraTasks = [...plugins.sources.values()].filter((p) => p.area === 'work' && ok(p))
+    .flatMap((p) => asList(hook(p, 'plan', extra[p.name])).filter((t) => t?.title && (t.key || t.url))
+      .map((t) => ({ title: String(t.title), detail: t.detail || '', url: t.url || null, stamp: t.stamp, minutes: Math.min(Math.max(Number(t.minutes) || 15, 5), 240), why: t.why || p.label, key: `${p.name}:${t.key || t.url}` })));
+  const pluginMentions = [...plugins.sources.values()].filter(ok).flatMap((p) => workItemsOf(p.name, extra[p.name])).filter((i) => i.kind === 'mention').length;
   return {
     generatedAt: new Date().toISOString(),
-    plan: planNow({ github, jira, slack, calendar: cal }),
+    plan: planNow({ github, jira, calendar: cal, extraTasks }),
     nextStandup: nextStandup().toISOString(),
     summary: {
       reviewsWaiting: github.reviewRequested?.length ?? null,
       myPrsNeedingAction: github.myPrs ? needsMe.length : null,
       myPrsWaitingOnOthers: github.myPrs ? github.myPrs.filter((p) => p.status.owner === 'others').length : null,
-      mentions: (github.mentions?.length || 0) + (jira.mentions?.length || 0) + (slack.mentions?.length || 0),
+      mentions: (github.mentions?.length || 0) + (jira.mentions?.length || 0) + pluginMentions,
       jiraOpen: jira.assigned?.length ?? null,
       jiraInProgress: jira.assigned ? jira.assigned.filter((i) => i.statusCategory === 'indeterminate').length : null,
     },
     github,
     jira,
-    slack,
     calendar: cal,
     sources: extra,
     // Everything that can need you, from every source, with the next step on each.
-    items: [['github', github], ['jira', jiraWork], ['jiraMentions', jiraMentions], ['slack', slack], ...Object.entries(extra)].flatMap(([n, d]) => workItemsOf(n, d)),
+    items: [['github', github], ['jira', jiraWork], ['jiraMentions', jiraMentions], ...Object.entries(extra)].flatMap(([n, d]) => workItemsOf(n, d)),
   };
 }
 
@@ -742,8 +739,14 @@ export function toMarkdown(d) {
     `[${m.repo}#${m.number}](${m.url}) ${m.kind}: ${m.title}, updated ${ago(m.updatedAt)}`, g.error);
   section('Jira mentions', j.mentions, (m) =>
     `[${m.key}](${m.url}) ${m.summary}: ${m.by}, ${ago(m.at)}: "${m.excerpt}"`, j.error);
-  if (!d.slack.disabled) section('Slack mentions', d.slack.mentions, (m) =>
-    `[${m.channel}](${m.url}) ${m.by}, ${ago(m.at)}: "${m.excerpt}"`, d.slack.error);
+  // Work plugins, each with its own section (their markdown() hook).
+  for (const p of plugins.sources.values()) {
+    const sd = d.sources?.[p.name];
+    if (p.area !== 'work' || !sd || sd.disabled) continue;
+    const m = sd.error ? null : hook(p, 'markdown', sd);
+    if (sd.error) section(p.label, null, null, sd.error);
+    else if (m && !m.hookError && Array.isArray(m.lines)) section(String(m.title || p.label), m.lines, (l) => String(l), null);
+  }
   section('My Jira issues', j.assigned, (i) =>
     `[${i.key}](${i.url}) ${i.summary} [${i.status}${i.priority ? `, ${i.priority}` : ''}${i.due ? `, due ${i.due}` : ''}]`, j.error);
   if (g.assigned?.length) section('GitHub issues assigned to me', g.assigned, (i) =>
@@ -1053,6 +1056,7 @@ function copilotEnv() {
   // Java ignores TMPDIR (Maven, Gradle, tests)
   env.JAVA_TOOL_OPTIONS = `${env.JAVA_TOOL_OPTIONS ? `${env.JAVA_TOOL_OPTIONS} ` : ''}-Djava.io.tmpdir=${copilotTmp()}`;
   for (const k of ['GITHUB_TOKEN', 'GH_TOKEN', 'SLACK_TOKEN', 'GOOGLE_CALENDAR_ICS', 'CALENDAR_ICS_URL']) delete env[k];
+  for (const p of plugins.sources.values()) for (const [k, f] of Object.entries(p.settings || {})) if (f.secret) delete env[k];
   const bin = copilot.findCopilot(process.env.COPILOT_BIN);
   const dirs = [bin?.includes('/') && dirname(bin), dirname(process.execPath)].filter(Boolean);
   env.PATH = [...new Set([...dirs, ...(env.PATH || '').split(delimiter).filter(Boolean)])].join(delimiter);
@@ -2184,7 +2188,7 @@ function localToken(file) {
 
 // ---------------------------------------------------------------- notifications
 
-const ATTENTION_SOURCES = ['github', 'jiraMentions', 'slack'];
+const ATTENTION_SOURCES = ['github', 'jiraMentions'];
 const poller = { lastPoll: null, notifier: null, timer: null };
 
 // Desktop banners come from notify-send when it's there; otherwise the open page shows them.
@@ -2222,6 +2226,8 @@ async function pollOnce(force) {
   const before = localState.seen(stateFile);
   const { seen, fresh } = diffAttention(items, before, {
     dismissed: localState.dismissed(stateFile), muted: localState.muted(stateFile), first: !Object.keys(before).length,
+    // A plugin you just added (or Slack, now a plugin) starts quiet too: what it already had isn't news.
+    quiet: (it) => { const src = String(it.key).split(':')[0]; return plugins.sources.has(src) && !Object.keys(before).some((k) => k.startsWith(`${src}:`)); },
   });
   if (fresh.length || Object.keys(seen).length !== Object.keys(before).length) localState.setSeen(stateFile, seen);
   poller.lastPoll = new Date().toISOString();

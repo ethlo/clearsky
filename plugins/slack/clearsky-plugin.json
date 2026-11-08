@@ -1,0 +1,40 @@
+{
+  "name": "slack",
+  "label": "Slack",
+  "version": "1.0.0",
+  "description": "Slack messages that @mention you, with your user token, through Slack search.",
+  "clearsky": 1,
+  "entry": "source.mjs",
+  "area": "work",
+  "panel": {
+    "title": "Slack",
+    "zone": "needs"
+  },
+  "settings": {
+    "SLACK_TOKEN": {
+      "label": "Slack user token",
+      "hint": "Open the link above (it's pre-filled; pick your work workspace), click Install to Workspace (your admins may need to approve it), then paste the User OAuth Token (xoxp-…) from OAuth & Permissions here.",
+      "secret": true,
+      "pattern": "^xox[pb]-\\S+$",
+      "patternHint": "the Slack token should start with xoxp-",
+      "link": {
+        "label": "Create the Clearsky Slack app",
+        "url": "https://api.slack.com/apps?new_app=1&manifest_json=%7B%22display_information%22%3A%7B%22name%22%3A%22Clearsky%22%2C%22description%22%3A%22Shows%20Slack%20messages%20that%20mention%20you%20on%20your%20Clearsky%20dashboard.%22%7D%2C%22oauth_config%22%3A%7B%22scopes%22%3A%7B%22user%22%3A%5B%22search%3Aread%22%5D%7D%7D%2C%22settings%22%3A%7B%22org_deploy_enabled%22%3Afalse%2C%22socket_mode_enabled%22%3Afalse%2C%22token_rotation_enabled%22%3Afalse%7D%7D"
+      }
+    }
+  },
+  "enabledWhen": [
+    "SLACK_TOKEN"
+  ],
+  "hosts": [
+    "slack.com"
+  ],
+  "clis": [],
+  "secrets": [
+    {
+      "key": "SLACK_TOKEN",
+      "kind": "token"
+    }
+  ],
+  "files": []
+}

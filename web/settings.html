@@ -141,18 +141,6 @@
   </section>
 
   <section>
-    <h2>Slack <span class="state" id="slack-state"></span></h2>
-    <ol>
-      <li><a id="slack-create" target="_blank" rel="noopener">Create the Clearsky Slack app</a> (pre-filled; pick your work workspace).</li>
-      <li>Click <b>Install to Workspace</b>. Your admins may need to approve it.</li>
-      <li>Under <b>OAuth &amp; Permissions</b>, copy the <b>User OAuth Token</b> (<code>xoxp-…</code>) and paste it below.</li>
-    </ol>
-    <label for="SLACK_TOKEN">User OAuth Token</label>
-    <input id="SLACK_TOKEN" data-key="SLACK_TOKEN" type="password" autocomplete="off" placeholder="xoxp-…">
-    <div class="row"><button class="save" data-keys="SLACK_TOKEN">Save</button><span class="msg"></span></div>
-  </section>
-
-  <section>
     <h2>General</h2>
     <label for="CLEARSKY_STANDUP_TIME">Daily stand-up at</label>
     <input id="CLEARSKY_STANDUP_TIME" data-key="CLEARSKY_STANDUP_TIME" placeholder="09:45">
@@ -164,7 +152,7 @@
     <input id="CLEARSKY_MENTION_DAYS" data-key="CLEARSKY_MENTION_DAYS" inputmode="numeric" placeholder="14">
     <label for="CLEARSKY_TIME_FORMAT">Clock</label>
     <select id="CLEARSKY_TIME_FORMAT" data-key="CLEARSKY_TIME_FORMAT"><option value="24">24-hour (14:30)</option><option value="12">12-hour (2:30 PM)</option></select>
-    <label for="CLEARSKY_POLL_MINUTES">Check GitHub, Jira mentions and Slack every … minutes</label>
+    <label for="CLEARSKY_POLL_MINUTES">Check GitHub, Jira mentions and plugins every … minutes</label>
     <input id="CLEARSKY_POLL_MINUTES" data-key="CLEARSKY_POLL_MINUTES" inputmode="numeric" placeholder="3">
     <div class="row"><button class="save" data-keys="CLEARSKY_STANDUP_TIME,CLEARSKY_WORKDAYS,CLEARSKY_WORKDAY_END,CLEARSKY_MENTION_DAYS,CLEARSKY_TIME_FORMAT,CLEARSKY_POLL_MINUTES">Save</button><span class="msg"></span></div>
     <h3>Team pack</h3>
@@ -300,15 +288,9 @@
   draw();
 })();
 const CSRF = '__CSRF__';
-const SECRET = new Set(['GITHUB_TOKEN', 'GOOGLE_CALENDAR_ICS', 'SLACK_TOKEN', 'COPILOT_SANDBOX_TOKEN', 'GRAFANA_TOKENS']);
+const SECRET = new Set(['GITHUB_TOKEN', 'GOOGLE_CALENDAR_ICS', 'COPILOT_SANDBOX_TOKEN', 'GRAFANA_TOKENS']);
 const $ = (s) => document.querySelector(s);
 
-const manifest = {
-  display_information: { name: 'Clearsky', description: 'Shows Slack messages that mention you on your Clearsky dashboard.' },
-  oauth_config: { scopes: { user: ['search:read'] } },
-  settings: { org_deploy_enabled: false, socket_mode_enabled: false, token_rotation_enabled: false },
-};
-$('#slack-create').href = 'https://api.slack.com/apps?new_app=1&manifest_json=' + encodeURIComponent(JSON.stringify(manifest));
 
 async function post(path, body) {
   const res = await fetch(path, {
@@ -395,8 +377,6 @@ function render(s) {
     <span>${esc(c.name)}</span><small>${esc(c.own ? 'your work calendar' : c.account || '')}${c.synced ? '' : ' · not synced yet'}</small></label>`).join('');
   syncCalPick();
 
-  state($('#slack-state'), !!s.slack.token, s.slack.token ? 'connected' : 'not connected');
-  $('#SLACK_TOKEN').placeholder = s.slack.token ? `${s.slack.token}; paste a new one to replace` : 'xoxp-…';
 
   $('#CLEARSKY_WORKDAY_END').value = s.workdayEnd || '';
   $('#CLEARSKY_STANDUP_TIME').value = s.standupTime || '';
@@ -452,8 +432,11 @@ function render(s) {
   clearTimeout(render.poll);
   if (logins.some((l) => l.running)) render.poll = setTimeout(load, 2000);
   if (extra.length && !$('#extra-fields').children.length) {
-    $('#extra-fields').innerHTML = extra.map((f) => `<label for="${esc(f.key)}">${esc(f.label)}</label>
+    // Grouped by the plugin they belong to, each with its set-up link if it has one.
+    let last = null;
+    $('#extra-fields').innerHTML = extra.map((f) => `${f.source && f.source !== last ? `<h3>${esc(last = f.source)}</h3>` : ''}<label for="${esc(f.key)}">${esc(f.label)}</label>
       <input id="${esc(f.key)}" data-key="${esc(f.key)}"${f.secret ? ' type="password" autocomplete="off"' : ''}>
+      ${f.link ? `<p class="hint"><a href="${esc(f.link.url)}" target="_blank" rel="noopener">${esc(f.link.label)}</a></p>` : ''}
       ${f.hint ? `<p class="hint">${esc(f.hint)}</p>` : ''}`).join('');
     $('#extra-save').dataset.keys = extra.map((f) => f.key).join(',');
   }
