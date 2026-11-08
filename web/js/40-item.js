@@ -267,7 +267,7 @@ async function renderMap() {
 // Done or snoozed from the item page: back to the list.
 document.addEventListener('click', (e) => { if (e.target.closest('[data-back-after]')) setTimeout(back, 0); });
 
-// Sources from plugins (lib/sources, ~/.config/clearsky/sources) each get a page of their own,
+// Sources from plugins (lib/plugins.mjs, ~/.config/clearsky/sources) each get a page of their own,
 // listed in the menu: personal ones under Personal, the rest under Work.
 let extraSources = [];
 function addSourcePanels(list) {

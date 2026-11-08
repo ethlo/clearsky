@@ -42,6 +42,8 @@ import { githubFilter, REGISTRY_HOSTS, GITHUB_LOG_HOSTS, SHARED_BRANCH } from '.
 import { githubAdvice, jiraAdvice, outsideAdvice, parseRules, ruleLabel } from '../lib/advice.mjs';
 import { attentionItems, diffAttention, desktopNotify, DbusNotifier } from '../lib/notify.mjs';
 import { loadSources, makeContext, hook, asList } from '../lib/sources.mjs';
+import { loadPlugins, migrateBundled, pluginPaths, listPlugins, preparePlugin, removePlugin, updatePlugin } from '../lib/plugins.mjs';
+import { sandboxedSource, srtCli } from '../lib/plugin-sandbox.mjs';
 import { pluginItems } from '../lib/items.mjs';
 import { manifest as slackManifest, createSlack, workItems as slackItems } from '../lib/modules/slack.mjs';
 import { findBrowser, BROWSERS } from '../lib/browser.mjs';
@@ -155,9 +157,20 @@ const buildConfig = (env = process.env) => ({
 });
 const config = buildConfig();
 
-// Extra sources: lib/sources/*.mjs and your own in ~/.config/clearsky/sources/*.mjs.
-const builtinSources = join(here, '..', 'lib', 'sources');
-const plugins = await loadSources([builtinSources, process.env.CLEARSKY_SOURCES_DIR || join(homedir(), '.config', 'clearsky', 'sources')], { trusted: [builtinSources] });
+// Extra sources: the plugins you added (lib/plugins.mjs; `clearsky add`, or Settings → Plugins),
+// and your own single-file ones in ~/.config/clearsky/sources/*.mjs.
+const pluginDirs = pluginPaths();
+const migrated = migrateBundled(process.env, { paths: pluginDirs });
+if (migrated.length) console.error(`clearsky: ${migrated.join(', ')} ${migrated.length === 1 ? 'is' : 'are'} a plugin now, and added for you since ${migrated.length === 1 ? 'it was' : 'they were'} set up`);
+const plugins = await loadSources([process.env.CLEARSKY_SOURCES_DIR || join(homedir(), '.config', 'clearsky', 'sources')]);
+{
+  const added = await loadPlugins({ paths: pluginDirs, makeSandboxed: sandboxedSource({ root: pluginDirs.root, standupSince: () => previousStandup() }) });
+  for (const [n, p] of added.sources) {
+    if (plugins.sources.has(n)) plugins.errors.push(`plugin ${n}: a source called "${n}" is already loaded from ~/.config/clearsky/sources`);
+    else plugins.sources.set(n, p);
+  }
+  plugins.errors.push(...added.errors);
+}
 for (const e of plugins.errors) console.error(`clearsky: ${e}`);
 for (const p of plugins.sources.values()) settings.addFields(p.settings);
 
@@ -349,6 +362,7 @@ const BUILTIN_MANIFESTS = [
 const linksFile = () => join(dirname(userEnvFile), 'links.json');
 export function moduleManifests(env = process.env) {
   const fromPlugin = (p) => ({ name: p.name, label: p.label, area: p.area, ...(p.manifest || {}),
+    plugin: p.plugin ? { from: p.plugin.from, run: p.plugin.run, version: p.plugin.version, commit: p.plugin.commit } : { from: '~/.config/clearsky/sources', run: 'inside' },
     secrets: p.manifest?.secrets || Object.entries(p.settings || {}).filter(([, f]) => f.secret).map(([key]) => ({ key, kind: 'token' })) });
   return [...BUILTIN_MANIFESTS, ...[...plugins.sources.values()].map(fromPlugin)].map((m) => ({
     hosts: [], clis: [], files: [], ...m,
@@ -2279,7 +2293,9 @@ export function buildPage(csrf, web = join(here, '..', 'web')) {
 const startedAt = Date.now();
 function updateReady() {
   const root = join(here, '..');
-  for (const dir of ['bin', 'lib', 'lib/sources', 'lib/modules', 'web', 'web/js', 'web/css']) {
+  let bundled = [];
+  try { bundled = readdirSync(join(root, 'plugins')).flatMap((n) => [`plugins/${n}`, `plugins/${n}/lib`]); } catch { /* none */ }
+  for (const dir of ['bin', 'lib', 'lib/modules', 'web', 'web/js', 'web/css', ...bundled]) {
     let names = [];
     try { names = readdirSync(join(root, dir)); } catch { continue; }
     for (const n of names) {
@@ -2330,6 +2346,75 @@ function keepLoginsAlive() {
   }
 }
 
+// ---------------------------------------------------------------- plugins
+
+// What's added (and loaded by this run), and what ships with Clearsky, for Settings → Plugins.
+function pluginList() {
+  const { added, available } = listPlugins({ paths: pluginDirs });
+  const strip = ({ manifest, ...p }) => ({ ...p, manifest: manifest && { hosts: manifest.hosts, clis: manifest.clis, files: manifest.files, secrets: manifest.secrets, outside: manifest.outside || null, area: manifest.area } });
+  return {
+    added: added.map((p) => ({ ...strip(p), loaded: plugins.sources.get(p.name)?.plugin?.from === p.from })),
+    available: available.map(strip), errors: plugins.errors, sandbox: !!srtCli(),
+  };
+}
+
+// A fetched plugin waiting for you to say yes (10 minutes), so what's added is what you saw.
+const pendingPlugins = new Map();
+async function previewPlugin(from) {
+  const p = await preparePlugin(from, { paths: pluginDirs });
+  const token = randomBytes(12).toString('hex');
+  pendingPlugins.set(token, { ...p, timer: setTimeout(() => { pendingPlugins.delete(token); p.discard(); }, 10 * 6e4) });
+  const m = p.manifest;
+  return { token, name: m.name, label: m.label, version: m.version, description: m.description, from, kind: p.spec.kind,
+    commit: p.got.commit || null, hosts: m.hosts, clis: m.clis, files: m.files, secrets: m.secrets, settings: Object.keys(m.settings),
+    outside: m.outside || null, replaces: p.had ? { version: p.had.version, commit: p.had.commit || null } : null, sandbox: !!srtCli() };
+}
+
+// `clearsky add | remove | plugins | update`.
+async function pluginCommand(args) {
+  const [cmd, name] = args, flag = (f) => args.includes(f);
+  const say = (m) => console.log(m);
+  const where = (m) => [m.hosts.length ? `reaches ${m.hosts.join(', ')}` : 'reaches no hosts', m.clis.length && `runs ${m.clis.join(', ')}`, m.files.length && `keeps ${m.files.join(', ')}`].filter(Boolean).join('; ');
+  try {
+    if (cmd === 'plugins') {
+      const { added, available } = listPlugins({ paths: pluginDirs });
+      say(added.length ? 'Added:' : 'No plugins added. `clearsky add <plugin>` adds one.');
+      for (const p of added) say(`  ${p.name} ${p.version || ''}  ${p.run === 'inside' ? 'inside Clearsky' : 'sandboxed'}  from ${p.from}${p.commit ? ` @ ${p.commit.slice(0, 10)}` : ''}${p.problem ? `  (${p.problem})` : ''}`);
+      if (available.length) { say('Ship with Clearsky (`clearsky add <name>`):'); for (const p of available) say(`  ${p.name}  ${p.description}`); }
+      if (!srtCli()) say('The sandbox (srt) isn\'t installed, so sandboxed plugins won\'t run. `clearsky doctor` says how to get it.');
+      return 0;
+    }
+    if (!name && cmd !== 'update') { say(`usage: clearsky ${cmd} <plugin>`); return 2; }
+    if (cmd === 'remove') { removePlugin(name, { paths: pluginDirs, data: flag('--data') }); say(`Removed ${name}${flag('--data') ? ', and what it kept' : ''}. Restart Clearsky to drop it.`); return 0; }
+    if (cmd === 'update') {
+      const names = name ? [name] : Object.keys(listPlugins({ paths: pluginDirs }).added.reduce((o, p) => (p.kind === 'bundled' ? o : { ...o, [p.name]: 1 }), {}));
+      for (const n of names) { const r = await updatePlugin(n, { paths: pluginDirs }); say(`${n}: ${r.before.commit && r.commit ? `${r.before.commit.slice(0, 10)} → ${r.commit.slice(0, 10)}` : `${r.before.version} → ${r.version}`}`); }
+      if (names.length) say('Restart Clearsky to load the new code.'); else say('Nothing to update.');
+      return 0;
+    }
+    // add: show what it is and what it reaches before any of its code runs, then ask.
+    const p = await preparePlugin(name, { paths: pluginDirs });
+    const m = p.manifest;
+    say(`${m.label} ${m.version}${p.got.commit ? ` (${p.got.commit.slice(0, 10)})` : ''}: ${m.description || 'no description'}`);
+    say(`  ${where(m)}`);
+    if (Object.keys(m.settings).length) say(`  settings: ${Object.keys(m.settings).join(', ')}`);
+    if (p.spec.kind === 'bundled') say('  ships with Clearsky; runs inside it');
+    else if (m.outside) say(`  runs OUTSIDE the sandbox, as you: ${m.outside}`);
+    else say(`  runs in a sandbox of its own${srtCli() ? '' : ' (not installed here, so it won\'t run until it is)'}`);
+    if (m.outside && p.spec.kind !== 'bundled' && !flag('--trust')) { p.discard(); say('Not added: it can do anything you can. Add it again with --trust if you trust its code.'); return 1; }
+    if (!flag('--yes') && !process.stdin.isTTY) { p.discard(); say('Not added: say yes with --yes when there\'s no terminal to ask in.'); return 1; }
+    if (!flag('--yes')) {
+      const rl = (await import('node:readline/promises')).createInterface({ input: process.stdin, output: process.stdout });
+      const yes = /^y(es)?$/i.test((await rl.question('Add it? [y/N] ')).trim());
+      rl.close();
+      if (!yes) { p.discard(); say('Not added.'); return 1; }
+    }
+    const r = p.done({ trust: flag('--trust') });
+    say(`Added ${r.name}. Restart Clearsky (or Settings → Restart) to load it${Object.keys(m.settings).length ? ', then fill in its settings' : ''}.`);
+    return 0;
+  } catch (e) { console.error(`clearsky: ${e.message}`); return 1; }
+}
+
 function serve() {
   // A bug in a library (srt's proxy, say) shouldn't take the dashboard and every chat down with it.
   process.on('uncaughtException', (e) => logEvent(`unexpected error, still running: ${e?.stack || e}`));
@@ -2371,6 +2456,29 @@ function serve() {
       if (req.method === 'POST') {
         if (req.headers['x-clearsky-token'] !== csrf || (req.headers.origin && !origins.has(req.headers.origin))) {
           return json(res, 403, { error: 'forbidden' });
+        }
+        // Plugins (lib/plugins.mjs): look first (what it reaches, before any of its code runs), then add.
+        if (url.pathname === '/api/plugins/preview') {
+          if (isDemo()) return json(res, 400, { error: 'not in the demo' });
+          const { from } = await readJson(req);
+          try { return json(res, 200, await previewPlugin(String(from || ''))); } catch (e) { return json(res, 400, { error: e.message }); }
+        }
+        if (url.pathname === '/api/plugins/add') {
+          const { token, trust } = await readJson(req);
+          const p = pendingPlugins.get(String(token || ''));
+          if (!p) return json(res, 400, { error: 'look at it again first; that preview has run out' });
+          pendingPlugins.delete(String(token));
+          clearTimeout(p.timer);
+          try { const r = p.done({ trust: trust === true }); logEvent(`plugin ${r.name} added from ${r.from} (${r.run === 'inside' ? 'runs inside Clearsky' : 'sandboxed'})`); return json(res, 200, { added: r, ...pluginList() }); }
+          catch (e) { return json(res, 400, { error: e.message }); }
+        }
+        if (url.pathname === '/api/plugins/remove' || url.pathname === '/api/plugins/update') {
+          const { name, data } = await readJson(req);
+          try {
+            const r = url.pathname.endsWith('remove') ? removePlugin(String(name || ''), { paths: pluginDirs, data: data === true }) : await updatePlugin(String(name || ''), { paths: pluginDirs });
+            logEvent(`plugin ${r.name} ${url.pathname.endsWith('remove') ? 'removed' : `updated from ${r.from}`}`);
+            return json(res, 200, { done: r, ...pluginList() });
+          } catch (e) { return json(res, 400, { error: e.message }); }
         }
         if (url.pathname === '/api/restart') {
           const { maxWaitMinutes, force } = await readJson(req).catch(() => ({}));
@@ -2758,6 +2866,7 @@ function serve() {
       }
       if (url.pathname === '/favicon.ico') { res.writeHead(302, { Location: '/icon.svg' }); return res.end(); }
       if (url.pathname === '/api/modules') return json(res, 200, { modules: moduleManifests() });
+      if (url.pathname === '/api/plugins') return json(res, 200, pluginList());
       if (url.pathname === '/api/sources') {
         return json(res, 200, { sources: [...plugins.sources.values()].map((p) => ({ name: p.name, label: p.label, area: p.area, panel: p.panel || null })), errors: plugins.errors });
       }
@@ -3161,7 +3270,7 @@ async function dockerCommand([sub = 'up', ...rest]) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
   const args = process.argv.slice(2);
   if (args.includes('-h') || args.includes('--help')) {
-    console.log('usage: clearsky [--json] | clearsky try [--port N] [--no-open] | clearsky doctor [--json] | clearsky join [<team pack>] | clearsky team export [--name N] [--links] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky app [--port N] | clearsky docker [up|start|down|logs|login|mounts] [--port N] | clearsky school-handover | clearsky jira-debug');
+    console.log('usage: clearsky [--json] | clearsky try [--port N] [--no-open] | clearsky doctor [--json] | clearsky join [<team pack>] | clearsky team export [--name N] [--links] | clearsky add <plugin> [--trust] [--yes] | clearsky remove <plugin> [--data] | clearsky plugins | clearsky update [<plugin>] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky app [--port N] | clearsky docker [up|start|down|logs|login|mounts] [--port N] | clearsky school-handover | clearsky jira-debug');
   } else if (args[0] === 'try') {
     // Clearsky with made-up data, in this terminal: Ctrl+C stops it.
     const p = args.indexOf('--port');
@@ -3201,8 +3310,10 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.a
     const p = args.indexOf('--port');
     if (p > -1) { config.port = Number(args[p + 1]); args.splice(p, 2); }
     await dockerCommand(args.slice(1));
+  } else if (['add', 'remove', 'plugins', 'update'].includes(args[0])) {
+    process.exitCode = await pluginCommand(args);
   } else if (args[0] === 'school-handover') {
-    const { handOverLogin } = await import('../lib/flyt.mjs');
+    const { handOverLogin } = await import('../plugins/flyt/lib/flyt.mjs');
     const where = await handOverLogin();
     console.log(where ? `School login moved to ${where}; Clearsky's container takes it from there.` : 'No school login here to hand over.');
   } else if (args[0] === 'jira-debug') {

@@ -1,21 +1,14 @@
 // School: what Visma Flyt Skole (Min Skole / Flyt Foresatt) has for your children. Log in once
-// with BankID from Settings; the login is kept in the GNOME keyring.
+// with BankID from Settings; the login is kept in the GNOME keyring. What it reaches and keeps
+// is in clearsky-plugin.json; this is what it does.
 
-import { collectFlyt, waiting, inbox, portalUrl, defaultStore, readFlyt, flytFile, keepAlive } from '../flyt.mjs';
-import { login } from '../flyt-login.mjs';
-import { schoolEvents, CACHE } from '../school-events.mjs';
+import { collectFlyt, waiting, inbox, portalUrl, defaultStore, readFlyt, flytFile, keepAlive } from './lib/flyt.mjs';
+import { login, useBrowserFrom } from './lib/flyt-login.mjs';
+import { schoolEvents, CACHE } from './lib/school-events.mjs';
 
 const WHAT = { message: 'Message', notice: 'Notice', announcement: 'Announcement', form: 'Form to answer', consent: 'Consent to answer' };
 
-export default {
-  name: 'flyt',
-  label: 'Visma Flyt Skole',
-  area: 'personal',
-  settings: {
-    FLYT_SCHOOL_KEY: { label: 'School portal key', hint: 'The last part of https://foresatt.visma.no/<key>. Filled in for you when you log in, if the portal tells us.', secret: false },
-    FLYT_EVENTS: { label: 'Weekly plans in the calendar', hint: 'on (default) or off. Reads the PDF and Word files on recent school messages and puts what\'s on each day (trips, gym, when school ends, homework) on a calendar of its own in Clearsky.', secret: false },
-    FLYT_CALENDAR: { label: 'Calendar for weekly plans', hint: 'The name of that calendar, School by default. Hide or show it from the day schedule like any other.', secret: false },
-  },
+export default (lends) => (useBrowserFrom(lends), {
   login: {
     label: 'Log in with BankID',
     async status() {
@@ -29,17 +22,6 @@ export default {
       return { settings: { FLYT_SCHOOL_KEY: env.FLYT_SCHOOL_KEY || customerKey } };
     },
   },
-  manifest: {
-    secrets: [{ kind: 'web-session', note: 'the three cookies from your BankID login, in the GNOME keyring (or ~/.config/clearsky/flyt-session.json)' }],
-    hosts: ['foresatt.visma.no', 'api.foresatt.visma.no'],
-    files: ['~/.config/clearsky/flyt-session.json', '~/.config/clearsky/school-events.json'],
-    clis: ['pdftotext'],
-    note: 'The login opens a browser window on ID-porten; only the cookies for the school portal are kept.',
-  },
-  enabled: (env) => !!env.FLYT_SCHOOL_KEY,
-  // An inbox: everything from school, newest first, by School or child. The count is what's unread.
-  panel: { title: 'School', zone: 'needs', view: 'table' },
-
   async fetch(ctx) {
     const data = await collectFlyt();
     const out = { ...data, customerKey: data.customerKey || ctx.env.FLYT_SCHOOL_KEY };
@@ -79,4 +61,4 @@ export default {
     })),
     ...(d.planEvents || []),
   ],
-};
+});

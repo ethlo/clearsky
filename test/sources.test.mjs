@@ -44,7 +44,7 @@ test('an extra source shows up in the page, notifications, Now / Next, stand-up 
   for (let i = 0; i < 50; i++) { try { await fetch(base); break; } catch { await new Promise((r) => setTimeout(r, 100)); } }
   const get = async (p) => (await fetch(base + p)).json();
 
-  // Sources shipped in lib/sources load too; this test is about the one from CLEARSKY_SOURCES_DIR.
+  // Plugins load too; this test is about the one from CLEARSKY_SOURCES_DIR.
   assert.deepEqual((await get('/api/sources')).sources.filter((s) => s.name === 'school'), [{ name: 'school', label: 'School', area: 'personal', panel: { zone: 'track', title: 'School' } }]);
   const school = await get('/api/source/school');
   assert.deepEqual(school.items.map((i) => i.title), ['Teacher: Trip on Friday']);

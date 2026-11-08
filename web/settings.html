@@ -51,6 +51,13 @@
   .mods summary::after { content: '›'; color: var(--muted); transition: transform .12s; }
   .mods details[open] summary::after { transform: rotate(90deg); }
   .mods .body { padding: 0 4px 10px 164px; display: flex; flex-direction: column; gap: 2px; }
+  .plugs { margin-top: 10px; font-size: 12.5px; }
+  .plug { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; padding: 8px 4px; border-top: 1px solid var(--line); }
+  .plug .k, .plug .sum { color: var(--text-2); }
+  .plug .acts { display: flex; gap: 6px; }
+  .plug-from { display: flex; gap: 8px; align-items: center; } .plug-from input { flex: 1; margin: 0; }
+  .plug-look { margin-top: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+  .plug-look .warn { color: var(--amber, #b26b00); }
   @media (max-width: 520px) { .mods summary { grid-template-columns: 1fr auto 10px; } .mods summary .sum { display: none; } .mods .body { padding-left: 4px; } }
   .mods code { font-size: 11.5px; }
   .mods .k { color: var(--muted); }
@@ -248,9 +255,20 @@
     <div class="mods" id="mods"></div>
   </section>
 
+  <section>
+    <h2>Plugins</h2>
+    <p class="hint">Sources you add to Clearsky, such as School. One you add from a git repo, npm or a folder runs in a sandbox of its own: it reaches only the hosts it lists, keeps files only in its own folder, and gets only its own settings. You see what it reaches before any of its code runs.</p>
+    <div class="plugs" id="plugs"></div>
+    <label for="plug-from">Add a plugin</label>
+    <div class="plug-from"><input id="plug-from" spellcheck="false" placeholder="github:owner/repo, https://…/repo.git, npm:package or a folder">
+      <button id="plug-look" class="secondary">Look at it</button></div><span class="msg" id="plug-msg"></span>
+    <div id="plug-preview"></div>
+    <div class="row" id="plug-restart" hidden><button id="plug-restart-btn">Restart to load</button><span class="msg">Clearsky loads plugins when it starts.</span></div>
+  </section>
+
   <section id="extra" hidden>
     <h2>Other sources</h2>
-    <p class="hint">Settings for sources added in <code>lib/sources/</code> or <code>~/.config/clearsky/sources/</code>.</p>
+    <p class="hint">Settings for your plugins and for sources in <code>~/.config/clearsky/sources/</code>.</p>
     <div id="extra-logins"></div>
     <div id="extra-fields"></div>
     <div class="row"><button class="save" id="extra-save">Save</button><span class="msg"></span></div>
@@ -460,6 +478,58 @@ function renderModules(list) {
     ${m.note ? `<div class="k">${esc(m.note)}</div>` : ''}</div></details>`).join('');
 }
 
+// Plugins: what's added (and how it runs), what ships with Clearsky, and adding one after a look.
+const runLabel = (p) => (p.run === 'inside' ? (p.kind === 'bundled' ? 'ships with Clearsky' : 'runs inside Clearsky, as you') : 'sandboxed');
+function reach(m) {
+  if (!m) return '';
+  const code = (xs) => xs.map((x) => `<code>${esc(x)}</code>`).join(', ');
+  return [m.hosts?.length ? `reaches ${code(m.hosts)}` : 'reaches no hosts', m.clis?.length && `runs ${code(m.clis)}`, m.files?.length && `keeps ${code(m.files)}`].filter(Boolean).join(' · ');
+}
+function renderPlugins(r) {
+  const added = r.added.map((p) => `<div class="plug"><div><b>${esc(p.label)}</b> <span class="k">${esc(p.version || '')} · ${esc(runLabel(p))}${p.kind === 'bundled' ? '' : ` · from <code>${esc(p.from)}</code>${p.commit ? ` @ ${esc(p.commit.slice(0, 10))}` : ''}`}</span>
+      <div class="sum">${p.problem ? `<span class="bad">${esc(p.problem)}</span>` : reach(p.manifest)}${p.loaded ? '' : ' · <b>restart to load</b>'}${p.run === 'sandbox' && !r.sandbox ? ' · <span class="bad">needs the sandbox (srt), not installed</span>' : ''}</div></div>
+      <div class="acts">${p.kind === 'bundled' ? '' : `<button class="secondary" data-plug-update="${esc(p.name)}">Update</button>`}<button class="secondary" data-plug-remove="${esc(p.name)}">Remove</button></div></div>`);
+  const shipped = r.available.map((p) => `<div class="plug"><div><b>${esc(p.label)}</b> <span class="k">ships with Clearsky, not added</span><div class="sum">${esc(p.description)}</div></div>
+      <div class="acts"><button data-plug-add="${esc(p.name)}">Add</button></div></div>`);
+  $('#plugs').innerHTML = [...added, ...shipped].join('') || '<p class="k">None added yet.</p>';
+  $('#plug-restart').hidden = r.added.every((p) => p.loaded) && !renderPlugins.changed;
+}
+const loadPlugins = () => fetch('/api/plugins').then((x) => x.json()).then(renderPlugins).catch(() => {});
+async function lookAt(from) {
+  const msg = $('#plug-msg');
+  msg.textContent = 'Fetching…'; msg.className = 'msg'; $('#plug-preview').innerHTML = '';
+  try {
+    const p = await post('/api/plugins/preview', { from });
+    msg.textContent = '';
+    const sandboxed = p.kind !== 'bundled' && !p.outside;
+    $('#plug-preview').innerHTML = `<div class="plug-look"><div><b>${esc(p.label)}</b> ${esc(p.version)}${p.commit ? ` <span class="k">@ ${esc(p.commit.slice(0, 10))}</span>` : ''}${p.replaces ? ` <span class="k">(replaces ${esc(p.replaces.version)})</span>` : ''}</div>
+      ${p.description ? `<div class="k">${esc(p.description)}</div>` : ''}
+      <div>${reach(p)}</div>
+      ${p.settings.length ? `<div class="k">Settings: ${p.settings.map((x) => `<code>${esc(x)}</code>`).join(', ')}</div>` : ''}
+      <div>${p.kind === 'bundled' ? 'Ships with Clearsky and runs inside it.' : sandboxed ? `Runs in a sandbox of its own.${p.sandbox ? '' : ' <span class="warn">The sandbox (srt) isn\'t installed here, so it won\'t run until it is.</span>'}` : `<span class="warn">Runs outside the sandbox, as you: ${esc(p.outside)}</span>`}</div>
+      ${p.outside && p.kind !== 'bundled' ? '<label><input type="checkbox" id="plug-trust"> I trust its code: run it outside the sandbox</label>' : ''}
+      <div class="row"><button id="plug-add" data-token="${esc(p.token)}">Add ${esc(p.label)}</button><button class="secondary" id="plug-cancel">Cancel</button><span class="msg"></span></div></div>`;
+  } catch (e) { msg.textContent = e.message; msg.className = 'msg bad'; }
+}
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('#plug-look,[data-plug-add],#plug-add,#plug-cancel,[data-plug-remove],[data-plug-update],#plug-restart-btn');
+  if (!b) return;
+  if (b.id === 'plug-look') return lookAt($('#plug-from').value.trim());
+  if (b.dataset.plugAdd) return lookAt(b.dataset.plugAdd);
+  if (b.id === 'plug-cancel') { $('#plug-preview').innerHTML = ''; return; }
+  const msg = b.parentElement.querySelector('.msg') || $('#plug-msg');
+  b.disabled = true;
+  try {
+    if (b.id === 'plug-restart-btn') { await post('/api/restart', { force: false }); msg.textContent = 'Restarting when no chat is busy…'; return; }
+    if (b.dataset.plugRemove && !confirm(`Remove ${b.dataset.plugRemove}? What it kept stays, in case you add it again.`)) { b.disabled = false; return; }
+    const r = b.id === 'plug-add' ? await post('/api/plugins/add', { token: b.dataset.token, trust: !!$('#plug-trust')?.checked })
+      : await post(b.dataset.plugRemove ? '/api/plugins/remove' : '/api/plugins/update', { name: b.dataset.plugRemove || b.dataset.plugUpdate });
+    renderPlugins.changed = true;
+    if (b.id === 'plug-add') { $('#plug-preview').innerHTML = ''; $('#plug-from').value = ''; }
+    renderPlugins(r);
+  } catch (err) { msg.textContent = err.message; msg.className = 'msg bad'; b.disabled = false; }
+});
+
 // Each Grafana environment: logged in or not, and the button to log in with your browser.
 async function drawGrafana() {
   let g = { instances: [] }, v = {};
@@ -484,6 +554,7 @@ document.addEventListener('click', async (e) => {
 async function load() {
   render(await (await fetch('/api/settings')).json());
   fetch('/api/modules').then((r) => r.json()).then((r) => renderModules(r.modules || [])).catch(() => {});
+  loadPlugins();
 }
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

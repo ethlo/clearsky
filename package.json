@@ -6,9 +6,10 @@
   "bin": { "clearsky": "bin/clearsky.mjs" },
   "scripts": {
     "start": "node bin/clearsky.mjs serve",
-    "test": "node --test test/*.test.mjs",
+    "test": "node --test test/*.test.mjs plugins/*/test/*.test.mjs",
     "docs": "node scripts/render-docs.mjs"
   },
+  "files": ["bin", "lib", "web", "scripts", "contrib", "docs", "README.md"],
   "engines": { "node": ">=22" },
   "optionalDependencies": { "@anthropic-ai/sandbox-runtime": "0.0.79" },
   "license": "MIT"
