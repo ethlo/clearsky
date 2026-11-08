@@ -1,0 +1,4 @@
+#!/usr/bin/env node
+// acli in Clearsky's sandbox: acli keeps its Jira login in the keyring, which the sandbox
+// hides, so Clearsky runs it (lib/broker.mjs): reading at once, changes after you OK them.
+require('./shim.js').viaClearsky('acli', process.argv.slice(2));

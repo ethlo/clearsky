@@ -1,0 +1,5 @@
+#!/usr/bin/env node
+// `vm <command>` in Clearsky's sandbox: runs the command in this chat's VM (lib/vm.mjs), which
+// has its own Docker, in the same folder. For builds and tests that start containers.
+if (process.argv.length < 3) { process.stderr.write('usage: vm <command> [args…] (only in Clearsky\'s sandbox)\n'); process.exit(2); }
+require('./shim.js').viaClearsky('vm', process.argv.slice(2));

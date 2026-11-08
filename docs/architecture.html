@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Design: how Clearsky works</title>
+<!-- Generated from architecture.md by scripts/render-docs.mjs. Edit the Markdown, then run npm run docs. -->
+<style>
+  :root { color-scheme: light dark; --bg: #f7f8fa; --surface: #fff; --text: #111827; --text-2: #4b5563; --muted: #6b7280; --line: #e5e7eb; --accent: #2563eb; --code: #f2f4f7; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0c0e12; --surface: #14171c; --text: #f2f4f7; --text-2: #c5cad3; --muted: #8a93a3; --line: #252a33; --accent: #6b9bff; --code: #1b1f26; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 32px 20px 64px; }
+  .crumb { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+  a { color: var(--accent); }
+  h1 { font-size: 28px; line-height: 1.25; margin: 0 0 12px; letter-spacing: -.01em; }
+  h2 { font-size: 20px; margin: 36px 0 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+  h3 { font-size: 16px; margin: 24px 0 8px; }
+  p, li { color: var(--text-2); }
+  strong { color: var(--text); }
+  code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--code); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.5; }
+  .table { overflow-x: auto; margin: 12px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; background: var(--surface); }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border: 1px solid var(--line); }
+  th { color: var(--text); font-weight: 600; }
+  td { color: var(--text-2); }
+  img { max-width: 100%; height: auto; display: block; margin: 16px auto; }
+  nav.toc { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 16px; margin: 20px 0; font-size: 14px; }
+  nav.toc ol { margin: 4px 0; padding-left: 20px; }
+  @media (max-width: 560px) { .wrap { padding: 20px 16px 48px; } h1 { font-size: 23px; } }
+</style>
+</head>
+<body><div class="wrap">
+<div class="crumb"><a href="index.html">Clearsky design docs</a></div>
+<h1>Design: how Clearsky works</h1>
+<nav class="toc"><b>Contents</b><ol><li><a href="#goal">Goal</a></li><li><a href="#parts">Parts</a></li><li><a href="#sources">Sources</a></li><li><a href="#now-next-and-the-day">Now / Next and the day</a></li><li><a href="#copilot">Copilot</a></li><li><a href="#security">Security</a></li><li><a href="#deliberate-limits">Deliberate limits</a></li></ol></nav>
+<p>Written 2026-10-29. This covers the shape of the system. The README covers setup and use.</p>
+<h2 id="goal">Goal</h2>
+<p>Clearsky is one local page that shows what needs your attention at work, and next to it a few personal things:</p>
+<ul><li><strong>Work:</strong> GitHub reviews and PRs, Jira tickets and mentions, Slack mentions.</li><li><strong>Personal:</strong> school messages.</li><li><strong>Both:</strong> the calendar, shown as today's schedule.</li></ul>
+<p>It runs on the laptop, uses the logins already there, has no dependencies beyond Node 22, and sends nothing anywhere except to the services it reads.</p>
+<p><img src="architecture.svg" alt="Browser, local server, sources, and Copilot, all on the laptop"></p>
+<h2 id="parts">Parts</h2>
+<div class="table"><table><thead><tr><th>Part</th><th>Where</th><th>What it does</th></tr></thead><tbody><tr><td>Server</td><td><code>bin/clearsky.mjs</code></td><td>HTTP on 127.0.0.1, caches sources, plans Now / Next, polls for notifications, talks to Copilot</td></tr><tr><td>Modules</td><td><code>lib/modules/*.mjs</code></td><td>GitHub, Jira (through acli), Slack and Calendar: each fetches its service, turns it into work items, and declares what it holds and reaches</td></tr><tr><td>Item model</td><td><code>lib/items.mjs</code></td><td>the one kind of row every list draws, with the next step on each item</td></tr><tr><td>Page</td><td><code>web/index.html</code>, <code>web/css/app.css</code>, <code>web/js/*.js</code></td><td>A menu and one work area: the Work list, an item in full, Copilot chats, Calendar, Stand-up and a page per extra source; the server puts the CSS and scripts inline, so there's no build step</td></tr><tr><td>Settings</td><td><code>web/settings.html</code>, <code>lib/settings.mjs</code></td><td>writes <code>~/.config/clearsky/.env</code> (mode 600); never sends saved secrets back</td></tr><tr><td>Sources</td><td>built in, plus <code>lib/sources/*.mjs</code> and <code>~/.config/clearsky/sources/*.mjs</code></td><td>each one fetches one service; see the contract in <code>lib/sources.mjs</code></td></tr><tr><td>State</td><td><code>lib/state.mjs</code> → <code>~/.config/clearsky/state.json</code></td><td>done, muted and dismissed items, what was already notified, session links</td></tr><tr><td>Copilot</td><td><code>lib/acp.mjs</code>, <code>lib/copilot.mjs</code></td><td>the Copilot CLI over ACP (JSON-RPC on stdio), in every access mode</td></tr><tr><td>Calendar</td><td><code>lib/eds.mjs</code>, <code>lib/ics.mjs</code></td><td>GNOME's Evolution cache (SQLite) or an iCal link, parsed locally</td></tr><tr><td>Notifications</td><td><code>lib/notify.mjs</code></td><td>what's new since last time; desktop banners over D-Bus (<code>gdbus</code>), or the browser's</td></tr></tbody></table></div>
+<h2 id="sources">Sources</h2>
+<p>GitHub (through <code>gh</code>), Jira (through <code>acli</code>, never direct REST tokens), Slack and the calendar are built in. Everything else is a source module with <code>name</code>, <code>label</code>, <code>area</code> (<code>work</code> or <code>personal</code>), <code>settings</code>, <code>fetch(ctx)</code> and optional hooks:</p>
+<ul><li><code>items</code>: rows for its panel;</li><li><code>attention</code>: what should notify you when it's new;</li><li><code>events</code>: calendar entries; <code>fyi: true</code> events show but don't take your time;</li><li><code>standup</code>: lines for Yesterday and Today;</li><li><code>detail</code> and <code>attachment</code>: read an item in full inside Clearsky;</li><li><code>login</code>: a login started from Settings.</li></ul>
+<p>The source's <code>area</code> decides its tab. Only the calendar mixes work and personal.</p>
+<p>Files in <code>~/.config/clearsky/sources</code> load only if you own them and nobody else can write to them. A source that throws only breaks its own panel.</p>
+<h2 id="now-next-and-the-day">Now / Next and the day</h2>
+<p><code>planNow()</code> turns the calendar plus the work items into:</p>
+<ul><li>the current or next meeting;</li><li>the free slot until then (back-to-back meetings count as one block, and the daily stand-up counts even without a calendar entry);</li><li>up to three tasks that fit the slot, most urgent first.</li></ul>
+<p>Events on a shared calendar (like Family) only take your time when you organised them, were invited, or your name is in the title. Calendars you hide neither show nor take time. Today's schedule draws the same data as a timeline.</p>
+<h2 id="copilot">Copilot</h2>
+<p>The panel drives the Copilot CLI on the laptop in ACP mode, so sessions are Copilot's own:</p>
+<ul><li>History lists every session, whether started here, in a terminal or in an editor.</li><li>Reopening one replays it.</li><li>A session counts as open while a live process holds its <code>inuse.&lt;pid&gt;.hold</code> file.</li></ul>
+<p>A first message carries a short dashboard summary plus any attached PRs or tickets, after a marker, so titles and links use only what you typed.</p>
+<p>Sessions link to PRs and tickets in three ways:</p>
+<ul><li>by the item you attached;</li><li>by a checkout of the PR's branch;</li><li>by a key or PR number in the title.</li></ul>
+<p>A chat about a PR runs in your local clone of that repo.</p>
+<p>Every access mode runs over ACP, so anything Copilot wants your OK for (each step in Ask, the sandbox's doors out in Sandboxed) shows as Allow/Deny. Copilot gets none of Clearsky's tokens, and skills never merge, approve, force-push or comment without asking.</p>
+<h2 id="security">Security</h2>
+<ul><li><strong>Network:</strong> the server listens on 127.0.0.1 only and refuses other <code>Host</code> headers (DNS rebinding).</li><li><strong>Requests:</strong> writes need a per-install CSRF token from the page.</li><li><strong>Files:</strong> config and state files are mode 600.</li><li><strong>Secrets:</strong> they never go back to the browser.</li><li><strong>School attachments:</strong> served with <code>nosniff</code> and a sandbox CSP.</li></ul>
+<p><a href="remote-access.html">Remote access</a> describes what would change to reach it from a phone.</p>
+<h2 id="deliberate-limits">Deliberate limits</h2>
+<ul><li>No dependencies and no build step: everything is plain Node 22 and one HTML file per page.</li><li>Read-only towards the services: Clearsky never replies, merges or marks anything as read.</li><li>Work data only on the work side. The work tokens stay on the laptop.</li></ul>
+</div></body>
+</html>

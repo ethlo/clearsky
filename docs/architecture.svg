@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 330" width="860" height="330" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="13" role="img" aria-labelledby="t d">
+  <title id="t">Clearsky's parts</title>
+  <desc id="d">The browser talks to the local Clearsky server on 127.0.0.1. The server reads GitHub through gh, Jira through acli, Slack, the GNOME calendar cache and source modules like the school portal, keeps state in the config folder, and drives the Copilot CLI over ACP, which works in the local clones.</desc>
+  <style>
+    .box { fill: #ffffff; stroke: #d1d5db; stroke-width: 1.2; }
+    .core { fill: #eff4ff; stroke: #2563eb; stroke-width: 1.4; }
+    .zone { fill: #f2f4f7; stroke: #e5e7eb; }
+    .t { fill: #111827; font-weight: 600; }
+    .s { fill: #4b5563; font-size: 11.5px; }
+    .z { fill: #6b7280; font-size: 11px; font-weight: 600; letter-spacing: .06em; }
+    .bus { stroke: #2563eb; stroke-width: 1.5; fill: none; }
+    .a { stroke: #2563eb; stroke-width: 1.5; fill: none; marker-end: url(#arr); }
+    #arr path { fill: #2563eb; }
+    @media (prefers-color-scheme: dark) {
+      .box { fill: #14171c; stroke: #333a45; } .core { fill: #17223a; stroke: #6b9bff; } .zone { fill: #1b1f26; stroke: #252a33; }
+      .t { fill: #f2f4f7; } .s { fill: #c5cad3; } .z { fill: #8a93a3; }
+      .a, .bus { stroke: #6b9bff; } #arr path { fill: #6b9bff; }
+    }
+  </style>
+  <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z"/></marker></defs>
+
+  <rect class="zone" x="10" y="10" width="840" height="310" rx="12"/>
+  <text class="z" x="26" y="32">LAPTOP</text>
+
+  <rect class="box" x="30" y="120" width="150" height="80" rx="10"/>
+  <text class="t" x="105" y="148" text-anchor="middle">Browser</text>
+  <text class="s" x="105" y="166" text-anchor="middle">Work · Personal</text>
+  <text class="s" x="105" y="182" text-anchor="middle">Stand-up · Copilot</text>
+
+  <rect class="core" x="240" y="100" width="200" height="120" rx="12"/>
+  <text class="t" x="340" y="130" text-anchor="middle">Clearsky server</text>
+  <text class="s" x="340" y="150" text-anchor="middle">127.0.0.1 only</text>
+  <text class="s" x="340" y="168" text-anchor="middle">cache · Now / Next</text>
+  <text class="s" x="340" y="186" text-anchor="middle">polling · notifications</text>
+  <text class="s" x="340" y="204" text-anchor="middle">~/.config/clearsky</text>
+
+  <rect class="box" x="520" y="30" width="310" height="36" rx="8"/>
+  <text class="t" x="536" y="53">GitHub</text>
+  <text class="s" x="598" y="53">via gh</text>
+  <path class="a" d="M480,48 L518,48"/>
+  <rect class="box" x="520" y="74" width="310" height="36" rx="8"/>
+  <text class="t" x="536" y="97">Jira</text>
+  <text class="s" x="582" y="97">via acli</text>
+  <path class="a" d="M480,92 L518,92"/>
+  <rect class="box" x="520" y="118" width="310" height="36" rx="8"/>
+  <text class="t" x="536" y="141">Slack</text>
+  <text class="s" x="590" y="141">user token</text>
+  <path class="a" d="M480,136 L518,136"/>
+  <rect class="box" x="520" y="162" width="310" height="36" rx="8"/>
+  <text class="t" x="536" y="185">Calendar</text>
+  <text class="s" x="614" y="185">GNOME cache · iCal link</text>
+  <path class="a" d="M480,180 L518,180"/>
+  <rect class="box" x="520" y="206" width="310" height="36" rx="8"/>
+  <text class="t" x="536" y="229">Source modules</text>
+  <text class="s" x="662" y="229">school portal · your own</text>
+  <path class="a" d="M480,224 L518,224"/>
+  <path class="bus" d="M440,160 L480,160 M480,48 L480,224"/>
+  <rect class="box" x="520" y="252" width="140" height="52" rx="9"/>
+  <text class="t" x="590" y="274" text-anchor="middle">Copilot CLI</text>
+  <text class="s" x="590" y="292" text-anchor="middle">ACP over stdio</text>
+  <rect class="box" x="690" y="252" width="140" height="52" rx="9"/>
+  <text class="t" x="760" y="274" text-anchor="middle">Your clones</text>
+  <text class="s" x="760" y="292" text-anchor="middle">~/dev</text>
+  <path class="a" d="M180,160 L238,160"/>
+  <path class="a" d="M340,220 L340,278 L518,278"/>
+  <path class="a" d="M660,278 L688,278"/>
+
+</svg>

@@ -1,0 +1,4 @@
+#!/usr/bin/env node
+// `usage` in Clearsky's sandbox: one line saying which model did this chat's work and how many
+// credits it used, for the end of a PR description (lib/disclosure.mjs). Only when switched on.
+require('./shim.js').viaClearsky('usage', process.argv.slice(2));

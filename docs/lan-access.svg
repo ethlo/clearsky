@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 300" width="860" height="300" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="13" role="img" aria-labelledby="t d">
+  <title id="t">Phone access on the home network</title>
+  <desc id="d">On the laptop, Settings shows a one-time pairing QR code. The phone scans it once and gets a session cookie. After that the phone talks HTTPS to Clearsky's network port 7778 on the home Wi-Fi, which allows only Ask-mode Copilot and no settings changes. The laptop's own browser keeps using 127.0.0.1:7777.</desc>
+  <style>
+    .box { fill: #ffffff; stroke: #d1d5db; stroke-width: 1.2; }
+    .zone { fill: #f2f4f7; stroke: #e5e7eb; }
+    .gate { fill: #fffaeb; stroke: #b54708; stroke-width: 1.2; }
+    .core { fill: #eff4ff; stroke: #2563eb; stroke-width: 1.4; }
+    .t { fill: #111827; font-weight: 600; }
+    .s { fill: #4b5563; font-size: 11.5px; }
+    .z { fill: #6b7280; font-size: 11px; font-weight: 600; letter-spacing: .06em; }
+    .a { stroke: #2563eb; stroke-width: 1.6; fill: none; marker-end: url(#arr); }
+    .o { stroke: #6b7280; stroke-width: 1.3; stroke-dasharray: 5 4; fill: none; marker-end: url(#arrg); }
+    #arr path { fill: #2563eb; } #arrg path { fill: #6b7280; }
+    @media (prefers-color-scheme: dark) {
+      .box { fill: #14171c; stroke: #333a45; } .zone { fill: #1b1f26; stroke: #252a33; } .gate { fill: #2a2010; stroke: #fdb022; } .core { fill: #17223a; stroke: #6b9bff; }
+      .t { fill: #f2f4f7; } .s { fill: #c5cad3; } .z { fill: #8a93a3; }
+      .a { stroke: #6b9bff; } #arr path { fill: #6b9bff; } .o { stroke: #8a93a3; } #arrg path { fill: #8a93a3; }
+    }
+  </style>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z"/></marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z"/></marker>
+  </defs>
+
+  <rect class="zone" x="10" y="10" width="840" height="280" rx="12"/>
+  <text class="z" x="26" y="32">HOME WI-FI</text>
+  <rect class="zone" x="330" y="44" width="500" height="230" rx="12"/>
+  <text class="z" x="346" y="66">LAPTOP</text>
+
+  <rect class="box" x="40" y="120" width="170" height="80" rx="10"/>
+  <text class="t" x="125" y="148" text-anchor="middle">Work phone</text>
+  <text class="s" x="125" y="166" text-anchor="middle">browser, paired once</text>
+  <text class="s" x="125" y="182" text-anchor="middle">30-day session cookie</text>
+
+  <rect class="gate" x="360" y="84" width="200" height="96" rx="10"/>
+  <text class="t" x="460" y="110" text-anchor="middle">Network port 7778</text>
+  <text class="s" x="460" y="128" text-anchor="middle">HTTPS, own certificate</text>
+  <text class="s" x="460" y="144" text-anchor="middle">paired phones only</text>
+  <text class="s" x="460" y="160" text-anchor="middle">Copilot Ask only, no settings</text>
+
+  <rect class="core" x="610" y="84" width="200" height="96" rx="12"/>
+  <text class="t" x="710" y="114" text-anchor="middle">Clearsky server</text>
+  <text class="s" x="710" y="134" text-anchor="middle">same data and state</text>
+  <text class="s" x="710" y="150" text-anchor="middle">as on the laptop</text>
+
+  <rect class="box" x="360" y="204" width="200" height="54" rx="10"/>
+  <text class="t" x="460" y="227" text-anchor="middle">Settings: Pair a phone</text>
+  <text class="s" x="460" y="244" text-anchor="middle">one-time QR code, 5 minutes</text>
+
+  <rect class="box" x="610" y="204" width="200" height="54" rx="10"/>
+  <text class="t" x="710" y="227" text-anchor="middle">Laptop browser</text>
+  <text class="s" x="710" y="244" text-anchor="middle">127.0.0.1:7777, as today</text>
+
+  <path class="a" d="M210,150 L358,150"/>
+  <path class="a" d="M560,132 L608,132"/>
+  <path class="o" d="M358,231 C280,231 200,231 150,202"/>
+  <path class="a" d="M710,204 L710,182"/>
+</svg>

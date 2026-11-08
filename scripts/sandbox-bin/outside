@@ -1,0 +1,5 @@
+#!/usr/bin/env node
+// `outside <command>` in Clearsky's sandbox: runs the command on your machine, outside the
+// sandbox, after you OK it in the chat (lib/broker.mjs). For tests that need Docker.
+if (process.argv.length < 3) { process.stderr.write('usage: outside <command> [args…] (only in Clearsky\'s sandbox)\n'); process.exit(2); }
+require('./shim.js').viaClearsky('outside', process.argv.slice(2));

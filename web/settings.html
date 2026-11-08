@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#2563eb">
+<title>Clearsky settings</title>
+<script>try { const t = localStorage.getItem('clearsky.theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch {}</script>
+<style>
+/*__CSS__*/
+</style>
+<style>
+  /* Settings: the app's look (app.css), one card at a time under tabs. */
+  body { height: 100%; }
+  .set { display: flex; flex-direction: column; height: 100%; background: var(--surface); }
+  .set .vh .sub { margin-left: auto; }
+  .set-b { flex: 1; min-height: 0; overflow-y: auto; }
+  nav.tabs { display: flex; gap: 2px; padding: 0 20px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; flex: none; }
+  nav.tabs a { display: flex; gap: 6px; align-items: center; padding: 10px 10px; color: var(--text-2); white-space: nowrap; font-size: 13px; font-weight: 550;
+    border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  nav.tabs a:hover { color: var(--text); }
+  nav.tabs a.on { color: var(--text); border-bottom-color: var(--accent); }
+  nav.tabs .state { font-size: 11px; }
+  main { max-width: 760px; padding: 20px 24px 40px; }
+  main > section:not(.cur) { display: none; }
+  main > section > h2:first-child { display: none; } /* the tab names it */
+  @media (max-width: 520px) { main { padding: 16px 12px 24px; } nav.tabs { padding: 0 8px; } .set .vh { padding: 0 12px; } }
+  section h2 { font-size: 15px; font-weight: 600; margin: 0 0 6px; display: flex; gap: 8px; align-items: center; }
+  section h3 { font-size: 13.5px; font-weight: 600; margin: 14px 0 4px; }
+  .state { font-size: 12px; font-weight: 600; border: 1px solid currentColor; border-radius: 99px; padding: 0 8px; }
+  .state:empty { display: none; }
+  .on { color: var(--green); } .off { color: var(--muted); } .bad { color: var(--red); }
+  section p, section ol { margin: 6px 0; color: var(--text-2); }
+  section ol { padding-left: 20px; }
+  label { display: block; font-size: 12.5px; color: var(--text-2); font-weight: 500; margin: 14px 0 4px; }
+  .cal-list { display: flex; flex-direction: column; gap: 4px; }
+  .cal-list label.cal { display: flex; align-items: baseline; gap: 8px; margin: 0; font-size: 13.5px; font-weight: 400; color: var(--text); }
+  .cal-list input { width: auto; flex: none; margin: 0; }
+  .cal-list small { color: var(--muted); font-size: 12px; }
+  .hint { color: var(--muted); font-size: 12.5px; margin: 6px 0 0; }
+  .hint.warn { color: var(--amber); }
+  .mods { margin-top: 10px; font-size: 12.5px; border-bottom: 1px solid var(--line); }
+  .mods details { border-top: 1px solid var(--line); }
+  .mods summary { display: grid; grid-template-columns: 150px minmax(0, 1fr) auto 10px; gap: 10px; align-items: baseline; padding: 8px 4px; cursor: pointer; list-style: none; }
+  .mods summary::-webkit-details-marker { display: none; }
+  .mods summary:hover { background: var(--surface-2); }
+  .mods summary b { font-weight: 600; font-size: 13px; }
+  .mods summary .sum { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mods summary::after { content: '›'; color: var(--muted); transition: transform .12s; }
+  .mods details[open] summary::after { transform: rotate(90deg); }
+  .mods .body { padding: 0 4px 10px 164px; display: flex; flex-direction: column; gap: 2px; }
+  @media (max-width: 520px) { .mods summary { grid-template-columns: 1fr auto 10px; } .mods summary .sum { display: none; } .mods .body { padding-left: 4px; } }
+  .mods code { font-size: 11.5px; }
+  .mods .k { color: var(--muted); }
+  input, select, textarea { width: 100%; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--line-strong);
+    border-radius: 7px; padding: 6px 9px; }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+  section button, section .btn { font: inherit; font-size: 13px; font-weight: 500; color: var(--text); background: var(--surface); border: 1px solid var(--line-strong);
+    border-radius: 7px; height: 30px; padding: 0 12px; display: inline-flex; align-items: center; }
+  section button:hover, section .btn:hover { border-color: var(--text-2); color: var(--text); }
+  section button.save, section button:not(.secondary):first-child { background: var(--text); border-color: var(--text); color: var(--bg); }
+  section button.save:hover, section button:not(.secondary):first-child:hover { filter: brightness(1.15); color: var(--bg); }
+  button:disabled { opacity: .6; cursor: default; }
+  .msg { font-size: 13px; color: var(--text-2); }
+  .code { font: 600 20px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; }
+  section a { color: var(--accent); }
+  section a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="set">
+<header class="vh"><button class="back" id="back" title="Back (Esc)" aria-label="Back"><svg class="i" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button><h1>Settings</h1><span class="sub" id="file"></span></header>
+<nav class="tabs" id="tabs" aria-label="Settings"></nav>
+<div class="set-b">
+<main>
+  <section>
+    <h2>GitHub <span class="state" id="gh-state"></span></h2>
+    <p id="gh-detail"></p>
+    <div class="row">
+      <button id="gh-login">Log in with GitHub</button>
+      <span class="msg" id="gh-msg"></span>
+    </div>
+    <label for="GITHUB_ORGS">Work organizations (comma-separated; empty means all)</label>
+    <input id="GITHUB_ORGS" data-key="GITHUB_ORGS" placeholder="acme">
+    <label for="GITHUB_MY_PRS">Your PRs</label>
+    <select id="GITHUB_MY_PRS" data-key="GITHUB_MY_PRS"><option value="">Only in the work organizations</option><option value="all">Everywhere (also your own repos)</option></select>
+    <label for="GITHUB_BUILD_REPOS">Repos on the Builds page</label>
+    <input id="GITHUB_BUILD_REPOS" data-key="GITHUB_BUILD_REPOS" placeholder="the ones your PRs and reviews are in" spellcheck="false" title="Comma-separated, like acme/api, acme/web. Each shows how its main branch builds and its newest artifact and release.">
+    <label for="GITHUB_TOKEN">Or a personal access token instead of the gh login (optional)</label>
+    <input id="GITHUB_TOKEN" data-key="GITHUB_TOKEN" type="password" autocomplete="off" placeholder="leave empty to keep">
+    <div class="row"><button class="save" data-keys="GITHUB_ORGS,GITHUB_MY_PRS,GITHUB_BUILD_REPOS,GITHUB_TOKEN">Save</button><span class="msg"></span></div>
+  </section>
+
+  <section>
+    <h2>Jira <span class="state" id="jira-state"></span></h2>
+    <p id="jira-detail"></p>
+    <div class="row">
+      <button id="jira-login">Log in to Atlassian</button>
+      <span class="msg" id="jira-msg"></span>
+    </div>
+    <p>This runs <code>acli jira auth login --web</code>, which opens the Atlassian login in your browser. Clearsky stores no Jira credentials.</p>
+  </section>
+
+  <section>
+    <h2>Google Calendar <span class="state" id="cal-state"></span></h2>
+    <p id="cal-detail"></p>
+    <p><b>Option A, no new login:</b> add your work Google account in your desktop's <b>Settings → Online Accounts → Google</b>, with Calendar switched on. Enter your work email below and save. Clearsky reads the calendar GNOME syncs.</p>
+    <label for="CALENDAR_EMAIL">Your work calendar email</label>
+    <input id="CALENDAR_EMAIL" data-key="CALENDAR_EMAIL" type="email" placeholder="you@company.com">
+    <div id="cal-pick" hidden>
+      <label>Calendars to include</label>
+      <div id="cal-list" class="cal-list"></div>
+      <p class="hint">Add a personal Google account in Online Accounts (Calendar only) to see family appointments here too.
+        On a shared calendar (one not named after your address, like "Family"), events only take your time when you're invited,
+        or when one of these names is in the title; the rest just show in the agenda.</p>
+      <label for="CALENDAR_MY_NAMES">Your names in shared calendar titles</label>
+      <input id="CALENDAR_MY_NAMES" data-key="CALENDAR_MY_NAMES" placeholder="Alex, Dad">
+    </div>
+    <input type="hidden" id="EVOLUTION_CALENDARS" data-key="EVOLUTION_CALENDARS">
+    <div class="row"><button class="save" data-keys="CALENDAR_EMAIL,EVOLUTION_CALENDARS,CALENDAR_MY_NAMES">Save</button><span class="msg"></span></div>
+    <p style="margin-top:14px"><b>Option B, iCal link</b> (only if your admin allows it). You can use both; meetings are merged:</p>
+    <ol>
+      <li>Open <a href="https://calendar.google.com/calendar/r/settings" target="_blank" rel="noopener">Google Calendar settings</a>.</li>
+      <li>Under <b>Settings for my calendars</b>, click your calendar, then <b>Integrate calendar</b>.</li>
+      <li>Copy <b>Secret address in iCal format</b> and paste it below.</li>
+    </ol>
+    <label for="GOOGLE_CALENDAR_ICS">Secret address in iCal format (several? separate them with spaces)</label>
+    <input id="GOOGLE_CALENDAR_ICS" data-key="GOOGLE_CALENDAR_ICS" type="password" autocomplete="off" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics">
+    <div class="row"><button class="save" data-keys="GOOGLE_CALENDAR_ICS">Save</button>
+      <button class="secondary" id="cal-remove" hidden>Remove link</button><span class="msg"></span></div>
+  </section>
+
+  <section>
+    <h2>Slack <span class="state" id="slack-state"></span></h2>
+    <ol>
+      <li><a id="slack-create" target="_blank" rel="noopener">Create the Clearsky Slack app</a> (pre-filled; pick your work workspace).</li>
+      <li>Click <b>Install to Workspace</b>. Your admins may need to approve it.</li>
+      <li>Under <b>OAuth &amp; Permissions</b>, copy the <b>User OAuth Token</b> (<code>xoxp-…</code>) and paste it below.</li>
+    </ol>
+    <label for="SLACK_TOKEN">User OAuth Token</label>
+    <input id="SLACK_TOKEN" data-key="SLACK_TOKEN" type="password" autocomplete="off" placeholder="xoxp-…">
+    <div class="row"><button class="save" data-keys="SLACK_TOKEN">Save</button><span class="msg"></span></div>
+  </section>
+
+  <section>
+    <h2>General</h2>
+    <label for="CLEARSKY_STANDUP_TIME">Daily stand-up at</label>
+    <input id="CLEARSKY_STANDUP_TIME" data-key="CLEARSKY_STANDUP_TIME" placeholder="09:45">
+    <label for="CLEARSKY_WORKDAYS">Workdays (no stand-up on other days)</label>
+    <input id="CLEARSKY_WORKDAYS" data-key="CLEARSKY_WORKDAYS" placeholder="Mon-Fri">
+    <label for="CLEARSKY_WORKDAY_END">Workday ends at (for Now / Next)</label>
+    <input id="CLEARSKY_WORKDAY_END" data-key="CLEARSKY_WORKDAY_END" placeholder="17:00">
+    <label for="CLEARSKY_MENTION_DAYS">Show mentions from the last … days</label>
+    <input id="CLEARSKY_MENTION_DAYS" data-key="CLEARSKY_MENTION_DAYS" inputmode="numeric" placeholder="14">
+    <label for="CLEARSKY_TIME_FORMAT">Clock</label>
+    <select id="CLEARSKY_TIME_FORMAT" data-key="CLEARSKY_TIME_FORMAT"><option value="24">24-hour (14:30)</option><option value="12">12-hour (2:30 PM)</option></select>
+    <label for="CLEARSKY_POLL_MINUTES">Check GitHub, Jira mentions and Slack every … minutes</label>
+    <input id="CLEARSKY_POLL_MINUTES" data-key="CLEARSKY_POLL_MINUTES" inputmode="numeric" placeholder="3">
+    <div class="row"><button class="save" data-keys="CLEARSKY_STANDUP_TIME,CLEARSKY_WORKDAYS,CLEARSKY_WORKDAY_END,CLEARSKY_MENTION_DAYS,CLEARSKY_TIME_FORMAT,CLEARSKY_POLL_MINUTES">Save</button><span class="msg"></span></div>
+    <h3>Team pack</h3>
+    <p class="hint" id="team-now">Your team's shared setup (organizations, stand-up time, links, Copilot skills), from a git repo, an https link or a file the team keeps. Settings you changed yourself are kept. <code>clearsky team export</code> makes one from your settings.</p>
+    <div class="row"><input id="team-from" placeholder="https://github.com/acme/clearsky-team.git" spellcheck="false" style="flex:1;min-width:220px"><button class="secondary" id="team-join" type="button">Join</button><span class="msg" id="team-msg"></span></div>
+    <h3>Set-up check</h3>
+    <p class="hint">What this machine has for Clearsky (gh, acli, Copilot, the sandbox, a calendar) and how to get what's missing: <a href="/welcome">the welcome page</a>, or <code>clearsky doctor</code> in a terminal.</p>
+    <h3>Demo</h3>
+    <p class="hint">Clearsky with made-up data, in a new tab: for showing it to others without your own work on screen. Nothing of yours is read or shown, and it stops when you click Leave demo in its menu.</p>
+    <div class="row"><button class="secondary" id="demo-start" type="button">Try with demo data</button><span class="msg" id="demo-msg"></span></div>
+  </section>
+
+  <section>
+    <h2>Copilot</h2>
+    <p class="hint" style="margin:0 0 4px">Defaults for a new chat. The pickers in a chat still change that chat.</p>
+    <label for="COPILOT_MODEL">Model</label>
+    <input id="COPILOT_MODEL" data-key="COPILOT_MODEL" list="cp-models" placeholder="Copilot's default" spellcheck="false">
+    <datalist id="cp-models"></datalist>
+    <label for="COPILOT_EFFORT">Reasoning effort</label>
+    <select id="COPILOT_EFFORT" data-key="COPILOT_EFFORT"></select>
+    <label for="COPILOT_PERMISSION">Access</label>
+    <select id="COPILOT_PERMISSION" data-key="COPILOT_PERMISSION"></select>
+    <label for="COPILOT_CWD">Folder for general chats</label>
+    <input id="COPILOT_CWD" data-key="COPILOT_CWD" placeholder="the Clearsky folder" spellcheck="false">
+    <p class="hint">Where a chat runs when it isn't about a PR or ticket. Chats about a PR or ticket run in that repo's clone, or the worktree with the PR's branch. Clearsky's own skills (stand-up, triage) are available only from the Clearsky folder.</p>
+    <label for="COPILOT_FOLDERS">Folders Copilot can change (read and write)</label>
+    <input id="COPILOT_FOLDERS" data-key="COPILOT_FOLDERS" placeholder="~/dev" spellcheck="false">
+    <p class="hint">Comma-separated, like <code>~/dev/work, ~/dev/mine</code>. Copilot can read and change files there, including worktrees next to your clones, without the "Access paths outside trusted directories" question. Commands and edits still follow the access mode. Empty means <code>~/dev</code>. Running chats pick changes up on their next message.</p>
+    <p class="hint warn" id="copilot-unmounted" hidden></p>
+    <label for="COPILOT_READ">Folders Copilot can only read</label>
+    <textarea id="COPILOT_READ" data-key="COPILOT_READ" rows="2" spellcheck="false" placeholder="~/dev/other-team, ~/notes"></textarea>
+    <p class="hint">Comma-separated. In the sandbox, Copilot can read these but not change them. It can also always read <span id="read-default"></span> (what it needs to run and build) and files outside your home, like <code>/usr/lib/jvm</code>. The rest of your home is hidden from it: mail, documents, browser profiles, shell history and logins. Maven still reaches your repositories: Copilot gets a copy of <code>~/.m2/settings.xml</code> without the passwords, and the sandbox adds your login on the way out, only to the hosts that login is for.</p>
+    <label for="COPILOT_ASSISTED_ALLOW">Never ask before</label>
+    <textarea id="COPILOT_ASSISTED_ALLOW" data-key="COPILOT_ASSISTED_ALLOW" rows="2" spellcheck="false" placeholder="e.g. acli jira workitem transition, git push"></textarea>
+    <p class="hint">In the sandbox, Copilot runs everything without asking, and asks you only at its doors out: <code>git push</code> and GitHub changes (held at the sandbox's network until you click Allow), Jira changes through <code>acli</code>, and <code>outside</code> (a command run on your machine, like tests that start Docker containers). Jira and <code>outside</code> commands that start like one of these (comma-separated) go through without asking. <code>outside</code> commands only match exactly, like <code>outside ./mvnw verify</code>.</p>
+    <label for="COPILOT_SANDBOX">Sandbox</label>
+    <select id="COPILOT_SANDBOX" data-key="COPILOT_SANDBOX"><option value="off">Off</option><option value="srt">Anthropic sandbox runtime (srt)</option></select>
+    <p class="hint">With the sandbox on, Copilot and everything it runs can write only in the chat's folder, the folders above, <code>~/.copilot</code> and <code>/tmp</code>, can read only the parts of your home listed under <b>Also readable</b> (never <code>~/.ssh</code>, keyrings, browser profiles or Clearsky's own settings), and can reach only the hosts below. That holds in every access mode, Full included. The <b>Sandboxed</b> access mode always runs in it, and then runs every step inside without asking; only its doors out ask (see <b>Never ask before</b>). srt comes with Clearsky (Linux also needs <code>bubblewrap</code>, <code>socat</code> and <code>ripgrep</code>). Hosts are checked by name only: an allowed host can be written to as well as read. Your GitHub login never enters it: Copilot, git and gh inside get stand-ins, and the sandbox's proxy adds your <code>gh</code> login on the way to GitHub. Reading GitHub goes through; a push or any change (a PR, a comment, a review) waits until you click Allow in the chat. Inside it, git reaches GitHub over https instead of ssh.</p>
+    <label for="COPILOT_SANDBOX_TOKEN">GitHub token for the sandbox (optional)</label>
+    <input id="COPILOT_SANDBOX_TOKEN" data-key="COPILOT_SANDBOX_TOKEN" type="password" autocomplete="off" placeholder="leave empty to use your gh login">
+    <p class="hint">Not needed: by default the sandbox uses your <code>gh</code> login. If you can create a fine-grained token (with <b>Copilot Requests</b>), the sandbox uses it instead, for example one that can only read your work repos. Either way it stays out of the sandbox and changes still wait for your Allow.</p>
+    <label for="COPILOT_DISCLOSE">Say what did the work</label>
+    <select id="COPILOT_DISCLOSE" data-key="COPILOT_DISCLOSE"><option value="">Off</option><option value="on">On: last line of the PR description</option></select>
+    <p class="hint">When a sandboxed chat is done, it ends the PR description (and the ticket description, if it wrote that) with a line like <i>Implemented with Copilot (Claude Opus 5.5). 939 credits used.</i> The model and credits come from the chat's own session log, through Clearsky. Applies to chats started after you switch it on.</p>
+    <label for="COPILOT_DOMAINS">Hosts a sandboxed Copilot may reach</label>
+    <textarea id="COPILOT_DOMAINS" data-key="COPILOT_DOMAINS" rows="2" spellcheck="false"></textarea>
+    <p class="hint">Comma-separated, wildcards like <code>*.atlassian.net</code> allowed. Empty means Copilot, GitHub and your Jira site. Add package registries (say <code>repo.maven.apache.org</code>, <code>registry.npmjs.org</code>) if builds need them.</p>
+    <label for="COPILOT_VM_IMAGES">Images the VM copies from your Docker</label>
+    <textarea id="COPILOT_VM_IMAGES" data-key="COPILOT_VM_IMAGES" rows="2" spellcheck="false" placeholder="registry.example.com/team/"></textarea>
+    <p class="hint">Comma-separated, for private images tests need (say from your company's registry): a whole image like <code>registry.example.com/team/app:main</code>, or a name prefix like <code>registry.example.com/</code> (then the newest tag of each image there). Before each <code>vm</code> command, the ones your own Docker has are copied into the chat's VM if it doesn't have that version yet. Your registry login never goes in the VM. The VM gets what your Docker has: <code>docker pull</code> on your machine when the image changes.</p>
+    <label for="COPILOT_GATE_RULES">Let through without asking</label>
+    <textarea id="COPILOT_GATE_RULES" data-key="COPILOT_GATE_RULES" rows="2" spellcheck="false" placeholder="nothing yet"></textarea>
+    <p class="hint">Kinds of change you said to always allow, from the <b>Allow, and always for…</b> button on a card. Each still shows in the chat and in <b>Copilot's changes</b>. <code>merge-ready</code>: merging a PR of the chat's repo when CI is green, it's approved and has no conflicts. <code>delete-merged-branch</code>: deleting a branch whose PR is merged. <code>repo:owner/name</code>: everyday changes to that repo from any chat. <code>jira:KEY</code>: changes to tickets in that Jira project. Remove one to be asked again.</p>
+    <label for="COPILOT_VM_CPUS">VM size: cores and memory (GB)</label>
+    <div class="row"><input id="COPILOT_VM_CPUS" data-key="COPILOT_VM_CPUS" inputmode="numeric" spellcheck="false" style="max-width:8em"> <input id="COPILOT_VM_MEMORY_GB" data-key="COPILOT_VM_MEMORY_GB" aria-label="VM memory in GB" inputmode="decimal" spellcheck="false" style="max-width:8em"></div>
+    <p class="hint">For each chat's VM. Empty uses the default shown: half this machine's cores (up to 12) and a quarter of its memory (4 to 16 GB). Memory the VM doesn't use stays yours. Kept within this machine: at most all its cores and half its memory. Applies to the next VM a chat starts; the first one after a change takes about 15 seconds longer (it saves a new snapshot).</p>
+    <div class="row"><button class="save" data-keys="COPILOT_MODEL,COPILOT_EFFORT,COPILOT_PERMISSION,COPILOT_CWD,COPILOT_FOLDERS,COPILOT_ASSISTED_ALLOW,COPILOT_SANDBOX,COPILOT_SANDBOX_TOKEN,COPILOT_DISCLOSE,COPILOT_READ,COPILOT_DOMAINS,COPILOT_VM_IMAGES,COPILOT_GATE_RULES,COPILOT_VM_CPUS,COPILOT_VM_MEMORY_GB">Save</button><span class="msg"></span></div>
+    <h3 id="memory" style="margin-top:28px">Memory</h3>
+    <textarea id="memory-text" rows="8" aria-label="Copilot's memory" spellcheck="false" placeholder="Nothing yet. Notes you save from a chat's Remember card show up here."></textarea>
+    <p class="hint">Notes every new chat reads, kept in <code id="memory-path">~/.local/share/clearsky/memory/memory.md</code> on this machine. Copilot is told never to change this file (in the sandbox it can't): it suggests notes in the chat, and they're saved only when you press Save on the card. Put notes for one repo under a <code>## owner/name</code> heading. <span id="memory-size"></span></p>
+    <div class="row"><button id="memory-save" class="save">Save memory</button><span class="msg" id="memory-msg"></span></div>
+  </section>
+
+  <section>
+    <h2>Grafana <span class="state" id="graf-state"></span></h2>
+    <p class="hint">Lets Copilot read logs and metrics of your environments with <code>grafana logs test '{app="api"} |= "error"'</code> instead of a shell on servers. Read only: Clearsky makes only search and query calls, with your Viewer login, which never goes in the sandbox. Secrets it knows the shape of are removed from what comes back, every call is in <b>Copilot's changes</b>, and the environments below that ask do so in the chat every time.</p>
+    <label for="GRAFANA_INSTANCES">Environments</label>
+    <textarea id="GRAFANA_INSTANCES" data-key="GRAFANA_INSTANCES" rows="3" spellcheck="false" placeholder="test=https://grafana.test.example.com, prod=https://grafana.example.com"></textarea>
+    <p class="hint">One per environment, as <code>name=address</code>. Kept in your settings file only.</p>
+    <label for="GRAFANA_ASK">Ask every time for</label>
+    <input id="GRAFANA_ASK" data-key="GRAFANA_ASK" spellcheck="false" placeholder="every name with “prod”">
+    <label for="GRAFANA_TOKENS">Viewer tokens (optional)</label>
+    <input id="GRAFANA_TOKENS" data-key="GRAFANA_TOKENS" type="password" autocomplete="off" placeholder="leave empty to use your browser login">
+    <p class="hint">Not needed: log in below with your browser instead. If you can create a Grafana service account with the <b>Viewer</b> role, its token (<code>name=glsa_…</code>) is used instead of the login.</p>
+    <div class="row"><button class="save" data-keys="GRAFANA_INSTANCES,GRAFANA_ASK,GRAFANA_TOKENS">Save</button><span class="msg"></span></div>
+    <div id="graf-list"></div>
+    <label for="VPN_CHECK">VPN check</label>
+    <input id="VPN_CHECK" data-key="VPN_CHECK" spellcheck="false" placeholder="the first Grafana's host">
+    <p class="hint">A host (or URL) behind your work VPN. Off the VPN it either can't be reached or refuses you with 403, as many work sites do at their load balancer; then the menu says <b>VPN off</b>, Grafana and the modules listed next pause instead of failing, and Copilot is told to ask you to connect. Clearsky never runs the VPN itself.</p>
+    <label for="VPN_NEEDED_BY">Modules that need the VPN</label>
+    <input id="VPN_NEEDED_BY" data-key="VPN_NEEDED_BY" spellcheck="false" placeholder="for example jira, github">
+    <div class="row"><button class="save" data-keys="VPN_CHECK,VPN_NEEDED_BY">Save</button><span class="msg"></span></div>
+  </section>
+
+  <section>
+    <h2>Modules</h2>
+    <p class="hint">What each part of Clearsky holds and talks to; click one for the details. Saved secrets are never shown, only whether one is there. Each source gets only its own settings, and a source that lists its hosts can reach only those through Clearsky.</p>
+    <div class="mods" id="mods"></div>
+  </section>
+
+  <section id="extra" hidden>
+    <h2>Other sources</h2>
+    <p class="hint">Settings for sources added in <code>lib/sources/</code> or <code>~/.config/clearsky/sources/</code>.</p>
+    <div id="extra-logins"></div>
+    <div id="extra-fields"></div>
+    <div class="row"><button class="save" id="extra-save">Save</button><span class="msg"></span></div>
+  </section>
+</main>
+</div>
+</div>
+
+<script>
+// Tabs: one per card, named by its heading (with its connection state), in the address.
+(() => {
+  const main = document.querySelector('main'), nav = document.getElementById('tabs');
+  const slug = (sec) => sec.id || (sec.id = sec.querySelector('h2').firstChild.textContent.trim().toLowerCase().replace(/\W+/g, '-'));
+  const cards = () => [...main.children].filter((x) => x.tagName === 'SECTION' && !x.hidden);
+  document.getElementById('back').onclick = () => { location.href = '/'; };
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && !/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName)) location.href = '/'; });
+  function draw() {
+    const list = cards(), want = location.hash.slice(1);
+    const cur = list.find((x) => slug(x) === want) || list[0];
+    list.forEach((x) => x.classList.toggle('cur', x === cur));
+    const html = list.map((x) => {
+      const st = x.querySelector('h2 .state');
+      return `<a href="#${slug(x)}"${x === cur ? ' class="on" aria-current="page"' : ''}>${x.querySelector('h2').firstChild.textContent.trim()}${st && st.textContent ? ` ${st.outerHTML.replace(/ id="[^"]*"/, '')}` : ''}</a>`;
+    }).join('');
+    if (nav.innerHTML !== html) nav.innerHTML = html;
+  }
+  addEventListener('hashchange', () => { draw(); document.querySelector('.set-b').scrollTop = 0; });
+  new MutationObserver(draw).observe(main, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['hidden', 'class'] });
+  draw();
+})();
+const CSRF = '__CSRF__';
+const SECRET = new Set(['GITHUB_TOKEN', 'GOOGLE_CALENDAR_ICS', 'SLACK_TOKEN', 'COPILOT_SANDBOX_TOKEN', 'GRAFANA_TOKENS']);
+const $ = (s) => document.querySelector(s);
+
+const manifest = {
+  display_information: { name: 'Clearsky', description: 'Shows Slack messages that mention you on your Clearsky dashboard.' },
+  oauth_config: { scopes: { user: ['search:read'] } },
+  settings: { org_deploy_enabled: false, socket_mode_enabled: false, token_rotation_enabled: false },
+};
+$('#slack-create').href = 'https://api.slack.com/apps?new_app=1&manifest_json=' + encodeURIComponent(JSON.stringify(manifest));
+
+async function post(path, body) {
+  const res = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Clearsky-Token': CSRF },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+// Try with demo data: the demo opens in a tab of its own (the tab is opened first, so the
+// browser doesn't take it for a pop-up).
+$('#demo-start').onclick = async () => {
+  const tab = window.open('about:blank', '_blank');
+  $('#demo-msg').textContent = 'Starting the demo…';
+  try { const d = await post('/api/demo/start'); if (tab) tab.location = d.url; else location.href = d.url; $('#demo-msg').textContent = ''; }
+  catch (e) { tab?.close(); $('#demo-msg').textContent = e.message; }
+};
+// Team pack: join one, or fetch the one you joined again (Update).
+async function drawTeam() {
+  const t = (await (await fetch('/api/team')).json()).team;
+  if (!t) return;
+  $('#team-from').value = t.from;
+  $('#team-join').textContent = 'Update';
+  $('#team-msg').textContent = `${t.name}, fetched ${new Date(t.at).toLocaleDateString()}`;
+}
+$('#team-join').onclick = async () => {
+  $('#team-msg').textContent = 'Fetching…';
+  try { const r = await post('/api/team/join', { from: $('#team-from').value.trim() }); $('#team-msg').textContent = `${r.name}: ${r.summary}`; $('#team-join').textContent = 'Update'; load(); }
+  catch (e) { $('#team-msg').textContent = e.message; }
+};
+drawTeam().catch(() => {});
+if (document.querySelector('meta[name=demo]')) { $('#demo-start').disabled = true; $('#demo-msg').textContent = 'This is the demo.'; }
+
+function state(el, on, text) {
+  el.textContent = text;
+  el.className = `state ${on === true ? 'on' : on === 'bad' ? 'bad' : 'off'}`;
+}
+
+function render(s) {
+  $('#file').textContent = `Saved to ${s.file}`;
+  const gh = s.github;
+  state($('#gh-state'), gh.cli === 'logged-in' || !!gh.token, gh.token ? 'token' : gh.cli === 'logged-in' ? 'connected' : gh.cli === 'missing' ? 'gh missing' : 'not connected');
+  $('#gh-detail').textContent = gh.token ? `Using a personal access token ${gh.token}.`
+    : gh.cli === 'logged-in' ? `Using the GitHub CLI login${gh.user ? ` as ${gh.user}` : ''}.`
+    : gh.cli === 'missing' ? 'The GitHub CLI (gh) is not installed. Install it, or paste a token below.'
+    : 'Log in with the GitHub CLI, or paste a token below.';
+  $('#gh-login').hidden = gh.cli === 'missing';
+  $('#gh-login').textContent = gh.cli === 'logged-in' ? 'Log in again' : 'Log in with GitHub';
+  $('#gh-login').className = gh.cli === 'logged-in' ? 'secondary' : '';
+  $('#GITHUB_ORGS').value = gh.orgs || '';
+  $('#GITHUB_MY_PRS').value = gh.myPrs || '';
+  $('#GITHUB_BUILD_REPOS').value = gh.buildRepos || '';
+
+  const j = s.jira;
+  state($('#jira-state'), j.cli === 'logged-in' ? true : j.cli === 'missing' ? 'bad' : false,
+    j.cli === 'logged-in' ? 'connected' : j.cli === 'missing' ? 'acli missing' : 'not connected');
+  $('#jira-detail').textContent = j.cli === 'logged-in' ? `acli is logged in${j.site ? ` to ${j.site}` : ''}.`
+    : j.cli === 'missing' ? 'The Atlassian CLI (acli) is not installed.' : 'acli is not logged in.';
+  $('#jira-login').hidden = j.cli === 'missing';
+  $('#jira-login').textContent = j.cli === 'logged-in' ? 'Log in again' : 'Log in to Atlassian';
+  $('#jira-login').className = j.cli === 'logged-in' ? 'secondary' : '';
+
+  const evo = s.calendar.evolution || [];
+  const evoOk = evo.some((c) => c.synced);
+  const using = [s.calendar.url && 'iCal link', evoOk && 'GNOME'].filter(Boolean);
+  state($('#cal-state'), using.length > 0, using.length ? using.join(' + ') : 'not connected');
+  $('#cal-detail').textContent = [
+    s.calendar.url ? 'iCal link saved.' : '',
+    evo.length ? `GNOME Online Accounts: ${evo.map((c) => `${c.name}${c.synced ? '' : ' (not synced yet; open GNOME Calendar once)'}`).join(', ')}.`
+      : s.calendar.email ? `No calendar for ${s.calendar.email} in GNOME Online Accounts yet.` : '',
+    s.calendar.url || evo.length ? 'Meetings from both are merged.' : '',
+  ].filter(Boolean).join(' ');
+  $('#cal-remove').hidden = !s.calendar.url;
+  $('#GOOGLE_CALENDAR_ICS').placeholder = s.calendar.url ? `${s.calendar.url}; paste a new one to replace` : 'https://calendar.google.com/calendar/ical/…/basic.ics';
+  $('#CALENDAR_EMAIL').value = s.calendar.email || '';
+  $('#CALENDAR_MY_NAMES').value = s.calendar.myNames || '';
+  // Your work calendar is always in; tick any others (family, personal) to include them.
+  const cals = (s.calendar.all || []).filter((c) => c.synced || c.picked);
+  $('#cal-pick').hidden = !cals.length;
+  $('#cal-list').innerHTML = cals.map((c) => `<label class="cal"><input type="checkbox" value="${esc(c.uid)}"${c.picked ? ' checked' : ''}${c.own ? ' disabled' : ''}>
+    <span>${esc(c.name)}</span><small>${esc(c.own ? 'your work calendar' : c.account || '')}${c.synced ? '' : ' · not synced yet'}</small></label>`).join('');
+  syncCalPick();
+
+  state($('#slack-state'), !!s.slack.token, s.slack.token ? 'connected' : 'not connected');
+  $('#SLACK_TOKEN').placeholder = s.slack.token ? `${s.slack.token}; paste a new one to replace` : 'xoxp-…';
+
+  $('#CLEARSKY_WORKDAY_END').value = s.workdayEnd || '';
+  $('#CLEARSKY_STANDUP_TIME').value = s.standupTime || '';
+  $('#CLEARSKY_WORKDAYS').value = s.workdays || '';
+  $('#CLEARSKY_MENTION_DAYS').value = s.mentionDays || '';
+  $('#CLEARSKY_TIME_FORMAT').value = s.timeFormat || '24';
+  $('#CLEARSKY_POLL_MINUTES').value = s.pollMinutes || '';
+  const gf = s.grafana || {};
+  $('#GRAFANA_INSTANCES').value = gf.instances || '';
+  $('#GRAFANA_ASK').value = gf.ask || '';
+  $('#GRAFANA_TOKENS').placeholder = gf.tokens ? `${gf.tokens}; paste all again to replace` : 'leave empty to use your browser login';
+  $('#VPN_CHECK').value = gf.vpnCheck || '';
+  $('#VPN_NEEDED_BY').value = gf.vpnNeededBy || '';
+  drawGrafana();
+  const cp = s.copilot || {};
+  $('#COPILOT_FOLDERS').value = cp.folders || '';
+  // In the container, a folder exists only if docker-compose mounts it.
+  const um = $('#copilot-unmounted');
+  um.hidden = !cp.unmounted?.length;
+  um.innerHTML = cp.unmounted?.length ? `Not in Clearsky's container: ${cp.unmounted.map((f) => `<code>${esc(f)}</code>`).join(', ')}. Save, then run <code>clearsky docker up</code> on your machine: it mounts the folders set here (Clearsky restarts).` : '';
+  $('#COPILOT_CWD').value = cp.cwd || '';
+  $('#COPILOT_MODEL').value = cp.model || '';
+  $('#COPILOT_ASSISTED_ALLOW').value = cp.assistedAllow || '';
+  $('#COPILOT_SANDBOX_TOKEN').placeholder = cp.sandboxToken ? `${cp.sandboxToken}; paste a new one to replace` : 'leave empty to use your gh login';
+  $('#COPILOT_SANDBOX').value = cp.sandbox || 'off';
+  $('#COPILOT_DISCLOSE').value = cp.disclose ? 'on' : '';
+  $('#COPILOT_READ').value = cp.read || '';
+  $('#read-default').textContent = cp.readDefault || '';
+  $('#COPILOT_DOMAINS').value = cp.domains || '';
+  $('#COPILOT_VM_IMAGES').value = cp.vmImages || '';
+  $('#COPILOT_GATE_RULES').value = cp.gateRules || '';
+  $('#COPILOT_VM_CPUS').value = cp.vmCpus || '';
+  $('#COPILOT_VM_MEMORY_GB').value = cp.vmMemoryGb || '';
+  $('#COPILOT_VM_CPUS').placeholder = cp.vmDefault ? `${cp.vmDefault.cpus} cores` : 'cores';
+  $('#COPILOT_VM_MEMORY_GB').placeholder = cp.vmDefault ? `${cp.vmDefault.memGb} GB` : 'GB';
+  $('#COPILOT_DOMAINS').placeholder = cp.defaultDomains || '';
+  if (!loadMemory.done) { loadMemory.done = true; loadMemory(); }
+  // The choices come from Copilot itself (models you've used, its access modes).
+  fetch('/api/copilot').then((r) => r.json()).then((i) => {
+    $('#cp-models').innerHTML = (i.models || []).map((m) => `<option value="${esc(m)}">`).join('');
+    $('#COPILOT_EFFORT').innerHTML = `<option value="">Copilot's default</option>${(i.efforts || []).map((e) => `<option>${esc(e)}</option>`).join('')}`;
+    $('#COPILOT_PERMISSION').innerHTML = Object.entries(i.permissions || {}).map(([k, l]) => `<option value="${k === 'ask' ? '' : esc(k)}">${esc(l)}${i.permissionHints?.[k] ? ` · ${esc(i.permissionHints[k])}` : ''}</option>`).join('');
+    $('#COPILOT_EFFORT').value = cp.effort || '';
+    $('#COPILOT_PERMISSION').value = cp.permission || '';
+  }).catch(() => {});
+
+  const extra = s.extra || [], logins = s.logins || [];
+  $('#extra').hidden = !extra.length && !logins.length;
+  $('#extra-logins').innerHTML = logins.map((l) => `<h3>${esc(l.label)} <span class="state ${l.running ? 'off' : l.loggedIn ? 'on' : 'bad'}">${
+      l.running ? 'logging in…' : l.loggedIn ? 'logged in' : 'not logged in'}</span></h3>
+    <div class="row"><button data-login="${esc(l.name)}" class="${l.loggedIn ? 'secondary' : ''}"${l.running ? ' disabled' : ''}>${esc(l.loggedIn ? 'Log in again' : l.button)}</button>
+      <span class="msg${l.error ? ' bad' : ''}">${esc(l.running ? 'A browser window is open. Log in there; it closes by itself when you are in.' : l.error || l.detail)}</span></div>`).join('');
+  clearTimeout(render.poll);
+  if (logins.some((l) => l.running)) render.poll = setTimeout(load, 2000);
+  if (extra.length && !$('#extra-fields').children.length) {
+    $('#extra-fields').innerHTML = extra.map((f) => `<label for="${esc(f.key)}">${esc(f.label)}</label>
+      <input id="${esc(f.key)}" data-key="${esc(f.key)}"${f.secret ? ' type="password" autocomplete="off"' : ''}>
+      ${f.hint ? `<p class="hint">${esc(f.hint)}</p>` : ''}`).join('');
+    $('#extra-save').dataset.keys = extra.map((f) => f.key).join(',');
+  }
+  for (const f of extra) {
+    if (f.secret) { SECRET.add(f.key); $(`#${f.key}`).placeholder = f.value ? `${f.value}; paste a new one to replace` : ''; }
+    else $(`#${f.key}`).value = f.value || '';
+  }
+}
+
+const KIND = { token: 'Token', 'web-session': 'Web session (cookies)', 'cli-login': 'Login kept by its CLI', keyring: 'Keyring' };
+function renderModules(list) {
+  const code = (xs) => xs.map((x) => `<code>${esc(x)}</code>`).join(', ');
+  // One line each (what it holds, how many hosts), the rest when you open it.
+  const sum = (m) => [(m.secrets || []).map((x) => `${KIND[x.kind] || x.kind}${x.key ? (x.set ? ' saved' : ' not set') : ''}`).join(', ') || 'Holds nothing',
+    m.hosts.length && `reaches ${m.hosts.length === 1 ? m.hosts[0] : `${m.hosts.length} hosts`}`].filter(Boolean).join(' · ');
+  $('#mods').innerHTML = list.map((m) => `<details><summary><b>${esc(m.label)}</b><span class="sum">${esc(sum(m))}</span><span class="k">${esc(m.area)}</span></summary><div class="body">
+    ${(m.secrets || []).map((x) => `<div><b>${esc(KIND[x.kind] || x.kind)}</b>${x.key ? ` <code>${esc(x.key)}</code> ${x.set ? '· saved' : '· not set'}` : ''}${x.note ? ` <span class="k">${esc(x.note)}</span>` : ''}</div>`).join('') || '<div class="k">Holds nothing</div>'}
+    ${m.hosts.length ? `<div><span class="k">Reaches</span> ${code(m.hosts)}</div>` : ''}
+    ${m.clis.length ? `<div><span class="k">Runs</span> ${code(m.clis)}</div>` : ''}
+    ${m.files.length ? `<div><span class="k">Files</span> ${code(m.files)}</div>` : ''}
+    ${m.dbus ? '<div><span class="k">Uses the desktop session bus (D-Bus)</span></div>' : ''}
+    ${m.note ? `<div class="k">${esc(m.note)}</div>` : ''}</div></details>`).join('');
+}
+
+// Each Grafana environment: logged in or not, and the button to log in with your browser.
+async function drawGrafana() {
+  let g = { instances: [] }, v = {};
+  try { [g, v] = await Promise.all([fetch('/api/grafana').then((r) => r.json()), fetch('/api/vpn').then((r) => r.json())]); } catch {}
+  const n = g.instances.length, ok = g.instances.filter((i) => i.token || (i.login && i.alive !== 'expired')).length;
+  state($('#graf-state'), n && ok === n, !n ? 'not set up' : v.known && !v.up ? 'VPN off' : `${ok} of ${n} logged in`);
+  $('#graf-list').innerHTML = g.instances.map((i) => `<div class="row"><span><b>${esc(i.name)}</b> <small>${esc(i.host)}${i.asks ? ' · asks every time' : ''} · ${i.token ? 'Viewer token' : i.login && i.alive === 'expired' ? '<b>login expired</b>' : i.login ? `logged in ${esc(new Date(i.login).toLocaleDateString())}` : 'not logged in'}</small></span>
+    <button data-glogin="${esc(i.name)}">${i.login ? 'Log in again' : 'Log in'}</button>${i.login ? `<button data-glogout="${esc(i.name)}">Log out</button>` : ''}<span class="msg"></span></div>`).join('');
+}
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-glogin],[data-glogout]');
+  if (!b) return;
+  const msg = b.parentElement.querySelector('.msg');
+  b.disabled = true; msg.textContent = b.dataset.glogin ? 'Log in in the window that opened…' : ''; msg.className = 'msg';
+  try {
+    const r = await post(b.dataset.glogin ? '/api/grafana/login' : '/api/grafana/logout', { name: b.dataset.glogin || b.dataset.glogout });
+    msg.textContent = r.login ? `Logged in as ${r.login}.` : 'Done.'; msg.className = 'msg on';
+    setTimeout(drawGrafana, 1200);
+  } catch (err) { msg.textContent = err.message; msg.className = 'msg bad'; b.disabled = false; }
+});
+
+async function load() {
+  render(await (await fetch('/api/settings')).json());
+  fetch('/api/modules').then((r) => r.json()).then((r) => renderModules(r.modules || [])).catch(() => {});
+}
+
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// Copilot's memory (lib/memory.mjs): the whole file, edited here.
+let memMax = 4096;
+const memSize = () => {
+  const n = new TextEncoder().encode($('#memory-text').value).length;
+  $('#memory-size').textContent = `${n} of ${memMax} bytes.`;
+  $('#memory-size').className = n > memMax ? 'bad' : '';
+};
+async function loadMemory() {
+  try {
+    const m = await (await fetch('/api/copilot/memory')).json();
+    memMax = m.max || memMax;
+    $('#memory-text').value = m.text || '';
+    if (m.path) $('#memory-path').textContent = m.path;
+    memSize();
+  } catch { /* shown empty */ }
+}
+document.addEventListener('input', (e) => { if (e.target.id === 'memory-text') memSize(); });
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('#memory-save');
+  if (!btn) return;
+  const msg = $('#memory-msg');
+  btn.disabled = true; msg.textContent = 'Saving…'; msg.className = 'msg';
+  try {
+    const r = await post('/api/copilot/memory', { text: $('#memory-text').value });
+    $('#memory-text').value = r.text; memSize();
+    msg.textContent = 'Saved. New chats read it.'; msg.className = 'msg on';
+  } catch (err) { msg.textContent = err.message; msg.className = 'msg bad'; }
+  btn.disabled = false;
+});
+
+function syncCalPick() {
+  $('#EVOLUTION_CALENDARS').value = [...document.querySelectorAll('#cal-list input:checked:not(:disabled)')].map((i) => i.value).join(',');
+}
+document.addEventListener('change', (e) => { if (e.target.closest('#cal-list')) syncCalPick(); });
+
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.save');
+  if (!btn || !btn.dataset.keys) return;
+  const msg = btn.nextElementSibling;
+  const body = {};
+  for (const key of btn.dataset.keys.split(',')) {
+    const v = document.querySelector(`[data-key="${key}"]`).value.trim();
+    if (SECRET.has(key) && !v) continue; // empty secret field means "keep the current one"
+    body[key] = v;
+  }
+  btn.disabled = true; msg.textContent = 'Saving…'; msg.className = 'msg';
+  try {
+    render(await post('/api/settings', body));
+    for (const key of Object.keys(body)) if (SECRET.has(key)) document.querySelector(`[data-key="${key}"]`).value = '';
+    msg.textContent = 'Saved.'; msg.className = 'msg on';
+  } catch (e) {
+    msg.textContent = e.message; msg.className = 'msg bad';
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$('#cal-remove').addEventListener('click', async () => {
+  const msg = $('#cal-remove').nextElementSibling;
+  try { render(await post('/api/settings', { GOOGLE_CALENDAR_ICS: '' })); msg.textContent = 'Removed.'; msg.className = 'msg on'; }
+  catch (e) { msg.textContent = e.message; msg.className = 'msg bad'; }
+});
+
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-login]');
+  if (!btn) return;
+  btn.disabled = true;
+  try { render(await post(`/api/source/${btn.dataset.login}/login`)); }
+  catch (err) { btn.disabled = false; btn.nextElementSibling.textContent = err.message; btn.nextElementSibling.className = 'msg bad'; }
+});
+
+$('#gh-login').addEventListener('click', async () => {
+  const msg = $('#gh-msg');
+  msg.textContent = 'Starting…'; msg.className = 'msg';
+  try {
+    const { code, url } = await post('/api/login/github');
+    msg.innerHTML = `Enter <span class="code">${code}</span> at <a href="${url}" target="_blank" rel="noopener">${url}</a>, then reload this page.`;
+  } catch (e) {
+    msg.textContent = e.message; msg.className = 'msg bad';
+  }
+});
+
+$('#jira-login').addEventListener('click', async () => {
+  const msg = $('#jira-msg');
+  msg.textContent = 'Starting…'; msg.className = 'msg';
+  try {
+    const { url } = await post('/api/login/jira');
+    msg.innerHTML = url ? `Finish the login at <a href="${url}" target="_blank" rel="noopener">Atlassian</a>, then reload this page.`
+      : 'A browser window should open for the Atlassian login. Reload this page when done.';
+  } catch (e) {
+    msg.textContent = e.message; msg.className = 'msg bad';
+  }
+});
+
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,194 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VmImage, ChatVm, reapOrphans, vmSize, VM_DEFAULT, loginForwarder, loginHead } from '../lib/vm.mjs';
+import { registryWrite, githubFilter } from '../lib/github-gate.mjs';
+import { srtSettings } from '../lib/sandbox.mjs';
+import { needs, serveBroker } from '../lib/broker.mjs';
+
+test('whether this machine can run the VM, and why not', () => {
+  assert.match(vmSupport({ platform: 'darwin' }).why, /Linux/);
+  assert.match(vmSupport({ platform: 'linux', exists: () => false }).why, /kvm/);
+  assert.match(vmSupport({ platform: 'linux', exists: () => true, has: (b) => b !== 'socat' }).why, /socat/);
+  assert.deepEqual(vmSupport({ platform: 'linux', exists: () => true, has: () => true }), { ok: true });
+});
+
+test('the VM reaches Docker Hub (with its CDN) and Maven Central through the proxy', () => {
+  for (const h of ['registry-1.docker.io', 'production.cloudfront.docker.com', '*.cloudflare.docker.com', 'repo.maven.apache.org']) assert.ok(VM_DOMAINS.includes(h), h);
+  const s = mavenSettings({ port: 1, url: 'http://srt:tok3n@' });
+  assert.match(s, /<host>10\.0\.2\.100<\/host><port>3128<\/port><username>srt<\/username><password>tok3n<\/password>/);
+  assert.doesNotMatch(mavenSettings({ port: 1, url: 'http://' }), /username/);
+});
+
+test('the prepared image: our keys, Docker and Maven via the proxy, nothing left that slows a boot', () => {
+  const c = cloudConfig({ key: 'ssh-ed25519 AAAA you\n', hostKey: '-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----\n', hostPub: 'ssh-ed25519 BBBB host\n', proxy: 'http://srt:t@10.0.2.100:3128' });
+  assert.match(c, /^#cloud-config\n/);
+  assert.match(c, /ed25519_private: \|\n    -----BEGIN OPENSSH PRIVATE KEY-----\n    abc\n/);
+  assert.match(c, /http_proxy: http:\/\/srt:t@10\.0\.2\.100:3128/);
+  assert.match(c, /packages: \[docker\.io, maven\]/);
+  assert.match(cloudConfig({ key: 'k', hostKey: 'h', hostPub: 'p', proxy: 'x', uid: 1234 }), /    uid: 1234\n/);
+  for (const s of ['PerSourcePenalties no', 'systemctl disable docker.service docker.socket', 'snapd.seeded.service', 'systemd-networkd-wait-online', 'rm -f /etc/apt/apt.conf.d/90cloud-init-aptproxy', 'cloud-init clean --logs', 'cloud-init.disabled']) assert.ok(c.includes(s), s);
+});
+
+test('a command runs with your JDK only when it is one the VM has', () => {
+  assert.equal(javaEnv('/usr/lib/jvm/java-25-openjdk-amd64'), " JAVA_HOME='/usr/lib/jvm/java-25-openjdk-amd64' PATH='/usr/lib/jvm/java-25-openjdk-amd64/bin':\"$PATH\"");
+  assert.equal(javaEnv('/home/alex/.sdkman/candidates/java/21'), '');
+  assert.equal(javaEnv('/usr/lib/jvm/x; rm -rf /'), '');
+  assert.equal(javaEnv(null), '');
+});
+
+test('a chat\'s VM keeps a log and a view of what runs in it', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'vm-'));
+  writeFileSync(join(dir, 'chat-dead.qcow2'), ''); // left by a Clearsky that crashed
+  const image = new VmImage({ dir });
+  assert.ok(!existsSync(join(dir, 'chat-dead.qcow2')));
+  assert.equal(image.ready(), false);
+  const vm = new ChatVm({ id: 'abc', cwd: '/work/repo', image, proxy: { port: 1, url: 'http://' }, hosts: ['repo1.maven.org'] });
+  const seen = [];
+  vm.onEvent = (e) => seen.push(e.text);
+  for (let i = 0; i < 305; i++) vm.event(`e${i}`);
+  assert.equal(vm.events.length, 300);
+  assert.equal(vm.events[0].text, 'e5');
+  assert.equal(seen.length, 305);
+  const priv = new ChatVm({ id: 'p', cwd: '/w', image, proxy: { port: 1, url: 'http://srt:s3cr3t@' } });
+  priv.event('$ curl -x http://srt:s3cr3t@10.0.2.100:3128 https://x; echo s3cr3t; git clone https://a:b@github.com/x');
+  assert.equal(priv.events[0].text, '$ curl -x http://…@10.0.2.100:3128 https://x; echo …; git clone https://…@github.com/x');
+  const v = vm.view();
+  assert.equal(v.state, 'off');
+  assert.deepEqual(v.network.hosts, ['repo1.maven.org']);
+  assert.equal(v.events.length, 150);
+  assert.equal(v.shares[0], '/work/repo');
+  assert.ok(vm.ssh('true').includes('StrictHostKeyChecking=yes'));
+});
+
+test('`vm <command>` runs without asking, and its output comes as it is written', async () => {
+  assert.equal(needs('vm', ['./mvnw', 'verify']), 'run');
+  assert.equal(needs('vm', []), 'no');
+  const dir = mkdtempSync(join(tmpdir(), 'broker-vm-'));
+  const path = join(dir, 's', 'broker.sock');
+  const work = join(dir, 'work'); mkdirSync(work);
+  const calls = [];
+  const vm = async ({ key, argv, cwd, java }, out, err) => {
+    calls.push([key, argv.join(' '), cwd, java]);
+    out('first\n'); await new Promise((r) => setTimeout(r, 20)); err('warn\n'); out('ünïcode\n');
+    return 3;
+  };
+  const server = serveBroker({ path, vm, where: (key) => (key === 'k1' ? [work] : null), ask: async () => { throw new Error('should not ask'); } });
+  await new Promise((r) => server.once('listening', r));
+  const bin = fileURLToPath(new URL('../scripts/sandbox-bin/vm', import.meta.url));
+  const go = (env = {}) => new Promise((r) => execFile(process.execPath, [bin, './mvnw', 'verify'],
+    { cwd: work, env: { ...process.env, CLEARSKY_BROKER_SOCKET: path, CLEARSKY_BROKER_KEY: 'k1', JAVA_HOME: '/usr/lib/jvm/java-21', ...env } }, (e, o, er) => r({ code: e ? e.code : 0, out: o, err: er })));
+  try {
+    const r = await go();
+    assert.equal(r.code, 3);
+    assert.equal(r.out, 'first\nünïcode\n');
+    assert.equal(r.err, 'warn\n');
+    assert.deepEqual(calls, [['k1', './mvnw verify', work, '/usr/lib/jvm/java-21']]);
+    const closed = await go({ CLEARSKY_BROKER_KEY: 'gone' });
+    assert.equal(closed.code, 1);
+    assert.match(closed.err, /closed/);
+  } finally { server.close(); }
+  const none = serveBroker({ path, where: () => [work] });
+  await new Promise((r) => none.once('listening', r));
+  try {
+    const r = await new Promise((done) => execFile(process.execPath, [bin, 'true'], { cwd: work, env: { ...process.env, CLEARSKY_BROKER_SOCKET: path, CLEARSKY_BROKER_KEY: 'k1' } }, (e, o, er) => done({ code: e ? e.code : 0, err: er })));
+    assert.equal(r.code, 1);
+    assert.match(r.err, /outside/);
+  } finally { none.close(); }
+});
+
+test('an `outside` card can send the command to the chat\'s VM instead', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'broker-vm2-'));
+  const path = join(dir, 's', 'broker.sock');
+  const work = join(dir, 'work'); mkdirSync(work);
+  const asked = [], ran = [];
+  const server = serveBroker({ path, where: () => [work], vm: async ({ argv }, out) => { ran.push(argv.join(' ')); out('in vm\n'); return 0; },
+    ask: async (q) => { asked.push(q.vm); return 'vm'; }, run: () => { throw new Error('should not run outside'); } });
+  await new Promise((r) => server.once('listening', r));
+  const bin = fileURLToPath(new URL('../scripts/sandbox-bin/outside', import.meta.url));
+  try {
+    const r = await new Promise((done) => execFile(process.execPath, [bin, './mvnw', 'test'], { cwd: work, env: { ...process.env, CLEARSKY_BROKER_SOCKET: path, CLEARSKY_BROKER_KEY: 'k1' } }, (e, o) => done({ code: e ? e.code : 0, out: o })));
+    assert.deepEqual([r.code, r.out, asked, ran], [0, 'in vm\n', [true], ['./mvnw test']]);
+  } finally { server.close(); }
+});
+
+test('a VM resumes from its snapshot only on the same devices: every share is always there', () => {
+  const shares = [{ tag: 'work', ro: false, path: '/w' }, { tag: 'jvm', ro: true, path: '/empty' }];
+  const a = vmArgs({ disk: 'd', serial: 's', sshPort: 2222, proxyPort: 3128, qmp: 'q', shares });
+  assert.ok(a.includes('local,path=/w,mount_tag=work,security_model=none'));
+  assert.ok(a.includes('local,path=/empty,mount_tag=jvm,security_model=none,readonly=on'));
+  assert.ok(a.some((x) => x.startsWith('user,id=n0,restrict=on,hostfwd=tcp:127.0.0.1:2222-:22,guestfwd=tcp:10.0.2.100:3128-cmd:socat - TCP:127.0.0.1:3128')));
+  assert.deepEqual(a.slice(-2), ['-qmp', 'unix:q,server=on,wait=off']);
+});
+
+test('a failed pull is spotted in dockerd\'s log', () => {
+  assert.equal(pullFailure('level=error msg="Handler for POST /v1.44/images/create returned error: Get \\"https://registry.example.com/v2/\\": Forbidden"'),
+    'Get "https://registry.example.com/v2/": Forbidden');
+  assert.equal(pullFailure('level=info msg="Loading containers: done."'), null);
+  assert.equal(pullFailure('time="x" level=info msg="fetch failed" error="pull access denied, repository does not exist or may require authorization: server message: insufficient_scope: authorization failed" host=registry-1.docker.io'),
+    'pull access denied, repository does not exist or may require authorization: server message: insufficient_scope: authorization failed');
+  assert.equal(pullFailure('level=info msg="fetch failed" error="read tcp: connection reset by peer" host=registry-1.docker.io'), null);
+});
+
+test('Docker Hub is read only: pulls go through, pushes and push logins are refused', async () => {
+  const r = (m, url) => new Request(url, { method: m, ...(m !== 'GET' && { body: '' }) });
+  assert.equal(registryWrite(r('GET', 'https://registry-1.docker.io/v2/library/mysql/manifests/8.4')), null);
+  assert.equal(registryWrite(r('GET', 'https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/mysql:pull')), null);
+  assert.ok(registryWrite(r('GET', 'https://auth.docker.io/token?service=registry.docker.io&scope=repository:evil/x:push,pull')));
+  assert.ok(registryWrite(r('POST', 'https://registry-1.docker.io/v2/evil/x/blobs/uploads/')));
+  assert.ok(registryWrite(r('PUT', 'https://registry-1.docker.io/v2/evil/x/manifests/latest')));
+  assert.equal(registryWrite(r('POST', 'https://example.org/x')), null);
+  const f = githubFilter(async () => true);
+  assert.equal((await f(r('PATCH', 'https://registry-1.docker.io/v2/evil/x/blobs/uploads/1'))).action, 'deny');
+  const s = srtSettings({ cwd: '/w', home: '/h', domains: ['github.com'], ca: { cert: 'c', key: 'k' }, inspect: ['registry-1.docker.io'], exists: () => true });
+  assert.ok(s.network.allowedDomains.includes('registry-1.docker.io'));
+  assert.ok(!s.network.tlsTerminate.excludeDomains.includes('registry-1.docker.io'));
+  assert.ok(s.network.tlsTerminate.excludeDomains.includes('github.com'));
+});
+
+test('vmSize: default, overrides, and kept within the machine', () => {
+  const host = { cpus: 20, memMb: 63 * 1024 };
+  assert.deepEqual(vmSize({}, host), { cpus: Math.min(20, VM_DEFAULT.cpus), memMb: VM_DEFAULT.memMb });
+  assert.deepEqual(vmSize({ COPILOT_VM_CPUS: '16', COPILOT_VM_MEMORY_GB: '24' }, host), { cpus: 16, memMb: 24576 });
+  assert.deepEqual(vmSize({ COPILOT_VM_CPUS: '64', COPILOT_VM_MEMORY_GB: '500' }, host), { cpus: 20, memMb: 31.5 * 1024 });
+  assert.deepEqual(vmSize({ COPILOT_VM_CPUS: '0', COPILOT_VM_MEMORY_GB: '1' }, host).memMb, 2048);
+  assert.equal(vmSize({ COPILOT_VM_CPUS: '0' }, host).cpus, Math.min(20, VM_DEFAULT.cpus));
+  assert.equal(vmSize({ COPILOT_VM_MEMORY_GB: '6,5' }, host).memMb, 6656);
+  assert.equal(vmSize({ COPILOT_VM_CPUS: 'lots' }, host).cpus, Math.min(20, VM_DEFAULT.cpus));
+});
+
+test('the VM\'s proxy needs no login: Clearsky adds it on the way to srt\'s proxy', async () => {
+  const { createServer, connect } = await import('node:net');
+  assert.equal(loginHead('GET http://a/x HTTP/1.1\r\nHost: a\r\nProxy-Connection: keep-alive\r\nProxy-Authorization: Basic bad', 'dTpw'),
+    'GET http://a/x HTTP/1.1\r\nProxy-Authorization: Basic dTpw\r\nConnection: close\r\nHost: a');
+  assert.equal(loginHead('CONNECT a:443 HTTP/1.1\r\nHost: a:443', 'dTpw'), 'CONNECT a:443 HTTP/1.1\r\nProxy-Authorization: Basic dTpw\r\nHost: a:443');
+  const seen = [];
+  const up = createServer((s) => s.on('data', (d) => { seen.push(d.toString()); s.end('HTTP/1.1 200 OK\r\n\r\nhi'); }));
+  await new Promise((ok) => up.listen(0, '127.0.0.1', ok));
+  const fwd = await loginForwarder({ url: 'http://u:p%40ss@', port: up.address().port });
+  const got = await new Promise((ok) => {
+    const c = connect(fwd.address().port, '127.0.0.1', () => c.write('GET http://example.org/ HTTP/1.1\r\nHost: example.org\r\n\r\n'));
+    let out = ''; c.on('data', (d) => { out += d; }); c.on('close', () => ok(out));
+  });
+  assert.match(got, /200 OK[\s\S]*hi/);
+  assert.match(seen.join(''), new RegExp(`Proxy-Authorization: Basic ${Buffer.from('u:p@ss').toString('base64')}`));
+  fwd.close(); up.close();
+});
+
+test('VMs left running by a Clearsky that was killed are stopped; nothing else is', () => {
+  const proc = mkdtempSync(join(tmpdir(), 'cs-proc-'));
+  const ps = { 101: ['/usr/bin/qemu-system-x86_64', '-drive', 'if=virtio,file=/h/.cache/clearsky/vm/chat-ab12.qcow2'],
+    102: ['qemu-system-x86_64', '-drive', 'file=/other/vm/disk.qcow2'],
+    103: ['/usr/bin/node', '/h/.cache/clearsky/vm/chat-ab12.qcow2'],
+    104: ['/usr/bin/qemu-system-x86_64', '-drive', 'file=/h/.cache/clearsky/vm/snapshot.qcow2'] };
+  for (const [pid, args] of Object.entries(ps)) { mkdirSync(join(proc, pid)); writeFileSync(join(proc, pid, 'cmdline'), `${args.join('\0')}\0`); }
+  mkdirSync(join(proc, 'self'));
+  const killed = [];
+  const out = reapOrphans('/h/.cache/clearsky/vm', { proc, kill: (pid, sig) => killed.push([pid, sig]), self: new Set([{ qemu: { pid: 104 } }]) });
+  assert.deepEqual(out, [101], 'not another QEMU, not a non-QEMU process, not a VM this Clearsky runs');
+  assert.deepEqual(killed, [[101, 'SIGKILL']]);
+});

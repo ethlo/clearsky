@@ -1,0 +1,27 @@
+# Clearsky in Docker. Start it with `clearsky docker up` (node bin/clearsky.mjs docker up) on
+# your machine: that fills in HOME_DIR, UID, GID and PORT, and mounts the folders Copilot may
+# use (Settings → Copilot) plus the tool folders you have, at the same paths as on your machine
+# (written to ~/.config/clearsky/docker-mounts.yml). Plain `docker compose up` mounts none.
+# Log in once, inside:  clearsky docker login
+# gh, acli and Copilot keep those logins in the container's own keyring, in
+# ~/.config/clearsky/container/; your machine's keyring and logins aren't used or changed.
+# Anything extra goes in docker-compose.override.yml (yours, not in git).
+services:
+  clearsky:
+    build: .
+    image: clearsky:local
+    restart: unless-stopped   # also brings it back after Clearsky restarts itself
+    user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      HOME: ${HOME_DIR}
+      CLEARSKY_PUBLIC_PORT: ${PORT:-7777}
+    ports:
+      - "127.0.0.1:${PORT:-7777}:7777"  # this machine only
+    # Your home inside is a scratch folder (tools keep caches there), with your folders
+    # mounted on top of it.
+    tmpfs:
+      - ${HOME_DIR}:uid=${UID:-1000},gid=${GID:-1000},mode=0700,exec
+      # Also ~/.config and ~/.cache, else Docker makes them (for mounts inside) owned by root.
+      # exec: Copilot unpacks itself into ~/.cache and runs from there (tmpfs is noexec by default).
+      - ${HOME_DIR}/.config:uid=${UID:-1000},gid=${GID:-1000},mode=0700
+      - ${HOME_DIR}/.cache:uid=${UID:-1000},gid=${GID:-1000},mode=0700,exec
