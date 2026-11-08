@@ -51,6 +51,24 @@ test('the chat panel talks to the local Copilot CLI with the chosen options', as
   assert.equal(await (await fetch(`${base}/api/copilot/file?chat=sess-1234&path=${encodeURIComponent(kept.path)}`)).text(), 'hello');
   assert.equal((await fetch(`${base}/api/copilot/file?chat=sess-1234&path=${encodeURIComponent('/etc/passwd')}`)).status, 404, 'only the chat\'s own files');
 
+  // A file on disk you point at with @: found by name or path, only its path goes in, and it
+  // shows in the outputs. Paths outside the chat's folders are refused, not quietly dropped.
+  mkdirSync(join(home, 'dev', 'proj', 'logs'), { recursive: true });
+  writeFileSync(join(home, 'dev', 'proj', 'logs', 'big-run.log'), 'line\n'.repeat(5000));
+  const found = (await (await fetch(`${base}/api/copilot/files?q=big-run&chat=sess-1234`)).json()).files;
+  assert.deepEqual(found.map((f) => f.shown), ['~/dev/proj/logs/big-run.log']);
+  const listed = (await (await fetch(`${base}/api/copilot/files?q=${encodeURIComponent('~/dev/proj/')}&chat=sess-1234`)).json()).files;
+  assert.deepEqual(listed.map((f) => [f.name, f.dir]), [['logs', true]]);
+  const ptEvs = await events(await ask({ message: 'Why did it fail?', session: 'sess-1234', resume: true, permission: 'read', files: [found[0].path] }));
+  const ptPrompt = info0(ptEvs).prompt;
+  assert.match(ptPrompt, /Why did it fail\?\n\nFiles I'm pointing you at \(read them from disk, and only the parts you need\): ~\/dev\/proj\/logs\/big-run\.log$/);
+  assert.ok(!ptPrompt.includes('line\nline'), 'the contents stay on disk');
+  const outs2 = await (await fetch(`${base}/api/copilot/outputs?chat=sess-1234`)).json();
+  assert.ok(outs2.files.some((f) => f.kind === 'pointed' && f.name === 'big-run.log'), JSON.stringify(outs2.files));
+  const bad = await ask({ message: 'And this', session: 'sess-1234', resume: true, permission: 'read', files: ['/etc/passwd'] });
+  assert.equal(bad.status, 400);
+  assert.match((await bad.json()).error, /outside this chat's folders/);
+
   // Every mode runs over ACP, so a step Copilot won't run unattended (here: Full mode, resumed)
   // still reaches the panel as Allow/Deny instead of being refused.
   const fullEvs = [];

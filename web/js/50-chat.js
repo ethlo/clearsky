@@ -321,7 +321,7 @@ async function drawChanges() {
 
 // Files for the next message: dropped on the chat or picked with the paperclip, uploaded at once.
 async function attachFiles(list) {
-  for (const file of [...list].slice(0, 10 - chat.files.length)) {
+  for (const file of [...list].slice(0, Math.max(0, 10 - chat.files.filter((x) => !x.pointed).length))) {
     const f = { name: file.name, size: file.size, path: null };
     if (file.size > 25 * 1024 * 1024) { $('#chat-sub').textContent = `${file.name} is over 25 MB`; continue; }
     chat.files.push(f); drawRefs();
@@ -348,7 +348,7 @@ for (const ev of ['dragover', 'drop']) {
 // What this chat made and changed: its files (yours attached, its own, what it wrote) with a
 // preview, and the PRs, branches, tickets and CI runs it touched, with the usual hover cards.
 const fsize = (n) => (n == null ? '' : n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} kB` : `${(n / 1048576).toFixed(1)} MB`);
-const FILE_KIND = { attached: 'you attached', research: 'research', file: 'its files', wrote: 'written' };
+const FILE_KIND = { attached: 'you attached', pointed: 'you pointed at', research: 'research', file: 'its files', wrote: 'written' };
 async function drawOutputs() {
   const el = $('#cp-out'), id = chat.turns ? chat.session : null;
   let d = null;
@@ -817,7 +817,7 @@ function drawRefs() {
   for (const [i, f] of chat.files.entries()) {
     const el = document.createElement('span');
     el.className = 'ref file';
-    el.innerHTML = `<span title="${esc(f.path || 'uploading')}">${icon('clip', 12)} ${esc(f.name)}${f.path ? '' : ' …'}</span><button type="button" data-unfile="${i}" aria-label="Remove">✕</button>`;
+    el.innerHTML = `<span title="${esc(f.pointed ? `${f.shown}: Copilot gets the path and reads it itself` : f.path || 'uploading')}">${f.pointed ? '@' : icon('clip', 12)} ${esc(f.name)}${f.dir ? '/' : ''}${f.path ? '' : ' …'}</span><button type="button" data-unfile="${i}" aria-label="Remove">✕</button>`;
     $('#cp-refs').append(el);
   }
   for (const [i, r] of chat.refs.entries()) {
@@ -833,31 +833,64 @@ function addRef(r) {
   chat.refs.push(r);
   drawRefs();
 }
+// A file or folder on disk for the next message: Copilot gets the path, not the contents.
+function addFileRef(f) {
+  if (chat.files.some((x) => x.path === f.path) || chat.files.length >= 20) return;
+  chat.files.push({ name: f.name, path: f.path, shown: f.shown, dir: f.dir, pointed: true });
+  drawRefs();
+}
 function closeRefPick() { $('#cp-refs .ref-pick:not(.slash)')?.remove(); }
 function openRefPick() {
   if ($('#cp-refs .ref-pick:not(.slash)')) return closeRefPick();
   const box = document.createElement('div');
   box.className = 'ref-pick';
-  box.innerHTML = '<input placeholder="Find a PR or ticket, or paste ABC-1234 / a link" spellcheck="false"><ul></ul>';
+  box.innerHTML = '<input placeholder="Find a PR, ticket or file, or paste ABC-1234 / a link / a path" spellcheck="false"><ul></ul>';
   $('#cp-refs').append(box);
   const input = box.querySelector('input'), ul = box.querySelector('ul');
   const all = refCandidates();
-  let shown = [], on = 0;
+  let shown = [], on = 0, files = [], asked = '';
+  const pathy = (q) => /^(~|\/|\.\.?\/)/.test(q);
   const draw = () => {
     const q = input.value.trim().toLowerCase();
-    shown = all.filter((r) => !q || `${refLabel(r)} ${r.repo || ''} ${r.title || ''}`.toLowerCase().includes(q)).slice(0, 40);
+    shown = pathy(q) ? [] : all.filter((r) => !q || `${refLabel(r)} ${r.repo || ''} ${r.title || ''}`.toLowerCase().includes(q)).slice(0, 40);
     const typed = parseRef(input.value);
     if (typed && !shown.some((r) => refLabel(r) === refLabel(typed))) shown.unshift({ ...typed, title: '', where: 'add' });
+    // Files after the PRs and tickets: a path you typed lists that folder, a word finds names.
+    shown = [...shown, ...files.map((f) => ({ file: f }))];
     on = Math.min(on, Math.max(shown.length - 1, 0));
-    ul.innerHTML = shown.map((r, i) => `<li data-i="${i}" class="${i === on ? 'on' : ''}"><code>${esc(refLabel(r))}</code>${esc(r.title || '')}<small>${esc(r.where || '')}</small></li>`).join('')
-      || '<li class="none">Nothing on your dashboard matches. Type a key like ABC-1234 or org/repo#12.</li>';
+    ul.innerHTML = shown.map((r, i) => (r.file
+      ? `<li data-i="${i}" class="${i === on ? 'on' : ''}"><code>${r.file.dir ? '▸' : '@'}</code>${esc(r.file.name)}${r.file.dir ? '/' : ''}<small title="${esc(r.file.shown)}">${esc(r.file.shown.replace(/\/[^/]*$/, '') || '/')}</small></li>`
+      : `<li data-i="${i}" class="${i === on ? 'on' : ''}"><code>${esc(refLabel(r))}</code>${esc(r.title || '')}<small>${esc(r.where || '')}</small></li>`)).join('')
+      || `<li class="none">${q.length < 2 ? 'Type a few letters of a PR, ticket or file name, or a path like ~/dev/' : 'Nothing matches. Type a key like ABC-1234, org/repo#12 or a path.'}</li>`;
   };
-  const pick = (i) => { const r = shown[i]; if (!r) return; addRef({ ...r }); closeRefPick(); $('#chat-text').focus(); };
-  input.addEventListener('input', () => { on = 0; draw(); });
+  let timer = null;
+  const lookFiles = () => {
+    clearTimeout(timer);
+    const q = input.value.trim();
+    if (q.length < 2 && !pathy(q)) { files = []; asked = ''; return draw(); }
+    timer = setTimeout(async () => {
+      asked = q;
+      let found = [];
+      try { found = (await getJson(`/api/copilot/files?q=${encodeURIComponent(q)}&chat=${encodeURIComponent(chat.session || '')}&cwd=${encodeURIComponent(chat.cwd || '')}`)).files || []; } catch {}
+      if (asked !== input.value.trim() || !box.isConnected) return;
+      files = found; draw();
+    }, 150);
+  };
+  const pick = (i, keepOpen) => {
+    const r = shown[i]; if (!r) return;
+    if (r.file) {
+      // A folder picked with Tab opens it in the picker, to go further down.
+      if (r.file.dir && keepOpen) { input.value = `${r.file.shown}/`; on = 0; lookFiles(); return; }
+      addFileRef(r.file);
+    } else addRef({ ...r });
+    closeRefPick(); $('#chat-text').focus();
+  };
+  input.addEventListener('input', () => { on = 0; draw(); lookFiles(); });
   input.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowDown') { on = Math.min(on + 1, shown.length - 1); draw(); e.preventDefault(); }
     else if (e.key === 'ArrowUp') { on = Math.max(on - 1, 0); draw(); e.preventDefault(); }
     else if (e.key === 'Enter') { pick(on); e.preventDefault(); }
+    else if (e.key === 'Tab' && shown[on]?.file?.dir) { pick(on, true); e.preventDefault(); }
     else if (e.key === 'Escape') { closeRefPick(); e.stopPropagation(); }
   });
   ul.addEventListener('mousedown', (e) => { const li = e.target.closest('[data-i]'); if (li) { e.preventDefault(); pick(+li.dataset.i); } });
@@ -869,7 +902,8 @@ async function send(text) {
   if (!text.trim() || chat.stop) return;
   if (chat.files.some((f) => !f.path)) { $('#chat-sub').textContent = 'Still uploading your files…'; return; }
   const refs = chat.refs.map(({ kind, key, repo, number }) => ({ kind, key, repo, number }));
-  const attachments = chat.files.map((f) => f.path);
+  const attachments = chat.files.filter((f) => !f.pointed).map((f) => f.path);
+  const files = chat.files.filter((f) => f.pointed).map((f) => f.path);
   const sentFiles = chat.files.map((f) => f.name);
   addMsg('me', `${refs.length ? `<span class="refs-sent">${icon('clip', 13)} ${chat.refs.map((r) => esc(refLabel(r))).join(', ')}</span>` : ''}${sentFiles.length ? `<span class="refs-sent">${icon('clip', 13)} ${sentFiles.map(esc).join(', ')}</span>` : ''}${esc(text)}`);
   chat.refs = [];
@@ -911,7 +945,7 @@ async function send(text) {
   drawCtx();
   try {
     const res = await fetchWithToken('/api/copilot', { method: 'POST', signal: ctrl.signal,
-      body: JSON.stringify({ message: skillPrompt(text), attachments, session: chat.session, resume: chat.turns > 0, cwd: chat.cwd, refs, model: cpPrefs.model, effort: cpPrefs.effort, permission: $('#cp-perm').value }) });
+      body: JSON.stringify({ message: skillPrompt(text), attachments, files, session: chat.session, resume: chat.turns > 0, cwd: chat.cwd, refs, model: cpPrefs.model, effort: cpPrefs.effort, permission: $('#cp-perm').value }) });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
     const reader = res.body.getReader(), dec = new TextDecoder();
     let buf = '';
@@ -1178,7 +1212,7 @@ function sendQueued() {
 const SLASH = [
   { name: 'new', description: 'Start a new chat', run: () => newChat() },
   { name: 'history', description: 'Your Copilot sessions', run: () => showHistory(true) },
-  { name: 'ref', description: 'Attach a PR or ticket', run: () => openRefPick() },
+  { name: 'ref', description: 'Attach a PR, ticket or file', run: () => openRefPick() },
 ];
 let slash = null;
 function slashItems() {
