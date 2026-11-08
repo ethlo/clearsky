@@ -514,6 +514,7 @@ a.ref:hover { border-bottom-style: solid; }
 .vm-st i, .vm-ctr i { width: 7px; height: 7px; border-radius: 50%; background: var(--line-strong); flex: none; }
 .vm-st.s-running i { background: var(--green); }
 .vm-st.s-starting i { background: var(--amber); animation: pulse 1.2s ease-in-out infinite; }
+.vm-st.s-queued i { background: var(--amber); }
 .vm-sub { color: var(--muted); }
 .vm-map { display: flex; flex-direction: column; align-items: stretch; }
 .vm-arrow { width: 1px; height: 12px; background: var(--line-strong); margin: 0 auto; position: relative; }
