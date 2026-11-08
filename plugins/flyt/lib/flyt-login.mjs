@@ -8,10 +8,15 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { findBrowser } from './browser.mjs';
 import { API, PORTAL, sessionFromCookies, renew, defaultStore } from './flyt.mjs';
 
-export { findBrowser };
+// The browser comes from Clearsky (what it lends plugins that run inside it; see lib/plugins.mjs).
+let lent = null;
+export const useBrowserFrom = (lends) => { lent = lends; };
+const findBrowser = () => {
+  if (!lent?.findBrowser) throw new Error('no browser to log in with: Clearsky lends one to plugins that run inside it');
+  return lent.findBrowser();
+};
 
 // A tiny DevTools client: send a command, get its result.
 async function devtools(url) {

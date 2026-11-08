@@ -1,4 +1,4 @@
 #!/usr/bin/env node
-// `grafana …` in Clearsky's sandbox: reads logs, metrics and dashboards of your environments
-// through Clearsky (lib/modules/grafana.mjs), which holds the Grafana login. Read only.
+// `grafana …` in Clearsky's sandbox: the Grafana plugin's door (plugins/grafana), which reads
+// logs, metrics and dashboards through Clearsky, which holds the Grafana login. Read only.
 require('./shim.js').viaClearsky('grafana', process.argv.slice(2));

@@ -2,19 +2,11 @@
 // instead of getting a shell on servers. Read only by construction: Clearsky makes only these
 // calls (frontend settings, search, a dashboard, and data-source queries), as you, with a Viewer
 // login, and the sandbox never gets that login or a route to Grafana. `grafana …` in a chat comes
-// here through Clearsky's door (lib/broker.mjs); bin/clearsky.mjs adds the card for prod, the log
-// line and the VPN check.
+// here through Clearsky's door (lib/broker.mjs, ../source.mjs); Clearsky adds the log line and
+// removes secrets, the door asks for prod and minds the VPN.
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync } from 'node:fs';
 import { dirname } from 'node:path';
-
-export const manifest = {
-  name: 'grafana', label: 'Grafana', area: 'work',
-  secrets: [{ key: 'GRAFANA_TOKENS', kind: 'token', note: 'optional Viewer service-account tokens; else your browser login' }],
-  clis: [],
-  hosts: [], // yours, from GRAFANA_INSTANCES (kept in your settings only)
-  files: ['~/.config/clearsky/grafana-sessions.json'],
-};
 
 // "test=https://grafana.test.example.com, prod=https://grafana.example.com" → instances. Names that
 // match GRAFANA_ASK (default: any name with "prod") ask in the chat every time.
@@ -87,7 +79,7 @@ export function createGrafana({ instances, tokens = {}, sessions, fetch = global
   async function call(inst, path, { method = 'GET', body } = {}, retried = false) {
     const token = tokens()[inst.name];
     const s = token ? null : sessions.get(inst.name);
-    if (!token && !s) throw Object.assign(new Error(`not logged in to Grafana ${inst.name}: log in under Settings → Grafana`), { login: true });
+    if (!token && !s) throw Object.assign(new Error(`not logged in to Grafana ${inst.name}: log in under Settings → Other sources`), { login: true });
     const headers = { Accept: 'application/json', ...(body && { 'Content-Type': 'application/json' }), ...(token ? { Authorization: `Bearer ${token}` } : { Cookie: s.cookie }) };
     const res = await fetch(`${inst.url}${path}`, { method, headers, body: body && JSON.stringify(body), redirect: 'manual', signal: AbortSignal.timeout(timeoutMs) });
     const fresh = sessionCookie(res.headers.getSetCookie?.() || []);
@@ -96,7 +88,7 @@ export function createGrafana({ instances, tokens = {}, sessions, fetch = global
       const r = await fetch(`${inst.url}/api/user/auth-tokens/rotate`, { method: 'POST', headers: { Cookie: s.cookie }, redirect: 'manual', signal: AbortSignal.timeout(timeoutMs) }).catch(() => null);
       const rotated = r && sessionCookie(r.headers.getSetCookie?.() || []);
       if (rotated) { sessions.set(inst.name, rotated); return call(inst, path, { method, body }, true); }
-      throw Object.assign(new Error(`your Grafana ${inst.name} login has expired: log in again under Settings → Grafana`), { login: true });
+      throw Object.assign(new Error(`your Grafana ${inst.name} login has expired: log in again under Settings → Other sources`), { login: true });
     }
     const text = await res.text();
     if (!res.ok) throw new Error(`Grafana ${inst.name} answered ${res.status}: ${text.slice(0, 300)}`);
@@ -123,7 +115,7 @@ export function createGrafana({ instances, tokens = {}, sessions, fetch = global
     if (c.cmd === 'help') return USAGE;
     if (c.cmd === 'list') {
       const list = instances();
-      return list.length ? list.map((i) => `${i.name}${i.asks ? '  (asks the user each time)' : ''}`).join('\n') : 'No Grafana environments are set up (Settings → Grafana).';
+      return list.length ? list.map((i) => `${i.name}${i.asks ? '  (asks the user each time)' : ''}`).join('\n') : 'No Grafana environments are set up (Settings → Other sources).';
     }
     const inst = find(c.env);
     if (!inst) throw new Error(`no Grafana environment "${c.env}". There are: ${instances().map((i) => i.name).join(', ') || 'none'}`);

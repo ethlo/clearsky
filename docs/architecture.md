@@ -19,7 +19,7 @@ It runs on the laptop, uses the logins already there, has no dependencies beyond
 | Part | Where | What it does |
 |---|---|---|
 | Server | `bin/clearsky.mjs` | HTTP on 127.0.0.1, caches sources, plans Now / Next, polls for notifications, talks to Copilot |
-| Modules | `lib/modules/*.mjs` | GitHub, Jira (through acli), Slack and Calendar: each fetches its service, turns it into work items, and declares what it holds and reaches |
+| Modules | `lib/modules/*.mjs` | GitHub, Jira (through acli) and Calendar: each fetches its service, turns it into work items, and declares what it holds and reaches |
 | Item model | `lib/items.mjs` | the one kind of row every list draws, with the next step on each item |
 | Page | `web/index.html`, `web/css/app.css`, `web/js/*.js` | A menu and one work area: the Work list, an item in full, Copilot chats, Calendar, Stand-up and a page per extra source; the server puts the CSS and scripts inline, so there's no build step |
 | Settings | `web/settings.html`, `lib/settings.mjs` | writes `~/.config/clearsky/.env` (mode 600); never sends saved secrets back |
@@ -31,14 +31,16 @@ It runs on the laptop, uses the logins already there, has no dependencies beyond
 
 ## Sources
 
-GitHub (through `gh`), Jira (through `acli`, never direct REST tokens), Slack and the calendar are built in. Everything else is a source module with `name`, `label`, `area` (`work` or `personal`), `settings`, `fetch(ctx)` and optional hooks:
+GitHub (through `gh`), Jira (through `acli`, never direct REST tokens) and the calendar are built in. Everything else, Slack and Grafana included, is a plugin (`plugins/`, [plugins.md](plugins.md)) or a source module with `name`, `label`, `area` (`work` or `personal`), `settings`, `fetch(ctx)` and optional hooks:
 
 - `items`: rows for its panel;
 - `attention`: what should notify you when it's new;
 - `events`: calendar entries; `fyi: true` events show but don't take your time;
 - `standup`: lines for Yesterday and Today;
 - `detail` and `attachment`: read an item in full inside Clearsky;
-- `login`: a login started from Settings.
+- `plan` and `markdown`: tasks for Now / Next and lines for `--md` (work sources);
+- `login` or `logins`: one login, or several, started from Settings;
+- `doors`: commands Copilot chats run through Clearsky (`grafana …`), for plugins that run inside.
 
 The source's `area` decides its tab. Only the calendar mixes work and personal.
 

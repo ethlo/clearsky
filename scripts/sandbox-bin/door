@@ -1,0 +1,4 @@
+#!/usr/bin/env node
+// `door <name> …` in Clearsky's sandbox: a command a plugin offers chats (its doors), run by
+// Clearsky with what the plugin holds. `grafana …` is the same as `door grafana …`.
+require('./shim.js').viaClearsky('door', process.argv.slice(2));

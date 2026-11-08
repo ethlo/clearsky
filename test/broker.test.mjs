@@ -45,3 +45,31 @@ test('the sandbox\'s commands reach Clearsky, which asks in the chat and runs th
     assert.deepEqual(seen, [['acli', 'jira', 'workitem', 'view', 'ABC-1', '-'], ['acli', 'jira', 'workitem', 'transition', '--key', 'ABC-1', '--status', 'Done', '-']]);
   } finally { server.close(); }
 });
+
+test('a plugin\'s door runs by its own name or as `door <name>`, and only doors that exist', async () => {
+  assert.equal(needs('door', ['grafana', 'query'], [], (n) => n === 'grafana'), 'run');
+  assert.equal(needs('door', ['nope'], [], (n) => n === 'grafana'), 'no');
+  assert.equal(needs('door', [], [], () => true), 'no');
+  assert.equal(needs('grafana', ['query'], [], (n) => n === 'grafana'), 'run');
+  assert.equal(needs('grafana', ['query']), 'no', 'no plugin, no door');
+
+  const dir = mkdtempSync(join(tmpdir(), 'broker-door-'));
+  const path = join(dir, 's', 'broker.sock');
+  const work = join(dir, 'work'); mkdirSync(work);
+  const calls = [];
+  const doors = (n) => (n === 'grafana' ? async ({ key, name, argv }) => { calls.push([key, name, ...argv]); return { code: 0, stdout: `${argv.join(' ')}\n`, stderr: '' }; } : null);
+  const server = serveBroker({ path, doors, where: (key) => (key === 'k1' ? [work] : null) });
+  await new Promise((r) => server.once('listening', r));
+  const bin = (n) => fileURLToPath(new URL(`../scripts/sandbox-bin/${n}`, import.meta.url));
+  const go = (n, args, { key = 'k1', cwd = dir } = {}) => new Promise((r) => execFile(process.execPath, [bin(n), ...args],
+    { cwd, env: { ...process.env, CLEARSKY_BROKER_SOCKET: path, CLEARSKY_BROKER_KEY: key } }, (e, out, err) => r({ code: e ? e.code : 0, out, err })));
+  try {
+    const a = await go('grafana', ['logs', 'api']); // a door works from any folder: it doesn't touch the chat's files
+    assert.equal(a.code, 0); assert.equal(a.out, 'logs api\n');
+    const b = await go('door', ['grafana', 'metrics']);
+    assert.equal(b.code, 0); assert.equal(b.out, 'metrics\n');
+    assert.equal((await go('door', ['weather'])).code, 1);
+    assert.equal((await go('grafana', ['logs'], { key: 'closed' })).code, 1);
+    assert.deepEqual(calls, [['k1', 'grafana', 'logs', 'api'], ['k1', 'grafana', 'metrics']]);
+  } finally { server.close(); }
+});

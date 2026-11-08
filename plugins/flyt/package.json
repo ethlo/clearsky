@@ -1,0 +1,9 @@
+{
+  "name": "clearsky-plugin-flyt",
+  "version": "1.0.0",
+  "description": "Clearsky plugin: school messages, forms and weekly plans from Visma Flyt Skole",
+  "type": "module",
+  "files": ["clearsky-plugin.json", "source.mjs", "lib", "README.md"],
+  "keywords": ["clearsky-plugin"],
+  "license": "MIT"
+}

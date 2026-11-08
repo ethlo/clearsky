@@ -7,9 +7,11 @@ import { mkdtempSync, statSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { client, renew, collectFlyt, waiting, readFlyt, flytFile, parseKey, osloTime, sessionFromCookies, jwtExpiry, keyringStore, fileStore, FlytAuthError, keepAlive } from '../lib/flyt.mjs';
-import { browserLogin, findBrowser } from '../lib/flyt-login.mjs';
-import { checkSource, hook } from '../lib/sources.mjs';
-import flytSource from '../lib/sources/flyt.mjs';
+import { browserLogin } from '../lib/flyt-login.mjs';
+import { findBrowser } from '../../../lib/browser.mjs';
+import { fileURLToPath } from 'node:url';
+import { hook } from '../../../lib/sources.mjs';
+import { sourceFromDir } from '../../../lib/plugins.mjs';
 
 const jwt = (expMs) => `h.${Buffer.from(JSON.stringify({ exp: Math.floor(expMs / 1000) })).toString('base64url')}.s`;
 const memStore = (v) => ({ v, where: 'memory', async get() { return this.v; }, async set(x) { this.v = x; } });
@@ -148,7 +150,7 @@ test('collects what waits for each child; areas a school has turned off come bac
 });
 
 test('the source module fits the contract and turns data into rows, notifications and deadlines', async () => {
-  const s = checkSource({ default: flytSource }, 'lib/sources/flyt.mjs');
+  const s = await sourceFromDir(fileURLToPath(new URL('..', import.meta.url)));
   assert.equal(s.panel.zone, 'needs');
   assert.equal(s.enabled({}), false);
   assert.equal(s.enabled({ FLYT_SCHOOL_KEY: 'eksempel' }), true);

@@ -31,7 +31,7 @@ const mergedAt = new Map();
 const justMerged = (url) => url && Date.now() - (mergedAt.get(url) || 0) < 10 * 6e4;
 function inboxItems() {
   const out = [];
-  for (const name of ['github', 'jira', 'jiraMentions', 'slack', ...extraSources.map((x) => x.name)]) {
+  for (const name of ['github', 'jira', 'jiraMentions', ...extraSources.map((x) => x.name)]) {
     const d = state[name];
     if (d && !d.error) (d.work || []).filter((x) => !justMerged(x.url)).forEach((x) => out.push({ ...x }));
   }
@@ -538,7 +538,8 @@ function renderList() {
   xrefAll = all;
   if ($('#list-q').value !== (listQ[listView] || '')) $('#list-q').value = listQ[listView] || '';
   const by = (f) => live.filter(f);
-  const sources = [['GitHub', state.github], ['Jira', state.jira], ['Jira mentions', state.jiraMentions], ['Slack', state.slack]];
+  const sources = [['GitHub', state.github], ['Jira', state.jira], ['Jira mentions', state.jiraMentions],
+    ...extraSources.filter((x) => x.area === 'work' && x.panel.zone === 'needs').map((x) => [x.panel.title, state[x.name]])];
   const errs = sources.filter(([, s]) => s?.error).map(([n, s]) => `<div class="err">${esc(n)}: ${esc(s.error)}</div>`).join('')
     + sources.filter(([, s]) => s?.paused).map(([n, s]) => `<div class="paused">${esc(n)}: paused, ${esc(s.paused)}</div>`).join('');
   const loading = sources.some(([, s]) => !s);

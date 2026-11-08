@@ -2,7 +2,7 @@
 // The server joins web/js/*.js in name order into one script in index.html, so they share one scope.
 //
 // The index is what the page already has, built when the box opens: PRs, tickets, mentions,
-// Slack, Copilot chats, links, today's and tomorrow's meetings, personal sources' items, servers,
+// Copilot chats, links, today's and tomorrow's meetings, personal sources' items, servers,
 // the pages, Settings' tabs, your skills and a few commands. Nothing extra is fetched to search.
 // A key or link it doesn't know (an old ticket, someone's PR) still opens: that item is looked
 // up when you pick it, the same way hover cards do.
@@ -29,13 +29,13 @@ function oneboxIndex() {
     add('meeting', e.title, `${sameDay(e.start) ? 'Today' : 'Tomorrow'}${e.allDay ? '' : ` ${hm(e.start)}`}${e.location ? ` · ${e.location}` : ''}`, () => { location.hash = '#calendar'; });
   }
   // Personal sources (school and the like): their page.
-  for (const x of extraSources) for (const i of state[x.name]?.items || []) add('personal', i.title, x.panel.title, () => { location.hash = `#src-${x.name}`; }, i.from || '');
+  for (const x of extraSources.filter((s) => s.area === 'personal')) for (const i of state[x.name]?.items || []) add('personal', i.title, x.panel.title, () => { location.hash = `#src-${x.name}`; }, i.from || '');
   // Servers, once their page has loaded them: the ssh command goes to the clipboard.
   for (const h of serversData?.hosts || []) add('server', h.name, [h.host, h.jump && `via ${h.jump}`].filter(Boolean).join(' · '), () => copyText(`ssh ${h.name}`, `Copied: ssh ${h.name}`));
   // Pages in the menu, and Settings' tabs.
   for (const a of document.querySelectorAll('#nav a[data-nav], #side-personal a[data-nav]')) if (!a.hidden) add('page', a.querySelector('.lab')?.textContent, '', () => { location.hash = a.getAttribute('href') || '#'; });
   for (const [name, slug, words] of [['General', 'general', 'stand-up workday clock team pack demo'], ['GitHub', 'github', 'organizations token'], ['Jira', 'jira', 'atlassian acli'],
-    ['Calendar', 'google-calendar', 'ical gnome'], ['Slack', 'slack', ''], ['Copilot', 'copilot', 'sandbox model folders doors'], ['Grafana', 'grafana', 'vpn'], ['Modules', 'modules', '']]) {
+    ['Calendar', 'google-calendar', 'ical gnome'], ['Plugins', 'plugins', 'slack school add'], ['Copilot', 'copilot', 'sandbox model folders doors'], ['VPN', 'vpn', 'grafana'], ['Modules', 'modules', '']]) {
     add('setting', `Settings: ${name}`, '', () => { location.href = `/settings#${slug}`; }, words);
   }
   // Skills: a new chat that runs it.

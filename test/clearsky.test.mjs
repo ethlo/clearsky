@@ -99,7 +99,7 @@ before(async () => {
 });
 after(() => server.close());
 
-test('collects GitHub, Jira and Slack into one view', async () => {
+test('collects GitHub, Jira and the Slack plugin into one view', async () => {
   const { collect, toMarkdown } = await import('../bin/clearsky.mjs');
   const d = await collect();
 
@@ -122,9 +122,15 @@ test('collects GitHub, Jira and Slack into one view', async () => {
     reviewsWaiting: 1, myPrsNeedingAction: 2, myPrsWaitingOnOthers: 1, mentions: 4, jiraOpen: 1, jiraInProgress: 1,
   });
 
-  assert.equal(d.slack.error, undefined);
-  assert.deepEqual(d.slack.mentions.map((m) => m.channel), ['#payments', 'DM'], 'own and old messages dropped');
-  assert.equal(d.slack.mentions[0].excerpt, '@you can you look at #deploys? cc @bob link');
+  // Slack is a plugin now, added for you because SLACK_TOKEN was set.
+  const sl = d.sources.slack;
+  assert.equal(sl.error, undefined);
+  assert.deepEqual(sl.mentions.map((m) => m.channel), ['#payments', 'DM'], 'own and old messages dropped');
+  assert.equal(sl.mentions[0].excerpt, '@you can you look at #deploys? cc @bob link');
+  // Its rows need you, as mentions with Reply as the next step, and its replies join the plan.
+  const rows = d.items.filter((i) => i.src === 'Slack');
+  assert.deepEqual(rows.map((i) => [i.kind, i.group, i.next.label, i.ref]), [['mention', 'needs', 'Reply', '#payments'], ['mention', 'needs', 'Reply', 'DM']]);
+  assert.equal(rows[0].k, `slack:${sl.mentions[0].url}`);
   const search = seen.find((s) => s.url.startsWith('/slack/search.messages'));
   assert.equal(search.auth, 'Bearer xoxp-test');
   assert.match(decodeURIComponent(search.url), /query=<@U1>[+ ]after:\d{4}-\d{2}-\d{2}/);
@@ -252,6 +258,9 @@ test('Now / Next: free slot and tasks that fit it', async () => {
   assert.equal(p.freeMinutes, 60);
   assert.ok(!p.agenda.some((e) => e.title === 'Stand-up'), 'calendar already has the stand-up');
   assert.deepEqual(p.suggestions.map((s) => s.title), ['Merge a/b#3', 'Review a/b#2', 'Continue OPS-1']);
+  // What plugins put forward (their plan() hook) comes right after merging.
+  const withReply = planNow({ ...data, extraTasks: [{ key: 'slack:u9', title: 'Reply to anna in #team', url: 'u9', stamp: '1', minutes: 5, why: 'Slack mention' }] }, at(9, 5), {}, {}, {});
+  assert.deepEqual(withReply.suggestions.map((s) => s.title), ['Merge a/b#3', 'Reply to anna in #team', 'Review a/b#2']);
 
   // Dismissed (same stamp) and muted items drop out; a dismissed item with new activity comes back.
   const later = new Date(at(9, 5) + 36e5).toISOString();

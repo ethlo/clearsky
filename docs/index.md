@@ -4,5 +4,6 @@ Written in Markdown next to the code. The `.html` files are rendered from them w
 
 - [How Clearsky works](architecture.md): the parts, the sources, Now / Next, Copilot, and security.
 - [Team packs](team-pack.md): a team's shared setup, joined with one command.
+- [Plugins](plugins.md): adding sources on their own, each in a sandbox of its own, and writing one.
 - [Clearsky in a container, reachable from the phone](remote-access.md): on hold, design only.
 - [Clearsky on the work phone, over the home network](lan-access.md): on hold, design only.

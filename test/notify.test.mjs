@@ -16,7 +16,6 @@ const data = {
     mentions: [],
   },
   jiraMentions: { tickets: [{ dismissKey: 'jira-mention:OPS-2', stamp: 'c9', key: 'OPS-2', people: ['Anna'], excerpt: 'can you check?', url: 'https://x.atlassian.net/browse/OPS-2' }] },
-  slack: { error: 'not configured' },
 };
 
 test('only things that need you count, and only new ones notify', () => {

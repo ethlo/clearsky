@@ -5,7 +5,7 @@ One page that shows what needs your attention at work:
 - **Now / Next:** your current or next meeting, how much free time you have until it, and up to three tasks that fit that gap (optional, from Google Calendar).
 - **Needs my review:** open PRs where your review is requested, oldest request first, with re-reviews flagged.
 - **My PRs:** each open PR shows who has the ball (changes requested, CI failing, merge conflict, unresolved threads, ready to merge) or who you are waiting on.
-- **Mentions:** GitHub issues and PRs that mention you, Jira comments that @mention you, and (optionally) Slack messages that @mention you, from the last 14 days.
+- **Mentions:** GitHub issues and PRs that mention you, Jira comments that @mention you, and, with the Slack plugin, Slack messages that @mention you, from the last 14 days.
 - **What I have left:** your open Jira issues (in progress, then to do), plus GitHub issues assigned to you.
 - **Stand-up tab:** a ready-to-paste Yesterday / Today / Blockers summary for your next daily stand-up (`CLEARSKY_STANDUP_TIME`, default 09:45, on `CLEARSKY_WORKDAYS`, default Mon-Fri). It covers everything since the previous stand-up, so on Monday that's since Friday's: PRs merged, opened and reviewed, commits, and Jira issues you finished or worked on. Today comes from the dashboard queue and your meetings. The dashboard reminds you 30 minutes before, and the stand-up counts as a meeting in Now / Next.
 - **Links:** your favourites in groups, under Work or Personal in the menu. Add one with Add link or by dropping a link from your browser, or import your browser's bookmarks (its HTML export; each folder becomes a group). Edit renames, moves between Work and Personal, reorders and removes. They're kept only in `~/.config/clearsky/links.json`, and no favicons are fetched.
@@ -47,7 +47,7 @@ Tokens:
   - **Today's schedule** under Now / Next shows the day as a timeline: meetings as blocks (overlaps on their own line), your free slot in green, the rest of the workday, and a line for now. Hover over a meeting for its details (time, place, organizer, link, description); click to keep them open. The calendar names below the timeline hide or show each one (saved as `CALENDAR_HIDDEN`); a hidden calendar doesn't take your time either.
   - Times are 24-hour unless you pick 12-hour under Settings → General (`CLEARSKY_TIME_FORMAT=12`).
   - **iCal link:** in Google Calendar, open Settings, pick your calendar, then **Integrate calendar**, and copy **Secret address in iCal format** into `GOOGLE_CALENDAR_ICS`. Several addresses can be given, separated by spaces. Workspace admins often turn this off.
-- **Slack (optional):** a user token, see below. Without `SLACK_TOKEN` the Slack part is skipped.
+- **Slack (optional):** a plugin that ships with Clearsky (`clearsky add slack`, or Settings → Plugins), with a user token, see below.
 
 ### Slack token
 
@@ -105,11 +105,28 @@ Done and snoozed items are saved in `~/.config/clearsky/state.json`, so the plan
 
 "Has feedback" on your PR means someone commented after your latest commit; once you push, the PR shows as waiting for review.
 
-The server also answers JSON on 127.0.0.1: `/api/source/<github|jira|jiraMentions|slack|calendar>`, `/api/plan`, `/api/work` (everything), `/api/standup`, `/api/issue/<KEY>`, `/api/pr?repo=<org/repo>&number=<n>` `/api/dismissed`, `/api/copilot/sessions` and `/api/copilot/sessions/<id>`. Add `?refresh=1` to skip the cache.
+The server also answers JSON on 127.0.0.1: `/api/source/<github|jira|jiraMentions|calendar|a plugin's name>`, `/api/plan`, `/api/work` (everything), `/api/standup`, `/api/issue/<KEY>`, `/api/pr?repo=<org/repo>&number=<n>` `/api/dismissed`, `/api/copilot/sessions` and `/api/copilot/sessions/<id>`. Add `?refresh=1` to skip the cache.
 
-## Adding a source
+## Plugins
 
-Besides the built-in sources, Clearsky loads extra ones, one module each, from `lib/sources/*.mjs` in this repo and from `~/.config/clearsky/sources/*.mjs` (for private ones, like a school or family app). A source declares its settings (they show up under **Other sources** in Settings and are saved to `.env`), a `fetch(ctx)`, and any of these hooks: `items` (rows for its page in the menu; a work source's `needs` rows also show under Work), `attention` (notifies when something new turns up), `events` (joins Now / Next; mark `fyi: true` to show without blocking your time) and `standup` (lines for Yesterday and Today). `ctx` gives the source its settings and helpers to fetch JSON or run a CLI. See the comment at the top of [lib/sources.mjs](lib/sources.mjs) for the contract and [test/sources/school.mjs](test/sources/school.mjs) for a complete example. Files that others can write to are skipped.
+Clearsky's core is GitHub, Jira, your calendars, Copilot and your links. Everything else is a plugin you add: a folder with a `clearsky-plugin.json` and one ES module, with no build step and no dependencies to install. Three ship in [plugins/](plugins/): Slack (mentions), Grafana (logs and metrics for Copilot chats, through `grafana …`) and School. If Slack or Grafana was set up before it became a plugin, Clearsky adds it for you once.
+
+```
+clearsky add github:someone/clearsky-weather     # a GitHub repo (#ref and /sub/folder work too)
+clearsky add https://git.example.com/me/plug.git # any git repo, with your own git login
+clearsky add npm:clearsky-weather@1.2.0          # an npm package, fetched without running its scripts
+clearsky add ./my-plugin                         # a folder here
+clearsky add flyt                                # one that ships with Clearsky
+clearsky plugins                                 # what's added, and what ships with Clearsky
+clearsky update [<name>]                         # fetch again from where it came from
+clearsky remove <name> [--data]
+```
+
+Or do the same under **Settings → Plugins**. Either way, you see what a plugin reaches (hosts, programs, files) before any of its code runs, and Clearsky loads it at its next start.
+
+A plugin you add runs in a sandbox of its own (srt, like Copilot's): every fetch is a separate process that reaches only the hosts in its manifest, reads only its own code, writes only its own data folder, and gets only its own settings, with nothing of Clearsky's environment. Clearsky itself never loads its code. Its files are hashed when it's added (git ones also pinned to the commit), and a plugin whose files changed isn't loaded until you update it. A plugin that can't work in the sandbox, say because it opens a browser to log in, says why in its manifest and is added only with `--trust` (or the box in Settings). The ones in `plugins/` are part of Clearsky and run inside it.
+
+How to write one is in [docs/plugins.md](docs/plugins.md). For a quick private source there's still `~/.config/clearsky/sources/*.mjs`: one file each, loaded as it is, never shared. The hooks are the same; see the comment at the top of [lib/sources.mjs](lib/sources.mjs) and [test/sources/school.mjs](test/sources/school.mjs).
 
 Work and personal stay apart: a source sets `area: 'work'` to sit with GitHub, Jira and Slack on the **Work** tab, or leaves it out to land on the **Personal** tab (school, training and the like). Only the calendar mixes the two: personal events show in the day schedule on both tabs.
 
@@ -120,6 +137,8 @@ Work and personal stay apart: a source sets `area: 'work'` to sit with GitHub, J
 ## School (Visma Flyt Skole)
 
 If your children's school uses Visma Flyt Skole (Min Skole / Flyt Foresatt), Clearsky shows what waits for you there: unread messages and notices, and forms and consents to answer. Form deadlines show up in Now / Next. It only reads. It never replies or marks anything as read, so the portal still shows everything as unread.
+
+School is a plugin: add it under **Settings → Plugins** (or `clearsky add flyt`) and restart. If you had it set up before it became a plugin, it was added for you.
 
 1. In Settings, under **Other sources**, set **School portal key**: the last part of `https://foresatt.visma.no/<key>`.
 2. Click **Log in with BankID**. A Chrome or Chromium window opens. Log in with BankID or MinID, and the window closes by itself once you're in. Set `CLEARSKY_BROWSER` if your browser isn't found.

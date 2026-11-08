@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// clearsky: one view of what needs your attention on GitHub, Jira and Slack.
+// clearsky: one view of what needs your attention on GitHub and Jira, and in what plugins add (Slack, School…).
 // Zero dependencies, Node 22+. See README.md.
 //
 //   clearsky              print a Markdown summary
@@ -24,7 +24,6 @@ import { branchesFor } from '../lib/branches.mjs';
 import { sandboxedCommand, sandboxEnded, stopSandbox, sandboxProxy, githubLogin, DEFAULT_DOMAINS, READ_DEFAULT, parseDomains } from '../lib/sandbox.mjs';
 import { VmImage, ChatVm, vmSupport, VM_DOMAINS, reapOrphans } from '../lib/vm.mjs';
 import { logWrite, readWrites } from '../lib/agent-log.mjs';
-import { manifest as grafanaManifest, createGrafana, parseInstances, parseTokens, parseCommand, sessionStore, USAGE as GRAFANA_USAGE } from '../lib/modules/grafana.mjs';
 import { cookieLogin } from '../lib/browser-login.mjs';
 import { redact } from '../lib/redact.mjs';
 import { vpnWatch, checkTarget } from '../lib/vpn.mjs';
@@ -42,8 +41,9 @@ import { githubFilter, REGISTRY_HOSTS, GITHUB_LOG_HOSTS, SHARED_BRANCH } from '.
 import { githubAdvice, jiraAdvice, outsideAdvice, parseRules, ruleLabel } from '../lib/advice.mjs';
 import { attentionItems, diffAttention, desktopNotify, DbusNotifier } from '../lib/notify.mjs';
 import { loadSources, makeContext, hook, asList } from '../lib/sources.mjs';
+import { loadPlugins, migrateBundled, pluginPaths, listPlugins, preparePlugin, removePlugin, updatePlugin } from '../lib/plugins.mjs';
+import { sandboxedSource, srtCli } from '../lib/plugin-sandbox.mjs';
 import { pluginItems } from '../lib/items.mjs';
-import { manifest as slackManifest, createSlack, workItems as slackItems } from '../lib/modules/slack.mjs';
 import { findBrowser, BROWSERS } from '../lib/browser.mjs';
 import { manifest as calendarManifest, createCalendar } from '../lib/modules/calendar.mjs';
 import { readLinks, saveLinks, parseBookmarks, mergeLinks } from '../lib/links.mjs';
@@ -78,25 +78,12 @@ const agentLogFile = join(dirname(stateFile), 'agent-writes.jsonl');
 // Files a chat wrote or you attached to it, for its Outputs (see chatOutputs).
 const agentFilesFile = join(dirname(stateFile), 'agent-files.jsonl');
 
-// Grafana (lib/modules/grafana.mjs): your environments and logins stay in your settings, here.
-const grafanaInstances = () => parseInstances(process.env.GRAFANA_INSTANCES, process.env.GRAFANA_ASK);
-const grafanaSessions = sessionStore(join(homedir(), '.config', 'clearsky', 'grafana-sessions.json'));
-const grafana = createGrafana({ instances: grafanaInstances, tokens: () => parseTokens(process.env.GRAFANA_TOKENS), sessions: grafanaSessions });
-// The VPN (lib/vpn.mjs): noticed, never managed. Modules listed in VPN_NEEDED_BY (and Grafana)
-// pause while it's off.
-const vpn = vpnWatch({ target: () => checkTarget(process.env, grafanaInstances().map((i) => i.url)) });
+// The VPN (lib/vpn.mjs): noticed, never managed. Modules listed in VPN_NEEDED_BY pause while
+// it's off, and plugins' doors (Grafana) say so. Checked against VPN_CHECK, else the first address
+// a plugin names (its vpnTargets() hook, such as your first Grafana).
+const pluginVpnTargets = () => [...(globalThis.clearskyPlugins?.sources.values() || [])].flatMap((p) => asList(hook(p, 'vpnTargets', makeContext(p).env)).filter((u) => typeof u === 'string'));
+const vpn = vpnWatch({ target: () => checkTarget(process.env, pluginVpnTargets()) });
 const needsVpn = (name) => String(process.env.VPN_NEEDED_BY || '').split(/[\s,]+/).includes(name);
-// Grafana browser logins kept alive: one read of your own user every 30 minutes while the VPN is on.
-// The last result per environment (ok, expired, unreachable) shows in Settings, so a lapsed login
-// is seen before Copilot needs it.
-const grafanaAlive = {};
-async function grafanaKeepAlive() {
-  const v = await vpn.check();
-  if (v.known && !v.up) return;
-  Object.assign(grafanaAlive, await grafana.keepAlive().catch(() => ({})));
-}
-setTimeout(grafanaKeepAlive, 60_000).unref();
-setInterval(grafanaKeepAlive, 30 * 6e4).unref();
 loadEnvFile(join(process.cwd(), '.env'));
 loadEnvFile(join(here, '..', '.env'));
 loadEnvFile(userEnvFile);
@@ -148,18 +135,26 @@ const buildConfig = (env = process.env) => ({
   workdayEnd: env.CLEARSKY_WORKDAY_END || '17:00',
   standupTime: env.CLEARSKY_STANDUP_TIME || '09:45', // daily stand-up (local time)
   workdays: parseWorkdays(env.CLEARSKY_WORKDAYS || 'Mon-Fri'),
-  slack: {
-    token: env.SLACK_TOKEN, // optional; user token (xoxp-) with search:read
-    api: (env.SLACK_API_URL || 'https://slack.com/api').replace(/\/$/, ''),
-  },
 });
 const config = buildConfig();
 
-// Extra sources: lib/sources/*.mjs and your own in ~/.config/clearsky/sources/*.mjs.
-const builtinSources = join(here, '..', 'lib', 'sources');
-const plugins = await loadSources([builtinSources, process.env.CLEARSKY_SOURCES_DIR || join(homedir(), '.config', 'clearsky', 'sources')], { trusted: [builtinSources] });
+// Extra sources: the plugins you added (lib/plugins.mjs; `clearsky add`, or Settings → Plugins),
+// and your own single-file ones in ~/.config/clearsky/sources/*.mjs.
+const pluginDirs = pluginPaths();
+const migrated = migrateBundled(process.env, { paths: pluginDirs });
+if (migrated.length) console.error(`clearsky: ${migrated.join(', ')} ${migrated.length === 1 ? 'is a plugin' : 'are plugins'} now, and added for you since ${migrated.length === 1 ? 'it was' : 'they were'} set up`);
+const plugins = await loadSources([process.env.CLEARSKY_SOURCES_DIR || join(homedir(), '.config', 'clearsky', 'sources')]);
+{
+  const added = await loadPlugins({ paths: pluginDirs, makeSandboxed: sandboxedSource({ root: pluginDirs.root, standupSince: () => previousStandup() }) });
+  for (const [n, p] of added.sources) {
+    if (plugins.sources.has(n)) plugins.errors.push(`plugin ${n}: a source called "${n}" is already loaded from ~/.config/clearsky/sources`);
+    else plugins.sources.set(n, p);
+  }
+  plugins.errors.push(...added.errors);
+}
 for (const e of plugins.errors) console.error(`clearsky: ${e}`);
-for (const p of plugins.sources.values()) settings.addFields(p.settings);
+globalThis.clearskyPlugins = plugins;
+for (const p of plugins.sources.values()) settings.addFields(p.settings, p.label);
 
 // ---------------------------------------------------------------- helpers
 
@@ -198,10 +193,8 @@ const { acli, jiraSearch, jiraComments, jiraSite, browseUrl, jiraDebug } = jiraM
 const fetchJiraWork = jiraModule.fetchWork, fetchJiraMentions = jiraModule.fetchMentions;
 export const issuePreview = (key) => jiraModule.issuePreview(key);
 
-// ---------------------------------------------------------------- Slack and Calendar (lib/modules)
+// ---------------------------------------------------------------- Calendar (lib/modules)
 
-const slackModule = createSlack({ config, http, daysAgoIso });
-const fetchSlack = slackModule.fetch;
 const fetchCalendar = createCalendar({ config }).fetch;
 
 // ---------------------------------------------------------------- Now / Next
@@ -227,7 +220,7 @@ function reviewMinutes(p) {
 // and up to three tasks that fit it, most urgent first.
 export function planNow(d, now = Date.now(), dismissedItems = localState.dismissed(stateFile), mutedItems = localState.muted(stateFile, now),
   doneAt = localState.doneAt(stateFile)) {
-  const g = d.github || {}, j = d.jira || {}, s = d.slack || {}, cal = d.calendar || {};
+  const g = d.github || {}, j = d.jira || {}, cal = d.calendar || {};
   // Calendars you hid (from the agenda) neither show nor take your time.
   const hidden = hiddenCalendars();
   const calendars = [...new Set((cal.events || []).map((e) => e.calendar).filter(Boolean))]
@@ -260,8 +253,8 @@ export function planNow(d, now = Date.now(), dismissedItems = localState.dismiss
   const candidates = [
     ...(g.myPrs || []).filter((p) => p.status.label === 'Ready to merge')
       .map((p) => ({ title: `Merge ${p.repo}#${p.number}`, detail: p.title, url: p.url, stamp: p.stamp, minutes: 5, why: 'approved and green' })),
-    ...(s.mentions || []).filter((m) => recent(m.at, 24))
-      .map((m) => ({ title: `Reply to ${m.by} in ${m.channel}`, detail: m.excerpt, url: m.url, stamp: m.stamp, minutes: 5, why: 'Slack mention' })),
+    // What plugins put forward (their plan() hook), such as replying to a Slack mention.
+    ...(d.extraTasks || []),
     ...(j.tickets || jiraMentionsByTicket(j.mentions)).filter((t) => recent(t.at, 48))
       .map((t) => ({ key: t.dismissKey, title: `Answer ${t.by} on ${t.key}`, detail: t.excerpt, url: t.url, stamp: t.stamp, minutes: 10, why: 'Jira mention' })),
     ...[...(g.reviewRequested || [])].filter((p) => !p.draft)
@@ -322,7 +315,7 @@ export function planNow(d, now = Date.now(), dismissedItems = localState.dismiss
 
 
 // Each source is fetched and cached on its own, so the page can show whatever is ready.
-const SOURCES = { github: fetchGitHub, jira: fetchJiraWork, jiraMentions: fetchJiraMentions, slack: fetchSlack, calendar: fetchCalendar };
+const SOURCES = { github: fetchGitHub, jira: fetchJiraWork, jiraMentions: fetchJiraMentions, calendar: fetchCalendar };
 for (const p of plugins.sources.values()) {
   SOURCES[p.name] = async () => {
     if (p.enabled && !p.enabled(process.env)) return { disabled: true };
@@ -337,9 +330,7 @@ for (const p of plugins.sources.values()) {
 const BUILTIN_MANIFESTS = [
   githubManifest,
   jiraManifest,
-  slackManifest,
   calendarManifest,
-  grafanaManifest,
   { name: 'copilot', label: 'Copilot', area: 'work', secrets: [{ kind: 'cli-login', note: 'none from Clearsky (its tokens are removed from Copilot\'s environment); Copilot keeps its own login in ~/.copilot or the keyring' }],
     hosts: ['*.githubcopilot.com', 'github.com'], clis: ['copilot'], files: ['~/.copilot', 'your Copilot folders'],
     note: 'Settings → Copilot → Sandbox limits it to your folders and listed hosts.' },
@@ -349,6 +340,7 @@ const BUILTIN_MANIFESTS = [
 const linksFile = () => join(dirname(userEnvFile), 'links.json');
 export function moduleManifests(env = process.env) {
   const fromPlugin = (p) => ({ name: p.name, label: p.label, area: p.area, ...(p.manifest || {}),
+    plugin: p.plugin ? { from: p.plugin.from, run: p.plugin.run, version: p.plugin.version, commit: p.plugin.commit } : { from: '~/.config/clearsky/sources', run: 'inside' },
     secrets: p.manifest?.secrets || Object.entries(p.settings || {}).filter(([, f]) => f.secret).map(([key]) => ({ key, kind: 'token' })) });
   return [...BUILTIN_MANIFESTS, ...[...plugins.sources.values()].map(fromPlugin)].map((m) => ({
     hosts: [], clis: [], files: [], ...m,
@@ -357,7 +349,7 @@ export function moduleManifests(env = process.env) {
 }
 
 // Each source's data as rows of the one item model (lib/items.mjs).
-const WORK_ITEMS = { github: githubItems, jira: jiraItems, jiraMentions: jiraMentionItems, slack: slackItems };
+const WORK_ITEMS = { github: githubItems, jira: jiraItems, jiraMentions: jiraMentionItems };
 function workItemsOf(name, data) {
   try {
     if (WORK_ITEMS[name]) return WORK_ITEMS[name](data);
@@ -429,8 +421,8 @@ function withOwn(data) {
 }
 
 export async function collect(force) {
-  const [rawGithub, jiraWork, jiraMentions, slack, calendar] = await Promise.all(
-    ['github', 'jira', 'jiraMentions', 'slack', 'calendar'].map((n) => source(n, force)));
+  const [rawGithub, jiraWork, jiraMentions, calendar] = await Promise.all(
+    ['github', 'jira', 'jiraMentions', 'calendar'].map((n) => source(n, force)));
   const github = withOwn(rawGithub);
   const jira = mergeJira(jiraWork, jiraMentions);
   const needsMe = (github.myPrs || []).filter((p) => p.status.owner === 'me' && !p.draft);
@@ -439,25 +431,30 @@ export async function collect(force) {
   const more = [...plugins.sources.values()].flatMap((p) => (extra[p.name]?.error || extra[p.name]?.disabled ? []
     : asList(hook(p, 'events', extra[p.name])).map((e) => ({ ...e, calendar: e.calendar || p.label }))));
   const cal = more.length ? { ...calendar, events: [...(calendar.events || []), ...more] } : calendar;
+  // Tasks plugins suggest for the next free slot (their plan() hook), work ones only.
+  const ok = (p) => !(extra[p.name]?.error || extra[p.name]?.disabled || extra[p.name]?.paused);
+  const extraTasks = [...plugins.sources.values()].filter((p) => p.area === 'work' && ok(p))
+    .flatMap((p) => asList(hook(p, 'plan', extra[p.name])).filter((t) => t?.title && (t.key || t.url))
+      .map((t) => ({ title: String(t.title), detail: t.detail || '', url: t.url || null, stamp: t.stamp, minutes: Math.min(Math.max(Number(t.minutes) || 15, 5), 240), why: t.why || p.label, key: `${p.name}:${t.key || t.url}` })));
+  const pluginMentions = [...plugins.sources.values()].filter(ok).flatMap((p) => workItemsOf(p.name, extra[p.name])).filter((i) => i.kind === 'mention').length;
   return {
     generatedAt: new Date().toISOString(),
-    plan: planNow({ github, jira, slack, calendar: cal }),
+    plan: planNow({ github, jira, calendar: cal, extraTasks }),
     nextStandup: nextStandup().toISOString(),
     summary: {
       reviewsWaiting: github.reviewRequested?.length ?? null,
       myPrsNeedingAction: github.myPrs ? needsMe.length : null,
       myPrsWaitingOnOthers: github.myPrs ? github.myPrs.filter((p) => p.status.owner === 'others').length : null,
-      mentions: (github.mentions?.length || 0) + (jira.mentions?.length || 0) + (slack.mentions?.length || 0),
+      mentions: (github.mentions?.length || 0) + (jira.mentions?.length || 0) + pluginMentions,
       jiraOpen: jira.assigned?.length ?? null,
       jiraInProgress: jira.assigned ? jira.assigned.filter((i) => i.statusCategory === 'indeterminate').length : null,
     },
     github,
     jira,
-    slack,
     calendar: cal,
     sources: extra,
     // Everything that can need you, from every source, with the next step on each.
-    items: [['github', github], ['jira', jiraWork], ['jiraMentions', jiraMentions], ['slack', slack], ...Object.entries(extra)].flatMap(([n, d]) => workItemsOf(n, d)),
+    items: [['github', github], ['jira', jiraWork], ['jiraMentions', jiraMentions], ...Object.entries(extra)].flatMap(([n, d]) => workItemsOf(n, d)),
   };
 }
 
@@ -728,8 +725,14 @@ export function toMarkdown(d) {
     `[${m.repo}#${m.number}](${m.url}) ${m.kind}: ${m.title}, updated ${ago(m.updatedAt)}`, g.error);
   section('Jira mentions', j.mentions, (m) =>
     `[${m.key}](${m.url}) ${m.summary}: ${m.by}, ${ago(m.at)}: "${m.excerpt}"`, j.error);
-  if (!d.slack.disabled) section('Slack mentions', d.slack.mentions, (m) =>
-    `[${m.channel}](${m.url}) ${m.by}, ${ago(m.at)}: "${m.excerpt}"`, d.slack.error);
+  // Work plugins, each with its own section (their markdown() hook).
+  for (const p of plugins.sources.values()) {
+    const sd = d.sources?.[p.name];
+    if (p.area !== 'work' || !sd || sd.disabled) continue;
+    const m = sd.error ? null : hook(p, 'markdown', sd);
+    if (sd.error) section(p.label, null, null, sd.error);
+    else if (m && !m.hookError && Array.isArray(m.lines)) section(String(m.title || p.label), m.lines, (l) => String(l), null);
+  }
   section('My Jira issues', j.assigned, (i) =>
     `[${i.key}](${i.url}) ${i.summary} [${i.status}${i.priority ? `, ${i.priority}` : ''}${i.due ? `, due ${i.due}` : ''}]`, j.error);
   if (g.assigned?.length) section('GitHub issues assigned to me', g.assigned, (i) =>
@@ -929,13 +932,18 @@ function sendFile(res, file) {
 const sourceLogins = new Map();
 
 async function loginStatus() {
-  return Promise.all([...plugins.sources.values()].filter((p) => p.login).map(async (p) => {
+  const many = [...plugins.sources.values()].filter((p) => p.logins?.list).map((p) => {
+    let list = [];
+    try { list = asList(p.logins.list(makeContext(p).env)); } catch { /* shows none */ }
+    return { name: p.name, label: p.label, many: list.map((l) => ({ id: String(l.id), label: String(l.label || l.id), loggedIn: !!l.loggedIn, detail: String(l.detail || ''), canLogOut: !!l.canLogOut })) };
+  });
+  return [...many, ...await Promise.all([...plugins.sources.values()].filter((p) => p.login).map(async (p) => {
     let st = {};
     try { st = (await p.login.status?.(makeContext(p).env)) || {}; } catch (e) { st = { detail: e.message }; }
     const run = sourceLogins.get(p.name);
     return { name: p.name, label: p.label, button: p.login.label || 'Log in', loggedIn: !!st.loggedIn, detail: st.detail || '',
       running: run?.state === 'running', error: run?.state === 'error' ? run.message : null };
-  }));
+  }))];
 }
 
 // Join a team pack (lib/team.mjs): settings through the settings file, links and skills too.
@@ -944,7 +952,8 @@ function joinTeam(from) {
     confDir: dirname(userEnvFile), skillsDir: join(homedir(), '.copilot', 'skills'),
     readEnv: () => Object.fromEntries(TEAM_KEYS.map((k) => [k, process.env[k] || ''])),
     writeEnv: (v) => { settings.writeEnvFile(userEnvFile, v); applySettings(v); },
-    validate: settings.validate, readLinks: () => readLinks(linksFile()), saveLinks: (d) => saveLinks(linksFile(), d),
+    // A team setting for a plugin you haven't added is left out.
+    validate: (w) => settings.validate(Object.fromEntries(Object.entries(w).filter(([k]) => settings.FIELDS[k]))), readLinks: () => readLinks(linksFile()), saveLinks: (d) => saveLinks(linksFile(), d),
   });
 }
 
@@ -1039,6 +1048,7 @@ function copilotEnv() {
   // Java ignores TMPDIR (Maven, Gradle, tests)
   env.JAVA_TOOL_OPTIONS = `${env.JAVA_TOOL_OPTIONS ? `${env.JAVA_TOOL_OPTIONS} ` : ''}-Djava.io.tmpdir=${copilotTmp()}`;
   for (const k of ['GITHUB_TOKEN', 'GH_TOKEN', 'SLACK_TOKEN', 'GOOGLE_CALENDAR_ICS', 'CALENDAR_ICS_URL']) delete env[k];
+  for (const p of plugins.sources.values()) for (const [k, f] of Object.entries(p.settings || {})) if (f.secret) delete env[k];
   const bin = copilot.findCopilot(process.env.COPILOT_BIN);
   const dirs = [bin?.includes('/') && dirname(bin), dirname(process.execPath)].filter(Boolean);
   env.PATH = [...new Set([...dirs, ...(env.PATH || '').split(delimiter).filter(Boolean)])].join(delimiter);
@@ -1122,7 +1132,7 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   // asks you in this chat. The key tells Clearsky which chat a request comes from.
   const key = randomBytes(16).toString('hex');
   if (process.platform === 'linux') {
-    broker ||= serveBroker({ bins: { acli: config.jira.acli }, allow: assistedAllow, ask: brokerAsk, where: brokerWhere, vm: vmSupport().ok ? vmRun : null, grafana: grafanaRun, review: reviewRun, usage: usageRun, log: console.log });
+    broker ||= serveBroker({ bins: { acli: config.jira.acli }, allow: assistedAllow, ask: brokerAsk, where: brokerWhere, vm: vmSupport().ok ? vmRun : null, doors: pluginDoor, review: reviewRun, usage: usageRun, log: console.log });
     Object.assign(env, { CLEARSKY_BROKER_SOCKET: brokerSocket(), CLEARSKY_BROKER_KEY: key });
     env.PATH = `${join(here, '..', 'scripts', 'sandbox-bin')}${delimiter}${env.PATH}`;
   }
@@ -1480,37 +1490,43 @@ function brokerAsk({ key, tool, argv, cwd, vm = false }) {
   });
 }
 
-// `grafana …` from a chat (lib/broker.mjs): checked, VPN noticed, production asked, secrets
-// removed, and every call in the agent log (reads too: they're as you).
-async function grafanaRun({ key, argv }) {
+// Plugins' doors (lib/broker.mjs): commands chats call through Clearsky, such as `grafana …`.
+// Only from plugins that run inside Clearsky and list the door in their manifest. The door
+// decides what to ask (with the chat's card); Clearsky removes secrets from what goes back, cuts
+// it to size, and puts every call in the agent log (reads too: they're as you).
+function doorsByName() {
+  const out = new Map();
+  for (const p of plugins.sources.values()) {
+    if (p.sandboxed || !p.doors) continue;
+    for (const d of p.pluginManifest?.doors || []) if (typeof p.doors[d.name]?.run === 'function' && !out.has(d.name)) out.set(d.name, { p, door: p.doors[d.name] });
+  }
+  return out;
+}
+function pluginDoor(name) {
+  const found = doorsByName().get(name);
+  return found ? (req) => doorRun(found, req) : null;
+}
+async function doorRun({ p, door }, { key, name, argv }) {
   const c = chatByKey(key);
   if (!c) return { code: 1, stdout: '', stderr: 'Clearsky: this chat is closed.\n' };
-  const cmd = parseCommand(argv);
-  if (cmd.error) return { code: 2, stdout: '', stderr: `grafana: ${cmd.error}\n\n${GRAFANA_USAGE}\n` };
-  const line = ['grafana', ...argv].map((a) => (/^[\w@%+=:,./-]+$/.test(a) ? a : `'${a.replace(/'/g, `'\\''`)}'`)).join(' ');
-  const inst = cmd.env && grafana.find(cmd.env);
-  const log = (decided, extra = {}) => logWrite(agentLogFile, { where: 'grafana', what: line, target: inst?.name || null, chats: [chatRef(c)], decided, ...extra });
-  if (inst) {
-    const v = await vpn.check();
-    if (v.known && !v.up) {
-      log('vpn off');
-      return { code: 1, stdout: '', stderr: `Clearsky: Grafana ${inst.name} can't be reached: the VPN looks off (${v.why}). Tell the user to connect the VPN, then try again; don't work around it.\n` };
-    }
-    if (inst.asks && c.mode !== 'full') {
-      const ok = await askInChat(c, { title: `Read Grafana ${inst.name} as you`, detail: line,
-        advice: { level: 'check', text: `Check first: this reads ${inst.name}. Logs there can hold customer data, and secrets Clearsky doesn't know the shape of.` } });
-      if (!ok) { log('declined'); return { code: 1, stdout: '', stderr: `Clearsky: the user declined reading ${inst.name}. Ask what to do instead.\n` }; }
-    }
-  }
+  const line = [name, ...argv].map((a) => (/^[\w@%+=:,./-]+$/.test(a) ? a : `'${a.replace(/'/g, `'\\''`)}'`)).join(' ');
+  const log = (decided, extra = {}) => logWrite(agentLogFile, { where: name, door: p.name, what: line, chats: [chatRef(c)], decided, ...extra });
+  if (p.enabled && !p.enabled(process.env)) { log('not set up'); return { code: 1, stdout: '', stderr: `Clearsky: ${p.label} isn't set up yet (Settings → Other sources).\n` }; }
+  const ctx = {
+    env: makeContext(p).env, chat: { mode: c.mode },
+    ask: ({ title, detail = line, advice } = {}) => askInChat(c, { title: String(title || `${name} as you`), detail, ...(advice && { advice }) }),
+    vpn: () => vpn.check(),
+  };
   try {
-    const out = await grafana.run(cmd);
-    const { text, removed } = redact(out);
+    const r = (await door.run(argv, ctx)) || {};
+    const { text, removed } = redact(String(r.stdout ?? ''));
     const max = 200_000, cut = text.length > max;
-    log(inst?.asks ? 'allowed' : 'read', { removed });
-    return { code: 0, stdout: `${cut ? text.slice(-max) : text}\n`, stderr: `${removed ? `(Clearsky removed ${removed} secret${removed > 1 ? 's' : ''} from this output)\n` : ''}${cut ? '(output cut to its last 200k characters: narrow the query)\n' : ''}` };
+    log(r.decided || (r.code ? 'failed' : 'ran'), { target: r.target || null, removed });
+    return { code: Number.isInteger(r.code) ? r.code : 0, stdout: text ? `${cut ? text.slice(-max) : text}${text.endsWith('\n') ? '' : '\n'}` : '',
+      stderr: `${r.stderr || ''}${removed ? `(Clearsky removed ${removed} secret${removed > 1 ? 's' : ''} from this output)\n` : ''}${cut ? '(output cut to its last 200k characters: narrow the query)\n' : ''}` };
   } catch (e) {
     log('failed');
-    return { code: 1, stdout: '', stderr: `grafana: ${e.message}\n` };
+    return { code: 1, stdout: '', stderr: `${name}: ${e.message}\n` };
   }
 }
 // `review …` from a chat (lib/review.mjs): a proper review by a fresh Copilot, in its own
@@ -1634,11 +1650,11 @@ function askInChat(c, { title, detail, advice = null }) {
     c.emit(ev);
   });
 }
-// What a sandboxed chat is told about Grafana, when you have it set up.
-const grafanaHint = () => {
-  const list = grafanaInstances();
-  return list.length ? ` To read logs and metrics of our environments (${list.map((i) => i.name).join(', ')}), use \`grafana\` (\`grafana help\` lists its commands): it runs LogQL and PromQL read only, through Clearsky, which holds the login; there is no ssh to servers. ${list.some((i) => i.asks) ? `Reading ${list.filter((i) => i.asks).map((i) => i.name).join(', ')} asks me each time, so ask for what you need in one go.` : ''}` : '';
-};
+// What a sandboxed chat is told about plugins' doors (Grafana's says which environments ask).
+const doorHints = () => [...doorsByName().values()].map(({ p, door }) => {
+  if (p.enabled && !p.enabled(process.env)) return '';
+  try { const h = door.hint?.(makeContext(p).env); return h ? ` ${h}` : ''; } catch { return ''; }
+}).join('');
 
 // A short-lived Copilot process, for listing or reading sessions.
 async function withAgent(bin, fn) {
@@ -2170,7 +2186,7 @@ function localToken(file) {
 
 // ---------------------------------------------------------------- notifications
 
-const ATTENTION_SOURCES = ['github', 'jiraMentions', 'slack'];
+const ATTENTION_SOURCES = ['github', 'jiraMentions'];
 const poller = { lastPoll: null, notifier: null, timer: null };
 
 // Desktop banners come from notify-send when it's there; otherwise the open page shows them.
@@ -2208,6 +2224,8 @@ async function pollOnce(force) {
   const before = localState.seen(stateFile);
   const { seen, fresh } = diffAttention(items, before, {
     dismissed: localState.dismissed(stateFile), muted: localState.muted(stateFile), first: !Object.keys(before).length,
+    // A plugin you just added (or Slack, now a plugin) starts quiet too: what it already had isn't news.
+    quiet: (it) => { const src = String(it.key).split(':')[0]; return plugins.sources.has(src) && !Object.keys(before).some((k) => k.startsWith(`${src}:`)); },
   });
   if (fresh.length || Object.keys(seen).length !== Object.keys(before).length) localState.setSeen(stateFile, seen);
   poller.lastPoll = new Date().toISOString();
@@ -2279,7 +2297,9 @@ export function buildPage(csrf, web = join(here, '..', 'web')) {
 const startedAt = Date.now();
 function updateReady() {
   const root = join(here, '..');
-  for (const dir of ['bin', 'lib', 'lib/sources', 'lib/modules', 'web', 'web/js', 'web/css']) {
+  let bundled = [];
+  try { bundled = readdirSync(join(root, 'plugins')).flatMap((n) => [`plugins/${n}`, `plugins/${n}/lib`]); } catch { /* none */ }
+  for (const dir of ['bin', 'lib', 'lib/modules', 'web', 'web/js', 'web/css', ...bundled]) {
     let names = [];
     try { names = readdirSync(join(root, dir)); } catch { continue; }
     for (const n of names) {
@@ -2321,13 +2341,82 @@ function keepLoginsAlive() {
     if (typeof p.keepAlive !== 'function') continue;
     const next = () => setTimeout(async () => {
       if (!p.enabled || p.enabled(process.env)) {
-        try { logEvent(`${p.label}: login kept alive (${await p.keepAlive(makeContext(p))})`, { echo: false }); }
+        try { logEvent(`${p.label}: login kept alive (${await p.keepAlive({ ...makeContext(p), vpn: () => vpn.check() })})`, { echo: false }); }
         catch (e) { logEvent(`${p.label}: keeping the login alive failed: ${e.message}`, { echo: false }); }
       }
       next();
     }, keepAliveDelay()).unref?.();
     next();
   }
+}
+
+// ---------------------------------------------------------------- plugins
+
+// What's added (and loaded by this run), and what ships with Clearsky, for Settings → Plugins.
+function pluginList() {
+  const { added, available } = listPlugins({ paths: pluginDirs });
+  const strip = ({ manifest, ...p }) => ({ ...p, manifest: manifest && { hosts: manifest.hosts, clis: manifest.clis, files: manifest.files, secrets: manifest.secrets, outside: manifest.outside || null, area: manifest.area } });
+  return {
+    added: added.map((p) => ({ ...strip(p), loaded: plugins.sources.get(p.name)?.plugin?.from === p.from })),
+    available: available.map(strip), errors: plugins.errors, sandbox: !!srtCli(),
+  };
+}
+
+// A fetched plugin waiting for you to say yes (10 minutes), so what's added is what you saw.
+const pendingPlugins = new Map();
+async function previewPlugin(from) {
+  const p = await preparePlugin(from, { paths: pluginDirs });
+  const token = randomBytes(12).toString('hex');
+  pendingPlugins.set(token, { ...p, timer: setTimeout(() => { pendingPlugins.delete(token); p.discard(); }, 10 * 6e4) });
+  const m = p.manifest;
+  return { token, name: m.name, label: m.label, version: m.version, description: m.description, from, kind: p.spec.kind,
+    commit: p.got.commit || null, hosts: m.hosts, clis: m.clis, files: m.files, secrets: m.secrets, settings: Object.keys(m.settings),
+    outside: m.outside || null, replaces: p.had ? { version: p.had.version, commit: p.had.commit || null } : null, sandbox: !!srtCli() };
+}
+
+// `clearsky add | remove | plugins | update`.
+async function pluginCommand(args) {
+  const [cmd, name] = args, flag = (f) => args.includes(f);
+  const say = (m) => console.log(m);
+  const where = (m) => [m.hosts.length ? `reaches ${m.hosts.join(', ')}` : 'reaches no hosts', m.clis.length && `runs ${m.clis.join(', ')}`, m.files.length && `keeps ${m.files.join(', ')}`].filter(Boolean).join('; ');
+  try {
+    if (cmd === 'plugins') {
+      const { added, available } = listPlugins({ paths: pluginDirs });
+      say(added.length ? 'Added:' : 'No plugins added. `clearsky add <plugin>` adds one.');
+      for (const p of added) say(`  ${p.name} ${p.version || ''}  ${p.run === 'inside' ? 'inside Clearsky' : 'sandboxed'}  from ${p.from}${p.commit ? ` @ ${p.commit.slice(0, 10)}` : ''}${p.problem ? `  (${p.problem})` : ''}`);
+      if (available.length) { say('Ship with Clearsky (`clearsky add <name>`):'); for (const p of available) say(`  ${p.name}  ${p.description}`); }
+      if (!srtCli()) say('The sandbox (srt) isn\'t installed, so sandboxed plugins won\'t run. `clearsky doctor` says how to get it.');
+      return 0;
+    }
+    if (!name && cmd !== 'update') { say(`usage: clearsky ${cmd} <plugin>`); return 2; }
+    if (cmd === 'remove') { removePlugin(name, { paths: pluginDirs, data: flag('--data') }); say(`Removed ${name}${flag('--data') ? ', and what it kept' : ''}. Restart Clearsky to drop it.`); return 0; }
+    if (cmd === 'update') {
+      const names = name ? [name] : Object.keys(listPlugins({ paths: pluginDirs }).added.reduce((o, p) => (p.kind === 'bundled' ? o : { ...o, [p.name]: 1 }), {}));
+      for (const n of names) { const r = await updatePlugin(n, { paths: pluginDirs }); say(`${n}: ${r.before.commit && r.commit ? `${r.before.commit.slice(0, 10)} → ${r.commit.slice(0, 10)}` : `${r.before.version} → ${r.version}`}`); }
+      if (names.length) say('Restart Clearsky to load the new code.'); else say('Nothing to update.');
+      return 0;
+    }
+    // add: show what it is and what it reaches before any of its code runs, then ask.
+    const p = await preparePlugin(name, { paths: pluginDirs });
+    const m = p.manifest;
+    say(`${m.label} ${m.version}${p.got.commit ? ` (${p.got.commit.slice(0, 10)})` : ''}: ${m.description || 'no description'}`);
+    say(`  ${where(m)}`);
+    if (Object.keys(m.settings).length) say(`  settings: ${Object.keys(m.settings).join(', ')}`);
+    if (p.spec.kind === 'bundled') say('  ships with Clearsky; runs inside it');
+    else if (m.outside) say(`  runs OUTSIDE the sandbox, as you: ${m.outside}`);
+    else say(`  runs in a sandbox of its own${srtCli() ? '' : ' (not installed here, so it won\'t run until it is)'}`);
+    if (m.outside && p.spec.kind !== 'bundled' && !flag('--trust')) { p.discard(); say('Not added: it can do anything you can. Add it again with --trust if you trust its code.'); return 1; }
+    if (!flag('--yes') && !process.stdin.isTTY) { p.discard(); say('Not added: say yes with --yes when there\'s no terminal to ask in.'); return 1; }
+    if (!flag('--yes')) {
+      const rl = (await import('node:readline/promises')).createInterface({ input: process.stdin, output: process.stdout });
+      const yes = /^y(es)?$/i.test((await rl.question('Add it? [y/N] ')).trim());
+      rl.close();
+      if (!yes) { p.discard(); say('Not added.'); return 1; }
+    }
+    const r = p.done({ trust: flag('--trust') });
+    say(`Added ${r.name}. Restart Clearsky (or Settings → Restart) to load it${Object.keys(m.settings).length ? ', then fill in its settings' : ''}.`);
+    return 0;
+  } catch (e) { console.error(`clearsky: ${e.message}`); return 1; }
 }
 
 function serve() {
@@ -2371,6 +2460,29 @@ function serve() {
       if (req.method === 'POST') {
         if (req.headers['x-clearsky-token'] !== csrf || (req.headers.origin && !origins.has(req.headers.origin))) {
           return json(res, 403, { error: 'forbidden' });
+        }
+        // Plugins (lib/plugins.mjs): look first (what it reaches, before any of its code runs), then add.
+        if (url.pathname === '/api/plugins/preview') {
+          if (isDemo()) return json(res, 400, { error: 'not in the demo' });
+          const { from } = await readJson(req);
+          try { return json(res, 200, await previewPlugin(String(from || ''))); } catch (e) { return json(res, 400, { error: e.message }); }
+        }
+        if (url.pathname === '/api/plugins/add') {
+          const { token, trust } = await readJson(req);
+          const p = pendingPlugins.get(String(token || ''));
+          if (!p) return json(res, 400, { error: 'look at it again first; that preview has run out' });
+          pendingPlugins.delete(String(token));
+          clearTimeout(p.timer);
+          try { const r = p.done({ trust: trust === true }); logEvent(`plugin ${r.name} added from ${r.from} (${r.run === 'inside' ? 'runs inside Clearsky' : 'sandboxed'})`); return json(res, 200, { added: r, ...pluginList() }); }
+          catch (e) { return json(res, 400, { error: e.message }); }
+        }
+        if (url.pathname === '/api/plugins/remove' || url.pathname === '/api/plugins/update') {
+          const { name, data } = await readJson(req);
+          try {
+            const r = url.pathname.endsWith('remove') ? removePlugin(String(name || ''), { paths: pluginDirs, data: data === true }) : await updatePlugin(String(name || ''), { paths: pluginDirs });
+            logEvent(`plugin ${r.name} ${url.pathname.endsWith('remove') ? 'removed' : `updated from ${r.from}`}`);
+            return json(res, 200, { done: r, ...pluginList() });
+          } catch (e) { return json(res, 400, { error: e.message }); }
         }
         if (url.pathname === '/api/restart') {
           const { maxWaitMinutes, force } = await readJson(req).catch(() => ({}));
@@ -2522,7 +2634,7 @@ function serve() {
           const options = { model: body.model, effort: body.effort, permission: copilot.PERMISSIONS[body.permission] ? body.permission : 'ask',
             allow: list(body.allow), deny: list(body.deny) };
           // The first turn carries the dashboard so Copilot knows what you're looking at.
-          const sandboxHint = process.env.COPILOT_SANDBOX === 'srt' || body.permission === 'sandboxed' ? `\n\n${SANDBOX_HINT}${grafanaHint()}${process.env.COPILOT_DISCLOSE === 'on' ? ` ${DISCLOSE_HINT}` : ''}` : '';
+          const sandboxHint = process.env.COPILOT_SANDBOX === 'srt' || body.permission === 'sandboxed' ? `\n\n${SANDBOX_HINT}${doorHints()}${process.env.COPILOT_DISCLOSE === 'on' ? ` ${DISCLOSE_HINT}` : ''}` : '';
           const folders = foldersHint();
           // A Copilot command (/compact, say) only works as the whole message: nothing goes in front.
           // The sandbox hint a resumed chat is owed then goes with the next message instead.
@@ -2574,26 +2686,16 @@ function serve() {
           localState.setRead(stateFile, marks);
           return json(res, 200, { ok: true });
         }
-        // Log in to a Grafana in a browser window; the login cookie stays in Clearsky's settings.
-        if (url.pathname === '/api/grafana/login') {
-          const { name } = await readJson(req);
-          const inst = grafana.find(String(name || ''));
-          if (!inst) return json(res, 400, { error: 'no such Grafana environment' });
-          const host = new URL(inst.url).hostname;
-          const cookie = await cookieLogin({ url: `${inst.url}/login`, profile: join(homedir(), '.config', 'clearsky', 'browser'), pick: (cookies) => {
-            const k = cookies.find((x) => x.name === 'grafana_session' && x.value && host.endsWith(x.domain.replace(/^\./, '')));
-            return k && `grafana_session=${k.value}`;
-          } }).catch((e) => ({ error: e.message }));
-          if (cookie.error) return json(res, 400, cookie);
-          grafanaSessions.set(inst.name, cookie);
-          delete grafanaAlive[inst.name];
-          const me = await grafana.call(inst, '/api/user').catch((e) => ({ error: e.message }));
-          return json(res, me.error ? 400 : 200, me.error ? me : { ok: true, login: me.login || me.email || null });
-        }
-        if (url.pathname === '/api/grafana/logout') {
-          const { name } = await readJson(req);
-          if (grafana.find(String(name || ''))) grafanaSessions.set(String(name), null);
-          return json(res, 200, { ok: true });
+        // A plugin with several logins (one per Grafana environment): log in to one, or out.
+        const multi = url.pathname.match(/^\/api\/source\/([a-z][a-z0-9-]+)\/logins$/);
+        if (multi) {
+          const p = plugins.sources.get(multi[1]);
+          const { id, action } = await readJson(req);
+          if (!p?.logins || typeof id !== 'string') return json(res, 404, { error: 'no such login' });
+          try {
+            const r = action === 'stop' ? await p.logins.stop?.(id, makeContext(p).env) : await p.logins.start(id, makeContext(p).env);
+            return json(res, 200, { ok: true, detail: r?.detail || '', ...await settingsStatus() });
+          } catch (e) { return json(res, 400, { error: e.message }); }
         }
         // Copilot's memory (lib/memory.mjs): the whole file from Settings, or notes from a card's Save.
         if (url.pathname === '/api/copilot/memory') {
@@ -2692,10 +2794,6 @@ function serve() {
       }
       if (url.pathname === '/api/settings') return json(res, 200, await settingsStatus());
       if (url.pathname === '/api/vpn') return json(res, 200, await vpn.check(url.searchParams.has('now')));
-      if (url.pathname === '/api/grafana') {
-        const tokens = parseTokens(process.env.GRAFANA_TOKENS);
-        return json(res, 200, { instances: grafanaInstances().map((i) => ({ name: i.name, host: new URL(i.url).host, asks: i.asks, login: grafanaSessions.get(i.name)?.at || null, alive: grafanaAlive[i.name] || null, token: !!tokens[i.name] })) });
-      }
       if (url.pathname === '/settings') {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
         return res.end(settingsPage);
@@ -2758,6 +2856,7 @@ function serve() {
       }
       if (url.pathname === '/favicon.ico') { res.writeHead(302, { Location: '/icon.svg' }); return res.end(); }
       if (url.pathname === '/api/modules') return json(res, 200, { modules: moduleManifests() });
+      if (url.pathname === '/api/plugins') return json(res, 200, pluginList());
       if (url.pathname === '/api/sources') {
         return json(res, 200, { sources: [...plugins.sources.values()].map((p) => ({ name: p.name, label: p.label, area: p.area, panel: p.panel || null })), errors: plugins.errors });
       }
@@ -3161,7 +3260,7 @@ async function dockerCommand([sub = 'up', ...rest]) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
   const args = process.argv.slice(2);
   if (args.includes('-h') || args.includes('--help')) {
-    console.log('usage: clearsky [--json] | clearsky try [--port N] [--no-open] | clearsky doctor [--json] | clearsky join [<team pack>] | clearsky team export [--name N] [--links] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky app [--port N] | clearsky docker [up|start|down|logs|login|mounts] [--port N] | clearsky school-handover | clearsky jira-debug');
+    console.log('usage: clearsky [--json] | clearsky try [--port N] [--no-open] | clearsky doctor [--json] | clearsky join [<team pack>] | clearsky team export [--name N] [--links] | clearsky add <plugin> [--trust] [--yes] | clearsky remove <plugin> [--data] | clearsky plugins | clearsky update [<plugin>] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky app [--port N] | clearsky docker [up|start|down|logs|login|mounts] [--port N] | clearsky school-handover | clearsky jira-debug');
   } else if (args[0] === 'try') {
     // Clearsky with made-up data, in this terminal: Ctrl+C stops it.
     const p = args.indexOf('--port');
@@ -3201,8 +3300,10 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.a
     const p = args.indexOf('--port');
     if (p > -1) { config.port = Number(args[p + 1]); args.splice(p, 2); }
     await dockerCommand(args.slice(1));
+  } else if (['add', 'remove', 'plugins', 'update'].includes(args[0])) {
+    process.exitCode = await pluginCommand(args);
   } else if (args[0] === 'school-handover') {
-    const { handOverLogin } = await import('../lib/flyt.mjs');
+    const { handOverLogin } = await import('../plugins/flyt/lib/flyt.mjs');
     const where = await handOverLogin();
     console.log(where ? `School login moved to ${where}; Clearsky's container takes it from there.` : 'No school login here to hand over.');
   } else if (args[0] === 'jira-debug') {
