@@ -590,6 +590,18 @@ a.ref:hover { border-bottom-style: solid; }
 .choice.rec { border-color: color-mix(in srgb, var(--accent) 55%, var(--line-strong)); }
 .choice:disabled { opacity: .55; cursor: default; }
 .choice.picked { opacity: 1; border-color: var(--accent); background: var(--accent-soft); }
+.remember { border: 1px solid var(--line-strong); background: var(--surface); border-radius: 10px; padding: 10px 12px; margin: 10px 0; max-width: 560px; }
+.remember-t { display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 13px; }
+.remember-t svg { color: var(--accent); }
+.remember ul { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
+.remember-edit { display: block; width: 100%; box-sizing: border-box; margin-top: 6px; font: inherit; font-size: 13px; }
+.remember-b { display: flex; gap: 6px; margin-top: 8px; }
+.remember-b button { border: 1px solid var(--line-strong); background: var(--surface); color: var(--text); border-radius: 7px; height: 26px; padding: 0 10px; font-size: 12.5px; }
+.remember-b button:hover:not(:disabled) { border-color: var(--text-2); }
+.remember-b .r-save { background: var(--text); border-color: var(--text); color: var(--bg); }
+.remember-b button:disabled { opacity: .55; cursor: default; }
+.remember-done { color: var(--muted); font-size: 12.5px; }
+.remember-err { color: var(--red); font-size: 12.5px; margin-top: 6px; }
 .nudge { display: inline-flex; align-items: center; gap: 5px; margin-top: 8px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--text-2);
   border-radius: 7px; height: 26px; padding: 0 10px; font-size: 12.5px; }
 .nudge:hover { color: var(--text); border-color: var(--text-2); }

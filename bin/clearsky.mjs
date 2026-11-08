@@ -30,6 +30,7 @@ import { redact } from '../lib/redact.mjs';
 import { vpnWatch, checkTarget } from '../lib/vpn.mjs';
 import { checkFolder } from '../lib/chat-folders.mjs';
 import { fileRoots, checkFileRef, findFiles, fileRefLine } from '../lib/file-refs.mjs';
+import * as memory from '../lib/memory.mjs';
 import { sshHosts } from '../lib/ssh-hosts.mjs';
 import { buildRepos } from '../lib/builds.mjs';
 import { disclosureLine, disclosureFields, creditSplit, DISCLOSE_HINT } from '../lib/disclosure.mjs';
@@ -1079,7 +1080,8 @@ const chatFolders = (id) => (id ? (localState.sessionFolders(stateFile)[id] || [
 // What a chat can read, for the files you point it at with @ (lib/file-refs.mjs): its folder,
 // Settings → Copilot's folders (read-write and read only) and the folders added to it.
 const chatReadRoots = (id, cwd) => fileRoots([cwd || acpChats.get(id)?.cwd || copilotCwd(), ...copilotFolders(), ...list(process.env.COPILOT_READ), ...chatFolders(id)], homedir());
-const sandboxOpts = (cwd, extra = []) => ({ cwd, folders: [...copilotFolders(), ...extra, copilotTmp()], home: homedir(), read: [...list(process.env.COPILOT_READ), join(here, '..')] });
+// Copilot's memory (lib/memory.mjs) is readable in the sandbox, not writable: notes go in through your Save.
+const sandboxOpts = (cwd, extra = []) => ({ cwd, folders: [...copilotFolders(), ...extra, copilotTmp()], home: homedir(), read: [...list(process.env.COPILOT_READ), join(here, '..'), memory.memoryDir()] });
 let broker = null;
 function ghToken() {
   try { return execFileSync('gh', ['auth', 'token'], { timeout: 10_000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null; } catch { return null; }
@@ -1686,6 +1688,8 @@ const PR_HINT = 'When you open a PR or finish a round of work on one, write (or 
 const CHOICES_HINT = 'When you need me to choose (an approach, a next step, yes or no), ask once, at the end of your answer, as a block I can click:\n'
   + '```choices\nThe question, in one line\n- First option (recommended) | what happens if I pick it\n- Second option | what happens\n```\n'
   + 'Two to four options, the one you recommend first. Then stop and wait for my pick.';
+// Long-term memory: where it is, and how to suggest a note (a ```remember block, saved only by you).
+const memoryHint = () => { const f = memory.memoryFile(); return memory.memoryHint(f, memory.readMemory(f)); };
 // Where my code is, so Copilot looks there first instead of listing my home and asking for it.
 function foldersHint() {
   const tilde = (p) => (p.startsWith(homedir()) ? `~${p.slice(homedir().length)}` : p);
@@ -2009,7 +2013,7 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, s
   // Changing the folders in Settings starts the chat's Copilot again (resuming it) on its next turn.
   // Changing a chat's own folders (its side panel) does the same.
   const extra = chatFolders(chat);
-  const args = [...copilot.optionArgs(options), ...copilot.folderArgs([...copilotFolders(), ...extra, copilotTmp()])];
+  const args = [...copilot.optionArgs(options), ...copilot.folderArgs([...copilotFolders(), ...extra, copilotTmp(), memory.memoryDir()])];
   // Sandboxed mode always runs in srt; the others when Settings → Copilot → Sandbox says so.
   const sandbox = !!copilot.PERMISSIONS[options.permission]?.sandbox || process.env.COPILOT_SANDBOX === 'srt';
   const sig = JSON.stringify([args, sandbox, process.env.COPILOT_DOMAINS, process.env.COPILOT_FOLDERS]);
@@ -2340,6 +2344,8 @@ function serve() {
   // websites open in the browser can't change settings or start logins. It's kept across
   // restarts so an open page keeps working.
   const csrf = localToken(join(dirname(userEnvFile), 'csrf'));
+  // Copilot's memory folder exists from the start, so every chat can read the file once you save a note.
+  try { mkdirSync(memory.memoryDir(), { recursive: true, mode: 0o700 }); } catch { /* read-only home: no memory */ }
   const page = buildPage(csrf);
   const welcomePage = demoMark(readFileSync(join(here, '..', 'web', 'welcome.html'), 'utf8')).replaceAll('__CSRF__', csrf)
     .replace('/*__CSS__*/', () => readFileSync(join(here, '..', 'web', 'css', 'app.css'), 'utf8'));
@@ -2527,7 +2533,7 @@ function serve() {
           const note = !command && folderNotes.get(body.session);
           if (note) folderNotes.delete(body.session);
           const update = !command && (owed || note) && `${UPDATE_INTRO}${owed ? sandboxHint : ''}${note ? `\n\n${note}` : ''}`;
-          const prefix = command ? '' : [update, !body.resume && `${CONTEXT_INTRO}\n\n${copilotContext()}\n\n${CHOICES_HINT}\n\n${PR_HINT}${folders && `\n\n${folders}`}${sandboxHint}`, refText].filter(Boolean).join('\n\n---\n\n');
+          const prefix = command ? '' : [update, !body.resume && `${CONTEXT_INTRO}\n\n${copilotContext()}\n\n${CHOICES_HINT}\n\n${memoryHint()}\n\n${PR_HINT}${folders && `\n\n${folders}`}${sandboxHint}`, refText].filter(Boolean).join('\n\n---\n\n');
           const prompt = prefix ? `${prefix}${MSG_MARK}${message}` : message;
           // Answers stream back as one JSON event per line: text, tool, permission, done, error.
           res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
@@ -2588,6 +2594,16 @@ function serve() {
           const { name } = await readJson(req);
           if (grafana.find(String(name || ''))) grafanaSessions.set(String(name), null);
           return json(res, 200, { ok: true });
+        }
+        // Copilot's memory (lib/memory.mjs): the whole file from Settings, or notes from a card's Save.
+        if (url.pathname === '/api/copilot/memory') {
+          const body = await readJson(req, 64 * 1024);
+          const file = memory.memoryFile();
+          const r = typeof body.text === 'string' ? memory.writeMemory(file, body.text)
+            : (() => { const a = memory.addNotes(memory.readMemory(file), { lines: Array.isArray(body.lines) ? body.lines.map(String) : [], repo: body.repo });
+              return a.error || !a.added ? a : { ...memory.writeMemory(file, a.text), added: a.added }; })();
+          if (r.error) return json(res, 400, { error: r.error });
+          return json(res, 200, { text: r.text, added: r.added ?? null, max: memory.MAX_BYTES });
         }
         // Links (lib/links.mjs): the whole list as you edited it, or bookmarks from a browser's export.
         if (url.pathname === '/api/links') {
@@ -2795,6 +2811,10 @@ function serve() {
         return sendFile(res, file);
       }
       if (url.pathname === '/api/links') return json(res, 200, readLinks(linksFile()));
+      if (url.pathname === '/api/copilot/memory') {
+        const file = memory.memoryFile();
+        return json(res, 200, { path: file.replace(homedir(), '~'), text: memory.readMemory(file), max: memory.MAX_BYTES });
+      }
       // The map of what chats did where (lib/map.mjs): one chat's, or the recent ones'.
       if (url.pathname === '/api/copilot/map') {
         const chatId = url.searchParams.get('chat') || null;

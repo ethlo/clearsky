@@ -215,6 +215,10 @@
     <div class="row"><input id="COPILOT_VM_CPUS" data-key="COPILOT_VM_CPUS" inputmode="numeric" spellcheck="false" style="max-width:8em"> <input id="COPILOT_VM_MEMORY_GB" data-key="COPILOT_VM_MEMORY_GB" aria-label="VM memory in GB" inputmode="decimal" spellcheck="false" style="max-width:8em"></div>
     <p class="hint">For each chat's VM. Empty uses the default shown: half this machine's cores (up to 12) and a quarter of its memory (4 to 16 GB). Memory the VM doesn't use stays yours. Kept within this machine: at most all its cores and half its memory. Applies to the next VM a chat starts; the first one after a change takes about 15 seconds longer (it saves a new snapshot).</p>
     <div class="row"><button class="save" data-keys="COPILOT_MODEL,COPILOT_EFFORT,COPILOT_PERMISSION,COPILOT_CWD,COPILOT_FOLDERS,COPILOT_ASSISTED_ALLOW,COPILOT_SANDBOX,COPILOT_SANDBOX_TOKEN,COPILOT_DISCLOSE,COPILOT_READ,COPILOT_DOMAINS,COPILOT_VM_IMAGES,COPILOT_GATE_RULES,COPILOT_VM_CPUS,COPILOT_VM_MEMORY_GB">Save</button><span class="msg"></span></div>
+    <h3 id="memory" style="margin-top:28px">Memory</h3>
+    <textarea id="memory-text" rows="8" aria-label="Copilot's memory" spellcheck="false" placeholder="Nothing yet. Notes you save from a chat's Remember card show up here."></textarea>
+    <p class="hint">Notes every new chat reads, kept in <code id="memory-path">~/.local/share/clearsky/memory/memory.md</code> on this machine. Copilot is told never to change this file (in the sandbox it can't): it suggests notes in the chat, and they're saved only when you press Save on the card. Put notes for one repo under a <code>## owner/name</code> heading. <span id="memory-size"></span></p>
+    <div class="row"><button id="memory-save" class="save">Save memory</button><span class="msg" id="memory-msg"></span></div>
   </section>
 
   <section>
@@ -411,6 +415,7 @@ function render(s) {
   $('#COPILOT_VM_CPUS').placeholder = cp.vmDefault ? `${cp.vmDefault.cpus} cores` : 'cores';
   $('#COPILOT_VM_MEMORY_GB').placeholder = cp.vmDefault ? `${cp.vmDefault.memGb} GB` : 'GB';
   $('#COPILOT_DOMAINS').placeholder = cp.defaultDomains || '';
+  if (!loadMemory.done) { loadMemory.done = true; loadMemory(); }
   // The choices come from Copilot itself (models you've used, its access modes).
   fetch('/api/copilot').then((r) => r.json()).then((i) => {
     $('#cp-models').innerHTML = (i.models || []).map((m) => `<option value="${esc(m)}">`).join('');
@@ -482,6 +487,36 @@ async function load() {
 }
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// Copilot's memory (lib/memory.mjs): the whole file, edited here.
+let memMax = 4096;
+const memSize = () => {
+  const n = new TextEncoder().encode($('#memory-text').value).length;
+  $('#memory-size').textContent = `${n} of ${memMax} bytes.`;
+  $('#memory-size').className = n > memMax ? 'bad' : '';
+};
+async function loadMemory() {
+  try {
+    const m = await (await fetch('/api/copilot/memory')).json();
+    memMax = m.max || memMax;
+    $('#memory-text').value = m.text || '';
+    if (m.path) $('#memory-path').textContent = m.path;
+    memSize();
+  } catch { /* shown empty */ }
+}
+document.addEventListener('input', (e) => { if (e.target.id === 'memory-text') memSize(); });
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('#memory-save');
+  if (!btn) return;
+  const msg = $('#memory-msg');
+  btn.disabled = true; msg.textContent = 'Saving…'; msg.className = 'msg';
+  try {
+    const r = await post('/api/copilot/memory', { text: $('#memory-text').value });
+    $('#memory-text').value = r.text; memSize();
+    msg.textContent = 'Saved. New chats read it.'; msg.className = 'msg on';
+  } catch (err) { msg.textContent = err.message; msg.className = 'msg bad'; }
+  btn.disabled = false;
+});
 
 function syncCalPick() {
   $('#EVOLUTION_CALENDARS').value = [...document.querySelectorAll('#cal-list input:checked:not(:disabled)')].map((i) => i.value).join(',');

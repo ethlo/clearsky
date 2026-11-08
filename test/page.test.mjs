@@ -200,6 +200,22 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
   await page.goto(`${base}/#inbox`);
   await page.waitForSelector('#side-cp .ni', { timeout: 15_000 });
 
+  // Copilot suggests a note for its memory: a card, saved only when you press Save, then in Settings.
+  await page.goto(`${base}/#copilot`);
+  await page.selectOption('#cp-perm', 'full');
+  await page.fill('#chat-text', 'remember this');
+  await page.press('#chat-text', 'Enter');
+  await page.waitForSelector('.remember [data-remember="save"]', { timeout: 10_000 });
+  assert.match(await page.locator('.remember').innerText(), /acme\/api[\s\S]*Run the tests with npm test/);
+  assert.match(await page.locator('#chat-log').innerText(), /memory\/memory\.md/, 'the chat was told where its memory is');
+  if (process.env.SHOT) await page.screenshot({ path: `${process.env.SHOT}/remember.png` });
+  await page.click('.remember [data-remember="save"]');
+  await page.waitForSelector('.remember .remember-done', { timeout: 5000 });
+  assert.equal(await page.locator('.remember .remember-done').innerText(), 'Saved to memory');
+  await page.goto(`${base}/settings#copilot`);
+  await page.waitForFunction(() => /## acme\/api\n- Run the tests with npm test/.test(document.querySelector('#memory-text').value), null, { timeout: 5000 });
+  if (process.env.SHOT) { await page.locator('#memory-text').scrollIntoViewIfNeeded(); await page.screenshot({ path: `${process.env.SHOT}/memory-settings.png` }); }
+
   for (const w of [390, 360]) {
     await page.setViewportSize({ width: w, height: 800 });
     await page.goto(base);

@@ -44,6 +44,8 @@ if (args[0] === 'skill' && args[1] === 'list') {
       const flags = args.filter((a, i) => a.startsWith('--') || ['shell', 'write', 'plan'].includes(a) && args[i - 1]?.startsWith('--'));
       say(`flags=${args.filter((a) => a.startsWith('--')).join(' ')} `);
       say(`info=${JSON.stringify({ prompt: m.params.prompt[0].text, flags, session: sid, model: args.includes('--model') ? args[args.indexOf('--model') + 1] : null, hasToken: !!process.env.GITHUB_TOKEN })}\n`);
+      // A note for Copilot's memory, as Copilot is asked to suggest one (lib/memory.mjs).
+      if (m.params.prompt[0].text.endsWith('remember this')) say('\n```remember\nrepo: acme/api\nRun the tests with npm test\n```\n');
       // Allowed tools run without asking, except a prompt that says "gated" (like a step Copilot's judge wants you to OK).
       if (args.includes('--allow-all-tools') && !m.params.prompt[0].text.includes('gated')) { out({ id: m.id, result: { stopReason: 'end_turn' } }); return; }
       out({ method: 'session/update', params: { update: { sessionUpdate: 'tool_call', toolCallId: 't1', title: 'git status', kind: 'execute', status: 'pending' } } });
