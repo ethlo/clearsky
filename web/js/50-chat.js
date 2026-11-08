@@ -692,6 +692,7 @@ function detach() {
 
 function newChat() {
   detach();
+  cpWide(false);
   chat.session = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   chat.cwd = null;
   chat.turns = 0;
@@ -789,6 +790,7 @@ function tilde(dir = '') {
 }
 async function openSession(id, cwd) {
   detach();
+  cpWide(false);
   const view = chat.view;
   chat.session = id; chat.turns = 1; // the list shows it as picked while it loads
   // Nothing of the chat you were on carries over while this one loads (a real session can
@@ -1415,6 +1417,29 @@ let tabsQueued = false;
 const tabsWatch = new MutationObserver(() => { if (!tabsQueued) { tabsQueued = true; queueMicrotask(() => { tabsQueued = false; syncTabs(); }); } });
 for (const p of document.querySelectorAll('.cp-pane')) tabsWatch.observe(p, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden'] });
 syncTabs();
+
+// The side pane in the main column: its tabs take the whole width, and Conversation (or Esc)
+// goes back. On a narrow screen, where there is no side pane, Details in the header does the same.
+function cpWide(on) {
+  const w = $('.cpw');
+  if (w.classList.contains('wide') === on) return;
+  w.classList.toggle('wide', on);
+  const b = $('#cp-wide');
+  b.innerHTML = icon(on ? 'collapse' : 'expand', 14);
+  b.title = on ? 'Back beside the conversation (Alt+D)' : 'Show in the main column (Alt+D)';
+  b.setAttribute('aria-label', on ? 'Back beside the conversation' : 'Show in the main column');
+  b.setAttribute('aria-pressed', String(on));
+  $('#cp-details').setAttribute('aria-pressed', String(on));
+  if (on) $('.cp-side').scrollTop = 0;
+  else $('#chat-text').focus({ preventScroll: true });
+}
+const cpIsWide = () => $('.cpw').classList.contains('wide');
+$('#cp-wide').onclick = () => cpWide(!cpIsWide());
+$('#cp-conv').onclick = () => cpWide(false);
+$('#cp-details').onclick = () => cpWide(!cpIsWide());
+document.addEventListener('keydown', (e) => {
+  if (e.altKey && !e.ctrlKey && !e.metaKey && e.code === 'KeyD' && !$('#chat').hidden) { e.preventDefault(); cpWide(!cpIsWide()); }
+});
 
 // A "Copy line" button: copies its text (the credits line, say), ready to paste.
 document.addEventListener('click', async (e) => {
