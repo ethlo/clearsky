@@ -1,6 +1,6 @@
 # Plugins
 
-Clearsky ships as a core (GitHub, Jira, Slack, calendars, Copilot, links) and everything else is a plugin you add. A plugin is a plain folder: a `clearsky-plugin.json` that says what it is and what it reaches, and one ES module that does the work. There's no build step and nothing to `npm install`; a plugin has no dependencies, like Clearsky itself. School (`plugins/flyt`) is the first one.
+Clearsky ships as a core (GitHub, Jira, calendars, Copilot, links) and everything else is a plugin you add. A plugin is a plain folder: a `clearsky-plugin.json` that says what it is and what it reaches, and one ES module that does the work. There's no build step and nothing to `npm install`; a plugin has no dependencies, like Clearsky itself. Three ship with Clearsky in `plugins/`: Slack, Grafana and School (`flyt`). If you had Slack or Grafana set up before they became plugins, Clearsky adds them for you once.
 
 ## Adding one
 
@@ -37,7 +37,7 @@ A plugin you add runs in a sandbox of its own. Each fetch, and each time you ope
 
 Its files are hashed when it's added, and git plugins are pinned to the commit. If the files change after that, the plugin isn't loaded until you run `clearsky update` or add it again. Without srt installed, sandboxed plugins don't run at all, and Settings and `clearsky plugins` say so.
 
-Some plugins can't work like that. School opens a browser for a BankID login and keeps the session in your keyring. Such a plugin says why in `outside`, and it runs inside Clearsky, as you. Clearsky adds one from elsewhere only when you say you trust it (`--trust`, or the box in Settings). The plugins in `plugins/` are part of Clearsky, reviewed with it, and run inside.
+Some plugins can't work like that. School opens a browser for a BankID login and keeps the session in your keyring; Grafana holds your Grafana logins for Copilot chats that mustn't see them. Such a plugin says why in `outside`, and it runs inside Clearsky, as you. Clearsky adds one from elsewhere only when you say you trust it (`--trust`, or the box in Settings). The plugins in `plugins/` are part of Clearsky, reviewed with it, and run inside.
 
 ## Writing one
 
@@ -77,13 +77,14 @@ clearsky-weather/
 | `clearsky` | The plugin API it's written for. This Clearsky has 1, and refuses a plugin for a newer one. |
 | `entry` | Its module, inside the folder. |
 | `area` | `work` or `personal` (default): which tab its page is on. |
-| `panel` | Its page: `title`, `zone` (`needs` puts its rows with what needs you, `track` keeps them on its page) and `view: "table"` for an inbox. |
-| `settings` | Fields under Settings → Other sources, saved to `.env`. Only these reach the plugin. |
+| `panel` | Its page: `title`, `zone` (`needs` puts its rows with what needs you, `track` keeps them on its page), `view: "table"` for an inbox, and `page: false` for a `needs` plugin whose rows need no page of their own (Slack's are in Mentions). |
+| `settings` | Fields under Settings → Other sources, saved to `.env`. Only these reach the plugin. A field can have a `pattern` (a regular expression Settings checks) with a `patternHint`, and a `link` (`{ "label", "url" }`) to where you get the value. |
 | `enabledWhen` | Settings that must be filled in before Clearsky fetches anything. |
 | `hosts` | All it may reach. `*.example.com` covers the subdomains. |
 | `clis` | Programs it may run through `ctx.run`. |
 | `secrets`, `files`, `note` | What it keeps, shown in Settings → Modules. |
 | `outside` | Only if it can't work in the sandbox: why, in words. |
+| `doors` | Commands it offers Copilot chats, `[{ "name": "grafana", "about": "…" }]`. Only with `outside`. |
 
 The manifest wins over the code: what it reaches and holds is what you were shown.
 
@@ -103,9 +104,30 @@ export default {
 };
 ```
 
+Besides `fetch`, a plugin can have:
+
+| Hook | What it does |
+|---|---|
+| `items(data)` | Rows for its page (or for what needs you, with `zone: "needs"`). A row can be a mention (`kind: "mention"`, counted in Mentions), with Reply as its action (`next: "reply"`), a line saying why (`why`), its link's label (`open`) and the PR or ticket it's about (`ref: "pr:org/repo#1"` or `"issue:KEY-1"`). |
+| `attention(data)` | What notifies you when it's new. A plugin you just added starts quiet, so you don't get a burst of old ones. |
+| `events(data)` | Calendar entries; `fyi: true` ones show but don't take your time. |
+| `standup(data, since)` | Lines for Yesterday and Today. |
+| `plan(data)` | Work plugins: tasks Now / Next can pick for a free slot, `{ key, title, detail, url, why, minutes }`. Slack's: answer a fresh mention. |
+| `markdown(data)` | Work plugins: their part of `clearsky --md`, `{ title, lines }`. |
+| `detail`, `attachment` | Read an item in full inside Clearsky, with its files. |
+| `login`, `logins` | A login started from Settings, or several with a button each (Grafana's environments). Plugins that run inside only. |
+| `keepAlive(ctx)`, `vpnTargets(env)` | Keep a web session from expiring; name hosts behind your VPN for its check. Inside only. |
+| `doors` | Commands for Copilot chats, see below. Inside only. |
+
 `ctx` has `env` (its own settings), `fetch` and `json` (which refuse hosts not in the manifest), `run(bin, args)` (only its `clis`) and `dataDir` (its data folder, in the sandbox). A plugin that runs inside Clearsky can instead export a function, `export default (lends) => ({ … })`, to get what Clearsky lends it, such as `lends.findBrowser()`.
 
 To try it while you write it, `clearsky add ./clearsky-weather` and restart; add it again after each change (the hash check stops a changed copy from loading).
+
+## Doors
+
+A Copilot chat runs in a sandbox that holds none of your logins. A door is how a plugin that runs inside Clearsky does something for it with what the plugin holds: the chat runs `grafana logs test '{app="api"}'` (or `door grafana …` for any plugin's door), and Clearsky passes it to the plugin's `doors.grafana.run(argv, door)`, which answers with `{ code, stdout, stderr }`. The door decides what to ask first: `door.ask({ title, detail })` puts a card in the chat and resolves to your answer, and Grafana asks for production that way. `door.vpn()` says whether the VPN is up. Clearsky logs every call in the agent log, removes secrets from the output and cuts it at 200,000 characters. Its `hint(env)` is a line added to Copilot's instructions so chats know the door is there.
+
+A door has to be listed in the manifest's `doors`, needs `outside` (a sandboxed plugin can't hold anything a chat shouldn't see, so it has nothing to lend), and can't take a name Clearsky uses itself, such as `git`, `acli` or `outside`.
 
 ## Publishing one
 
@@ -113,4 +135,4 @@ Put the folder in a git repo, and people add it with `clearsky add github:you/cl
 
 ## What's next
 
-Slack and Grafana are still part of the core: Slack's mentions feed the plan and notifications in ways a plugin can't reach yet, and Grafana answers Copilot through a door of Clearsky's (`grafana …`). Moving them out needs two more plugin hooks: rows that join the plan, and doors that chats can call. A plugin can't add Copilot skills yet either; a team pack can.
+A plugin can't add Copilot skills yet; a team pack can. Doors only come from plugins that run inside, so a sandboxed plugin has no way to answer a chat.

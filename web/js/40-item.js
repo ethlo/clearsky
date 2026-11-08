@@ -203,7 +203,7 @@ function changeRows(list, { chats = true } = {}) {
   const name = (id) => recentChats.find((r) => r.id === id)?.title || 'a Copilot chat';
   return `<ul class="notes changes">${list.map((w) => `<li class="d-${esc(w.decided.split(' ')[0])}">
       <span class="when" title="${esc(new Date(w.at).toLocaleString())}">${esc(ago(w.at))}</span>
-      <span class="what"><b>${esc({ jira: 'Jira', grafana: 'Grafana (read)', build: w.kind === 'test' ? 'Tests' : 'Build', review: 'Self-review' }[w.where] || 'GitHub')}${w.repo || w.target ? ` · ${esc(w.repo || w.target)}` : ''}</b><small title="${esc(w.what)}">${esc(w.what)}${w.removed ? ` · ${w.removed} secret${w.removed > 1 ? 's' : ''} removed` : ''}</small>
+      <span class="what"><b>${esc({ jira: 'Jira', grafana: 'Grafana (read)', build: w.kind === 'test' ? 'Tests' : 'Build', review: 'Self-review' }[w.where] || (w.door ? w.where : 'GitHub'))}${w.repo || w.target ? ` · ${esc(w.repo || w.target)}` : ''}</b><small title="${esc(w.what)}">${esc(w.what)}${w.removed ? ` · ${w.removed} secret${w.removed > 1 ? 's' : ''} removed` : ''}</small>
         ${chats && w.chats?.length ? `<small>${w.chats.length > 1 ? 'one of: ' : ''}${w.chats.map((c) => esc(name(c.id))).join(', ')}</small>` : ''}</span>
       <span class="kind">${esc(DECIDED[w.decided] || w.decided)}</span></li>`).join('')}</ul>`;
 }
@@ -278,7 +278,8 @@ function addSourcePanels(list) {
     if (x.area === 'work' && x.panel.zone === 'needs' && !FRESH_SOURCES.mentions.includes(x.name)) { FRESH_SOURCES.mentions.push(x.name); PANEL_SOURCES['c-mentions'].push(x.name); }
   }
   for (const x of extraSources) {
-    if (document.querySelector(`[data-nav="src-${x.name}"]`)) continue;
+    // `page: false`: its rows are only with what needs you (Slack, in Mentions), with no page of its own.
+    if (x.panel.page === false || document.querySelector(`[data-nav="src-${x.name}"]`)) continue;
     const a = document.createElement('a');
     a.className = 'ni'; a.href = `#src-${x.name}`; a.dataset.nav = `src-${x.name}`;
     a.innerHTML = `<span class="ico">${icon(x.area === 'personal' ? 'home' : 'source')}</span><span class="lab">${esc(x.panel.title)}</span><b></b>`;

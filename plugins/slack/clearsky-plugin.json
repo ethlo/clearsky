@@ -8,7 +8,8 @@
   "area": "work",
   "panel": {
     "title": "Slack",
-    "zone": "needs"
+    "zone": "needs",
+    "page": false
   },
   "settings": {
     "SLACK_TOKEN": {

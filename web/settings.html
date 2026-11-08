@@ -56,6 +56,7 @@
   .plug .k, .plug .sum { color: var(--text-2); }
   .plug .acts { display: flex; gap: 6px; }
   .plug-from { display: flex; gap: 8px; align-items: center; } .plug-from input { flex: 1; margin: 0; }
+  .login-head { margin: 14px 0 4px; } .login-slot .row { margin-top: 6px; }
   .plug-look { margin-top: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
   .plug-look .warn { color: var(--amber, #b26b00); }
   @media (max-width: 520px) { .mods summary { grid-template-columns: 1fr auto 10px; } .mods summary .sum { display: none; } .mods .body { padding-left: 4px; } }
@@ -217,21 +218,10 @@
   </section>
 
   <section>
-    <h2>Grafana <span class="state" id="graf-state"></span></h2>
-    <p class="hint">Lets Copilot read logs and metrics of your environments with <code>grafana logs test '{app="api"} |= "error"'</code> instead of a shell on servers. Read only: Clearsky makes only search and query calls, with your Viewer login, which never goes in the sandbox. Secrets it knows the shape of are removed from what comes back, every call is in <b>Copilot's changes</b>, and the environments below that ask do so in the chat every time.</p>
-    <label for="GRAFANA_INSTANCES">Environments</label>
-    <textarea id="GRAFANA_INSTANCES" data-key="GRAFANA_INSTANCES" rows="3" spellcheck="false" placeholder="test=https://grafana.test.example.com, prod=https://grafana.example.com"></textarea>
-    <p class="hint">One per environment, as <code>name=address</code>. Kept in your settings file only.</p>
-    <label for="GRAFANA_ASK">Ask every time for</label>
-    <input id="GRAFANA_ASK" data-key="GRAFANA_ASK" spellcheck="false" placeholder="every name with “prod”">
-    <label for="GRAFANA_TOKENS">Viewer tokens (optional)</label>
-    <input id="GRAFANA_TOKENS" data-key="GRAFANA_TOKENS" type="password" autocomplete="off" placeholder="leave empty to use your browser login">
-    <p class="hint">Not needed: log in below with your browser instead. If you can create a Grafana service account with the <b>Viewer</b> role, its token (<code>name=glsa_…</code>) is used instead of the login.</p>
-    <div class="row"><button class="save" data-keys="GRAFANA_INSTANCES,GRAFANA_ASK,GRAFANA_TOKENS">Save</button><span class="msg"></span></div>
-    <div id="graf-list"></div>
+    <h2>VPN <span class="state" id="vpn-state"></span></h2>
     <label for="VPN_CHECK">VPN check</label>
-    <input id="VPN_CHECK" data-key="VPN_CHECK" spellcheck="false" placeholder="the first Grafana's host">
-    <p class="hint">A host (or URL) behind your work VPN. Off the VPN it either can't be reached or refuses you with 403, as many work sites do at their load balancer; then the menu says <b>VPN off</b>, Grafana and the modules listed next pause instead of failing, and Copilot is told to ask you to connect. Clearsky never runs the VPN itself.</p>
+    <input id="VPN_CHECK" data-key="VPN_CHECK" spellcheck="false" placeholder="the first host a plugin names, such as your first Grafana">
+    <p class="hint">A host (or URL) behind your work VPN. Off the VPN it either can't be reached or refuses you with 403, as many work sites do at their load balancer; then the menu says <b>VPN off</b>, the modules listed next pause instead of failing, plugins' doors (Grafana) say so, and Copilot is told to ask you to connect. Clearsky never runs the VPN itself.</p>
     <label for="VPN_NEEDED_BY">Modules that need the VPN</label>
     <input id="VPN_NEEDED_BY" data-key="VPN_NEEDED_BY" spellcheck="false" placeholder="for example jira, github">
     <div class="row"><button class="save" data-keys="VPN_CHECK,VPN_NEEDED_BY">Save</button><span class="msg"></span></div>
@@ -288,7 +278,7 @@
   draw();
 })();
 const CSRF = '__CSRF__';
-const SECRET = new Set(['GITHUB_TOKEN', 'GOOGLE_CALENDAR_ICS', 'COPILOT_SANDBOX_TOKEN', 'GRAFANA_TOKENS']);
+const SECRET = new Set(['GITHUB_TOKEN', 'GOOGLE_CALENDAR_ICS', 'COPILOT_SANDBOX_TOKEN']);
 const $ = (s) => document.querySelector(s);
 
 
@@ -384,13 +374,10 @@ function render(s) {
   $('#CLEARSKY_MENTION_DAYS').value = s.mentionDays || '';
   $('#CLEARSKY_TIME_FORMAT').value = s.timeFormat || '24';
   $('#CLEARSKY_POLL_MINUTES').value = s.pollMinutes || '';
-  const gf = s.grafana || {};
-  $('#GRAFANA_INSTANCES').value = gf.instances || '';
-  $('#GRAFANA_ASK').value = gf.ask || '';
-  $('#GRAFANA_TOKENS').placeholder = gf.tokens ? `${gf.tokens}; paste all again to replace` : 'leave empty to use your browser login';
-  $('#VPN_CHECK').value = gf.vpnCheck || '';
-  $('#VPN_NEEDED_BY').value = gf.vpnNeededBy || '';
-  drawGrafana();
+  const vp = s.vpn || {};
+  $('#VPN_CHECK').value = vp.check || '';
+  $('#VPN_NEEDED_BY').value = vp.neededBy || '';
+  fetch('/api/vpn').then((r) => r.json()).then((v) => state($('#vpn-state'), v.known ? v.up : null, !v.known ? 'not checked' : v.up ? 'on' : 'off')).catch(() => {});
   const cp = s.copilot || {};
   $('#COPILOT_FOLDERS').value = cp.folders || '';
   // In the container, a folder exists only if docker-compose mounts it.
@@ -425,21 +412,33 @@ function render(s) {
 
   const extra = s.extra || [], logins = s.logins || [];
   $('#extra').hidden = !extra.length && !logins.length;
-  $('#extra-logins').innerHTML = logins.map((l) => `<h3>${esc(l.label)} <span class="state ${l.running ? 'off' : l.loggedIn ? 'on' : 'bad'}">${
-      l.running ? 'logging in…' : l.loggedIn ? 'logged in' : 'not logged in'}</span></h3>
-    <div class="row"><button data-login="${esc(l.name)}" class="${l.loggedIn ? 'secondary' : ''}"${l.running ? ' disabled' : ''}>${esc(l.loggedIn ? 'Log in again' : l.button)}</button>
-      <span class="msg${l.error ? ' bad' : ''}">${esc(l.running ? 'A browser window is open. Log in there; it closes by itself when you are in.' : l.error || l.detail)}</span></div>`).join('');
-  clearTimeout(render.poll);
-  if (logins.some((l) => l.running)) render.poll = setTimeout(load, 2000);
   if (extra.length && !$('#extra-fields').children.length) {
     // Grouped by the plugin they belong to, each with its set-up link if it has one.
+    // A plugin's logins go under its fields (in its slot), so its hints can say "log in below".
     let last = null;
-    $('#extra-fields').innerHTML = extra.map((f) => `${f.source && f.source !== last ? `<h3>${esc(last = f.source)}</h3>` : ''}<label for="${esc(f.key)}">${esc(f.label)}</label>
+    const slot = (src) => (src ? `<div class="login-slot" data-for="${esc(src)}"></div>` : '');
+    $('#extra-fields').innerHTML = extra.map((f) => `${f.source && f.source !== last ? `${slot(last)}<h3>${esc(last = f.source)}</h3>` : ''}<label for="${esc(f.key)}">${esc(f.label)}</label>
       <input id="${esc(f.key)}" data-key="${esc(f.key)}"${f.secret ? ' type="password" autocomplete="off"' : ''}>
       ${f.link ? `<p class="hint"><a href="${esc(f.link.url)}" target="_blank" rel="noopener">${esc(f.link.label)}</a></p>` : ''}
-      ${f.hint ? `<p class="hint">${esc(f.hint)}</p>` : ''}`).join('');
+      ${f.hint ? `<p class="hint">${esc(f.hint)}</p>` : ''}`).join('') + slot(last);
     $('#extra-save').dataset.keys = extra.map((f) => f.key).join(',');
   }
+  // A login's heading is the plugin's, so in its slot under the fields it's a line, not a second heading.
+  const loginHtml = (l, inSlot) => {
+    const head = (state) => (inSlot ? `<p class="login-head"><b>Login</b> ${state}</p>` : `<h3>${esc(l.label)} ${state}</h3>`);
+    return l.many ? `${head(`<span class="state ${l.many.length && l.many.every((x) => x.loggedIn) ? 'on' : 'bad'}">${
+      l.many.filter((x) => x.loggedIn).length} of ${l.many.length} logged in</span>`)}${l.many.map((x) => `<div class="row"><span><b>${esc(x.label)}</b> <small>${esc(x.detail)}</small></span>
+      <button data-many="${esc(l.name)}" data-id="${esc(x.id)}" class="${x.loggedIn ? 'secondary' : ''}">${x.loggedIn ? 'Log in again' : 'Log in'}</button>${x.canLogOut ? `<button class="secondary" data-many="${esc(l.name)}" data-id="${esc(x.id)}" data-stop>Log out</button>` : ''}<span class="msg"></span></div>`).join('')}`
+    : `${head(`<span class="state ${l.running ? 'off' : l.loggedIn ? 'on' : 'bad'}">${l.running ? 'logging in…' : l.loggedIn ? 'logged in' : 'not logged in'}</span>`)}
+    <div class="row"><button data-login="${esc(l.name)}" class="${l.loggedIn ? 'secondary' : ''}"${l.running ? ' disabled' : ''}>${esc(l.loggedIn ? 'Log in again' : l.button)}</button>
+      <span class="msg${l.error ? ' bad' : ''}">${esc(l.running ? 'A browser window is open. Log in there; it closes by itself when you are in.' : l.error || l.detail)}</span></div>`;
+  };
+  const slots = new Map([...document.querySelectorAll('#extra-fields .login-slot')].map((x) => [x.dataset.for, x]));
+  for (const x of slots.values()) x.innerHTML = '';
+  $('#extra-logins').innerHTML = logins.filter((l) => !slots.has(l.label)).map((l) => loginHtml(l, false)).join('');
+  for (const l of logins) if (slots.has(l.label)) slots.get(l.label).innerHTML = loginHtml(l, true);
+  clearTimeout(render.poll);
+  if (logins.some((l) => l.running)) render.poll = setTimeout(load, 2000);
   for (const f of extra) {
     if (f.secret) { SECRET.add(f.key); $(`#${f.key}`).placeholder = f.value ? `${f.value}; paste a new one to replace` : ''; }
     else $(`#${f.key}`).value = f.value || '';
@@ -513,27 +512,6 @@ document.addEventListener('click', async (e) => {
   } catch (err) { msg.textContent = err.message; msg.className = 'msg bad'; b.disabled = false; }
 });
 
-// Each Grafana environment: logged in or not, and the button to log in with your browser.
-async function drawGrafana() {
-  let g = { instances: [] }, v = {};
-  try { [g, v] = await Promise.all([fetch('/api/grafana').then((r) => r.json()), fetch('/api/vpn').then((r) => r.json())]); } catch {}
-  const n = g.instances.length, ok = g.instances.filter((i) => i.token || (i.login && i.alive !== 'expired')).length;
-  state($('#graf-state'), n && ok === n, !n ? 'not set up' : v.known && !v.up ? 'VPN off' : `${ok} of ${n} logged in`);
-  $('#graf-list').innerHTML = g.instances.map((i) => `<div class="row"><span><b>${esc(i.name)}</b> <small>${esc(i.host)}${i.asks ? ' · asks every time' : ''} · ${i.token ? 'Viewer token' : i.login && i.alive === 'expired' ? '<b>login expired</b>' : i.login ? `logged in ${esc(new Date(i.login).toLocaleDateString())}` : 'not logged in'}</small></span>
-    <button data-glogin="${esc(i.name)}">${i.login ? 'Log in again' : 'Log in'}</button>${i.login ? `<button data-glogout="${esc(i.name)}">Log out</button>` : ''}<span class="msg"></span></div>`).join('');
-}
-document.addEventListener('click', async (e) => {
-  const b = e.target.closest('[data-glogin],[data-glogout]');
-  if (!b) return;
-  const msg = b.parentElement.querySelector('.msg');
-  b.disabled = true; msg.textContent = b.dataset.glogin ? 'Log in in the window that opened…' : ''; msg.className = 'msg';
-  try {
-    const r = await post(b.dataset.glogin ? '/api/grafana/login' : '/api/grafana/logout', { name: b.dataset.glogin || b.dataset.glogout });
-    msg.textContent = r.login ? `Logged in as ${r.login}.` : 'Done.'; msg.className = 'msg on';
-    setTimeout(drawGrafana, 1200);
-  } catch (err) { msg.textContent = err.message; msg.className = 'msg bad'; b.disabled = false; }
-});
-
 async function load() {
   render(await (await fetch('/api/settings')).json());
   fetch('/api/modules').then((r) => r.json()).then((r) => renderModules(r.modules || [])).catch(() => {});
@@ -603,6 +581,18 @@ $('#cal-remove').addEventListener('click', async () => {
   const msg = $('#cal-remove').nextElementSibling;
   try { render(await post('/api/settings', { GOOGLE_CALENDAR_ICS: '' })); msg.textContent = 'Removed.'; msg.className = 'msg on'; }
   catch (e) { msg.textContent = e.message; msg.className = 'msg bad'; }
+});
+
+// One of a plugin's several logins (a Grafana environment): a browser window opens for it.
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-many]');
+  if (!b) return;
+  const msg = b.parentElement.querySelector('.msg');
+  b.disabled = true; msg.className = 'msg'; msg.textContent = 'stop' in b.dataset ? '' : 'Log in in the window that opened…';
+  try {
+    const r = await post(`/api/source/${b.dataset.many}/logins`, { id: b.dataset.id, action: 'stop' in b.dataset ? 'stop' : 'start' });
+    render(r);
+  } catch (err) { msg.textContent = err.message; msg.className = 'msg bad'; b.disabled = false; }
 });
 
 document.addEventListener('click', async (e) => {

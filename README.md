@@ -5,7 +5,7 @@ One page that shows what needs your attention at work:
 - **Now / Next:** your current or next meeting, how much free time you have until it, and up to three tasks that fit that gap (optional, from Google Calendar).
 - **Needs my review:** open PRs where your review is requested, oldest request first, with re-reviews flagged.
 - **My PRs:** each open PR shows who has the ball (changes requested, CI failing, merge conflict, unresolved threads, ready to merge) or who you are waiting on.
-- **Mentions:** GitHub issues and PRs that mention you, Jira comments that @mention you, and (optionally) Slack messages that @mention you, from the last 14 days.
+- **Mentions:** GitHub issues and PRs that mention you, Jira comments that @mention you, and, with the Slack plugin, Slack messages that @mention you, from the last 14 days.
 - **What I have left:** your open Jira issues (in progress, then to do), plus GitHub issues assigned to you.
 - **Stand-up tab:** a ready-to-paste Yesterday / Today / Blockers summary for your next daily stand-up (`CLEARSKY_STANDUP_TIME`, default 09:45, on `CLEARSKY_WORKDAYS`, default Mon-Fri). It covers everything since the previous stand-up, so on Monday that's since Friday's: PRs merged, opened and reviewed, commits, and Jira issues you finished or worked on. Today comes from the dashboard queue and your meetings. The dashboard reminds you 30 minutes before, and the stand-up counts as a meeting in Now / Next.
 - **Links:** your favourites in groups, under Work or Personal in the menu. Add one with Add link or by dropping a link from your browser, or import your browser's bookmarks (its HTML export; each folder becomes a group). Edit renames, moves between Work and Personal, reorders and removes. They're kept only in `~/.config/clearsky/links.json`, and no favicons are fetched.
@@ -47,7 +47,7 @@ Tokens:
   - **Today's schedule** under Now / Next shows the day as a timeline: meetings as blocks (overlaps on their own line), your free slot in green, the rest of the workday, and a line for now. Hover over a meeting for its details (time, place, organizer, link, description); click to keep them open. The calendar names below the timeline hide or show each one (saved as `CALENDAR_HIDDEN`); a hidden calendar doesn't take your time either.
   - Times are 24-hour unless you pick 12-hour under Settings → General (`CLEARSKY_TIME_FORMAT=12`).
   - **iCal link:** in Google Calendar, open Settings, pick your calendar, then **Integrate calendar**, and copy **Secret address in iCal format** into `GOOGLE_CALENDAR_ICS`. Several addresses can be given, separated by spaces. Workspace admins often turn this off.
-- **Slack (optional):** a user token, see below. Without `SLACK_TOKEN` the Slack part is skipped.
+- **Slack (optional):** a plugin that ships with Clearsky (`clearsky add slack`, or Settings → Plugins), with a user token, see below.
 
 ### Slack token
 
@@ -105,11 +105,11 @@ Done and snoozed items are saved in `~/.config/clearsky/state.json`, so the plan
 
 "Has feedback" on your PR means someone commented after your latest commit; once you push, the PR shows as waiting for review.
 
-The server also answers JSON on 127.0.0.1: `/api/source/<github|jira|jiraMentions|slack|calendar>`, `/api/plan`, `/api/work` (everything), `/api/standup`, `/api/issue/<KEY>`, `/api/pr?repo=<org/repo>&number=<n>` `/api/dismissed`, `/api/copilot/sessions` and `/api/copilot/sessions/<id>`. Add `?refresh=1` to skip the cache.
+The server also answers JSON on 127.0.0.1: `/api/source/<github|jira|jiraMentions|calendar|a plugin's name>`, `/api/plan`, `/api/work` (everything), `/api/standup`, `/api/issue/<KEY>`, `/api/pr?repo=<org/repo>&number=<n>` `/api/dismissed`, `/api/copilot/sessions` and `/api/copilot/sessions/<id>`. Add `?refresh=1` to skip the cache.
 
 ## Plugins
 
-Clearsky's core is GitHub, Jira, Slack, your calendars, Copilot and your links. Everything else is a plugin you add: a folder with a `clearsky-plugin.json` and one ES module, with no build step and no dependencies to install. School is the first one, and ships in [plugins/](plugins/).
+Clearsky's core is GitHub, Jira, your calendars, Copilot and your links. Everything else is a plugin you add: a folder with a `clearsky-plugin.json` and one ES module, with no build step and no dependencies to install. Three ship in [plugins/](plugins/): Slack (mentions), Grafana (logs and metrics for Copilot chats, through `grafana …`) and School. If Slack or Grafana was set up before it became a plugin, Clearsky adds it for you once.
 
 ```
 clearsky add github:someone/clearsky-weather     # a GitHub repo (#ref and /sub/folder work too)

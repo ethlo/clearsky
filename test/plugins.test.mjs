@@ -47,6 +47,11 @@ test('the manifest is checked before anything runs', () => {
   assert.throws(() => parseManifest({ name: 'ok', settings: { lower: {} } }), /UPPER_CASE/);
   assert.throws(() => parseManifest({ name: 'ok', outside: ' ' }), /why/);
   assert.throws(() => parseManifest('{nope'), /valid JSON/);
+  assert.throws(() => parseManifest({ name: 'ok', panel: { zone: 'track', page: false } }), /page can be false/);
+  assert.equal(parseManifest({ name: 'ok', panel: { zone: 'needs', page: false } }).panel.page, false);
+  assert.throws(() => parseManifest({ name: 'ok', doors: [{ name: 'weather', about: 'x' }] }), /outside/);
+  assert.throws(() => parseManifest({ name: 'ok', outside: 'why', doors: [{ name: 'git', about: 'x' }] }), /doors/);
+  assert.deepEqual(parseManifest({ name: 'ok', outside: 'why', doors: [{ name: 'weather', about: 'x' }] }).doors.map((d) => d.name), ['weather']);
 });
 
 test('where a plugin comes from', () => {

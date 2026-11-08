@@ -35,7 +35,7 @@ function oneboxIndex() {
   // Pages in the menu, and Settings' tabs.
   for (const a of document.querySelectorAll('#nav a[data-nav], #side-personal a[data-nav]')) if (!a.hidden) add('page', a.querySelector('.lab')?.textContent, '', () => { location.hash = a.getAttribute('href') || '#'; });
   for (const [name, slug, words] of [['General', 'general', 'stand-up workday clock team pack demo'], ['GitHub', 'github', 'organizations token'], ['Jira', 'jira', 'atlassian acli'],
-    ['Calendar', 'google-calendar', 'ical gnome'], ['Plugins', 'plugins', 'slack school add'], ['Copilot', 'copilot', 'sandbox model folders doors'], ['Grafana', 'grafana', 'vpn'], ['Modules', 'modules', '']]) {
+    ['Calendar', 'google-calendar', 'ical gnome'], ['Plugins', 'plugins', 'slack school add'], ['Copilot', 'copilot', 'sandbox model folders doors'], ['VPN', 'vpn', 'grafana'], ['Modules', 'modules', '']]) {
     add('setting', `Settings: ${name}`, '', () => { location.href = `/settings#${slug}`; }, words);
   }
   // Skills: a new chat that runs it.

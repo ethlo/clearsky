@@ -24,7 +24,6 @@ import { branchesFor } from '../lib/branches.mjs';
 import { sandboxedCommand, sandboxEnded, stopSandbox, sandboxProxy, githubLogin, DEFAULT_DOMAINS, READ_DEFAULT, parseDomains } from '../lib/sandbox.mjs';
 import { VmImage, ChatVm, vmSupport, VM_DOMAINS, reapOrphans } from '../lib/vm.mjs';
 import { logWrite, readWrites } from '../lib/agent-log.mjs';
-import { manifest as grafanaManifest, createGrafana, parseInstances, parseTokens, parseCommand, sessionStore, USAGE as GRAFANA_USAGE } from '../lib/modules/grafana.mjs';
 import { cookieLogin } from '../lib/browser-login.mjs';
 import { redact } from '../lib/redact.mjs';
 import { vpnWatch, checkTarget } from '../lib/vpn.mjs';
@@ -79,25 +78,12 @@ const agentLogFile = join(dirname(stateFile), 'agent-writes.jsonl');
 // Files a chat wrote or you attached to it, for its Outputs (see chatOutputs).
 const agentFilesFile = join(dirname(stateFile), 'agent-files.jsonl');
 
-// Grafana (lib/modules/grafana.mjs): your environments and logins stay in your settings, here.
-const grafanaInstances = () => parseInstances(process.env.GRAFANA_INSTANCES, process.env.GRAFANA_ASK);
-const grafanaSessions = sessionStore(join(homedir(), '.config', 'clearsky', 'grafana-sessions.json'));
-const grafana = createGrafana({ instances: grafanaInstances, tokens: () => parseTokens(process.env.GRAFANA_TOKENS), sessions: grafanaSessions });
-// The VPN (lib/vpn.mjs): noticed, never managed. Modules listed in VPN_NEEDED_BY (and Grafana)
-// pause while it's off.
-const vpn = vpnWatch({ target: () => checkTarget(process.env, grafanaInstances().map((i) => i.url)) });
+// The VPN (lib/vpn.mjs): noticed, never managed. Modules listed in VPN_NEEDED_BY pause while
+// it's off, and plugins' doors (Grafana) say so. Checked against VPN_CHECK, else the first address
+// a plugin names (its vpnTargets() hook, such as your first Grafana).
+const pluginVpnTargets = () => [...(globalThis.clearskyPlugins?.sources.values() || [])].flatMap((p) => asList(hook(p, 'vpnTargets', makeContext(p).env)).filter((u) => typeof u === 'string'));
+const vpn = vpnWatch({ target: () => checkTarget(process.env, pluginVpnTargets()) });
 const needsVpn = (name) => String(process.env.VPN_NEEDED_BY || '').split(/[\s,]+/).includes(name);
-// Grafana browser logins kept alive: one read of your own user every 30 minutes while the VPN is on.
-// The last result per environment (ok, expired, unreachable) shows in Settings, so a lapsed login
-// is seen before Copilot needs it.
-const grafanaAlive = {};
-async function grafanaKeepAlive() {
-  const v = await vpn.check();
-  if (v.known && !v.up) return;
-  Object.assign(grafanaAlive, await grafana.keepAlive().catch(() => ({})));
-}
-setTimeout(grafanaKeepAlive, 60_000).unref();
-setInterval(grafanaKeepAlive, 30 * 6e4).unref();
 loadEnvFile(join(process.cwd(), '.env'));
 loadEnvFile(join(here, '..', '.env'));
 loadEnvFile(userEnvFile);
@@ -156,7 +142,7 @@ const config = buildConfig();
 // and your own single-file ones in ~/.config/clearsky/sources/*.mjs.
 const pluginDirs = pluginPaths();
 const migrated = migrateBundled(process.env, { paths: pluginDirs });
-if (migrated.length) console.error(`clearsky: ${migrated.join(', ')} ${migrated.length === 1 ? 'is' : 'are'} a plugin now, and added for you since ${migrated.length === 1 ? 'it was' : 'they were'} set up`);
+if (migrated.length) console.error(`clearsky: ${migrated.join(', ')} ${migrated.length === 1 ? 'is a plugin' : 'are plugins'} now, and added for you since ${migrated.length === 1 ? 'it was' : 'they were'} set up`);
 const plugins = await loadSources([process.env.CLEARSKY_SOURCES_DIR || join(homedir(), '.config', 'clearsky', 'sources')]);
 {
   const added = await loadPlugins({ paths: pluginDirs, makeSandboxed: sandboxedSource({ root: pluginDirs.root, standupSince: () => previousStandup() }) });
@@ -167,6 +153,7 @@ const plugins = await loadSources([process.env.CLEARSKY_SOURCES_DIR || join(home
   plugins.errors.push(...added.errors);
 }
 for (const e of plugins.errors) console.error(`clearsky: ${e}`);
+globalThis.clearskyPlugins = plugins;
 for (const p of plugins.sources.values()) settings.addFields(p.settings, p.label);
 
 // ---------------------------------------------------------------- helpers
@@ -344,7 +331,6 @@ const BUILTIN_MANIFESTS = [
   githubManifest,
   jiraManifest,
   calendarManifest,
-  grafanaManifest,
   { name: 'copilot', label: 'Copilot', area: 'work', secrets: [{ kind: 'cli-login', note: 'none from Clearsky (its tokens are removed from Copilot\'s environment); Copilot keeps its own login in ~/.copilot or the keyring' }],
     hosts: ['*.githubcopilot.com', 'github.com'], clis: ['copilot'], files: ['~/.copilot', 'your Copilot folders'],
     note: 'Settings → Copilot → Sandbox limits it to your folders and listed hosts.' },
@@ -946,13 +932,18 @@ function sendFile(res, file) {
 const sourceLogins = new Map();
 
 async function loginStatus() {
-  return Promise.all([...plugins.sources.values()].filter((p) => p.login).map(async (p) => {
+  const many = [...plugins.sources.values()].filter((p) => p.logins?.list).map((p) => {
+    let list = [];
+    try { list = asList(p.logins.list(makeContext(p).env)); } catch { /* shows none */ }
+    return { name: p.name, label: p.label, many: list.map((l) => ({ id: String(l.id), label: String(l.label || l.id), loggedIn: !!l.loggedIn, detail: String(l.detail || ''), canLogOut: !!l.canLogOut })) };
+  });
+  return [...many, ...await Promise.all([...plugins.sources.values()].filter((p) => p.login).map(async (p) => {
     let st = {};
     try { st = (await p.login.status?.(makeContext(p).env)) || {}; } catch (e) { st = { detail: e.message }; }
     const run = sourceLogins.get(p.name);
     return { name: p.name, label: p.label, button: p.login.label || 'Log in', loggedIn: !!st.loggedIn, detail: st.detail || '',
       running: run?.state === 'running', error: run?.state === 'error' ? run.message : null };
-  }));
+  }))];
 }
 
 // Join a team pack (lib/team.mjs): settings through the settings file, links and skills too.
@@ -961,7 +952,8 @@ function joinTeam(from) {
     confDir: dirname(userEnvFile), skillsDir: join(homedir(), '.copilot', 'skills'),
     readEnv: () => Object.fromEntries(TEAM_KEYS.map((k) => [k, process.env[k] || ''])),
     writeEnv: (v) => { settings.writeEnvFile(userEnvFile, v); applySettings(v); },
-    validate: settings.validate, readLinks: () => readLinks(linksFile()), saveLinks: (d) => saveLinks(linksFile(), d),
+    // A team setting for a plugin you haven't added is left out.
+    validate: (w) => settings.validate(Object.fromEntries(Object.entries(w).filter(([k]) => settings.FIELDS[k]))), readLinks: () => readLinks(linksFile()), saveLinks: (d) => saveLinks(linksFile(), d),
   });
 }
 
@@ -1140,7 +1132,7 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   // asks you in this chat. The key tells Clearsky which chat a request comes from.
   const key = randomBytes(16).toString('hex');
   if (process.platform === 'linux') {
-    broker ||= serveBroker({ bins: { acli: config.jira.acli }, allow: assistedAllow, ask: brokerAsk, where: brokerWhere, vm: vmSupport().ok ? vmRun : null, grafana: grafanaRun, review: reviewRun, usage: usageRun, log: console.log });
+    broker ||= serveBroker({ bins: { acli: config.jira.acli }, allow: assistedAllow, ask: brokerAsk, where: brokerWhere, vm: vmSupport().ok ? vmRun : null, doors: pluginDoor, review: reviewRun, usage: usageRun, log: console.log });
     Object.assign(env, { CLEARSKY_BROKER_SOCKET: brokerSocket(), CLEARSKY_BROKER_KEY: key });
     env.PATH = `${join(here, '..', 'scripts', 'sandbox-bin')}${delimiter}${env.PATH}`;
   }
@@ -1498,37 +1490,43 @@ function brokerAsk({ key, tool, argv, cwd, vm = false }) {
   });
 }
 
-// `grafana …` from a chat (lib/broker.mjs): checked, VPN noticed, production asked, secrets
-// removed, and every call in the agent log (reads too: they're as you).
-async function grafanaRun({ key, argv }) {
+// Plugins' doors (lib/broker.mjs): commands chats call through Clearsky, such as `grafana …`.
+// Only from plugins that run inside Clearsky and list the door in their manifest. The door
+// decides what to ask (with the chat's card); Clearsky removes secrets from what goes back, cuts
+// it to size, and puts every call in the agent log (reads too: they're as you).
+function doorsByName() {
+  const out = new Map();
+  for (const p of plugins.sources.values()) {
+    if (p.sandboxed || !p.doors) continue;
+    for (const d of p.pluginManifest?.doors || []) if (typeof p.doors[d.name]?.run === 'function' && !out.has(d.name)) out.set(d.name, { p, door: p.doors[d.name] });
+  }
+  return out;
+}
+function pluginDoor(name) {
+  const found = doorsByName().get(name);
+  return found ? (req) => doorRun(found, req) : null;
+}
+async function doorRun({ p, door }, { key, name, argv }) {
   const c = chatByKey(key);
   if (!c) return { code: 1, stdout: '', stderr: 'Clearsky: this chat is closed.\n' };
-  const cmd = parseCommand(argv);
-  if (cmd.error) return { code: 2, stdout: '', stderr: `grafana: ${cmd.error}\n\n${GRAFANA_USAGE}\n` };
-  const line = ['grafana', ...argv].map((a) => (/^[\w@%+=:,./-]+$/.test(a) ? a : `'${a.replace(/'/g, `'\\''`)}'`)).join(' ');
-  const inst = cmd.env && grafana.find(cmd.env);
-  const log = (decided, extra = {}) => logWrite(agentLogFile, { where: 'grafana', what: line, target: inst?.name || null, chats: [chatRef(c)], decided, ...extra });
-  if (inst) {
-    const v = await vpn.check();
-    if (v.known && !v.up) {
-      log('vpn off');
-      return { code: 1, stdout: '', stderr: `Clearsky: Grafana ${inst.name} can't be reached: the VPN looks off (${v.why}). Tell the user to connect the VPN, then try again; don't work around it.\n` };
-    }
-    if (inst.asks && c.mode !== 'full') {
-      const ok = await askInChat(c, { title: `Read Grafana ${inst.name} as you`, detail: line,
-        advice: { level: 'check', text: `Check first: this reads ${inst.name}. Logs there can hold customer data, and secrets Clearsky doesn't know the shape of.` } });
-      if (!ok) { log('declined'); return { code: 1, stdout: '', stderr: `Clearsky: the user declined reading ${inst.name}. Ask what to do instead.\n` }; }
-    }
-  }
+  const line = [name, ...argv].map((a) => (/^[\w@%+=:,./-]+$/.test(a) ? a : `'${a.replace(/'/g, `'\\''`)}'`)).join(' ');
+  const log = (decided, extra = {}) => logWrite(agentLogFile, { where: name, door: p.name, what: line, chats: [chatRef(c)], decided, ...extra });
+  if (p.enabled && !p.enabled(process.env)) { log('not set up'); return { code: 1, stdout: '', stderr: `Clearsky: ${p.label} isn't set up yet (Settings → Other sources).\n` }; }
+  const ctx = {
+    env: makeContext(p).env, chat: { mode: c.mode },
+    ask: ({ title, detail = line, advice } = {}) => askInChat(c, { title: String(title || `${name} as you`), detail, ...(advice && { advice }) }),
+    vpn: () => vpn.check(),
+  };
   try {
-    const out = await grafana.run(cmd);
-    const { text, removed } = redact(out);
+    const r = (await door.run(argv, ctx)) || {};
+    const { text, removed } = redact(String(r.stdout ?? ''));
     const max = 200_000, cut = text.length > max;
-    log(inst?.asks ? 'allowed' : 'read', { removed });
-    return { code: 0, stdout: `${cut ? text.slice(-max) : text}\n`, stderr: `${removed ? `(Clearsky removed ${removed} secret${removed > 1 ? 's' : ''} from this output)\n` : ''}${cut ? '(output cut to its last 200k characters: narrow the query)\n' : ''}` };
+    log(r.decided || (r.code ? 'failed' : 'ran'), { target: r.target || null, removed });
+    return { code: Number.isInteger(r.code) ? r.code : 0, stdout: text ? `${cut ? text.slice(-max) : text}${text.endsWith('\n') ? '' : '\n'}` : '',
+      stderr: `${r.stderr || ''}${removed ? `(Clearsky removed ${removed} secret${removed > 1 ? 's' : ''} from this output)\n` : ''}${cut ? '(output cut to its last 200k characters: narrow the query)\n' : ''}` };
   } catch (e) {
     log('failed');
-    return { code: 1, stdout: '', stderr: `grafana: ${e.message}\n` };
+    return { code: 1, stdout: '', stderr: `${name}: ${e.message}\n` };
   }
 }
 // `review …` from a chat (lib/review.mjs): a proper review by a fresh Copilot, in its own
@@ -1652,11 +1650,11 @@ function askInChat(c, { title, detail, advice = null }) {
     c.emit(ev);
   });
 }
-// What a sandboxed chat is told about Grafana, when you have it set up.
-const grafanaHint = () => {
-  const list = grafanaInstances();
-  return list.length ? ` To read logs and metrics of our environments (${list.map((i) => i.name).join(', ')}), use \`grafana\` (\`grafana help\` lists its commands): it runs LogQL and PromQL read only, through Clearsky, which holds the login; there is no ssh to servers. ${list.some((i) => i.asks) ? `Reading ${list.filter((i) => i.asks).map((i) => i.name).join(', ')} asks me each time, so ask for what you need in one go.` : ''}` : '';
-};
+// What a sandboxed chat is told about plugins' doors (Grafana's says which environments ask).
+const doorHints = () => [...doorsByName().values()].map(({ p, door }) => {
+  if (p.enabled && !p.enabled(process.env)) return '';
+  try { const h = door.hint?.(makeContext(p).env); return h ? ` ${h}` : ''; } catch { return ''; }
+}).join('');
 
 // A short-lived Copilot process, for listing or reading sessions.
 async function withAgent(bin, fn) {
@@ -2343,7 +2341,7 @@ function keepLoginsAlive() {
     if (typeof p.keepAlive !== 'function') continue;
     const next = () => setTimeout(async () => {
       if (!p.enabled || p.enabled(process.env)) {
-        try { logEvent(`${p.label}: login kept alive (${await p.keepAlive(makeContext(p))})`, { echo: false }); }
+        try { logEvent(`${p.label}: login kept alive (${await p.keepAlive({ ...makeContext(p), vpn: () => vpn.check() })})`, { echo: false }); }
         catch (e) { logEvent(`${p.label}: keeping the login alive failed: ${e.message}`, { echo: false }); }
       }
       next();
@@ -2636,7 +2634,7 @@ function serve() {
           const options = { model: body.model, effort: body.effort, permission: copilot.PERMISSIONS[body.permission] ? body.permission : 'ask',
             allow: list(body.allow), deny: list(body.deny) };
           // The first turn carries the dashboard so Copilot knows what you're looking at.
-          const sandboxHint = process.env.COPILOT_SANDBOX === 'srt' || body.permission === 'sandboxed' ? `\n\n${SANDBOX_HINT}${grafanaHint()}${process.env.COPILOT_DISCLOSE === 'on' ? ` ${DISCLOSE_HINT}` : ''}` : '';
+          const sandboxHint = process.env.COPILOT_SANDBOX === 'srt' || body.permission === 'sandboxed' ? `\n\n${SANDBOX_HINT}${doorHints()}${process.env.COPILOT_DISCLOSE === 'on' ? ` ${DISCLOSE_HINT}` : ''}` : '';
           const folders = foldersHint();
           // A Copilot command (/compact, say) only works as the whole message: nothing goes in front.
           // The sandbox hint a resumed chat is owed then goes with the next message instead.
@@ -2688,26 +2686,16 @@ function serve() {
           localState.setRead(stateFile, marks);
           return json(res, 200, { ok: true });
         }
-        // Log in to a Grafana in a browser window; the login cookie stays in Clearsky's settings.
-        if (url.pathname === '/api/grafana/login') {
-          const { name } = await readJson(req);
-          const inst = grafana.find(String(name || ''));
-          if (!inst) return json(res, 400, { error: 'no such Grafana environment' });
-          const host = new URL(inst.url).hostname;
-          const cookie = await cookieLogin({ url: `${inst.url}/login`, profile: join(homedir(), '.config', 'clearsky', 'browser'), pick: (cookies) => {
-            const k = cookies.find((x) => x.name === 'grafana_session' && x.value && host.endsWith(x.domain.replace(/^\./, '')));
-            return k && `grafana_session=${k.value}`;
-          } }).catch((e) => ({ error: e.message }));
-          if (cookie.error) return json(res, 400, cookie);
-          grafanaSessions.set(inst.name, cookie);
-          delete grafanaAlive[inst.name];
-          const me = await grafana.call(inst, '/api/user').catch((e) => ({ error: e.message }));
-          return json(res, me.error ? 400 : 200, me.error ? me : { ok: true, login: me.login || me.email || null });
-        }
-        if (url.pathname === '/api/grafana/logout') {
-          const { name } = await readJson(req);
-          if (grafana.find(String(name || ''))) grafanaSessions.set(String(name), null);
-          return json(res, 200, { ok: true });
+        // A plugin with several logins (one per Grafana environment): log in to one, or out.
+        const multi = url.pathname.match(/^\/api\/source\/([a-z][a-z0-9-]+)\/logins$/);
+        if (multi) {
+          const p = plugins.sources.get(multi[1]);
+          const { id, action } = await readJson(req);
+          if (!p?.logins || typeof id !== 'string') return json(res, 404, { error: 'no such login' });
+          try {
+            const r = action === 'stop' ? await p.logins.stop?.(id, makeContext(p).env) : await p.logins.start(id, makeContext(p).env);
+            return json(res, 200, { ok: true, detail: r?.detail || '', ...await settingsStatus() });
+          } catch (e) { return json(res, 400, { error: e.message }); }
         }
         // Copilot's memory (lib/memory.mjs): the whole file from Settings, or notes from a card's Save.
         if (url.pathname === '/api/copilot/memory') {
@@ -2806,10 +2794,6 @@ function serve() {
       }
       if (url.pathname === '/api/settings') return json(res, 200, await settingsStatus());
       if (url.pathname === '/api/vpn') return json(res, 200, await vpn.check(url.searchParams.has('now')));
-      if (url.pathname === '/api/grafana') {
-        const tokens = parseTokens(process.env.GRAFANA_TOKENS);
-        return json(res, 200, { instances: grafanaInstances().map((i) => ({ name: i.name, host: new URL(i.url).host, asks: i.asks, login: grafanaSessions.get(i.name)?.at || null, alive: grafanaAlive[i.name] || null, token: !!tokens[i.name] })) });
-      }
       if (url.pathname === '/settings') {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
         return res.end(settingsPage);
