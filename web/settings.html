@@ -41,6 +41,17 @@
   .cal-list small { color: var(--muted); font-size: 12px; }
   .hint { color: var(--muted); font-size: 12.5px; margin: 6px 0 0; }
   .hint.warn { color: var(--amber); }
+  /* Lists and maps: a row per item. */
+  .ed { display: flex; flex-direction: column; gap: 6px; }
+  .ed-row { display: flex; gap: 6px; align-items: center; }
+  .ed-row input { flex: 1; min-width: 0; }
+  .ed-row .ed-eq { color: var(--muted); }
+  section button.ed-x { width: 30px; padding: 0; justify-content: center; color: var(--muted); flex: none; }
+  section button.ed-add { align-self: flex-start; height: 26px; font-size: 12.5px; color: var(--text-2); }
+  .ed-empty { color: var(--muted); font-size: 12.5px; }
+  .ed-pick { flex-direction: row; flex-wrap: wrap; gap: 6px 18px; }
+  .ed-pick label { display: flex; gap: 6px; align-items: center; margin: 0; font-size: 13.5px; font-weight: 400; color: var(--text); }
+  .ed-pick input { width: auto; margin: 0; }
   /* Plugins: one list, and a page for each laid out the same way. */
   .plugs { margin-top: 12px; font-size: 12.5px; border-bottom: 1px solid var(--line); }
   .pl { display: grid; grid-template-columns: 150px minmax(0, 1fr) auto auto 10px; gap: 10px; align-items: baseline; padding: 9px 4px; border-top: 1px solid var(--line); color: var(--text); }
@@ -130,12 +141,12 @@
         <button id="gh-login">Log in with GitHub</button>
         <span class="msg" id="gh-msg"></span>
       </div>
-      <label for="GITHUB_ORGS">Work organizations (comma-separated; empty means all)</label>
-      <input id="GITHUB_ORGS" data-key="GITHUB_ORGS" placeholder="acme">
+      <label for="GITHUB_ORGS">Work organizations</label>
+      <input id="GITHUB_ORGS" data-key="GITHUB_ORGS" data-list data-item="acme" placeholder="all of them">
       <label for="GITHUB_MY_PRS">Your PRs</label>
       <select id="GITHUB_MY_PRS" data-key="GITHUB_MY_PRS"><option value="">Only in the work organizations</option><option value="all">Everywhere (also your own repos)</option></select>
       <label for="GITHUB_BUILD_REPOS">Repos on the Builds page</label>
-      <input id="GITHUB_BUILD_REPOS" data-key="GITHUB_BUILD_REPOS" placeholder="the ones your PRs and reviews are in" spellcheck="false" title="Comma-separated, like acme/api, acme/web. Each shows how its main branch builds and its newest artifact and release.">
+      <input id="GITHUB_BUILD_REPOS" data-key="GITHUB_BUILD_REPOS" data-list data-words data-item="acme/api" placeholder="the ones your PRs and reviews are in" spellcheck="false" title="Each shows how its main branch builds and its newest artifact and release.">
       <label for="GITHUB_TOKEN">Or a personal access token instead of the gh login (optional)</label>
       <input id="GITHUB_TOKEN" data-key="GITHUB_TOKEN" type="password" autocomplete="off" placeholder="leave empty to keep">
       <div class="row"><button class="save" data-keys="GITHUB_ORGS,GITHUB_MY_PRS,GITHUB_BUILD_REPOS,GITHUB_TOKEN">Save</button><span class="msg"></span></div>
@@ -160,7 +171,7 @@
           On a shared calendar (one not named after your address, like "Family"), events only take your time when you're invited,
           or when one of these names is in the title; the rest just show in the agenda.</p>
         <label for="CALENDAR_MY_NAMES">Your names in shared calendar titles</label>
-        <input id="CALENDAR_MY_NAMES" data-key="CALENDAR_MY_NAMES" placeholder="Alex, Dad">
+        <input id="CALENDAR_MY_NAMES" data-key="CALENDAR_MY_NAMES" data-list data-item="Alex">
       </div>
       <input type="hidden" id="EVOLUTION_CALENDARS" data-key="EVOLUTION_CALENDARS">
       <div class="row"><button class="save" data-keys="CALENDAR_EMAIL,EVOLUTION_CALENDARS,CALENDAR_MY_NAMES">Save</button><span class="msg"></span></div>
@@ -193,15 +204,15 @@
     <input id="COPILOT_CWD" data-key="COPILOT_CWD" placeholder="the Clearsky folder" spellcheck="false">
     <p class="hint">Where a chat runs when it isn't about a PR or ticket. Chats about a PR or ticket run in that repo's clone, or the worktree with the PR's branch. Clearsky's own skills (stand-up, triage) are available only from the Clearsky folder.</p>
     <label for="COPILOT_FOLDERS">Folders Copilot can change (read and write)</label>
-    <input id="COPILOT_FOLDERS" data-key="COPILOT_FOLDERS" placeholder="~/dev" spellcheck="false">
-    <p class="hint">Comma-separated, like <code>~/dev/work, ~/dev/mine</code>. Copilot can read and change files there, including worktrees next to your clones, without the "Access paths outside trusted directories" question. Commands and edits still follow the access mode. Empty means <code>~/dev</code>. Running chats pick changes up on their next message.</p>
+    <input id="COPILOT_FOLDERS" data-key="COPILOT_FOLDERS" data-list data-item="~/dev/work" placeholder="~/dev" spellcheck="false">
+    <p class="hint">Copilot can read and change files there, including worktrees next to your clones, without the "Access paths outside trusted directories" question. Commands and edits still follow the access mode. Empty means <code>~/dev</code>. Running chats pick changes up on their next message.</p>
     <p class="hint warn" id="copilot-unmounted" hidden></p>
     <label for="COPILOT_READ">Folders Copilot can only read</label>
-    <textarea id="COPILOT_READ" data-key="COPILOT_READ" rows="2" spellcheck="false" placeholder="~/dev/other-team, ~/notes"></textarea>
-    <p class="hint">Comma-separated. In the sandbox, Copilot can read these but not change them. It can also always read <span id="read-default"></span> (what it needs to run and build) and files outside your home, like <code>/usr/lib/jvm</code>. The rest of your home is hidden from it: mail, documents, browser profiles, shell history and logins. Maven still reaches your repositories: Copilot gets a copy of <code>~/.m2/settings.xml</code> without the passwords, and the sandbox adds your login on the way out, only to the hosts that login is for.</p>
+    <input id="COPILOT_READ" data-key="COPILOT_READ" data-list data-item="~/notes" placeholder="nothing more" spellcheck="false">
+    <p class="hint">In the sandbox, Copilot can read these but not change them. It can also always read <span id="read-default"></span> (what it needs to run and build) and files outside your home, like <code>/usr/lib/jvm</code>. The rest of your home is hidden from it: mail, documents, browser profiles, shell history and logins. Maven still reaches your repositories: Copilot gets a copy of <code>~/.m2/settings.xml</code> without the passwords, and the sandbox adds your login on the way out, only to the hosts that login is for.</p>
     <label for="COPILOT_ASSISTED_ALLOW">Never ask before</label>
-    <textarea id="COPILOT_ASSISTED_ALLOW" data-key="COPILOT_ASSISTED_ALLOW" rows="2" spellcheck="false" placeholder="e.g. acli jira workitem transition, git push"></textarea>
-    <p class="hint">In the sandbox, Copilot runs everything without asking, and asks you only at its doors out: <code>git push</code> and GitHub changes (held at the sandbox's network until you click Allow), Jira changes through <code>acli</code>, and <code>outside</code> (a command run on your machine, like tests that start Docker containers). Jira and <code>outside</code> commands that start like one of these (comma-separated) go through without asking. <code>outside</code> commands only match exactly, like <code>outside ./mvnw verify</code>.</p>
+    <input id="COPILOT_ASSISTED_ALLOW" data-key="COPILOT_ASSISTED_ALLOW" data-list data-item="acli jira workitem transition" placeholder="nothing" spellcheck="false">
+    <p class="hint">In the sandbox, Copilot runs everything without asking, and asks you only at its doors out: <code>git push</code> and GitHub changes (held at the sandbox's network until you click Allow), Jira changes through <code>acli</code>, and <code>outside</code> (a command run on your machine, like tests that start Docker containers). Jira and <code>outside</code> commands that start like one of these go through without asking. <code>outside</code> commands only match exactly, like <code>outside ./mvnw verify</code>.</p>
     <label for="COPILOT_SANDBOX">Sandbox</label>
     <select id="COPILOT_SANDBOX" data-key="COPILOT_SANDBOX"><option value="off">Off</option><option value="srt">Anthropic sandbox runtime (srt)</option></select>
     <p class="hint">With the sandbox on, Copilot and everything it runs can write only in the chat's folder, the folders above, <code>~/.copilot</code> and <code>/tmp</code>, can read only the parts of your home listed under <b>Also readable</b> (never <code>~/.ssh</code>, keyrings, browser profiles or Clearsky's own settings), and can reach only the hosts below. That holds in every access mode, Full included. The <b>Sandboxed</b> access mode always runs in it, and then runs every step inside without asking; only its doors out ask (see <b>Never ask before</b>). srt comes with Clearsky (Linux also needs <code>bubblewrap</code>, <code>socat</code> and <code>ripgrep</code>). Hosts are checked by name only: an allowed host can be written to as well as read. Your GitHub login never enters it: Copilot, git and gh inside get stand-ins, and the sandbox's proxy adds your <code>gh</code> login on the way to GitHub. Reading GitHub goes through; a push or any change (a PR, a comment, a review) waits until you click Allow in the chat. Inside it, git reaches GitHub over https instead of ssh.</p>
@@ -212,13 +223,13 @@
     <select id="COPILOT_DISCLOSE" data-key="COPILOT_DISCLOSE"><option value="">Off</option><option value="on">On: last line of the PR description</option></select>
     <p class="hint">When a sandboxed chat is done, it ends the PR description (and the ticket description, if it wrote that) with a line like <i>Implemented with Copilot (Claude Opus 5.5). 939 credits used.</i> The model and credits come from the chat's own session log, through Clearsky. Applies to chats started after you switch it on.</p>
     <label for="COPILOT_DOMAINS">Hosts a sandboxed Copilot may reach</label>
-    <textarea id="COPILOT_DOMAINS" data-key="COPILOT_DOMAINS" rows="2" spellcheck="false"></textarea>
-    <p class="hint">Comma-separated, wildcards like <code>*.atlassian.net</code> allowed. Empty means Copilot, GitHub and your Jira site. Add package registries (say <code>repo.maven.apache.org</code>, <code>registry.npmjs.org</code>) if builds need them.</p>
+    <input id="COPILOT_DOMAINS" data-key="COPILOT_DOMAINS" data-list data-words data-item="registry.npmjs.org" spellcheck="false">
+    <p class="hint">Wildcards like <code>*.atlassian.net</code> are allowed. Empty means Copilot, GitHub and your Jira site. Add package registries (say <code>repo.maven.apache.org</code>, <code>registry.npmjs.org</code>) if builds need them.</p>
     <label for="COPILOT_VM_IMAGES">Images the VM copies from your Docker</label>
-    <textarea id="COPILOT_VM_IMAGES" data-key="COPILOT_VM_IMAGES" rows="2" spellcheck="false" placeholder="registry.example.com/team/"></textarea>
-    <p class="hint">Comma-separated, for private images tests need (say from your company's registry): a whole image like <code>registry.example.com/team/app:main</code>, or a name prefix like <code>registry.example.com/</code> (then the newest tag of each image there). Before each <code>vm</code> command, the ones your own Docker has are copied into the chat's VM if it doesn't have that version yet. Your registry login never goes in the VM. The VM gets what your Docker has: <code>docker pull</code> on your machine when the image changes.</p>
+    <input id="COPILOT_VM_IMAGES" data-key="COPILOT_VM_IMAGES" data-list data-item="registry.example.com/team/" placeholder="none" spellcheck="false">
+    <p class="hint">For private images tests need (say from your company's registry): a whole image like <code>registry.example.com/team/app:main</code>, or a name prefix like <code>registry.example.com/</code> (then the newest tag of each image there). Before each <code>vm</code> command, the ones your own Docker has are copied into the chat's VM if it doesn't have that version yet. Your registry login never goes in the VM. The VM gets what your Docker has: <code>docker pull</code> on your machine when the image changes.</p>
     <label for="COPILOT_GATE_RULES">Let through without asking</label>
-    <textarea id="COPILOT_GATE_RULES" data-key="COPILOT_GATE_RULES" rows="2" spellcheck="false" placeholder="nothing yet"></textarea>
+    <input id="COPILOT_GATE_RULES" data-key="COPILOT_GATE_RULES" data-list data-words data-item="repo:owner/name" placeholder="nothing yet" spellcheck="false">
     <p class="hint">Kinds of change you said to always allow, from the <b>Allow, and always for…</b> button on a card. Each still shows in the chat and in <b>Copilot's changes</b>. <code>merge-ready</code>: merging a PR of the chat's repo when CI is green, it's approved and has no conflicts. <code>delete-merged-branch</code>: deleting a branch whose PR is merged. <code>repo:owner/name</code>: everyday changes to that repo from any chat. <code>jira:KEY</code>: changes to tickets in that Jira project. Remove one to be asked again.</p>
     <label for="COPILOT_VM_CPUS">VM size: cores and memory (GB)</label>
     <div class="row"><input id="COPILOT_VM_CPUS" data-key="COPILOT_VM_CPUS" inputmode="numeric" spellcheck="false" style="max-width:8em"> <input id="COPILOT_VM_MEMORY_GB" data-key="COPILOT_VM_MEMORY_GB" aria-label="VM memory in GB" inputmode="decimal" spellcheck="false" style="max-width:8em"></div>
@@ -239,9 +250,9 @@
     <h2>VPN <span class="state" id="vpn-state"></span></h2>
     <label for="VPN_CHECK">VPN check</label>
     <input id="VPN_CHECK" data-key="VPN_CHECK" spellcheck="false" placeholder="the first host a plugin names, such as your first Grafana">
-    <p class="hint">A host (or URL) behind your work VPN. Off the VPN it either can't be reached or refuses you with 403, as many work sites do at their load balancer; then the menu says <b>VPN off</b>, the modules listed next pause instead of failing, plugins' doors (Grafana) say so, and Copilot is told to ask you to connect. Clearsky never runs the VPN itself.</p>
-    <label for="VPN_NEEDED_BY">Modules that need the VPN</label>
-    <input id="VPN_NEEDED_BY" data-key="VPN_NEEDED_BY" spellcheck="false" placeholder="for example jira, github">
+    <p class="hint">A host (or URL) behind your work VPN. Off the VPN it either can't be reached or refuses you with 403, as many work sites do at their load balancer; then the menu says <b>VPN off</b>, the plugins ticked next pause instead of failing, plugins' doors (Grafana) say so, and Copilot is told to ask you to connect. Clearsky never runs the VPN itself.</p>
+    <label for="VPN_NEEDED_BY">Plugins that need the VPN</label>
+    <input id="VPN_NEEDED_BY" data-key="VPN_NEEDED_BY" data-pick="plugins" spellcheck="false">
     <div class="row"><button class="save" data-keys="VPN_CHECK,VPN_NEEDED_BY">Save</button><span class="msg"></span></div>
   </section>
 </main>
@@ -415,8 +426,98 @@ function render(s) {
 
   S.settings = s;
   drawPlugins();
+  drawEditors();
   clearTimeout(render.poll);
   if ((s.logins || []).some((l) => l.running)) render.poll = setTimeout(load, 2000);
+}
+
+// Lists and maps are edited as lists and maps: a row per item (name and value for a map), with
+// + Add and ×. The field that's saved stays hidden behind them and holds what the settings file
+// keeps ("a, b" and "a=x, b=y"). data-pick="plugins" is a set to tick, from the plugins.
+//   data-list           a list; data-words also splits what was saved on spaces
+//   data-map            a map of name=value
+//   data-item, data-value   example item (and value), shown in an empty row
+//   placeholder         what an empty list means
+function editor(input) {
+  if (input.ed) return input.ed;
+  const kind = 'map' in input.dataset ? 'map' : 'pick' in input.dataset ? 'pick' : 'list';
+  const box = document.createElement('div');
+  box.className = kind === 'pick' ? 'ed ed-pick' : 'ed';
+  input.after(box);
+  input.hidden = true;
+  const label = document.querySelector(`label[for="${CSS.escape(input.id)}"]`)?.textContent || '';
+  const parse = (v) => (kind === 'map'
+    ? v.split(/\s*[\n,]\s*/).filter(Boolean).map((x) => { const i = x.indexOf('='); return i < 0 ? [x.trim(), ''] : [x.slice(0, i).trim(), x.slice(i + 1).trim()]; })
+    : v.split('words' in input.dataset || kind === 'pick' ? /[\s,]+/ : /\s*[\n,]\s*/).map((x) => x.trim()).filter(Boolean));
+  const sync = () => {
+    if (kind === 'pick') input.value = [...box.querySelectorAll('input:checked')].map((c) => c.value).join(', ');
+    else input.value = [...box.querySelectorAll('.ed-row')].map((r) => {
+      const [k, v] = [...r.querySelectorAll('input')].map((i) => i.value.trim());
+      return kind === 'map' ? (k ? `${k}=${v}` : '') : k;
+    }).filter(Boolean).join(', ');
+    input.shown = input.value;
+  };
+  const field = (value, ph, aria) => {
+    const i = document.createElement('input');
+    i.value = value; i.placeholder = ph; i.spellcheck = false; i.setAttribute('aria-label', aria);
+    return i;
+  };
+  const empty = () => {
+    const none = !box.querySelector('.ed-row');
+    let note = box.querySelector('.ed-empty');
+    if (none && input.placeholder && !note) { note = Object.assign(document.createElement('span'), { className: 'ed-empty' }); box.prepend(note); }
+    if (note && (!none || !input.placeholder)) note.remove();
+    else if (note) note.textContent = `Empty: ${input.placeholder}`;
+  };
+  const row = (item) => {
+    const r = document.createElement('div');
+    r.className = 'ed-row';
+    const [k, v] = kind === 'map' ? item : [item];
+    r.append(field(k, input.dataset.item || '', kind === 'map' ? `${label}: name` : label));
+    if (kind === 'map') r.append(Object.assign(document.createElement('span'), { className: 'ed-eq', textContent: '=' }), field(v, input.dataset.value || '', `${label}: value`));
+    const x = Object.assign(document.createElement('button'), { type: 'button', className: 'secondary ed-x', textContent: '×', title: 'Remove' });
+    x.setAttribute('aria-label', 'Remove');
+    x.onclick = () => { r.remove(); sync(); empty(); };
+    r.append(x);
+    return r;
+  };
+  const add = (focus) => { const r = row(kind === 'map' ? ['', ''] : ''); box.querySelector('.ed-add').before(r); empty(); if (focus) r.querySelector('input').focus(); return r; };
+  box.addEventListener('input', sync);
+  box.addEventListener('change', sync);
+  // Enter in the last row adds another, as in a list you type down.
+  box.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || kind === 'pick' || e.target.tagName !== 'INPUT') return;
+    e.preventDefault();
+    const r = e.target.closest('.ed-row'), inputs = [...r.querySelectorAll('input')];
+    if (e.target !== inputs.at(-1)) { inputs[inputs.indexOf(e.target) + 1].focus(); return; }
+    (r.nextElementSibling?.classList.contains('ed-row') ? r.nextElementSibling.querySelector('input') : add(true).querySelector('input')).focus();
+  });
+  const draw = () => {
+    box.innerHTML = '';
+    if (kind === 'pick') {
+      // The plugins to tick, and anything saved that isn't one (so it isn't lost).
+      const have = parse(input.value), all = (S.plugins?.all || []).filter((p) => p.added).map((p) => [p.name, p.label]);
+      for (const n of have) if (!all.some(([a]) => a === n)) all.push([n, n]);
+      box.innerHTML = all.map(([n, l]) => `<label><input type="checkbox" value="${esc(n)}"${have.includes(n) ? ' checked' : ''}> ${esc(l)}</label>`).join('') || '<span class="ed-empty">No plugins yet.</span>';
+      input.shown = input.value;
+      return;
+    }
+    for (const item of parse(input.value)) box.append(row(item));
+    const plus = Object.assign(document.createElement('button'), { type: 'button', className: 'secondary ed-add', textContent: '+ Add' });
+    plus.onclick = () => add(true);
+    box.append(plus);
+    empty();
+    input.shown = input.value;
+  };
+  return (input.ed = { draw, kind, empty: () => kind !== 'pick' && empty() });
+}
+// Draws each editor again when its saved value changed underneath it (loaded, or saved and tidied).
+function drawEditors(root = document) {
+  for (const i of root.querySelectorAll('[data-list],[data-map],[data-pick]')) {
+    const e = editor(i);
+    if (i.value !== i.shown || (e.kind === 'pick' && S.plugins && !i.picked)) { if (e.kind === 'pick' && S.plugins) i.picked = true; e.draw(); }
+    else e.empty(); // its placeholder may have come since
+  }
 }
 
 // Plugins: one list of everything Clearsky reads from, Clearsky's own included, and a page for
@@ -479,8 +580,10 @@ function loginHtml(l) {
 function setupHtml(p, fields) {
   if (!p.added) return `<div class="row"><button data-plug-add="${esc(p.name)}">Add ${esc(p.label)}</button><span class="msg"></span></div><div class="pp-preview"></div>`;
   if (!p.loaded) return `<div class="row"><button data-restart>Restart to load</button><span class="msg">Clearsky loads plugins when it starts.</span></div>`;
+  const kind = (f) => (f.secret ? ' type="password" autocomplete="off"' : f.type === 'list' ? ` data-list data-item="${esc(f.item || '')}" placeholder="${esc(f.empty || '')}"`
+    : f.type === 'map' ? ` data-map data-item="${esc(f.item || '')}" data-value="${esc(f.valueItem || '')}" placeholder="${esc(f.empty || '')}"` : '');
   return `${fields.map((f) => `<label for="${esc(f.key)}">${esc(f.label)}</label>
-    <input id="${esc(f.key)}" data-key="${esc(f.key)}"${f.secret ? ' type="password" autocomplete="off"' : ''}>
+    <input id="${esc(f.key)}" data-key="${esc(f.key)}"${kind(f)}>
     ${f.link ? `<p class="hint"><a href="${esc(f.link.url)}" target="_blank" rel="noopener">${esc(f.link.label)}</a></p>` : ''}
     ${f.hint ? `<p class="hint">${esc(f.hint)}</p>` : ''}`).join('')}
     ${fields.length ? `<div class="row"><button class="save" data-keys="${esc(fields.map((f) => f.key).join(','))}">Save</button><span class="msg"></span></div>` : ''}
@@ -524,6 +627,7 @@ function drawPlugins() {
         setup.innerHTML = setupHtml(p, fields);
         for (const f of fields) if (!f.secret) setup.querySelector(`#${CSS.escape(f.key)}`).value = f.value || '';
       }
+      drawEditors(setup);
     }
     for (const f of fields) {
       const el = setup.querySelector(`#${CSS.escape(f.key)}`);
@@ -535,6 +639,7 @@ function drawPlugins() {
     if (none) none.hidden = !!mine.length;
     pg.querySelector('.pp-reach').innerHTML = reachHtml(p.reach);
   }
+  drawEditors();
   showPlugin();
 }
 // #plugins/<name> opens that plugin's page; #plugins the list.

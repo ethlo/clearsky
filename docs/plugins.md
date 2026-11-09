@@ -80,7 +80,7 @@ clearsky-weather/
 | `entry` | Its module, inside the folder. |
 | `area` | `work` or `personal` (default): which tab its page is on. |
 | `panel` | Its page: `title`, `zone` (`needs` puts its rows with what needs you, `track` keeps them on its page), `view: "table"` for an inbox, and `page: false` for a `needs` plugin whose rows need no page of their own (Slack's are in Mentions). |
-| `settings` | Fields on its page under Settings → Plugins, saved to `.env`. Only these reach the plugin. A field can have a `pattern` (a regular expression Settings checks) with a `patternHint`, and a `link` (`{ "label", "url" }`) to where you get the value. |
+| `settings` | Fields on its page under Settings → Plugins, saved to `.env`. Only these reach the plugin. A field can have a `pattern` (a regular expression Settings checks) with a `patternHint`, a `link` (`{ "label", "url" }`) to where you get the value, and a `type`: `"list"` or `"map"` get a row per item (a map's rows are a name and a value), saved as `a, b` and `a=x, b=y`. `item` and `valueItem` are examples shown in an empty row, and `empty` says what an empty list means. |
 | `enabledWhen` | Settings that must be filled in before Clearsky fetches anything. |
 | `hosts` | All it may reach. `*.example.com` covers the subdomains. |
 | `clis` | Programs it may run through `ctx.run`. |
