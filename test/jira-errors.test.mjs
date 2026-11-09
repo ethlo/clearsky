@@ -17,7 +17,7 @@ test('acli errors say what acli said, also when it says it on stdout', () => {
 
 test('acli errors with nothing said give the exit code, and timeouts say so', () => {
   assert.equal(acliError(search, failed(search, { code: 2 })).message, 'acli jira workitem search failed: exited with 2 and said nothing');
-  assert.equal(acliError(search, failed(search, { code: null, killed: true, signal: 'SIGTERM' })).message, 'acli jira workitem search failed: no answer within 60s (stopped). Does "acli jira auth status" answer quickly in a terminal?');
+  assert.equal(acliError(search, failed(search, { code: null, killed: true, signal: 'SIGTERM' })).message, 'acli jira workitem search failed: no answer within 90s (stopped). acli may not be reaching Jira: try logging in again');
   assert.equal(acliError(search, failed(search, { stderr: 'Error: bad JQL' })).auth, undefined);
 });
 
