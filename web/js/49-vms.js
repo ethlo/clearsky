@@ -1,6 +1,8 @@
 // VMs: every chat's VM for Docker builds (GET /api/vms, lib/vm-queue.mjs, lib/vm.mjs). How many
 // may run at once and how many chats wait in line for one; per running VM its CPU and memory and
-// the containers in it. The menu shows how many wait. Open, it looks again every 3 seconds.
+// the containers in it. The menu shows how many wait, and its icon turns green, orange or red with
+// the busiest VM's load (none while no VM runs). Open, it looks again every 3 seconds; closed,
+// every 15 seconds, for the menu.
 
 let vmsData = null, vmsLoading = false;
 
@@ -8,7 +10,7 @@ async function loadVms(quick = false) {
   if (vmsLoading) return;
   vmsLoading = true;
   if (!vmsData && !quick) $('#vms').innerHTML = skeleton(3);
-  try { vmsData = await getJson(`/api/vms${quick ? '?quick' : ''}`); } catch (e) { if (!quick) vmsData = { error: e.message, vms: [] }; }
+  try { vmsData = await getJson('/api/vms'); } catch (e) { if (!quick) vmsData = { error: e.message, vms: [] }; }
   finally { vmsLoading = false; }
   renderVms(quick);
 }
@@ -25,6 +27,14 @@ function renderVms(quick) {
   const d = vmsData;
   const n = $('#n-vms');
   if (n) { n.textContent = d?.waiting ? String(d.waiting) : ''; n.title = d?.waiting ? `${d.waiting} chat${d.waiting === 1 ? '' : 's'} waiting for a VM` : ''; }
+  // The menu item's colour: how hard the busiest running VM works (lib/vm.mjs vmsLoad).
+  const nav = $('[data-nav="vms"]'), L = d?.load;
+  if (nav) {
+    nav.classList.remove('load-ok', 'load-warm', 'load-hot');
+    if (L) nav.classList.add(`load-${L.level}`);
+    nav.title = L ? `VMs: ${d.running} running${d.waiting ? `, ${d.waiting} waiting` : ''}. Busiest: ${L.pct != null ? `${L.pct}% ${L.what}` : 'starting'}${L.title ? ` (${L.title})` : ''}`
+      : 'Copilot\'s VMs for builds with Docker: what runs in them and who waits for one';
+  }
   if (quick || $('#v-vms').hidden || !d) return;
   const el = $('#vms');
   if (d.error) { el.innerHTML = `<div class="err">${esc(d.error)}</div>`; return; }
@@ -79,5 +89,5 @@ $('#vms').addEventListener('click', async (e) => {
   if (a) { e.preventDefault(); openChat(true, true); openSession(a.dataset.chat); }
 });
 setInterval(() => { if (document.hidden) return; if (!$('#v-vms').hidden) loadVms(); }, 3000);
-setInterval(() => { if (!document.hidden && $('#v-vms').hidden) loadVms(true); }, 20_000);
+setInterval(() => { if (!document.hidden && $('#v-vms').hidden) loadVms(true); }, 15_000);
 loadVms(true);
