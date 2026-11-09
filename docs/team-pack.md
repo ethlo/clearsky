@@ -37,11 +37,33 @@ clearsky-team/
   "plugins": [
     "github:someone/clearsky-weather#v1.2.0",
     { "from": "./plugins/deploys", "note": "Our deploy board" }
-  ]
+  ],
+  "jira": { "site": "acme.atlassian.net" },
+  "gate": { "suggest": ["repo:acme/docs", "jira:PAY"] }
 }
 ```
 
-`clearsky team export --name "Payments team"` prints one made from your own settings; add `--links` to include your work links. Check it before you share it.
+## Starting one
+
+```sh
+clearsky team init ~/dev/clearsky-team --name "Payments team" \
+  --repo https://github.com/acme/clearsky-team --jira-site acme.atlassian.net [--links]
+```
+
+or Settings → General → **Make a team pack**. It writes a folder that's ready to push:
+
+```
+clearsky-team/
+  clearsky-team.json   from your settings: the ones a team may set, never a secret
+  README.md            for colleagues: install, log in, join, what joining changes
+  skills/README.md     put shared Copilot skills here
+  plugins/README.md    put work-only plugins here
+  .gitignore
+```
+
+The plugins you added are listed with where they come from and their pins (one that follows a branch is pointed out, and one added from a folder here is left out, since colleagues can't fetch it). Your "always" rules become the pack's suggestions, minus repos outside the team's organizations. A value that looks like a token or a password is left out and named. Look it through, run `node scripts/leak-check.mjs <folder>` from a Clearsky checkout once it's a git repo, then push it with the `gh repo create … --private` line it prints. Nothing is pushed for you.
+
+`clearsky team export --name "Payments team"` prints just the JSON from your own settings; add `--links` to include your work links.
 
 ## What joining does
 
@@ -49,6 +71,9 @@ clearsky-team/
 - **The sandbox:** extra hosts in `COPILOT_DOMAINS` or `COPILOT_VM_IMAGES` are named when you join, so you know the sandbox may reach them.
 - **Links** are added to your work links. Links you already have aren't added twice.
 - **Skills** are copied to `~/.copilot/skills`, so Copilot has them in every repo. A skill you already have with the same name is left alone.
+
+- **Suggested rules** (`gate.suggest`): kinds of change the team lets through without asking, such as a docs repo's everyday changes (`repo:acme/docs`) or one Jira project's tickets (`jira:PAY`). They're offered under Settings → Copilot → Let through without asking, each with **Add**; the pack never changes your gate itself.
+- **Jira** (`jira.site`): joining tells you which site to log in to with `acli`.
 
 - **Plugins** are offered, never added unseen. They show under Settings → Plugins → From *your team*, each with **Look at it**, and `clearsky add --team` goes through them in a terminal. You see what each one reaches before it's added, like any plugin.
 

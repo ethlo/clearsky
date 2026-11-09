@@ -1,6 +1,6 @@
 # Plugins
 
-Clearsky ships as a core (GitHub, Jira, calendars, Copilot, links) and everything else is a plugin you add. A plugin is a plain folder: a `clearsky-plugin.json` that says what it is and what it reaches, and one ES module that does the work. There's no build step and nothing to `npm install`; a plugin has no dependencies, like Clearsky itself. Three ship with Clearsky in `plugins/`: Slack, Grafana and School (`flyt`). If you had Slack or Grafana set up before they became plugins, Clearsky adds them for you once.
+Clearsky ships as a core (GitHub, Jira, calendars, Copilot, links) and everything else is a plugin you add. A plugin is a plain folder: a `clearsky-plugin.json` that says what it is and what it reaches, and one ES module that does the work. There's no build step and nothing to `npm install`; a plugin has no dependencies, like Clearsky itself. These have a repo of their own and are in Clearsky's catalog (`plugins/catalog.json`): Slack (MCP), Confluence, Grafana and Visma Flyt Skole. `clearsky add slack-mcp` adds one from its repo, at the version the catalog pins.
 
 ## Adding one
 
@@ -10,14 +10,14 @@ clearsky add github:someone/plugins/weather#v1.2  # a folder in a repo, at a tag
 clearsky add https://git.example.com/me/plug.git  # any git repo, fetched with your own git login
 clearsky add npm:clearsky-weather@1.2.0           # an npm package
 clearsky add ./my-plugin                          # a folder here
-clearsky add flyt                                 # one that ships with Clearsky
+clearsky add visma-flyt                               # one from the catalog: its repo, at the pinned tag
 ```
 
 Settings → Plugins does the same: paste where it comes from, **Look at it**, then **Add**. Either way Clearsky first fetches it and shows its manifest (hosts, programs, files, settings, and whether it runs in the sandbox), and nothing of the plugin has run yet: a git clone brings no hooks, and npm packages are fetched with `--ignore-scripts`. What you add is what you looked at. Clearsky loads plugins when it starts, so restart after adding one (Settings has the button).
 
 Settings → Plugins lists every plugin the same way, Clearsky's own GitHub, Jira, Calendar and Links included. Each has a page with how it's doing, its logins and settings, and what it holds and reaches.
 
-`clearsky plugins` lists what's added and what ships with Clearsky, `clearsky update [name]` fetches again from where it came from, and `clearsky remove name` takes it out (`--data` also removes what it kept).
+`clearsky plugins` lists what's added and what the catalog has, `clearsky update [name]` fetches again from where it came from, and `clearsky remove name` takes it out (`--data` also removes what it kept).
 
 A private repo on github.com works with your gh login: while fetching, git asks `gh auth git-credential` for it. Nothing is stored and there's no token to make. Other hosts use whatever login your git has.
 
@@ -151,7 +151,19 @@ A door has to be listed in the manifest's `doors`, needs `outside` (a sandboxed 
 
 ## Publishing one
 
-Put the folder in a git repo, and people add it with `clearsky add github:you/clearsky-weather`. Tag releases as `v1.2.0` (any `vX.Y.Z` or `X.Y.Z` tag counts) so people can pin one and see when there's a newer one, and don't move a tag once it's out. A plugin that's only for your company can live in a private repo, or in the team pack's own repo (see [team packs](team-pack.md)). For npm, add a `package.json` with a `files` list that has `clearsky-plugin.json` and your code, and `npm publish`; people add it with `clearsky add npm:clearsky-weather`. The plugins in `plugins/` each have their own `package.json`, so they can be published on their own the same way.
+Put the folder in a git repo, and people add it with `clearsky add github:you/clearsky-weather`. Tag releases as `v1.2.0` (any `vX.Y.Z` or `X.Y.Z` tag counts) so people can pin one and see when there's a newer one, and don't move a tag once it's out. A plugin that's only for your company can live in a private repo, or in the team pack's own repo (see [team packs](team-pack.md)). For npm, add a `package.json` with a `files` list that has `clearsky-plugin.json` and your code, and `npm publish`; people add it with `clearsky add npm:clearsky-weather`. The catalog's plugins are made that way: each `plugins/clearsky-<name>/` folder is a whole repo (manifest, code, README, LICENSE, tests and a CI workflow), and `node scripts/split-plugins.mjs` makes each one a git repo tagged with its version, printing the `gh repo create` commands to push them.
+
+## The catalog
+
+`plugins/catalog.json` names the plugins anyone gets with a short name, each pinned to a tag:
+
+```json
+{ "plugins": [{ "name": "flyt", "aka": ["visma-flyt"], "folder": "clearsky-visma-flyt", "from": "github:ethlo/clearsky-visma-flyt#v1.0.0" }] }
+```
+
+`clearsky add visma-flyt` is then `clearsky add github:ethlo/clearsky-visma-flyt#v1.0.0`. A new release of a plugin is a new tag in its repo and a one-line change to the pin here. Anyone who added a plugin from its folder in `plugins/` (before it had a repo) keeps it working from that folder, and gets **Move to its repo** in Settings → Plugins (or `clearsky add visma-flyt`). Once a folder is deleted from `plugins/`, a plugin still added from it says where it lives now. A plugin that's gone for good is listed under `retired` with what to use instead (`{ "name": "slack", "use": "slack-mcp", "why": "…" }`): anyone who still has it added is told, and its old name adds the new one.
+
+A plugin's tests that load it the way Clearsky does need a Clearsky checkout: `test/core.mjs` finds it in `CLEARSKY_CORE`, or in the Clearsky the folder sits in.
 
 ## What's next
 

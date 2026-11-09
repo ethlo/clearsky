@@ -183,7 +183,7 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
   // Settings → Plugins: one list with Clearsky's own and the plugins alike, a page for each; old addresses still land there.
   await page.goto(`${base}/settings#plugins`);
   await page.waitForSelector('#plugs a.pl[href="#plugins/github"]');
-  assert.ok(await page.locator('#plugs a.pl[href="#plugins/slack"]').count(), 'Slack is in the same list as GitHub');
+  assert.ok(await page.locator('#plugs a.pl[href="#plugins/slack-mcp"]').count(), 'Slack is in the same list as GitHub');
   await page.click('#plugs a.pl[href="#plugins/github"]');
   await page.waitForSelector('.pp[data-plugin="github"]:not([hidden]) #GITHUB_ORGS + .ed');
   assert.equal(await page.locator('#plug-list').isHidden(), true);

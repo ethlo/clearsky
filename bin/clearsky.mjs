@@ -9,10 +9,10 @@
 import { createServer } from 'node:http';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, realpathSync, statSync, readdirSync, rmSync } from 'node:fs';
 import { join, dirname, resolve, basename } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { homedir, availableParallelism, totalmem } from 'node:os';
 import { execFile, execFileSync, spawn } from 'node:child_process';
-import { delimiter } from 'node:path';
+import { delimiter, sep } from 'node:path';
 import { promisify } from 'node:util';
 import { randomBytes } from 'node:crypto';
 import * as settings from '../lib/settings.mjs';
@@ -46,7 +46,7 @@ import { githubFilter, REGISTRY_HOSTS, GITHUB_LOG_HOSTS, SHARED_BRANCH } from '.
 import { githubAdvice, jiraAdvice, outsideAdvice, parseRules, ruleLabel } from '../lib/advice.mjs';
 import { attentionItems, diffAttention, desktopNotify, DbusNotifier } from '../lib/notify.mjs';
 import { loadSources, makeContext, hook, asList } from '../lib/sources.mjs';
-import { loadPlugins, migrateBundled, pluginPaths, listPlugins, preparePlugin, removePlugin, updatePlugin, checkPlugin, readRegistry, withRef, changesText } from '../lib/plugins.mjs';
+import { loadPlugins, migrateBundled, pluginPaths, listPlugins, preparePlugin, removePlugin, updatePlugin, checkPlugin, readRegistry, withRef, changesText, catalogEntry, bundledDir, codeDir, retiredText } from '../lib/plugins.mjs';
 import { sandboxedSource, srtCli } from '../lib/plugin-sandbox.mjs';
 import { pluginItems } from '../lib/items.mjs';
 import { findBrowser, BROWSERS } from '../lib/browser.mjs';
@@ -57,6 +57,7 @@ import { startDemo, demoPort, isDemo } from '../lib/demo.mjs';
 import { checks as doctorChecks, suggestions as doctorSuggestions, doctorText, ready as doctorReady } from '../lib/doctor.mjs';
 import { edsCalendars } from '../lib/eds.mjs';
 import { joinPack, joinSummary, readTeam, exportPack, TEAM_KEYS, applyWaiting, pluginOffers } from '../lib/team.mjs';
+import { scaffoldPack, writeScaffold, nextSteps } from '../lib/team-scaffold.mjs';
 import { readHandoffs, saveHandoffs, addHandoff, nextHandoff, settleAfterRestart, handoffPrompt, handoffResult, updateHandoff } from '../lib/handoff.mjs';
 import { srtInstalled } from '../lib/doctor.mjs';
 import { ownRead, chatPushes } from '../lib/own-read.mjs';
@@ -156,6 +157,8 @@ const plugins = await loadSources([process.env.CLEARSKY_SOURCES_DIR || join(home
     else plugins.sources.set(n, p);
   }
   plugins.errors.push(...added.errors);
+  // A retired plugin still loads if you have its code, but says what to use instead.
+  for (const n of added.sources.keys()) { const t = retiredText(n); if (t) plugins.errors.push(t); }
 }
 for (const e of plugins.errors) console.error(`clearsky: ${e}`);
 globalThis.clearskyPlugins = plugins;
@@ -971,6 +974,15 @@ function joinTeam(from) {
 function teamWaiting() {
   try { const w = applyWaiting(dirname(userEnvFile), { teamKey, ...teamIo() }); if (w.length) logEvent(`team pack settings filled in for a plugin you added: ${w.join(', ')}`); }
   catch (e) { console.error(`clearsky: team pack settings: ${e.message}`); }
+}
+// A new team pack repo from your own settings (lib/team-scaffold.mjs): `clearsky team init` and Settings.
+function makeTeamPack({ dir, name, repo, jiraSite, links = false, force = false }) {
+  if (!dir) throw new Error('say which folder to write it to');
+  const env = Object.fromEntries(Object.keys(settings.FIELDS).filter((k) => process.env[k]).map((k) => [k, process.env[k]]));
+  const { pack, files, warnings } = scaffoldPack({ name: name || 'Team', repo, jiraSite, env, teamKeys: Object.keys(settings.FIELDS).filter(teamKey),
+    links: links ? readLinks(linksFile()) : null, registry: readRegistry(pluginDirs.registry).plugins, catalogFrom: (n) => catalogEntry(n)?.from || null });
+  const w = writeScaffold(dir, files, { force });
+  return { ...w, pack, warnings, next: nextSteps(w.dir, repo) };
 }
 // The team pack's plugins next to yours, for Settings → Plugins.
 const teamPlugins = () => { const t = readTeam(dirname(userEnvFile)); return t?.plugins?.length ? { name: t.name, plugins: pluginOffers(t.plugins, readRegistry(pluginDirs.registry).plugins) } : null; };
@@ -2658,11 +2670,13 @@ function pluginList() {
     ...added.filter((p) => !plugins.sources.has(p.name)).map((p) => ({
       name: p.name, label: p.label, description: p.description, area: p.manifest?.area || 'personal', kind: p.kind, from: p.from, version: p.version || '', commit: p.commit || null,
       run: p.run, added: true, loaded: false, ready: true, problem: p.problem, reach: shape(p.manifest) })),
-    ...available.map((p) => ({ name: p.name, label: p.label, description: p.description, area: p.manifest?.area || 'personal', kind: 'bundled', from: p.name,
+    ...available.map((p) => ({ name: p.name, label: p.label, description: p.description, area: p.manifest?.area || 'personal', kind: p.kind, from: p.from,
       version: p.manifest?.version || '', added: false, loaded: false, ready: false, reach: shape(p.manifest) })),
   ];
   const pins = readRegistry(pluginDirs.registry).plugins;
   for (const p of all) if (pins[p.name]?.pin && p.added) p.pin = pins[p.name].pin;
+  // Added from its folder here, and it has a repo of its own now: offer the move.
+  for (const p of all) if (p.kind === 'bundled' && p.added && !retiredText(p.name)) { const c = catalogEntry(p.name); if (c) p.moveTo = c.from; }
   return {
     all, added: added.map((p) => ({ ...strip(p), loaded: loaded(p) })),
     available: available.map(strip), errors: plugins.errors, sandbox: !!srtCli(), team: teamPlugins(),
@@ -2692,7 +2706,7 @@ async function pluginCommand(args) {
       const { added, available } = listPlugins({ paths: pluginDirs });
       say(added.length ? 'Added:' : 'No plugins added. `clearsky add <plugin>` adds one.');
       for (const p of added) say(`  ${p.name} ${p.version || ''}  ${p.run === 'inside' ? 'inside Clearsky' : 'sandboxed'}  from ${p.from}${p.commit ? ` @ ${p.commit.slice(0, 10)}` : ''}${p.problem ? `  (${p.problem})` : ''}`);
-      if (available.length) { say('Ship with Clearsky (`clearsky add <name>`):'); for (const p of available) say(`  ${p.name}  ${p.description}`); }
+      if (available.length) { say('To add (`clearsky add <name>`):'); for (const p of available) say(`  ${catalogEntry(p.name)?.aka[0] || p.name}  ${p.description}${p.kind === 'catalog' ? `  (${p.from})` : ''}`); }
       if (!srtCli()) say('The sandbox (srt) isn\'t installed, so sandboxed plugins won\'t run. `clearsky doctor` says how to get it.');
       return 0;
     }
@@ -3149,6 +3163,15 @@ function serve() {
           if (!src) return json(res, 400, { error: 'give the team pack: a git repo, an https link or a file' });
           if (isDemo()) return json(res, 400, { error: 'not in the demo' });
           try { const r = await joinTeam(src); return json(res, 200, { name: r.name, summary: joinSummary(r), result: r }); }
+          catch (e) { return json(res, 400, { error: e.message }); }
+        }
+        // Make a team pack: a new folder with the pack, a README for colleagues, skills and plugins.
+        if (url.pathname === '/api/team/scaffold') {
+          if (isDemo()) return json(res, 400, { error: 'not in the demo' });
+          const b = await readJson(req);
+          const dir = resolve(String(b.dir || '').trim().replace(/^~(?=\/|\\|$)/, homedir()));
+          if (!String(b.dir || '').trim() || !dir.startsWith(homedir() + sep)) return json(res, 400, { error: 'pick a folder in your home folder' });
+          try { return json(res, 200, makeTeamPack({ dir, name: String(b.name || '').trim(), repo: String(b.repo || '').trim(), jiraSite: String(b.jiraSite || '').trim(), links: !!b.links })); }
           catch (e) { return json(res, 400, { error: e.message }); }
         }
         // Try with demo data: the demo on a port of its own; the page opens it in a new tab.
@@ -3709,7 +3732,7 @@ async function dockerCommand([sub = 'up', ...rest]) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
   const args = process.argv.slice(2);
   if (args.includes('-h') || args.includes('--help')) {
-    console.log('usage: clearsky [--json] | clearsky try [--port N] [--no-open] | clearsky doctor [--json] | clearsky join [<team pack>] | clearsky team export [--name N] [--links] | clearsky add <plugin> [--trust] [--yes] | clearsky remove <plugin> [--data] | clearsky plugins | clearsky update [<plugin>] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky app [--port N] | clearsky docker [up|start|down|logs|login|mounts] [--port N] | clearsky school-handover | clearsky jira-debug');
+    console.log('usage: clearsky [--json] | clearsky try [--port N] [--no-open] | clearsky doctor [--json] | clearsky join [<team pack>] | clearsky team init <folder> [--name N] [--repo URL] [--links] | clearsky team export [--name N] [--links] | clearsky add <plugin> [--trust] [--yes] | clearsky remove <plugin> [--data] | clearsky plugins | clearsky update [<plugin>] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky app [--port N] | clearsky docker [up|start|down|logs|login|mounts] [--port N] | clearsky school-handover | clearsky jira-debug');
   } else if (args[0] === 'try') {
     // Clearsky with made-up data, in this terminal: Ctrl+C stops it.
     const p = args.indexOf('--port');
@@ -3729,6 +3752,20 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.a
         if (r.plugins.some((p) => p.state !== 'added')) console.log('Look at the team\'s plugins and add them with `clearsky add --team` (or in Settings → Plugins).');
       }
       catch (e) { console.error(`clearsky: ${e.message}`); process.exitCode = 1; }
+    }
+  } else if (args[0] === 'team' && args[1] === 'init') {
+    // clearsky team init <folder> [--name N] [--repo URL] [--jira-site S] [--links] [--force]
+    const opt = (f) => { const i = args.indexOf(f); return i > -1 ? args[i + 1] : undefined; };
+    const dir = args[2] && !args[2].startsWith('--') ? args[2] : null;
+    if (!dir) { console.error('usage: clearsky team init <folder> [--name "Payments team"] [--repo https://github.com/acme/clearsky-team] [--jira-site acme.atlassian.net] [--links] [--force]'); process.exitCode = 2; }
+    else {
+      try {
+        const r = makeTeamPack({ dir, name: opt('--name'), repo: opt('--repo'), jiraSite: opt('--jira-site'), links: args.includes('--links'), force: args.includes('--force') });
+        console.log(`Wrote ${r.pack.name}'s team pack to ${r.dir}: ${r.written.join(', ')}`);
+        for (const w of r.warnings) console.log(`  note: ${w}`);
+        console.log('\nLook through clearsky-team.json, then:\n');
+        for (const n of r.next) console.log(`  ${n}`);
+      } catch (e) { console.error(`clearsky: ${e.message}`); process.exitCode = 1; }
     }
   } else if (args[0] === 'team' && args[1] === 'export') {
     // A team pack from your own settings (and, with --links, your work links), to share.
@@ -3756,9 +3793,13 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.a
   } else if (['add', 'remove', 'plugins', 'update'].includes(args[0])) {
     process.exitCode = await pluginCommand(args);
   } else if (args[0] === 'school-handover') {
-    const { handOverLogin } = await import('../plugins/flyt/lib/flyt.mjs');
-    const where = await handOverLogin();
-    console.log(where ? `School login moved to ${where}; Clearsky's container takes it from there.` : 'No school login here to hand over.');
+    // The School plugin's own code, wherever it is: added from its repo, or its folder here.
+    const dir = [codeDir(pluginDirs.root, 'flyt'), bundledDir('flyt')].find((d) => d && existsSync(join(d, 'lib', 'flyt.mjs')));
+    if (!dir) { console.error('clearsky: the School plugin isn\'t added here (`clearsky add visma-flyt --trust`)'); process.exitCode = 1; } else {
+      const { handOverLogin } = await import(pathToFileURL(join(dir, 'lib', 'flyt.mjs')).href);
+      const where = await handOverLogin();
+      console.log(where ? `School login moved to ${where}; Clearsky's container takes it from there.` : 'No school login here to hand over.');
+    }
   } else if (args[0] === 'jira-debug') {
     await jiraDebug();
   } else if (args[0] === 'serve') {
