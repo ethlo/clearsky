@@ -703,7 +703,7 @@ async function rememberClick(b) {
   const mark = (k) => { try { localStorage.setItem(MEM_SKIP_KEY, JSON.stringify([...memSkipped(), k].slice(-200))); } catch {} };
   if (act === 'skip') { mark(memKey(note)); return done('Skipped'); }
   if (act === 'edit') {
-    card.querySelector('ul').outerHTML = `<textarea class="remember-edit" rows="${Math.min(8, note.lines.length + 1)}" aria-label="Notes to remember, one per line">${esc(note.lines.join('\n'))}</textarea>`;
+    card.querySelector('ul').outerHTML = `<textarea class="remember-edit" spellcheck="true" rows="${Math.min(8, note.lines.length + 1)}" aria-label="Notes to remember, one per line">${esc(note.lines.join('\n'))}</textarea>`;
     card.querySelector('.remember-b').innerHTML = '<button type="button" class="r-save" data-remember="save">Save</button><button type="button" data-remember="cancel">Cancel</button>';
     card.querySelector('textarea').focus();
     return;
@@ -1257,6 +1257,7 @@ document.addEventListener('mousedown', (e) => { if (!e.target.closest('.ref-pick
 for (const id of ['#cp-model', '#cp-effort', '#cp-perm']) $(id).addEventListener('change', saveCp);
 $('#chat-form').onsubmit = (e) => {
   e.preventDefault();
+  autoFixLast($('#chat-text'));
   const t = $('#chat-text').value;
   // While Copilot works, a message waits for the turn to end; an empty box means Stop.
   if (chat.stop && !t.trim()) return chat.halt ? chat.halt() : chat.stop();
