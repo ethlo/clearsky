@@ -1,0 +1,126 @@
+<!-- title: Clearsky: what needs you at work, on one local page | One local page for reviews, your PRs, Jira tickets, mentions, meetings and stand-up, with a sandboxed GitHub Copilot chat next to it. Runs on your machine with your own logins. -->
+<section class="hero">
+  <span class="eyebrow">Free and open source · Linux, macOS, Windows</span>
+  <h1>What needs you at work, <em>on one local page</em></h1>
+  <p class="lead">Reviews, your PRs, Jira tickets, mentions, today's meetings and a stand-up summary, with a GitHub Copilot chat next to it that runs in a sandbox. On your own machine, with your own logins, and no tokens.</p>
+  <div class="cta">
+    <a class="btn primary" href="getting-started.html">Get started</a>
+    <a class="btn ghost" href="#try">Try it with demo data</a>
+  </div>
+  <div class="cmd"><b>clearsky try</b> &nbsp;·&nbsp; no logins, nothing of yours</div>
+  <div class="shot">
+    <picture>
+      <source srcset="img/work-dark.webp" media="(prefers-color-scheme: dark)">
+      <img src="img/work.webp" width="1600" height="1000" alt="Clearsky's Work list: review requests, your PRs, mentions from GitHub, Jira and Slack, and your tickets, grouped by whose move it is">
+    </picture>
+  </div>
+</section>
+
+<section class="section alt">
+  <div class="in">
+    <div class="pillars">
+      <div class="card">
+        <div class="icon"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></div>
+        <h3>Yours, on your machine</h3>
+        <p>It runs on 127.0.0.1 with the logins you already have (<code>gh</code>, <code>acli</code>). No tokens to make, no server, no account. Nothing is kept anywhere else.</p>
+      </div>
+      <div class="card">
+        <div class="icon"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/><circle cx="19" cy="16" r="2.5"/></svg></div>
+        <h3>Sorted by whose move it is</h3>
+        <p>One list instead of five tabs: what needs you now, your tickets, and what you're waiting on. Done hides an item until something new happens on it.</p>
+      </div>
+      <div class="card">
+        <div class="icon"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg></div>
+        <h3>Copilot in a sandbox</h3>
+        <p>Copilot works in your clone, fenced to your folders. A push, a Jira change or a new host waits until you click Allow.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <div class="in">
+    <div class="feature">
+      <div class="text">
+        <div class="tag">Work</div>
+        <h3>Every review, PR, ticket and mention in one list</h3>
+        <p>GitHub, Jira and Slack in one place, grouped by what each one needs from you. Each row says the next step: review it, read the new commits, fix the failing checks, reply.</p>
+        <ul>
+          <li>Bots don't count as reviewers, and threads you answered last aren't yours</li>
+          <li>Knows which code in your PRs you haven't read yourself</li>
+          <li><kbd>J</kbd> <kbd>K</kbd> to move, <kbd>E</kbd> done, <kbd>H</kbd> snooze, <kbd>Ctrl</kbd> <kbd>K</kbd> to find anything</li>
+        </ul>
+      </div>
+      <div class="frame"><img src="img/item.webp" width="1200" height="692" loading="lazy" alt="A pull request opened in Clearsky with its details, checks and Copilot chats"></div>
+    </div>
+
+    <div class="feature flip">
+      <div class="text">
+        <div class="tag">Copilot</div>
+        <h3>A Copilot chat on any PR or ticket</h3>
+        <p>Start a chat from any row and it opens in the right clone or worktree, with the PR or ticket attached. It can run long builds in the background, have a fresh reviewer look at its change before it opens a PR, and keep notes you approve.</p>
+        <ul>
+          <li>Background jobs that wake the chat when they're done</li>
+          <li>A self-review against the ticket before the PR</li>
+          <li>Writes comments and PR descriptions the way you do</li>
+        </ul>
+      </div>
+      <div class="frame"><img src="img/copilot.webp" width="1200" height="920" loading="lazy" alt="A Copilot chat fixing review feedback: it ran tests in a VM, reviewed its own change and pushed"></div>
+    </div>
+
+    <div class="feature">
+      <div class="text">
+        <div class="tag">Stand-up</div>
+        <h3>Your stand-up, already written</h3>
+        <p>Yesterday, today and blockers from what you actually did: PRs opened and reviewed, tickets moved, what Copilot did for you. Copy it into Slack, or let Copilot tidy it up.</p>
+        <p>Next to it, <strong>Now / Next</strong> shows your next meeting, how long you're free, and work that fits the gap.</p>
+      </div>
+      <div class="frame"><img src="img/standup.webp" width="1200" height="938" loading="lazy" alt="The stand-up page with Yesterday, Today and Blockers filled in"></div>
+    </div>
+  </div>
+</section>
+
+<section class="section alt">
+  <div class="in">
+    <h2>A sandbox that asks before anything leaves</h2>
+    <p class="sub">Clearsky doesn't try to judge shell commands. Copilot runs inside a sandbox that keeps it to your folders and allowed hosts, and a few doors lead out. Your GitHub login never enters the sandbox.</p>
+    <div class="doors">
+      <div class="door"><span class="k go">reads</span><div><b>Reading goes through</b><span>Fetching, browsing PRs and tickets, reading code and logs.</span></div></div>
+      <div class="door"><span class="k ask">asks</span><div><b>A push or a GitHub write waits</b><span>However the command was written: the proxy sees the request, and you click Allow.</span></div></div>
+      <div class="door"><span class="k ask">asks</span><div><b>Jira changes and new hosts</b><span>Reads run at once. A transition, a comment or an unknown host asks first.</span></div></div>
+      <div class="door"><span class="k ask">asks</span><div><b>Anything outside</b><span><code>outside &lt;cmd&gt;</code> for what can't run in the sandbox, such as tests that start Docker.</span></div></div>
+    </div>
+    <p style="margin-top:24px"><a href="docs/architecture.html">How Clearsky works →</a></p>
+  </div>
+</section>
+
+<section class="section">
+  <div class="in">
+    <div class="feature">
+      <div class="text">
+        <div class="tag">Plugins and teams</div>
+        <h3>Add what else you use. Share a setup with your team.</h3>
+        <p>Slack, Confluence, Grafana and school messages are plugins, each running in a sandbox of its own that reaches only the hosts it lists. You see what a plugin reaches before any of its code runs.</p>
+        <p>A <strong>team pack</strong> is a small repo your team owns: organizations, stand-up time, links, skills and pinned plugins. Colleagues join with one command, and company details never go into Clearsky itself.</p>
+        <p><a href="docs/plugins.html">Plugins</a> · <a href="docs/team-pack.html">Team packs</a></p>
+      </div>
+      <div class="frame"><img src="img/plugins.webp" width="1100" height="880" loading="lazy" alt="Settings, Plugins: GitHub, Jira, calendar, links, Slack, Confluence, Grafana and school"></div>
+    </div>
+  </div>
+</section>
+
+<section class="section alt" id="try">
+  <div class="in start">
+    <div>
+      <h2>Up in a minute</h2>
+      <p class="sub" style="margin-bottom:20px">You need Node 22 and git. <code>clearsky try</code> shows everything with made-up data first, so you can look around before you log in to anything.</p>
+      <a class="btn primary" href="getting-started.html">Getting started guide</a>
+    </div>
+<pre><code>git clone https://github.com/ethlo/clearsky
+cd clearsky
+sh scripts/install.sh   <span class="c"># never uses sudo</span>
+
+clearsky try            <span class="c"># made-up data, no logins</span>
+clearsky serve          <span class="c"># http://127.0.0.1:7777</span></code></pre>
+  </div>
+</section>

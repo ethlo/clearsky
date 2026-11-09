@@ -2,6 +2,8 @@
 
 One local page for what needs you at work: reviews, your PRs, Jira tickets, mentions, today's meetings and a stand-up summary, with a GitHub Copilot chat next to it that runs in a sandbox. It runs on your own machine with your own logins (`gh`, `acli`), needs no tokens, and keeps nothing anywhere else.
 
+Website, with a getting started guide: **https://clearsky.ethlo.com** (built from `site/`, this README and `docs/` by `npm run site`).
+
 ## Quick start
 
 You need [Node 22+](https://nodejs.org) and git. For real data you also want the [GitHub CLI](https://cli.github.com) and, if you use Jira, the [Atlassian CLI](https://developer.atlassian.com/cloud/acli/guides/install-acli/). Linux, macOS and Windows (WSL for the installer) all work.
