@@ -1,0 +1,4 @@
+#!/usr/bin/env node
+// `jobs` in Clearsky's sandbox: this chat's background jobs (`bg`). `jobs log <id> [lines]` shows
+// the end of one's output so far, `jobs stop <id>` stops one.
+require('./shim.js').viaClearsky('jobs', process.argv.slice(2));

@@ -1104,3 +1104,34 @@ a.u-row:hover { background: var(--accent-soft); }
   .vms-ctrs th:nth-child(1) { width: auto; } .vms-ctrs th:nth-child(3), .vms-ctrs th:nth-child(4) { width: 22%; }
 }
 .vms-cwd { display: inline-flex; align-items: center; gap: 4px; }
+
+/* Background jobs and the watchdog (chat side pane, About) */
+.ni.cp .live.s-background, .cp-chip.s-background i, .chat-ctx .s-background i { background: var(--violet); }
+.st.s-background { border-color: var(--violet); }
+.jobs { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.jobs h4 { margin-bottom: 0; }
+.jobs-l { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.job { display: grid; grid-template-columns: 7px 1fr; gap: 8px; align-items: start; font-size: 12.5px; }
+.job > i { width: 7px; height: 7px; border-radius: 50%; margin-top: 6px; background: var(--line-strong); }
+.job.j-running > i { background: var(--violet); animation: pulse 1.2s ease-in-out infinite; }
+.job.j-done > i { background: var(--green); }
+.job.j-failed > i, .job.j-interrupted > i { background: var(--red); }
+.job > div { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.job code { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+.job small { color: var(--text-2); }
+.job-acts { font-size: 11.5px; }
+.job-acts .linkish, .wd .linkish { font: inherit; background: none; border: 0; padding: 0; color: var(--blue); cursor: pointer; }
+.job-log { max-height: 220px; overflow: auto; margin: 4px 0 0; padding: 6px 8px; font-size: 11px; background: var(--gray-soft); border-radius: 6px; white-space: pre-wrap; word-break: break-word; }
+.wd { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 12px; color: var(--text-2); }
+.wd-st { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; color: var(--text); }
+.wd-st i { width: 7px; height: 7px; border-radius: 50%; background: var(--line-strong); }
+.wd-st.on i { background: var(--green); }
+.wd-st.due i { background: var(--amber); }
+.wd .linkish { font-size: 12px; }
+@media (prefers-reduced-motion: reduce) { .job.j-running > i { animation: none; } }
+/* What Clearsky said to the chat on its own: a job's result, a nudge */
+.msg.auto { align-self: stretch; max-width: none; font-size: 12.5px; color: var(--text-2); background: none; border: 1px dashed var(--line-strong); border-radius: 8px; padding: 6px 10px; }
+.msg.auto .auto-who { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; color: var(--violet); margin-right: 6px; }
+.msg.auto.a-ok { border-color: var(--green); } .msg.auto.a-bad { border-color: var(--red); }
+.msg.auto details { margin-top: 4px; } .msg.auto summary { cursor: pointer; color: var(--blue); }
+.msg.auto pre { max-height: 240px; overflow: auto; margin: 4px 0 0; font-size: 11px; white-space: pre-wrap; word-break: break-word; }
