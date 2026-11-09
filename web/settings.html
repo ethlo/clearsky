@@ -253,7 +253,7 @@
     <select id="CLEARSKY_FX_LIVE" data-key="CLEARSKY_FX_LIVE"><option value="">Off: use my rate</option><option value="on">On: look it up once a day</option></select>
     <div class="row"><button class="save" data-keys="COPILOT_CREDIT_USD,CLEARSKY_CURRENCY,CLEARSKY_FX_RATE,CLEARSKY_FX_LIVE">Save</button><span class="msg"></span></div>
     <h3 id="memory" style="margin-top:28px">Memory<span class="more">Kept in <code id="memory-path">~/.local/share/clearsky/memory/memory.md</code> on this machine. Copilot is told never to change this file (in the sandbox it can't): it suggests notes in the chat, and they're saved only when you press Save on the card. Put notes for one repo under a <code>## owner/name</code> heading.</span></h3>
-    <textarea id="memory-text" rows="8" aria-label="Copilot's memory" spellcheck="false" placeholder="Nothing yet. Notes you save from a chat's Remember card show up here."></textarea>
+    <textarea id="memory-text" rows="8" aria-label="Copilot's memory" spellcheck="true" placeholder="Nothing yet. Notes you save from a chat's Remember card show up here."></textarea>
     <p class="hint">Notes every new chat reads. <span id="memory-size"></span></p>
     <div class="row"><button id="memory-save" class="save">Save memory</button><span class="msg" id="memory-msg"></span></div>
     <h3 style="margin-top:28px">What Copilot holds and reaches</h3>
