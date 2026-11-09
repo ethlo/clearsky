@@ -21,11 +21,12 @@ const PAGES = [
   { src: 'docs/architecture.md', out: 'docs/architecture.html' },
   { src: 'docs/plugins.md', out: 'docs/plugins.html' },
   { src: 'docs/team-pack.md', out: 'docs/team-pack.html' },
+  { src: 'docs/windows.md', out: 'docs/windows.html' },
 ];
 const FILES = ['docs/architecture.svg']; // copied as they are, for the pages above
 
 const MENU = [
-  ['Start', [['Getting started', 'getting-started.html'], ['Guide', 'guide.html']]],
+  ['Start', [['Getting started', 'getting-started.html'], ['On Windows', 'docs/windows.html'], ['Guide', 'guide.html']]],
   ['Design docs', [['How Clearsky works', 'docs/architecture.html'], ['Plugins', 'docs/plugins.html'], ['Team packs', 'docs/team-pack.html']]],
 ];
 

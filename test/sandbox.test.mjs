@@ -63,3 +63,10 @@ test('Copilot starts inside srt, and gets stand-ins for your logins', { skip: !s
     await stopSandbox();
   }
 });
+
+test('under WSL the sandbox also hides the Windows drives and the interop socket', () => {
+  const s = srtSettings({ cwd: '/h/dev/x', home: '/h', platform: 'linux', uid: 1000, wsl: { version: 2 }, exists: () => true, folders: ['/mnt/c/Users/me/repo'] });
+  assert.ok(s.filesystem.denyRead.includes('/mnt') && s.filesystem.denyRead.includes('/run/WSL'));
+  assert.ok(s.filesystem.allowRead.includes('/mnt/c/Users/me/repo'), 'a folder you give Copilot there is allowed back');
+  assert.ok(!srtSettings({ cwd: '/h/dev/x', home: '/h', platform: 'linux', uid: 1000, wsl: null, exists: () => true }).filesystem.denyRead.includes('/mnt'));
+});

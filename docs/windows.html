@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clearsky on Windows</title>
+<!-- Generated from windows.md by scripts/render-docs.mjs. Edit the Markdown, then run npm run docs. -->
+<style>
+  :root { color-scheme: light dark; --bg: #f7f8fa; --surface: #fff; --text: #111827; --text-2: #4b5563; --muted: #6b7280; --line: #e5e7eb; --accent: #2563eb; --code: #f2f4f7; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0c0e12; --surface: #14171c; --text: #f2f4f7; --text-2: #c5cad3; --muted: #8a93a3; --line: #252a33; --accent: #6b9bff; --code: #1b1f26; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 32px 20px 64px; }
+  .crumb { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+  a { color: var(--accent); }
+  h1 { font-size: 28px; line-height: 1.25; margin: 0 0 12px; letter-spacing: -.01em; }
+  h2 { font-size: 20px; margin: 36px 0 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+  h3 { font-size: 16px; margin: 24px 0 8px; }
+  p, li { color: var(--text-2); }
+  strong { color: var(--text); }
+  code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--code); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.5; }
+  .table { overflow-x: auto; margin: 12px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; background: var(--surface); }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border: 1px solid var(--line); }
+  th { color: var(--text); font-weight: 600; }
+  td { color: var(--text-2); }
+  img { max-width: 100%; height: auto; display: block; margin: 16px auto; }
+  nav.toc { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 16px; margin: 20px 0; font-size: 14px; }
+  nav.toc ol { margin: 4px 0; padding-left: 20px; }
+  @media (max-width: 560px) { .wrap { padding: 20px 16px 48px; } h1 { font-size: 23px; } }
+</style>
+</head>
+<body><div class="wrap">
+<div class="crumb"><a href="index.html">Clearsky design docs</a></div>
+<h1>Clearsky on Windows</h1>
+<nav class="toc"><b>Contents</b><ol><li><a href="#1-wsl2-and-ubuntu">1. WSL2 and Ubuntu</a></li><li><a href="#2-what-clearsky-uses-inside-ubuntu">2. What Clearsky uses, inside Ubuntu</a></li><li><a href="#3-install-clearsky">3. Install Clearsky</a></li><li><a href="#4-log-in">4. Log in</a></li><li><a href="#5-its-own-window">5. Its own window</a></li><li><a href="#calendar">Calendar</a></li><li><a href="#the-copilot-sandbox">The Copilot sandbox</a></li><li><a href="#builds-that-need-docker-the-vm">Builds that need Docker (the VM)</a></li><li><a href="#notifications">Notifications</a></li><li><a href="#if-something-s-off">If something's off</a></li></ol></nav>
+<p>On Windows, Clearsky runs in Linux under WSL2 (Ubuntu), and you use it from Windows: in Edge or Chrome at http://127.0.0.1:7777, or in a window of its own. WSL2 forwards that address to Windows by itself. Your logins (gh, acli) and the Copilot sandbox live in Ubuntu, exactly as on a Linux machine; links and logins open in your Windows browser.</p>
+<p><code>clearsky doctor</code> and the welcome page notice WSL and say what's missing there, with the command to run.</p>
+<h2 id="1-wsl2-and-ubuntu">1. WSL2 and Ubuntu</h2>
+<p>In PowerShell, as administrator:</p>
+<pre class="lang-powershell"><code>wsl --install -d Ubuntu</code></pre>
+<p>Restart when it asks, open <strong>Ubuntu</strong> from the Start menu and pick a user name and password. Check it's WSL2 and not WSL1 (Clearsky can't use WSL1: no sandbox, no VM):</p>
+<pre class="lang-powershell"><code>wsl -l -v                     # VERSION should say 2
+wsl --set-version Ubuntu 2    # if it says 1</code></pre>
+<h2 id="2-what-clearsky-uses-inside-ubuntu">2. What Clearsky uses, inside Ubuntu</h2>
+<p>Everything from here on runs in the Ubuntu terminal, not in PowerShell.</p>
+<pre class="lang-sh"><code>sudo apt update
+sudo apt install git gh wslu bubblewrap socat ripgrep</code></pre>
+<ul><li><code>wslu</code> gives <code>wslview</code>, which opens links and logins in your Windows browser.</li><li><code>bubblewrap</code>, <code>socat</code> and <code>ripgrep</code> are what the Copilot sandbox uses, as on any Linux.</li><li>The Atlassian CLI, if you use Jira: <a href="https://developer.atlassian.com/cloud/acli/guides/install-acli/">Atlassian's Linux instructions</a> (the Debian/Ubuntu ones).</li></ul>
+<p>Node 22 or newer: Ubuntu's own is older, so use nvm (the installer picks it up). Then the GitHub Copilot CLI, for chats:</p>
+<pre class="lang-sh"><code>curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+exec bash
+nvm install 22
+npm install -g @github/copilot</code></pre>
+<p>Use the Linux versions of these tools, not the Windows ones: a Windows <code>gh.exe</code> or Node keeps its login and files on the Windows side, where Clearsky in Ubuntu can't use them.</p>
+<h2 id="3-install-clearsky">3. Install Clearsky</h2>
+<p>Clone it, and your repos, into your Linux home (<code>~/dev</code>), not under <code>/mnt/c</code>. Windows drives are slow through WSL, and git there sees every file as changed.</p>
+<pre class="lang-sh"><code>mkdir -p ~/dev &amp;&amp; cd ~/dev
+git clone https://github.com/ethlo/clearsky &amp;&amp; cd clearsky
+sh scripts/install.sh
+clearsky try        # made-up data first, at http://127.0.0.1:7790
+clearsky serve      # the real thing</code></pre>
+<p>Open <strong>http://127.0.0.1:7777</strong> in your Windows browser. The first time it's the welcome page.</p>
+<h2 id="4-log-in">4. Log in</h2>
+<p>The welcome page has a button each for GitHub and Jira. In a terminal it's the same:</p>
+<pre class="lang-sh"><code>gh auth login --web
+acli jira auth login --web</code></pre>
+<p>With <code>wslview</code> installed, both open the login in your Windows browser (Clearsky sets <code>BROWSER=wslview</code> for them when you haven't set <code>BROWSER</code> yourself). Without it, open the address they print. acli's login calls back to a port on 127.0.0.1, which WSL2 forwards, so it finishes on its own.</p>
+<h2 id="5-its-own-window">5. Its own window</h2>
+<pre class="lang-sh"><code>clearsky app</code></pre>
+<p>This opens Clearsky in Edge (or Chrome) on Windows as an app window: no tabs or address bar, its own taskbar icon. It starts the server first if it isn't running. Its browser profile is kept on Windows, in <code>%LOCALAPPDATA%\Clearsky\app-window</code>. <code>CLEARSKY_BROWSER</code> picks another browser.</p>
+<p>Or, in Edge at http://127.0.0.1:7777: <strong>… → Apps → Install this site as an app</strong>. That gives Clearsky a Start menu entry and taskbar icon of its own; the server has to be running for it to load.</p>
+<p>To start it from Windows with one click, make a shortcut with this target, set to <strong>Run: Minimized</strong>:</p>
+<pre><code>wsl.exe -d Ubuntu -- bash -lc &quot;clearsky app; tail -f ~/.cache/clearsky/clearsky.log&quot;</code></pre>
+<p>The minimized window keeps Ubuntu running: WSL may stop it a while after its last window closes, and Clearsky with it.</p>
+<p>To start Clearsky with Ubuntu instead, turn on systemd in WSL and use the service. Add this to <code>/etc/wsl.conf</code>:</p>
+<pre class="lang-ini"><code>[boot]
+systemd=true</code></pre>
+<p>then <code>wsl --shutdown</code> in PowerShell, open Ubuntu again, and run <code>sh scripts/install.sh --service</code>.</p>
+<h2 id="calendar">Calendar</h2>
+<p>GNOME Online Accounts, which Clearsky uses for calendars on Linux, isn't there in WSL. Use your calendar's iCal link instead: in Google Calendar, <strong>Settings → your calendar → Integrate calendar → Secret address in iCal format</strong>, and paste it in Clearsky under <strong>Settings → Google Calendar</strong>. Some workplaces turn that link off; without it, Now / Next and the day's schedule stay empty, and everything else works.</p>
+<h2 id="the-copilot-sandbox">The Copilot sandbox</h2>
+<p>Sandboxed chats use srt with bubblewrap inside WSL2, the same as on Linux (not srt's Windows mode, which needs an administrator setup). Under WSL the sandbox also hides:</p>
+<ul><li>the Windows drives (<code>/mnt/c</code> and the rest), which hold your Windows profile and its browsers' data. A folder you give Copilot there (Settings → Copilot) is let back in, but your repos are better off in <code>~/dev</code>.</li><li>WSL's interop socket (<code>/run/WSL</code>), so a sandboxed command can't start a Windows program such as <code>cmd.exe</code> or <code>powershell.exe</code> outside the sandbox.</li></ul>
+<h2 id="builds-that-need-docker-the-vm">Builds that need Docker (the VM)</h2>
+<p>Tests that start containers (Testcontainers) run in a VM of the chat's own, on KVM. Under WSL2 that VM runs inside WSL's own, which needs nested virtualisation:</p>
+<p><strong>Windows 11:</strong> put this in <code>%UserProfile%\.wslconfig</code>, then <code>wsl --shutdown</code> in PowerShell:</p>
+<pre class="lang-ini"><code>[wsl2]
+nestedVirtualization=true</code></pre>
+<p>Then in Ubuntu: <code>sudo apt install qemu-system-x86 qemu-utils openssh-client socat</code>, and if <code>/dev/kvm</code> is there but not yours, <code>sudo usermod -aG kvm $USER</code> and <code>wsl --shutdown</code> again.</p>
+<p><strong>Windows 10</strong> can't do nested virtualisation in WSL, so there's no VM there.</p>
+<p><code>clearsky doctor</code> says which it is. Without the VM, Copilot runs such builds with <code>outside</code>, on Ubuntu itself after asking you each time, so they need Docker there: Docker Desktop with WSL integration turned on for Ubuntu, or Docker Engine installed in Ubuntu.</p>
+<h2 id="notifications">Notifications</h2>
+<p>WSL has no desktop of its own to show notifications on, so Clearsky shows them through the browser: allow notifications for http://127.0.0.1:7777 when it asks (or under <strong>Notifications</strong> in the menu).</p>
+<h2 id="if-something-s-off">If something's off</h2>
+<ul><li><strong>http://127.0.0.1:7777 doesn't open in Windows:</strong> check that <code>clearsky serve</code> is running in Ubuntu, then <code>wsl --shutdown</code> in PowerShell and start it again. If it still doesn't, see that <code>localhostForwarding</code> isn't set to <code>false</code> in <code>%UserProfile%\.wslconfig</code>. On Windows 11, <code>networkingMode=mirrored</code> under <code>[wsl2]</code> there is another way.</li><li><strong>A login doesn't open a browser:</strong> <code>sudo apt install wslu</code>, or open the address the command printed.</li><li><strong>The School plugin's login:</strong> it opens a Linux Chromium in a window of its own (WSLg shows it), since it talks to that browser directly. Install Chromium in Ubuntu for it.</li><li><code>clearsky doctor</code> lists the rest.</li></ul>
+</div></body>
+</html>

@@ -49,7 +49,8 @@ import { loadSources, makeContext, hook, asList } from '../lib/sources.mjs';
 import { loadPlugins, migrateBundled, pluginPaths, listPlugins, preparePlugin, removePlugin, updatePlugin, checkPlugin, readRegistry, withRef, changesText, catalogEntry, bundledDir, codeDir, retiredText } from '../lib/plugins.mjs';
 import { sandboxedSource, srtCli } from '../lib/plugin-sandbox.mjs';
 import { pluginItems } from '../lib/items.mjs';
-import { findBrowser, BROWSERS } from '../lib/browser.mjs';
+import { findBrowser, BROWSERS, openCommand } from '../lib/browser.mjs';
+import { wslInfo, isWindowsExe, windowsProfileDir } from '../lib/wsl.mjs';
 import { manifest as calendarManifest, createCalendar } from '../lib/modules/calendar.mjs';
 import { readLinks, saveLinks, parseBookmarks, mergeLinks } from '../lib/links.mjs';
 import { logEvent } from '../lib/event-log.mjs';
@@ -989,7 +990,8 @@ const teamPlugins = () => { const t = readTeam(dirname(userEnvFile)); return t?.
 
 // `clearsky doctor` and the welcome page: what this machine has for Clearsky.
 const machineChecks = () => doctorChecks({ acliBin: config.jira.acli, copilotBin: copilot.findCopilot(process.env.COPILOT_BIN),
-  calendars: () => (process.platform === 'linux' ? edsCalendars() : []), browser: () => { try { return findBrowser(); } catch { return null; } } });
+  calendars: () => (process.platform === 'linux' && !wslInfo() ? edsCalendars() : []), browser: () => { try { return findBrowser(process.env, { windows: true }); } catch { return null; } },
+  vm: () => vmSupport(), folders: [join(here, '..'), ...copilotFolders()] });
 // Nothing set up yet: no settings file of your own and no organizations from anywhere else.
 const firstRun = () => !existsSync(userEnvFile) && !process.env.GITHUB_ORGS && !isDemo();
 
@@ -1162,6 +1164,8 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   }
   // The real values never go in: srt sets the stand-ins.
   for (const c of [...(github?.credentials || []), ...(maven?.credentials || [])]) delete env[c.name];
+  // Under WSL: no way to Windows programs from inside (the interop socket is hidden too, lib/wsl.mjs).
+  delete env.WSL_INTEROP;
   // The doors srt's network can't be (lib/broker.mjs): acli and `outside` reach Clearsky, which
   // asks you in this chat. The key tells Clearsky which chat a request comes from.
   const key = randomBytes(16).toString('hex');
@@ -2487,6 +2491,8 @@ let dbusNotifier = null;
 function hasNotifySend() {
   if (process.env.CLEARSKY_NOTIFY === 'off') return Promise.resolve('off');
   if (process.env.CLEARSKY_NOTIFY === 'browser') return Promise.resolve('browser');
+  // WSL has no desktop of its own to show them on: the page in your Windows browser does.
+  if (!process.env.CLEARSKY_NOTIFY && wslInfo()) return Promise.resolve('browser');
   const notifySend = () => execFileP(process.env.NOTIFY_SEND_BIN || 'notify-send', ['--version'], { timeout: 5000 }).then(() => 'desktop', () => 'browser');
   if (process.env.CLEARSKY_NOTIFY === 'notify-send' || process.env.NOTIFY_SEND_BIN) return notifySend();
   const bin = process.env.GDBUS_BIN || 'gdbus';
@@ -3212,7 +3218,7 @@ function serve() {
       if (url.pathname === '/api/team') return json(res, 200, { team: readTeam(dirname(userEnvFile)) });
       if (url.pathname === '/api/doctor') {
         const [list, hints] = await Promise.all([machineChecks(), doctorSuggestions({ acliBin: config.jira.acli })]);
-        return json(res, 200, { checks: list, ready: doctorReady(list), suggestions: hints, platform: process.platform,
+        return json(res, 200, { checks: list, ready: doctorReady(list), suggestions: hints, platform: process.platform, wsl: wslInfo(),
           values: { GITHUB_ORGS: process.env.GITHUB_ORGS || '', CLEARSKY_STANDUP_TIME: process.env.CLEARSKY_STANDUP_TIME || '', CLEARSKY_WORKDAYS: process.env.CLEARSKY_WORKDAYS || '' } });
       }
       if (url.pathname === '/api/standup/say') {
@@ -3611,8 +3617,8 @@ export { findBrowser, SOURCES, sourceCache };
 
 // Your default browser, as the desktop opens links.
 function openInBrowser(u) {
-  // Windows' start would read & as a command separator; rundll32 takes the URL as it is.
-  const [cmd, ...pre] = process.platform === 'darwin' ? ['open'] : process.platform === 'win32' ? ['rundll32', 'url.dll,FileProtocolHandler'] : ['xdg-open'];
+  // Under WSL, the Windows browser (wslview, else rundll32.exe): see lib/browser.mjs.
+  const [cmd, ...pre] = openCommand();
   spawn(cmd, [...pre, u], { stdio: 'ignore', detached: true }).on('error', () => {}).unref();
 }
 // The launcher's StartupWMClass, so GNOME files the window under Clearsky (icon, Alt+Tab, and a
@@ -3640,17 +3646,21 @@ async function appCommand() {
     else spawn(process.execPath, [fileURLToPath(import.meta.url), 'serve', '--port', String(config.port)], { detached: true, stdio: 'ignore', env: process.env, cwd: join(here, '..') }).unref();
     for (let i = 0; i < 50 && !(await up()); i++) await new Promise((r) => setTimeout(r, 200));
   }
-  const browser = findBrowser();
-  if (!browser) { console.error(`No Chromium-based browser found (tried ${BROWSERS.join(', ')}). Set CLEARSKY_BROWSER, or open ${base}`); process.exit(1); }
+  // Under WSL2 a Windows browser (Edge, Chrome): WSL forwards 127.0.0.1 to Windows.
+  const wsl = wslInfo();
+  const browser = findBrowser(process.env, { windows: !!wsl });
+  if (!browser) { console.error(`No Chromium-based browser found (tried ${wsl ? 'Edge and Chrome on C:, then ' : ''}${BROWSERS.join(', ')}). Set CLEARSKY_BROWSER, or open ${base}`); process.exit(1); }
   // A size that fits a laptop screen (CLEARSKY_WINDOW_SIZE=1600,1000 for another); the page
   // shrinks the window too when the browser remembers one taller than the screen.
   const size = /^\d+,\d+$/.test(process.env.CLEARSKY_WINDOW_SIZE || '') ? process.env.CLEARSKY_WINDOW_SIZE : '1280,860';
   // A browser profile of its own: in your running browser the window would be filed under the
   // browser (Wayland ignores --class there), so it couldn't be found as Clearsky in the dock or
   // Alt+Tab. No logins needed in it: links open in your default browser.
-  const profile = join(dirname(userEnvFile), 'app-window');
-  if (process.platform === 'linux') fixLauncher();
-  spawn(browser, [`--app=${base}/?app=1`, '--class=Clearsky', `--user-data-dir=${profile}`, '--no-first-run', '--no-default-browser-check', `--window-size=${size}`],
+  // A Windows browser keeps it on Windows (%LOCALAPPDATA%\Clearsky\app-window): it can't use the Linux home.
+  const windows = isWindowsExe(browser);
+  const profile = windows ? windowsProfileDir() : join(dirname(userEnvFile), 'app-window');
+  if (process.platform === 'linux' && !wsl) fixLauncher();
+  spawn(browser, [`--app=${base}/?app=1`, ...(windows ? [] : ['--class=Clearsky']), ...(profile ? [`--user-data-dir=${profile}`] : []), '--no-first-run', '--no-default-browser-check', `--window-size=${size}`],
     { detached: true, stdio: 'ignore' }).unref();
 }
 

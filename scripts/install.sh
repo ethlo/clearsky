@@ -25,6 +25,18 @@ for a in "$@"; do
   esac
 done
 
+# ---- Windows: Clearsky runs in WSL2 (Ubuntu) and you open it in your Windows browser.
+WSL=0
+if [ -n "${CLEARSKY_WSL:-}" ]; then WSL=$CLEARSKY_WSL
+elif grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null; then
+  if grep -qiE 'wsl2|microsoft-standard' /proc/sys/kernel/osrelease; then WSL=2; else WSL=1; fi
+fi
+if [ "$WSL" = 1 ]; then
+  echo "This distro runs on WSL1, which Clearsky can't use (no sandbox, no VM). In PowerShell:" >&2
+  echo "  wsl --set-version ${WSL_DISTRO_NAME:-<distro>} 2" >&2
+  exit 1
+fi
+
 say() { printf '\033[1m%s\033[0m\n' "$*"; }
 warn() { printf '  ! %s\n' "$*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
@@ -44,6 +56,7 @@ here=$(cd "$(dirname "$0")/.." 2>/dev/null && pwd || true)
 if [ -n "$here" ] && [ -f "$here/bin/clearsky.mjs" ]; then
   DIR=$here
   say "Using the checkout in $DIR"
+  case "$DIR" in /mnt/[a-z]/*) [ "$WSL" = 2 ] && warn "$DIR is on a Windows drive: slow through WSL. Clone Clearsky (and your repos) into your Linux home, ~/dev say";; esac
 else
   DIR=${CLEARSKY_DIR:-$HOME/.local/share/clearsky}
   if [ -d "$DIR/.git" ]; then
@@ -99,10 +112,16 @@ fi
 have gh || warn "GitHub CLI (gh) not found: Settings can log you in with it (https://cli.github.com), or use a token"
 have acli || warn "Atlassian CLI (acli) not found: Jira needs it (https://developer.atlassian.com/cloud/acli/guides/install-acli/)"
 have pdftotext || warn "pdftotext not found: school weekly plans in PDF need it  ->  ${pm:-install} poppler-utils"
+if [ "$WSL" = 2 ]; then
+  have wslview || warn "wslview not found: logins and links open in your Windows browser with it  ->  ${pm:-install} wslu"
+fi
 have copilot || [ -n "$(ls "$HOME"/.nvm/versions/node/*/bin/copilot 2>/dev/null | head -1)" ] || warn "GitHub Copilot CLI not found: the Copilot panel needs it (npm install -g @github/copilot)"
 
 # ---- Clearsky in its own window: an entry in your app menu that runs `clearsky app`.
-if [ "$(uname -s)" = Linux ]; then
+# Under WSL there's no Linux app menu to use: `clearsky app` opens it in Edge (or Chrome) on Windows.
+if [ "$WSL" = 2 ]; then
+  echo "  Windows: clearsky app opens it in a window of its own (Edge or Chrome); see the WSL2 guide for a Start menu shortcut"
+elif [ "$(uname -s)" = Linux ]; then
   apps="$HOME/.local/share/applications"
   mkdir -p "$apps"
   cat > "$apps/clearsky.desktop" <<DESKTOP
@@ -122,6 +141,11 @@ fi
 
 # ---- Start it at login, when asked.
 if [ "$SERVICE" = 1 ]; then
+  if [ "$WSL" = 2 ] && [ ! -d /run/systemd/system ]; then
+    echo "--service needs systemd, which is off in this WSL distro. Add this to /etc/wsl.conf, run wsl --shutdown in PowerShell, and run this again:" >&2
+    printf '  [boot]\n  systemd=true\n' >&2
+    exit 1
+  fi
   have systemctl || { echo "--service needs systemd" >&2; exit 1; }
   unit="$HOME/.config/systemd/user/clearsky.service"
   mkdir -p "$(dirname "$unit")"
@@ -137,5 +161,6 @@ if [ "$SERVICE" = 1 ]; then
   say "Clearsky runs at login: http://127.0.0.1:7777  (logs: journalctl --user -u clearsky -f)"
 else
   say "Done. Start it with:  clearsky serve   then open http://127.0.0.1:7777/settings"
+  [ "$WSL" = 2 ] && echo "  (WSL2 forwards it: open that address in your Windows browser)"
   echo "  (or run this again with --service to start it at login)"
 fi
