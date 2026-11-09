@@ -21,7 +21,8 @@ import * as copilot from '../lib/copilot.mjs';
 import { AcpAgent, chatEvent } from '../lib/acp.mjs';
 import { sessionEvents, sessionUsage } from '../lib/copilot-events.mjs';
 import { branchesFor } from '../lib/branches.mjs';
-import { sandboxedCommand, sandboxEnded, stopSandbox, sandboxProxy, githubLogin, DEFAULT_DOMAINS, READ_DEFAULT, parseDomains } from '../lib/sandbox.mjs';
+import { sandboxedCommand, sandboxEnded, stopSandbox, sandboxProxy, sandboxNetwork, githubLogin, DEFAULT_DOMAINS, READ_DEFAULT, parseDomains } from '../lib/sandbox.mjs';
+import { HostDoor, ruleMatches } from '../lib/host-door.mjs';
 import { VmImage, ChatVm, vmSupport, VM_DOMAINS, reapOrphans } from '../lib/vm.mjs';
 import { VmQueue } from '../lib/vm-queue.mjs';
 import { Jobs, jobReport, jobView, shellLine, tailOf } from '../lib/jobs.mjs';
@@ -1161,17 +1162,64 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   const s = await sandboxedCommand(bin, [...args, '--disable-builtin-mcps', '--acp'], { ...sandboxOpts(cwd, folders), domains, maven, github, ca: sandboxCa(keep),
     // Read only, so the proxy reads them: CI logs (with GitHub on), Docker Hub (with the VM).
     inspect: [...(github ? GITHUB_LOG_HOSTS : []), ...(vmSupport().ok ? REGISTRY_HOSTS : [])] },
-    { filterRequest: githubFilter(githubAsk, { told: githubTold, look: githubLook, scope: githubScope }) });
+    sandboxGate());
   const agent = new AcpAgent(s.bin, s.args, { env, acp: false });
   agent.child.once('exit', sandboxEnded);
   // A background job (`bg <command>`) runs in a sandbox of its own with the same fence: folders,
   // hosts, logins added on the way out, and the GitHub gate.
   agent.inSandbox = async (argv, dir) => ({ env, ...await sandboxedCommand(argv[0], argv.slice(1), { ...sandboxOpts(dir, folders), domains, maven, github, ca: sandboxCa(keep),
     inspect: [...(github ? GITHUB_LOG_HOSTS : []), ...(vmSupport().ok ? REGISTRY_HOSTS : [])] },
-  { filterRequest: githubFilter(githubAsk, { told: githubTold, look: githubLook, scope: githubScope }) }) });
+  sandboxGate()) });
   return Object.assign(agent, { sandboxed: true, brokerKey: key,
     github: github ? `${process.env.COPILOT_SANDBOX_TOKEN ? 'your sandbox token' : 'your gh login'}, added on the way out; changes ask you` : 'not signed in (gh auth login)',
     hosts: [...new Set([...domains, ...(maven?.hosts || []), ...(github?.read || [])])] });
+}
+
+// srt's proxy asks Clearsky about two things: hosts not on its list (the host door, which asks
+// you before Copilot reaches a new host) and requests it reads (data sent to such a host, and
+// GitHub changes).
+function sandboxGate() {
+  const github = githubFilter(githubAsk, { told: githubTold, look: githubLook, scope: githubScope });
+  const listed = (host) => sandboxNetwork().allowed.some((r) => ruleMatches(r.replace(/:\d+$/, ''), host, 443));
+  return { ask: (p) => hostDoor.decide(p), filterRequest: async (req) => (await hostDoor.check(req, { listed })) || github(req) };
+}
+// The host door (lib/host-door.mjs): a host not on the sandbox's list waits at the proxy for your
+// answer in the working chat. Always allowed ones are Settings → Copilot → Hosts allowed from a chat.
+const hostDoor = new HostDoor({
+  chats: () => askingChats(null),
+  ask: hostAsk,
+  always: () => parseDomains(process.env.COPILOT_READ_HOSTS),
+  addAlways: (rule) => {
+    const hosts = parseDomains(process.env.COPILOT_READ_HOSTS);
+    if (hosts.includes(rule)) return;
+    const values = settings.validate({ COPILOT_READ_HOSTS: [...hosts, rule].join(', ') });
+    settings.writeEnvFile(userEnvFile, values);
+    applySettings(values);
+  },
+  readable: () => sandboxNetwork().readsHttps,
+  // You answered after the request gave up (or long enough that it may have): the chat goes on.
+  late: (chats, rule) => { for (const c of chats) tellChat(c.id, `Clearsky: ${rule} is allowed now. If a request there failed while you waited, try it again and go on.`); },
+});
+function hostAsk(card, chats, { rule, write = false }) {
+  const shared = chats.length > 1;
+  const log = (decided) => logWrite(agentLogFile, { where: 'network', what: write ? card.detail.split('\n')[0] : `reach ${rule}`, target: rule, chats: chats.map(chatRef), decided });
+  return new Promise((done) => {
+    const id = randomBytes(6).toString('hex');
+    const ev = { type: 'permission', id, kind: 'fetch', ...card };
+    for (const c of chats) {
+      c.waiting.set(id, (answer) => {
+        for (const o of chats) { o.waiting.delete(id); o.pending.delete(id); o.shared.delete(id); o.emit({ type: 'permission-done', id }); }
+        const choice = answer.optionId || 'deny';
+        const name = card.options.find((o) => o.id === choice)?.name || 'Deny';
+        log(choice === 'deny' ? 'declined' : choice);
+        for (const o of chats) o.emit({ type: 'note', text: `Network: ${write ? card.detail.split('\n')[0] : rule}: ${name}` });
+        done(choice);
+      });
+      if (shared) c.shared.add(id); // may not be this chat's: it doesn't mark the chat as needing you
+      c.pending.set(id, ev);
+      c.emit(ev);
+    }
+  });
 }
 
 // A GitHub change from a sandbox, held at srt's proxy (lib/github-gate.mjs). The proxy can't tell
@@ -1932,6 +1980,9 @@ const SANDBOX_HINT = 'You run in a sandbox: everything inside it runs without as
   + 'It answers at once with the job\'s id; then end your turn, saying what you wait for. Clearsky wakes you here with the result and the end of '
   + 'its output when it ends, so a long wait never ends your work. `jobs` lists this chat\'s jobs, `jobs log <id>` shows output so far, '
   + '`jobs stop <id>` stops one. Never wait with sleep loops. '
+  + 'Only hosts on the sandbox\'s list are reachable. A request to any other host waits while Clearsky asks me; if it fails as '
+  + '"blocked by network allowlist" or "declined", don\'t carry on from memory or guesses: say which host you need and why, and end your turn. '
+  + 'When I allow it, Clearsky tells you here and you try again. Sending data to a host I allowed asks me again. '
   + 'If you stop before the task is done, Clearsky nudges you to go on; when you are done, or need me, say so plainly.';
 const sandboxHintFor = (permission) => (process.env.COPILOT_SANDBOX === 'srt' || permission === 'sandboxed'
   ? `\n\n${SANDBOX_HINT}${doorHints()}${process.env.COPILOT_DISCLOSE === 'on' ? ` ${DISCLOSE_HINT}` : ''}` : '');
@@ -2327,7 +2378,7 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, s
   const compact = /^\s*\/compact\b/.test(prompt) ? watchCompaction(c, chat) : null;
   let r = null, error = null;
   try { r = await (compact ? Promise.race([agent.prompt(prompt), compact]) : agent.prompt(prompt)); } catch (e) { error = e; }
-  finally { compact?.turnOver(); c.busy = false; c.approved.clear(); c.running.clear(); turnOver(); }
+  finally { compact?.turnOver(); c.busy = false; c.approved.clear(); c.running.clear(); hostDoor.turnEnded(c.id); turnOver(); }
   afterTurn(c, { stopReason: r?.stopReason, error, command: /^\s*\//.test(typedPart(prompt)) });
   if (error) throw error;
   c.emit({ type: 'done', stopReason: r?.stopReason });
