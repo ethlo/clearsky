@@ -1,84 +1,94 @@
 # Clearsky
 
-One page that shows what needs your attention at work:
+One local page for what needs you at work: reviews, your PRs, Jira tickets, mentions, today's meetings and a stand-up summary, with a GitHub Copilot chat next to it that runs in a sandbox. It runs on your own machine with your own logins (`gh`, `acli`), needs no tokens, and keeps nothing anywhere else.
 
-- **Now / Next:** your current or next meeting, how much free time you have until it, and up to three tasks that fit that gap (optional, from Google Calendar).
-- **Needs my review:** open PRs where your review is requested, oldest request first, with re-reviews flagged.
-- **My PRs:** each open PR shows who has the ball (changes requested, CI failing, merge conflict, unresolved threads, ready to merge) or who you are waiting on.
-- **Mentions:** GitHub issues and PRs that mention you, Jira comments that @mention you, and, with the Slack plugin, Slack messages that @mention you, from the last 14 days.
-- **What I have left:** your open Jira issues (in progress, then to do), plus GitHub issues assigned to you.
-- **Stand-up tab:** a ready-to-paste Yesterday / Today / Blockers summary for your next daily stand-up (`CLEARSKY_STANDUP_TIME`, default 09:45, on `CLEARSKY_WORKDAYS`, default Mon-Fri). It covers everything since the previous stand-up, so on Monday that's since Friday's: PRs merged, opened and reviewed, commits, and Jira issues you finished or worked on. Today comes from the dashboard queue and your meetings. The dashboard reminds you 30 minutes before, and the stand-up counts as a meeting in Now / Next.
-- **Links:** your favourites in groups, under Work or Personal in the menu. Add one with Add link or by dropping a link from your browser, or import your browser's bookmarks (its HTML export; each folder becomes a group). Edit renames, moves between Work and Personal, reorders and removes. They're kept only in `~/.config/clearsky/links.json`, and no favicons are fetched.
-- **Loads as it goes:** each source (GitHub, Jira, Jira mentions, Slack, calendar) loads on its own, so the page shows whatever is ready first.
-- **Hover cards:** hover a Jira key like `ABC-1234` or a PR like `org/repo#12` on the Stand-up tab to see its title, status and summary, with a link to the full item.
-- **Settings page** (`/settings`): log in to GitHub and Jira with one click, and set up Google Calendar and Slack with guided links. Everything is saved to `~/.config/clearsky/.env`.
+## Quick start
 
-It is a single Node script with no dependencies. It runs on your machine, talks to GitHub, Jira and Slack with your own tokens, and keeps no data anywhere.
-
-## Try it first
+You need [Node 22+](https://nodejs.org) and git. For real data you also want the [GitHub CLI](https://cli.github.com) and, if you use Jira, the [Atlassian CLI](https://developer.atlassian.com/cloud/acli/guides/install-acli/). Linux, macOS and Windows (WSL for the installer) all work.
 
 ```sh
-clearsky try          # or: node bin/clearsky.mjs try
+git clone https://github.com/ethlo/clearsky && cd clearsky
+sh scripts/install.sh      # puts `clearsky` on your PATH; never uses sudo
+clearsky try               # look around with made-up data first: no logins, nothing of yours
+clearsky serve             # then the real thing, at http://127.0.0.1:7777
 ```
 
-This opens Clearsky with made-up data (a company called Acme, its PRs, tickets, meetings and a Copilot chat) on http://127.0.0.1:7790. It needs no logins. Nothing of yours is read or shown, so it's also the way to show Clearsky to others. **Leave demo** in its menu, or Ctrl+C, stops it and removes its data. Settings → General → **Try with demo data** starts the same demo from the page.
+The first time, Clearsky opens a **welcome page** that checks what this machine has and logs you in to GitHub and Jira with a button each. That's all the setup there is. After that:
 
-## Setup
+- `clearsky app` opens it in a window of its own (it's in your app menu too).
+- If your team has a shared setup, join it: `clearsky join <the team's repo>` (see [Team packs](#team-packs)).
+- Add what else you use: `clearsky add slack`, `clearsky add grafana --trust`, `clearsky add school --trust` (see [Plugins](#plugins)).
+- Run `clearsky doctor` if something looks off.
 
-The first time you open Clearsky it shows a **welcome page** (`/welcome`): what this machine has (Node, git, gh, acli, Copilot, the sandbox, a calendar), with the install command for your OS next to anything missing, buttons to log in to GitHub and Jira through their CLIs, and your work organizations picked from your gh login. `clearsky doctor` prints the same check in a terminal. No tokens are needed.
+Everything you set is in `~/.config/clearsky/` and can be changed under **Settings**.
 
-Requires Node 22+ and the [Atlassian CLI](https://developer.atlassian.com/cloud/acli/guides/install-acli/) (`acli`), logged in with `acli jira auth login --web`.
+## What you get
 
-One command installs or updates everything:
+- **Work:** one list grouped by whose move it is: Copilot chats that need you, review requests, your PRs on your move, mentions (GitHub, Jira, Slack), your tickets, and what you're waiting on.
+- **Now / Next:** your current or next meeting, how long you're free, and tasks that fit that gap.
+- **Stand-up:** a ready-to-paste Yesterday / Today / Blockers for your daily stand-up.
+- **Copilot:** a chat with the GitHub Copilot CLI on any PR or ticket, in your clone of the repo, inside a sandbox that asks before anything leaves your machine (a push, a Jira change, a new host). It can hand work off, run long builds in the background, review its own change before opening a PR, and write like you (see the next section).
+- **Links, calendar, notifications,** and plugins for the rest (Slack, Grafana, school, your own).
 
-```sh
-git clone <this repository> clearsky && cd clearsky
-sh scripts/install.sh            # add --service to start it at login (systemd user service)
+## Make Copilot write like you
+
+Comments, PR descriptions and Jira replies that Copilot drafts for you go through the **write-like-me** skill. It reads a voice profile, `~/.copilot/voice.md`, if you have one, and checks each draft against it. The file is yours alone: it stays on your machine, is never sent anywhere by Clearsky, and doesn't belong in any repo or team pack.
+
+A good profile is short: a few rules on how you write, a checklist, and 10 to 20 real samples. To make one from what you've already written:
+
+1. **Collect samples you wrote yourself.** Copy them into a scratch file such as `~/voice-samples.txt`: PR review comments, PR descriptions, Jira tickets and comments, emails, Slack messages. Pick a mix: a pushback, a question, an approval, a bug report, a ticket description. Leave out anything an agent drafted for you, and anything you're not allowed to put through an AI tool; if your company has rules about that, follow them, or write a few samples fresh.
+2. **Let Copilot write the profile from them,** in a chat on your own machine:
+
+   > Read ~/voice-samples.txt. Write ~/.copilot/voice.md with: 5 to 10 rules on how I write (length, tone, structure, language, words I use and avoid); a "Check every draft against this" list; and 15 short samples from the file with people's names, ticket keys, repo and company names replaced by placeholders.
+
+3. **Delete the scratch file,** read `voice.md`, and fix anything that doesn't sound like you.
+4. **Try it:** ask Copilot to draft a review comment, compare, and tighten the rules where it's off. Small rules work best ("answer the question first", "one hedge at most", "no headings or sign-offs").
+
+A profile looks like this:
+
+```markdown
+# How I write
+- The thread's language; English when unsure.
+- 1 to 3 sentences. The point first, then the one fact that carries it.
+- Push back directly, with the reason. No "just", no "I think maybe".
+
+## Check every draft against this
+- Does it answer the actual question in the first sentence?
+- Could a word go? Then it goes.
+
+## Samples
+- "This retries forever if the queue is down. Cap it at 3 and log the last error?"
+- "Looks good. One thing: <TICKET> also needs the migration, can you add it here?"
 ```
 
-It puts `clearsky` and Anthropic's sandbox runtime (`srt`, for Settings → Copilot → Sandbox) on your PATH with npm, uses nvm's Node 22 when that's how Node is installed, and makes `~/.config/clearsky` (readable only by you). It never uses sudo: system packages the sandbox needs (bubblewrap, socat, ripgrep) and missing CLIs (gh, acli, copilot) are listed with the command to install them. `--no-sandbox` leaves srt out. Then open http://127.0.0.1:7777/settings.
+## Setup in detail
 
-Tokens:
+The welcome page (`/welcome`) shows what this machine has (Node, git, gh, acli, Copilot, the sandbox, a calendar), with the install command for your OS next to anything missing, buttons to log in to GitHub and Jira through their CLIs, and your work organizations picked from your gh login. `clearsky doctor` prints the same check in a terminal.
+
+`sh scripts/install.sh` installs or updates everything. It puts `clearsky` and Anthropic's sandbox runtime (`srt`, for Settings → Copilot → Sandbox) on your PATH with npm, uses nvm's Node 22 when that's how Node is installed, and makes `~/.config/clearsky` (readable only by you). It never uses sudo: system packages the sandbox needs (bubblewrap, socat, ripgrep) and missing CLIs (gh, acli, copilot) are listed with the command to install them. `--no-sandbox` leaves srt out; `--service` starts Clearsky at login (systemd user service). Without the installer, `node bin/clearsky.mjs serve` works from the checkout.
+
+### Try it first
+
+`clearsky try` opens Clearsky with made-up data (a company called Acme, its PRs, tickets, meetings and a Copilot chat) on http://127.0.0.1:7790. It needs no logins. Nothing of yours is read or shown, so it's also the way to show Clearsky to others. **Leave demo** in its menu, or Ctrl+C, stops it and removes its data. Settings → General → **Try with demo data** starts the same demo from the page.
+
+### Logins
 
 - **GitHub:** nothing, if you're logged in with the GitHub CLI (`gh auth login`); Clearsky then uses `gh auth token`. Otherwise a fine-grained token with read access to Pull requests, Issues, Contents and Metadata on your work org. A classic token with `repo` scope also works. If your org uses SSO, authorize the token for it.
-- **Jira:** no token in Clearsky. All Jira calls go through `acli`, so it uses whatever account `acli jira auth` is logged in as.
+- **Jira:** no token in Clearsky. All Jira calls go through `acli` (`acli jira auth login --web`), so it uses whatever account `acli jira auth` is logged in as.
 - **Google Calendar (optional), either or both ways.** When both are set up, their meetings are merged, and if one fails the other still shows:
   - **GNOME Online Accounts:** add your work Google account under Settings → Online Accounts with Calendar switched on, and set `CALENDAR_EMAIL`. Clearsky reads the calendar Evolution syncs locally, from its SQLite cache via `node:sqlite`, so it needs no login of its own. To include more calendars (a family or personal one), add that Google account in Online Accounts with only Calendar on, then tick the calendar in Clearsky's Settings (saved as `EVOLUTION_CALENDARS`). On a shared calendar like "Family", events only take your free time when you organise or are invited to them, or when one of your names (`CALENDAR_MY_NAMES`, say `Alex`) is in the title; the rest show greyed in the agenda. Holiday and birthday calendars are never picked automatically.
   - **Today's schedule** under Now / Next shows the day as a timeline: meetings as blocks (overlaps on their own line), your free slot in green, the rest of the workday, and a line for now. Hover over a meeting for its details (time, place, organizer, link, description); click to keep them open. The calendar names below the timeline hide or show each one (saved as `CALENDAR_HIDDEN`); a hidden calendar doesn't take your time either.
   - Times are 24-hour unless you pick 12-hour under Settings → General (`CLEARSKY_TIME_FORMAT=12`).
   - **iCal link:** in Google Calendar, open Settings, pick your calendar, then **Integrate calendar**, and copy **Secret address in iCal format** into `GOOGLE_CALENDAR_ICS`. Several addresses can be given, separated by spaces. Workspace admins often turn this off.
-- **Slack (optional):** a plugin that ships with Clearsky (`clearsky add slack`, or Settings → Plugins), with a user token, see below.
+- **Slack (optional):** the Slack plugin (`clearsky add slack`, or Settings → Plugins), with a user token; its [README](plugins/clearsky-slack/README.md) shows how to make one.
 
-### Slack token
-
-1. Go to https://api.slack.com/apps, choose **Create New App**, then **From a manifest**, and pick your work workspace.
-2. Paste this manifest and create the app:
-
-   ```yaml
-   display_information:
-     name: Clearsky
-   oauth_config:
-     scopes:
-       user:
-         - search:read
-   settings:
-     org_deploy_enabled: false
-     socket_mode_enabled: false
-     token_rotation_enabled: false
-   ```
-
-3. Choose **Install to Workspace**. If your workspace requires admin approval for apps, this sends a request to the admins instead. The app has a single read-only scope and acts only as you.
-4. Under **OAuth & Permissions**, copy the **User OAuth Token** (`xoxp-...`) into `SLACK_TOKEN`.
-
-Clearsky searches for messages that @mention you, including in DMs and private channels you are in. It does not list every unread DM, because Slack's API has no cheap way to do that, and Slack itself already shows them.
-
-The easiest way to set all of this up is the Settings page: run `clearsky serve` and open http://127.0.0.1:7777/settings. It runs `gh auth login --web` and `acli jira auth login --web` for you, and has a pre-filled link that creates the Slack app. Pasted tokens and URLs are written to `~/.config/clearsky/.env` (mode 600) and never shown back. The page only listens on 127.0.0.1, and changes need a per-run token, so other websites can't use it.
-
-The config is read from `./.env`, then the repo's `.env`, then `~/.config/clearsky/.env`. Real environment variables override all of them.
+The Settings page (`/settings`) runs `gh auth login --web` and `acli jira auth login --web` for you. Pasted tokens and URLs are written to `~/.config/clearsky/.env` (mode 600) and never shown back. The page only listens on 127.0.0.1, and changes need a per-run token, so other websites can't use it. The config is read from `./.env`, then the repo's `.env`, then `~/.config/clearsky/.env`. Real environment variables override all of them.
 
 ### Team packs
 
-If your team shares a setup, join it: `clearsky join <git repo, https link or file>` (or paste it on the welcome page, or in Settings → General). It fills in the organizations, stand-up time, Copilot defaults, links and skills the team agreed on, and keeps anything you set yourself. Tokens and the sandbox's doors are never part of a pack. A pack can also list the team's plugins, pinned to versions, which you look at and add yourself. See [docs/team-pack.md](docs/team-pack.md), which also describes a setup for using Clearsky at a company: Clearsky and plugins in public repos, the company's config in a private one.
+If your team shares a setup, join it: `clearsky join <git repo, https link or file>` (or paste it on the welcome page, or in Settings → General). It fills in the organizations, stand-up time, Copilot defaults, links and skills the team agreed on, and keeps anything you set yourself. Tokens and the sandbox's doors are never part of a pack. A pack can also list the team's plugins, pinned to versions, and kinds of change the team suggests letting through without asking; you look at both and take them yourself.
+
+To start one for your company, `clearsky team init ~/dev/clearsky-team` (or Settings → General → **Make a team pack**) writes a ready repo from your own settings: `clearsky-team.json`, a README for your colleagues, and folders for skills and work-only plugins, with no secrets in it. Push it to a private repo in your company's GitHub and share the link. See [docs/team-pack.md](docs/team-pack.md).
 
 ## Use
 
@@ -109,15 +119,21 @@ The server also answers JSON on 127.0.0.1: `/api/source/<github|jira|jiraMention
 
 ## Plugins
 
-Clearsky's core is GitHub, Jira, your calendars, Copilot and your links. Everything else is a plugin you add: a folder with a `clearsky-plugin.json` and one ES module, with no build step and no dependencies to install. Three ship in [plugins/](plugins/): Slack (mentions), Grafana (logs and metrics for Copilot chats, through `grafana …`) and School. If Slack or Grafana was set up before it became a plugin, Clearsky adds it for you once.
+Clearsky's core is GitHub, Jira, your calendars, Copilot and your links. Everything else is a plugin you add: a folder with a `clearsky-plugin.json` and one ES module, with no build step and no dependencies to install. Three have repos of their own and short names in Clearsky's catalog ([plugins/catalog.json](plugins/catalog.json)), each pinned to a released version:
+
+| Name | What it does | Repo |
+| --- | --- | --- |
+| `slack` | Slack messages that @mention you | [clearsky-slack](plugins/clearsky-slack/) |
+| `grafana` | Logs and metrics for Copilot chats, read only, through `grafana …` | [clearsky-grafana](plugins/clearsky-grafana/) |
+| `school` | Messages, forms and weekly plans from Visma Flyt Skole | [clearsky-school](plugins/clearsky-school/) |
 
 ```
+clearsky add slack                               # from the catalog: its repo, at the pinned tag
 clearsky add github:someone/clearsky-weather     # a GitHub repo (#ref and /sub/folder work too)
 clearsky add https://git.example.com/me/plug.git # any git repo, with your own git login
 clearsky add npm:clearsky-weather@1.2.0          # an npm package, fetched without running its scripts
 clearsky add ./my-plugin                         # a folder here
-clearsky add flyt                                # one that ships with Clearsky
-clearsky plugins                                 # what's added, and what ships with Clearsky
+clearsky plugins                                 # what's added, and what the catalog has
 clearsky update [<name>]                         # fetch again from where it came from (a #tag stays put)
 clearsky update --check                          # newer version tags, without fetching code
 clearsky update <name> --to v1.3.0               # move it to another tag, branch or commit
@@ -126,7 +142,7 @@ clearsky remove <name> [--data]
 
 Or do the same under **Settings → Plugins**. Either way, you see what a plugin reaches (hosts, programs, files) before any of its code runs, and Clearsky loads it at its next start.
 
-A plugin you add runs in a sandbox of its own (srt, like Copilot's): every fetch is a separate process that reaches only the hosts in its manifest, reads only its own code, writes only its own data folder, and gets only its own settings, with nothing of Clearsky's environment. Clearsky itself never loads its code. Its files are hashed when it's added (git ones also pinned to the commit), and a plugin whose files changed isn't loaded until you update it. A plugin that can't work in the sandbox, say because it opens a browser to log in, says why in its manifest and is added only with `--trust` (or the box in Settings). The ones in `plugins/` are part of Clearsky and run inside it.
+A plugin you add runs in a sandbox of its own (srt, like Copilot's): every fetch is a separate process that reaches only the hosts in its manifest, reads only its own code, writes only its own data folder, and gets only its own settings, with nothing of Clearsky's environment. Clearsky itself never loads its code. Its files are hashed when it's added (git ones also pinned to the commit), and a plugin whose files changed isn't loaded until you update it. A plugin that can't work in the sandbox, say because it opens a browser to log in (School) or lends chats a login (Grafana), says why in its manifest and is added only with `--trust` (or the box in Settings).
 
 How to write one is in [docs/plugins.md](docs/plugins.md). For a quick private source there's still `~/.config/clearsky/sources/*.mjs`: one file each, loaded as it is, never shared. The hooks are the same; see the comment at the top of [lib/sources.mjs](lib/sources.mjs) and [test/sources/school.mjs](test/sources/school.mjs).
 
@@ -135,21 +151,6 @@ Work and personal stay apart: a source sets `area: 'work'` to sit with GitHub, J
 ## Its own window
 
 `clearsky app` opens Clearsky in a window of its own (Chromium's app mode: no tabs or address bar, its own taskbar icon), starting the server first if it isn't running. The installer adds it to your app menu as **Clearsky**. It uses your normal browser profile, so links to GitHub and Jira open logged in. Any Chromium-based browser works (`CLEARSKY_BROWSER` picks one). The server is unchanged, so a browser tab still works too.
-
-## School (Visma Flyt Skole)
-
-If your children's school uses Visma Flyt Skole (Min Skole / Flyt Foresatt), Clearsky shows what waits for you there: unread messages and notices, and forms and consents to answer. Form deadlines show up in Now / Next. It only reads. It never replies or marks anything as read, so the portal still shows everything as unread.
-
-School is a plugin: add it under **Settings → Plugins** (or `clearsky add flyt`) and restart. If you had it set up before it became a plugin, it was added for you.
-
-1. In Settings, under **Plugins → Visma Flyt Skole**, set **School portal key**: the last part of `https://foresatt.visma.no/<key>`.
-2. Click **Log in with BankID**. A Chrome or Chromium window opens. Log in with BankID or MinID, and the window closes by itself once you're in. Set `CLEARSKY_BROWSER` if your browser isn't found.
-
-**Weekly plans in the calendar.** The weekly plans the school sends as PDF or Word files become events on a calendar of their own, **School**, inside Clearsky: trips and theme days at the times the plan gives, when school ends each day, homework on the day it's due, and SFO activities. What's the same every day (frilek, lunsj, storefri) is left out. It's read by script, no AI: a plan laid out as a table with the weekdays as columns works; a plan written as prose gives nothing. Each file is read once and what came out of it is kept in `~/.config/clearsky/school-events.json` (mode 600). The events show in the day schedule without taking your time, and each opens the message it came from. Turn it off, or rename the calendar, in Settings (**Weekly plans in the calendar**, **Calendar for weekly plans**). PDFs need `pdftotext` (poppler-utils).
-
-The login is kept in the GNOME keyring (`secret-tool`), or in `~/.config/clearsky/flyt-session.json` (mode 600) if there's no keyring. Clearsky renews the login itself. When Visma ends the login, the School panel links you to Settings to log in again.
-
-There is no public API. This uses the one the portal itself uses, as documented by [skolectl](https://github.com/langtind/skolectl), so it can break when Visma changes the portal.
 
 ## Getting things done
 
@@ -169,7 +170,7 @@ PRs and tickets link to each other: a PR shows the Jira tickets in its title or 
 
 A container has no keyring, and acli can only keep its login in one, so Clearsky's container runs a keyring of its own, kept in `~/.config/clearsky/container/` (yours only). Log in once after the first start: `clearsky docker login` brings over the logins this machine already has: gh's, which Copilot uses too. acli's login can't be copied, so acli logs in through your browser as usual: its login calls back to a port on 127.0.0.1, so that runs in a one-off container on this machine's network while Clearsky pauses, and it prints the link to open. Anything else it can't bring over is done in the browser too. Your machine's own keyring and logins aren't used or changed.
 
-Online Accounts calendars are found from `~/.config/clearsky/eds-sources.json`, which Clearsky writes whenever it runs natively. The school login (BankID) needs a browser, so log in natively and then hand it over with `node bin/clearsky.mjs school-handover` before starting the container; it moves the login from your keyring into the container's. Desktop notifications aren't available in the container. Updating: `git pull`, then `clearsky docker up` (Restart alone doesn't load new code into the image).
+Online Accounts calendars are found from `~/.config/clearsky/eds-sources.json`, which Clearsky writes whenever it runs natively. The School plugin's login (BankID) needs a browser, so log in natively and then hand it over with `clearsky school-handover` before starting the container; it moves the login from your keyring into the container's. Desktop notifications aren't available in the container. Updating: `git pull`, then `clearsky docker up` (Restart alone doesn't load new code into the image).
 
 `npm test` includes a browser check of every view when Playwright is installed, and skips it otherwise.
 
@@ -213,7 +214,7 @@ Sessions show up next to the PR or ticket they are about: one you started from t
 - **review-my-queue:** goes through your review requests, smallest and re-reviews first, and drafts review notes. It never submits a review unless you tell it to.
 - **continue-work:** checks a PR or ticket (CI, conflicts, unresolved review comments, what the ticket still asks for), then carries on with what's left after asking once. It never merges, approves, force-pushes or posts comments without asking. From ✦ on a PR in Clearsky, the chat runs in your local clone of that repository (found under `~/dev`, or `CLEARSKY_CODE_DIRS`).
 
-- **write-like-me:** anything posted as you (review comments, replies, PR descriptions, Jira comments, Slack) in your own voice: short, to the point, no filler. It reads your voice profile, `~/.copilot/voice.md`, if you have one: how you write, with samples of your own comments. That file stays on your machine; Copilot can write it for you from your recent GitHub and Jira comments.
+- **write-like-me:** anything posted as you (review comments, replies, PR descriptions, Jira comments, Slack) in your own voice: short, to the point, no filler. It reads your voice profile, `~/.copilot/voice.md`, if you have one; [Make Copilot write like you](#make-copilot-write-like-you) says how to make it.
 
 Inside this repo Copilot picks them up automatically. To have them in every repo, copy them to your personal skills folder:
 
@@ -234,3 +235,8 @@ Then ask Copilot "triage my work" or "review my queue".
 - Jira mentions are found with `comment ~ currentUser()` over the last 14 days. Each match is then confirmed by finding your account id in a mention in the comment's rich text. Mentions stay listed for the whole window; Jira's "seen" state isn't available. You can override the search with `JIRA_MENTIONS_JQL`.
 - The server listens on 127.0.0.1 only and caches results for 2 minutes. Use the Refresh button to force a fetch.
 - `npm test` runs the tests against a mocked GitHub and Slack, plus a fake `acli`.
+- Before publishing a fork or a team pack, `node scripts/leak-check.mjs` (add `--history` for every past version) looks for real tokens, email addresses, home folders and words of your own listed in `~/.config/clearsky/private-words.txt`.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
