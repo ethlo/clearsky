@@ -17,7 +17,7 @@ test('acli errors say what acli said, also when it says it on stdout', () => {
 
 test('acli errors with nothing said give the exit code, and timeouts say so', () => {
   assert.equal(acliError(search, failed(search, { code: 2 })).message, 'acli jira workitem search failed: exited with 2 and said nothing');
-  assert.equal(acliError(search, failed(search, { code: null, killed: true, signal: 'SIGTERM' })).message, 'acli jira workitem search failed: no answer within 60s (stopped)');
+  assert.equal(acliError(search, failed(search, { code: null, killed: true, signal: 'SIGTERM' })).message, 'acli jira workitem search failed: no answer within 60s (stopped). Does "acli jira auth status" answer quickly in a terminal?');
   assert.equal(acliError(search, failed(search, { stderr: 'Error: bad JQL' })).auth, undefined);
 });
 
@@ -48,4 +48,15 @@ test('your account id comes from a ticket you created when none is assigned to o
   assert.equal(asked.length, 3, 'found once and kept');
   const none = jiraWith(() => ({ stdout: '[]' }));
   await assert.rejects(none.jiraMe(), /no Jira ticket names you yet/);
+});
+
+test('acli gets its input closed, so a prompt can\'t hang it', async () => {
+  let ended = 0;
+  const j = createJira({
+    config: { days: 14, jira: { acli: 'acli', url: 'https://acme.atlassian.net' } },
+    execFileP: () => Object.assign(Promise.resolve({ stdout: '[]' }), { child: { stdin: { end: () => ended++ } } }),
+    settle: (p) => p,
+  });
+  await j.jiraSearch('assignee = currentUser()', ['key']);
+  assert.equal(ended, 1);
 });
