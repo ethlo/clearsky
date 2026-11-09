@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Stand-in for the Atlassian CLI in Clearsky's demo: the made-up tickets in data.mjs.
-import { tickets, mentionTickets, ago } from './data.mjs';
+import { tickets, mentionTickets, ago, jiraProjects, jiraVersions, versionTickets } from './data.mjs';
 
 const args = process.argv.slice(2);
 const arg = (n) => args[args.indexOf(n) + 1];
@@ -26,9 +26,19 @@ const richDoc = (summary) => ({ type: 'doc', content: [
 
 if (args[1] === 'auth' && args[2] === 'status') {
   process.stdout.write('✓ Authenticated\n  Site: acme.atlassian.net\n  Email: alex@example.com\n');
+} else if (args[1] === 'project' && args[2] === 'list') {
+  print(jiraProjects.map((p) => ({ key: p.key, name: p.name, projectTypeKey: 'software' })));
+} else if (args[1] === 'project' && args[2] === 'view') {
+  const key = arg('--key'), p = jiraProjects.find((x) => x.key === key);
+  if (!p) { process.stderr.write(`✗ Error: project ${key} not found\n`); process.exit(1); }
+  print({ key, name: p.name, versions: jiraVersions[key] || [] });
 } else if (args[1] === 'workitem' && args[2] === 'search') {
   const jql = arg('--jql');
-  if (/^(assignee|reporter) = currentUser\(\) ORDER/.test(jql)) print([{ key: 'PAY-412', self: self('PAY-412'), fields: { assignee: ME, reporter: ME } }]);
+  const fv = jql.match(/^project = "([^"]+)" AND fixVersion = "((?:[^"\\]|\\.)*)"/);
+  if (fv) print((versionTickets[`${fv[1]} ${fv[2].replace(/\\(.)/g, '$1')}`] || []).map((t) => ({ key: t.key, self: self(t.key), fields: { summary: t.summary, status: status(t.status, t.cat),
+    priority: { name: t.priority }, updated: t.updated, issuetype: { name: t.type }, assignee: t.assignee ? { displayName: t.assignee } : null } })));
+  else if (/fixVersion is not EMPTY/.test(jql)) print([]);
+  else if (/^(assignee|reporter) = currentUser\(\) ORDER/.test(jql)) print([{ key: 'PAY-412', self: self('PAY-412'), fields: { assignee: ME, reporter: ME } }]);
   else if (/comment ~ currentUser|watcher/.test(jql)) print(mentionTickets.map((t) => ({ key: t.key, self: self(t.key), fields: { summary: t.summary, status: status(t.status, 'indeterminate') } })));
   else print(tickets.map((t) => ({ key: t.key, self: self(t.key), fields: { summary: t.summary, status: status(t.status, t.cat), priority: { name: t.priority },
     updated: t.updated, issuetype: { name: t.type }, project: { key: t.key.split('-')[0] }, assignee: ME } })));

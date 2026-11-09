@@ -58,7 +58,7 @@ import { readHandoffs, saveHandoffs, addHandoff, nextHandoff, settleAfterRestart
 import { srtInstalled } from '../lib/doctor.mjs';
 import { ownRead, chatPushes } from '../lib/own-read.mjs';
 import { manifest as githubManifest, createGitHub, workItems as githubItems, PR_FIELDS, ITEM_FIELDS, ciState, isBot, latestReviewsByUser, openThreads, humanReviewers, myPrStatus, reviewerName } from '../lib/modules/github.mjs';
-import { manifest as jiraManifest, createJira, workItems as jiraItems, mentionItems as jiraMentionItems, listOf, fieldsOf, nameOf, commentInfo, excerpt, userId, mapLimit, JIRA_WAITING, jiraMentionsByTicket, mergeJira } from '../lib/modules/jira.mjs';
+import { manifest as jiraManifest, createJira, workItems as jiraItems, mentionItems as jiraMentionItems, listOf, fieldsOf, nameOf, commentInfo, excerpt, userId, mapLimit, JIRA_WAITING, jiraMentionsByTicket, mergeJira, PROJECT_KEY, starredProjects, versionSummary } from '../lib/modules/jira.mjs';
 
 // ---------------------------------------------------------------- config
 
@@ -191,6 +191,7 @@ const fetchGitHub = ghModule.fetch;
 export { isBot, openThreads, myPrStatus };
 
 const jiraModule = createJira({ config, execFileP, settle });
+let jiraProjectsCache = { at: 0, data: null }; // every Jira project you can see, for starring (Versions page)
 const { acli, jiraSearch, jiraComments, jiraSite, browseUrl, jiraDebug } = jiraModule;
 const fetchJiraWork = jiraModule.fetchWork, fetchJiraMentions = jiraModule.fetchMentions;
 export const issuePreview = (key) => jiraModule.issuePreview(key);
@@ -2860,6 +2861,17 @@ function serve() {
           vmQueue.pump(); // more VMs at once: whoever waits starts now
           return json(res, 200, await settingsStatus());
         }
+        // Star or unstar a Jira project for the Versions page; saved like a setting.
+        if (url.pathname === '/api/jira/star') {
+          const { key, starred } = await readJson(req);
+          if (!PROJECT_KEY.test(key || '')) return json(res, 400, { error: 'bad project key' });
+          const now = starredProjects(process.env.JIRA_STARRED_PROJECTS).filter((k) => k !== key);
+          if (starred) now.push(key);
+          const values = settings.validate({ JIRA_STARRED_PROJECTS: now.join(',') });
+          settings.writeEnvFile(userEnvFile, values);
+          if (values.JIRA_STARRED_PROJECTS) process.env.JIRA_STARRED_PROJECTS = values.JIRA_STARRED_PROJECTS; else delete process.env.JIRA_STARRED_PROJECTS;
+          return json(res, 200, { starred: starredProjects(process.env.JIRA_STARRED_PROJECTS) });
+        }
         // Show or hide one calendar's events; saved like a setting, without refetching everything.
         if (url.pathname === '/api/calendar/hidden') {
           const { name, hidden } = await readJson(req);
@@ -3139,6 +3151,29 @@ function serve() {
       }
       const issueKey = url.pathname.match(/^\/api\/issue\/([A-Z][A-Z0-9_]+-\d+)$/)?.[1];
       if (issueKey) return json(res, 200, await issuePreview(issueKey));
+      // The Versions page: starred Jira projects, their fix versions, and one version's tickets.
+      if (url.pathname === '/api/jira/starred') {
+        const names = new Map((jiraProjectsCache.data || []).map((p) => [p.key, p.name]));
+        return json(res, 200, { starred: starredProjects(process.env.JIRA_STARRED_PROJECTS).map((key) => ({ key, name: names.get(key) || null })), site: jiraModule.site });
+      }
+      if (url.pathname === '/api/jira/projects') {
+        if (!jiraProjectsCache.data || Date.now() - jiraProjectsCache.at > 30 * 6e4 || url.searchParams.has('refresh')) {
+          jiraProjectsCache = { at: Date.now(), data: await jiraModule.jiraProjects() };
+        }
+        return json(res, 200, { projects: jiraProjectsCache.data, starred: starredProjects(process.env.JIRA_STARRED_PROJECTS) });
+      }
+      if (url.pathname === '/api/jira/versions') {
+        const key = url.searchParams.get('project') || '';
+        if (!PROJECT_KEY.test(key)) return json(res, 400, { error: 'bad project key' });
+        return json(res, 200, { project: key, versions: await jiraModule.projectVersions(key, url.searchParams.has('refresh')) });
+      }
+      if (url.pathname === '/api/jira/version') {
+        const key = url.searchParams.get('project') || '', version = url.searchParams.get('version') || '';
+        if (!PROJECT_KEY.test(key)) return json(res, 400, { error: 'bad project key' });
+        if (!version || version.length > 200 || /[\r\n]/.test(version)) return json(res, 400, { error: 'bad version' });
+        const d = await jiraModule.versionIssues(key, version, url.searchParams.has('refresh'));
+        return json(res, 200, { ...d, summary: versionSummary(d.issues) });
+      }
       const prsFor = url.pathname.match(/^\/api\/issue\/([A-Z][A-Z0-9_]+-\d+)\/prs$/)?.[1];
       if (prsFor) return json(res, 200, await ghModule.ticketPrs(prsFor));
       // Builds: each repo's main branch, its checks and its newest artifact and release.

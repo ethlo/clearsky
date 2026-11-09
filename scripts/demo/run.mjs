@@ -108,7 +108,7 @@ Host globex-prod-db
   HostName 172.16.4.12
 `);
 writeFileSync(join(conf, '.env'), [
-  'GITHUB_TOKEN=demo', `GITHUB_API_URL=${base}`, 'GITHUB_ORGS=acme', `ACLI_BIN=${join(here, 'acli.mjs')}`, 'JIRA_URL=https://acme.atlassian.net', 'JIRA_ACCOUNT_ID=me-1',
+  'GITHUB_TOKEN=demo', `GITHUB_API_URL=${base}`, 'GITHUB_ORGS=acme', `ACLI_BIN=${join(here, 'acli.mjs')}`, 'JIRA_URL=https://acme.atlassian.net', 'JIRA_ACCOUNT_ID=me-1', 'JIRA_STARRED_PROJECTS=PAY, WEB',
   'SLACK_TOKEN=demo', `SLACK_API_URL=${base}/slack`, `GOOGLE_CALENDAR_ICS=${base}/calendar.ics`, 'CLEARSKY_POLL_MINUTES=0', `CLEARSKY_STANDUP_TIME=${hhmm(standupAt())}`, 'CLEARSKY_NOTIFY=off',
   `COPILOT_BIN=${join(here, 'copilot.mjs')}`, 'GRAFANA_INSTANCES=test=https://grafana.test.example.com,prod=https://grafana.example.com',
   'CLEARSKY_CURRENCY=EUR', 'CLEARSKY_FX_RATE=0.92', // made-up costs on the Usage page
