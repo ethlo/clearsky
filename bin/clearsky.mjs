@@ -23,7 +23,7 @@ import { sessionEvents, sessionUsage } from '../lib/copilot-events.mjs';
 import { branchesFor } from '../lib/branches.mjs';
 import { sandboxedCommand, sandboxEnded, stopSandbox, sandboxProxy, sandboxNetwork, githubLogin, DEFAULT_DOMAINS, READ_DEFAULT, parseDomains } from '../lib/sandbox.mjs';
 import { HostDoor, ruleMatches } from '../lib/host-door.mjs';
-import { VmImage, ChatVm, vmSupport, VM_DOMAINS, reapOrphans } from '../lib/vm.mjs';
+import { VmImage, ChatVm, vmSupport, VM_DOMAINS, reapOrphans, vmsLoad } from '../lib/vm.mjs';
 import { VmQueue } from '../lib/vm-queue.mjs';
 import { Jobs, jobReport, jobView, shellLine, tailOf } from '../lib/jobs.mjs';
 import { Watchdog, watchdogSettings, nudgeText, REASONS as NUDGE_REASONS, AUTO_MARK } from '../lib/watchdog.mjs';
@@ -3364,8 +3364,8 @@ function serve() {
       }
       // All chats' VMs (the VMs view): who has a place, who waits in line, and what runs in each.
       if (url.pathname === '/api/vms') {
-        if (isDemo()) return json(res, 200, { ...(await import('../scripts/demo/data.mjs')).vms(), support: { ok: true } });
-        return json(res, 200, { ...(await vmsOverview({ look: !url.searchParams.has('quick') })), support: vmSupport() });
+        if (isDemo()) { const d = (await import('../scripts/demo/data.mjs')).vms(); return json(res, 200, { ...d, load: vmsLoad(d.vms), support: { ok: true } }); }
+        { const d = await vmsOverview({ look: !url.searchParams.has('quick') }); return json(res, 200, { ...d, load: vmsLoad(d.vms), support: vmSupport() }); }
       }
       if (url.pathname === '/api/copilot/sessions') {
         const info = await copilotInfo();
