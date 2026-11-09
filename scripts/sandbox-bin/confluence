@@ -1,0 +1,4 @@
+#!/usr/bin/env node
+// `confluence …` in Clearsky's sandbox: the Confluence plugin's door (plugins/clearsky-confluence), which
+// searches and reads Confluence through Clearsky, which holds the Atlassian login. Read only.
+require('./shim.js').viaClearsky('confluence', process.argv.slice(2));

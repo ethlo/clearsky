@@ -1193,3 +1193,9 @@ a.u-row:hover { background: var(--accent-soft); }
 .msg.auto.a-ok { border-color: var(--green); } .msg.auto.a-bad { border-color: var(--red); }
 .msg.auto details { margin-top: 4px; } .msg.auto summary { cursor: pointer; color: var(--blue); }
 .msg.auto pre { max-height: 240px; overflow: auto; margin: 4px 0 0; font-size: 11px; white-space: pre-wrap; word-break: break-word; }
+/* The menu's VMs item while VMs run: green, orange or red with the busiest one's load. */
+.ni.load-ok .ico, .ni.load-ok:hover .ico, .ni.load-ok.on .ico { color: var(--green); }
+.ni.load-warm .ico, .ni.load-warm:hover .ico, .ni.load-warm.on .ico { color: var(--amber); }
+.ni.load-hot .ico, .ni.load-hot:hover .ico, .ni.load-hot.on .ico { color: var(--red); }
+.ni.load-warm .lab { color: var(--amber); }
+.ni.load-hot .lab { color: var(--red); font-weight: 600; }

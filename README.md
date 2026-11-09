@@ -81,6 +81,8 @@ The welcome page (`/welcome`) shows what this machine has (Node, git, gh, acli, 
   - Times are 24-hour unless you pick 12-hour under Settings → General (`CLEARSKY_TIME_FORMAT=12`).
   - **iCal link:** in Google Calendar, open Settings, pick your calendar, then **Integrate calendar**, and copy **Secret address in iCal format** into `GOOGLE_CALENDAR_ICS`. Several addresses can be given, separated by spaces. Workspace admins often turn this off.
 - **Slack (optional):** the Slack plugin (`clearsky add slack`, or Settings → Plugins), with a user token; its [README](plugins/clearsky-slack/README.md) shows how to make one.
+- **Slack through MCP (optional, no token):** `clearsky add slack-mcp` talks to Slack's own MCP server read only. You log in from Settings in your browser, Copilot chats read Slack with `door slack …`, and mentions show like the token plugin's. See [clearsky-slack-mcp](plugins/clearsky-slack-mcp/README.md).
+- **Confluence (optional, no token):** `clearsky add confluence` lets Copilot chats search and read Confluence with `confluence …`, read only, through Atlassian's MCP server. You log in from Settings in your browser; Clearsky registers itself as a client, so there's no app or token to create. Jira stays on `acli`. See [clearsky-confluence](plugins/clearsky-confluence/README.md).
 
 The Settings page (`/settings`) runs `gh auth login --web` and `acli jira auth login --web` for you. Pasted tokens and URLs are written to `~/.config/clearsky/.env` (mode 600) and never shown back. The page only listens on 127.0.0.1, and changes need a per-run token, so other websites can't use it. The config is read from `./.env`, then the repo's `.env`, then `~/.config/clearsky/.env`. Real environment variables override all of them.
 
@@ -119,13 +121,15 @@ The server also answers JSON on 127.0.0.1: `/api/source/<github|jira|jiraMention
 
 ## Plugins
 
-Clearsky's core is GitHub, Jira, your calendars, Copilot and your links. Everything else is a plugin you add: a folder with a `clearsky-plugin.json` and one ES module, with no build step and no dependencies to install. Three have repos of their own and short names in Clearsky's catalog ([plugins/catalog.json](plugins/catalog.json)), each pinned to a released version:
+Clearsky's core is GitHub, Jira, your calendars, Copilot and your links. Everything else is a plugin you add: a folder with a `clearsky-plugin.json` and one ES module, with no build step and no dependencies to install. These have repos of their own and short names in Clearsky's catalog ([plugins/catalog.json](plugins/catalog.json)), each pinned to a released version:
 
 | Name | What it does | Repo |
 | --- | --- | --- |
 | `slack` | Slack messages that @mention you | [clearsky-slack](plugins/clearsky-slack/) |
 | `grafana` | Logs and metrics for Copilot chats, read only, through `grafana …` | [clearsky-grafana](plugins/clearsky-grafana/) |
 | `school` | Messages, forms and weekly plans from Visma Flyt Skole | [clearsky-school](plugins/clearsky-school/) |
+| `slack-mcp` | Slack through Slack's MCP server: mentions and read-only `door slack …` for chats, no token | [clearsky-slack-mcp](plugins/clearsky-slack-mcp/) |
+| `confluence` | Read-only Confluence search and pages for chats, through Atlassian's MCP server | [clearsky-confluence](plugins/clearsky-confluence/) |
 
 ```
 clearsky add slack                               # from the catalog: its repo, at the pinned tag

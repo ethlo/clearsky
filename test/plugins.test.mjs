@@ -215,7 +215,7 @@ test('a source that becomes a plugin later (Slack) is offered once to lists from
 test('every plugin in the catalog has its folder here, a valid manifest, a pin on its version, and loads', async () => {
   const p = paths();
   const cat = readCatalog();
-  assert.deepEqual(cat.map((c) => c.name).sort(), ['flyt', 'grafana', 'slack']);
+  assert.deepEqual(cat.map((c) => c.name).sort(), ['confluence', 'flyt', 'grafana', 'slack', 'slack-mcp']);
   const reg = { plugins: {} };
   for (const c of cat) {
     const dir = bundledDir(c.name);

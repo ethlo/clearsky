@@ -1,6 +1,6 @@
 # Plugins
 
-Clearsky ships as a core (GitHub, Jira, calendars, Copilot, links) and everything else is a plugin you add. A plugin is a plain folder: a `clearsky-plugin.json` that says what it is and what it reaches, and one ES module that does the work. There's no build step and nothing to `npm install`; a plugin has no dependencies, like Clearsky itself. Three have a repo of their own and are in Clearsky's catalog (`plugins/catalog.json`): Slack, Grafana and School. `clearsky add slack` adds one from its repo, at the version the catalog pins.
+Clearsky ships as a core (GitHub, Jira, calendars, Copilot, links) and everything else is a plugin you add. A plugin is a plain folder: a `clearsky-plugin.json` that says what it is and what it reaches, and one ES module that does the work. There's no build step and nothing to `npm install`; a plugin has no dependencies, like Clearsky itself. These have a repo of their own and are in Clearsky's catalog (`plugins/catalog.json`): Slack, Slack (MCP), Confluence, Grafana and School. `clearsky add slack` adds one from its repo, at the version the catalog pins.
 
 ## Adding one
 

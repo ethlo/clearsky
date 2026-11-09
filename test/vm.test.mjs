@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VmImage, ChatVm, reapOrphans, cpuSample, cpuBusy, vmSize, VM_DEFAULT, loginForwarder, loginHead } from '../lib/vm.mjs';
+import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VmImage, ChatVm, reapOrphans, cpuSample, cpuBusy, vmsLoad, vmSize, VM_DEFAULT, loginForwarder, loginHead } from '../lib/vm.mjs';
 import { registryWrite, githubFilter } from '../lib/github-gate.mjs';
 import { srtSettings } from '../lib/sandbox.mjs';
 import { needs, serveBroker } from '../lib/broker.mjs';
@@ -202,4 +202,16 @@ test('VM CPU use comes from two looks at the guest\'s /proc/stat', () => {
   assert.equal(cpuBusy(b, a), null);
   assert.equal(cpuSample('nonsense'), null);
   assert.equal(cpuSample(''), null);
+});
+
+test('the VMs menu item\'s colour follows the busiest running VM', () => {
+  const vm = (chat, cpuPct, memUsedMb, state = 'running') => ({ chat, title: chat, state, system: { cpuPct, memUsedMb, memTotalMb: 1000 } });
+  assert.equal(vmsLoad([]), null);
+  assert.equal(vmsLoad([vm('a', 99, 990, 'off')]), null); // waiting or stopped: plain
+  assert.deepEqual(vmsLoad([vm('a', 20, 300)]), { pct: 30, what: 'memory', chat: 'a', title: 'a', level: 'ok' });
+  assert.equal(vmsLoad([vm('a', 20, 300), vm('b', 75, 100)]).level, 'warm');
+  assert.deepEqual(vmsLoad([vm('a', 95, 300), vm('b', 75, 100)]), { pct: 95, what: 'CPU', chat: 'a', title: 'a', level: 'hot' });
+  assert.equal(vmsLoad([vm('a', 10, 900)]).level, 'hot'); // memory counts too
+  assert.equal(vmsLoad([vm('a', null, 200)]).pct, 20); // no CPU figure on the first look
+  assert.deepEqual(vmsLoad([{ chat: 'a', state: 'running', system: null }]), { pct: null, what: 'CPU', chat: 'a', title: null, level: 'ok' });
 });
