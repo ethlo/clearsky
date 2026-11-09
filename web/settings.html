@@ -90,7 +90,10 @@
   .plug-from { display: flex; gap: 8px; align-items: center; } .plug-from input { flex: 1; margin: 0; }
   .login-head { margin: 14px 0 4px; } .login-slot .row { margin-top: 6px; }
   .plug-look { margin-top: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
-  .plug-look .warn { color: var(--amber, #b26b00); }
+  .plug-look .warn, .pp-ver .warn { color: var(--amber, #b26b00); }
+  .team-plug { padding: 6px 0; border-top: 1px solid var(--line); }
+  .team-plug code { overflow-wrap: anywhere; }
+  .pp-newer { display: inline-flex; flex-wrap: wrap; gap: 6px; }
   input, select, textarea { width: 100%; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--line-strong);
     border-radius: 7px; padding: 6px 9px; }
   input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
@@ -144,7 +147,8 @@
       <p class="hint">Everything Clearsky reads from. Open one to set it up.<span class="more">Each page also shows what the plugin holds and reaches. One you add from a git repo, npm or a folder runs in a sandbox of its own: it reaches only the hosts it lists, keeps files only in its own folder, and gets only its own settings. You see what it reaches before any of its code runs.</span></p>
       <div class="plugs" id="plugs"></div>
       <div class="row" id="plug-restart" hidden><button id="plug-restart-btn">Restart to load</button><span class="msg">Clearsky loads plugins when it starts.</span></div>
-      <label for="plug-from">Add a plugin</label>
+      <div id="plug-team"></div>
+      <label for="plug-from">Add a plugin<span class="more">Add <code>#v1.2.0</code> (a tag) or <code>#</code> and a commit to stay on that version; without one it follows the repo's default branch. A private repo on github.com is fetched with your gh login.</span></label>
       <div class="plug-from"><input id="plug-from" spellcheck="false" placeholder="github:owner/repo, https://…/repo.git, npm:package or a folder">
         <button id="plug-look" class="secondary">Look at it</button></div><span class="msg" id="plug-msg"></span>
       <div id="plug-preview"></div>
@@ -574,6 +578,30 @@ function plugStatus(p) {
 }
 const kindLabel = (p) => (p.kind === 'core' ? 'Built in' : p.kind === 'bundled' ? 'Ships with Clearsky'
   : p.kind === 'local' ? 'Your file in ~/.config/clearsky/sources' : `From ${p.from}${p.commit ? ` @ ${p.commit.slice(0, 10)}` : ''}`);
+// How it's pinned (lib/plugins.mjs pinOf), in words.
+const pinLabel = (p) => {
+  const ref = String(p.from || '').split('#')[1] || '';
+  return { default: 'Follows the repo\'s default branch: Update takes its new commits.', ref: `On ${ref}: Update fetches ${ref} again.`,
+    commit: 'Pinned to one commit.', version: `Pinned to version ${p.version}.`, range: 'Takes the newest version in its range.' }[p.pin] || '';
+};
+const canVersion = (p) => p.added && ['git', 'npm', 'folder'].includes(p.kind);
+function versionHtml(p, offer) {
+  if (!canVersion(p)) return '';
+  return `<h3>Version</h3><p class="k">${esc([p.version && `${p.version}${p.commit ? ` @ ${p.commit.slice(0, 10)}` : ''}.`, pinLabel(p)].filter(Boolean).join(' '))}</p>
+    ${offer ? `<p>${esc(S.plugins.team.name)} uses <code>${esc(offer.from)}</code>.</p>` : ''}
+    <div class="row">${offer ? `<button data-plug-add="${esc(offer.from)}">Look at the team's version</button>` : ''}
+      ${p.kind === 'folder' ? `<button class="secondary" data-plug-add="${esc(p.from)}">Copy it again</button>`
+        : `<button class="secondary" data-plug-check="${esc(p.name)}">Check for updates</button>`}<span class="pp-newer"></span><span class="msg"></span></div>
+    <div class="pp-preview"></div>`;
+}
+// The team pack's plugins you don't have yet, or have at another version.
+function teamHtml(t) {
+  if (!t?.plugins?.length) return '';
+  const what = { added: 'added', new: 'not added', 'other-version': 'you have another version' };
+  return `<h3>From ${esc(t.name)}<span class="more">Plugins your team pack lists. Nothing is added until you look at it and say yes. When the team moves a plugin to a new version, it shows here.</span></h3>
+    ${t.plugins.map((o) => `<div class="team-plug"><div class="row"><span><code>${esc(o.inPack || o.from)}</code>${o.note ? ` ${esc(o.note)}` : ''} <span class="k">${esc(what[o.state])}</span></span>
+      ${o.state === 'added' ? '' : `<button class="secondary" data-plug-add="${esc(o.from)}">${o.state === 'new' ? 'Look at it' : 'Look at the team\'s version'}</button>`}<span class="msg"></span></div><div class="pp-preview"></div></div>`).join('')}`;
+}
 const runLabel = (p) => (p.kind === 'core' ? '' : p.run === 'sandbox' ? 'sandboxed' : p.kind === 'bundled' || p.kind === 'local' ? '' : 'runs inside Clearsky, as you');
 const KIND = { token: 'Token', 'web-session': 'Web session (cookies)', 'cli-login': 'Login kept by its CLI', keyring: 'Keyring' };
 // What it holds and reaches: the same lines for every plugin (and for Copilot).
@@ -634,24 +662,30 @@ function drawPlugins() {
   const bad = list.filter((p) => plugStatus(p).on === 'bad').length;
   state($('#plug-state'), bad ? 'bad' : null, bad ? `${bad} need${bad === 1 ? 's' : ''} you` : '');
   $('#plug-restart').hidden = list.every((p) => !p.added || p.loaded) && !renderPlugins.changed;
+  const team = $('#plug-team'), tshape = JSON.stringify(S.plugins.team || null);
+  if (team.dataset.shape !== tshape) { team.dataset.shape = tshape; team.innerHTML = teamHtml(S.plugins.team); infoButtons(team); }
   const pages = $('#plug-pages');
   for (const p of list) {
     let pg = pages.querySelector(`.pp[data-plugin="${CSS.escape(p.name)}"]`);
     if (!pg) {
       pg = document.createElement('div');
       pg.className = 'pp'; pg.dataset.plugin = p.name; pg.hidden = true;
-      pg.innerHTML = `<a class="pp-back" href="#plugins">‹ All plugins</a><div class="pp-head"></div><div class="pp-setup"></div>
+      pg.innerHTML = `<a class="pp-back" href="#plugins">‹ All plugins</a><div class="pp-head"></div><div class="pp-ver"></div><div class="pp-setup"></div>
         <h3>What it holds and reaches</h3><div class="reach pp-reach"></div>`;
       pages.append(pg);
     }
     const st = plugStatus(p);
     const acts = p.added && p.kind !== 'core' && p.kind !== 'local'
-      ? `${p.kind === 'bundled' ? '' : `<button class="secondary" data-plug-update="${esc(p.name)}">Update</button>`}<button class="secondary" data-plug-remove="${esc(p.name)}">Remove</button>` : '';
+      ? `${p.kind === 'bundled' ? '' : `<button class="secondary" data-plug-add="${esc(p.from)}">Update</button>`}<button class="secondary" data-plug-remove="${esc(p.name)}">Remove</button>` : '';
     pg.querySelector('.pp-head').innerHTML = `<div class="pp-top"><h3 class="pp-title">${esc(p.label)} ${pill(st)}</h3><div class="acts">${acts}<span class="msg"></span></div></div>
       <p class="k">${[kindLabel(p), p.version, runLabel(p), `${p.area === 'work' ? 'Work' : 'Personal'} tab`].filter(Boolean).map(esc).join(' · ')}</p>
       ${p.description ? `<p>${esc(p.description)}</p>` : ''}
       ${p.problem ? `<p class="bad">${esc(p.problem)}</p>` : ''}
       ${p.run === 'sandbox' && !S.plugins.sandbox ? '<p class="bad">It runs in the sandbox (srt), which isn\'t installed here.</p>' : ''}`;
+    // Its version, and the team's if that's another one; drawn again only when one of them changes.
+    const offer = S.plugins.team?.plugins.find((o) => o.state === 'other-version' && o.name === p.name) || null;
+    const ver = pg.querySelector('.pp-ver'), vshape = JSON.stringify([p.added, p.from, p.commit, p.version, offer?.from]);
+    if (ver.dataset.shape !== vshape) { ver.dataset.shape = vshape; ver.innerHTML = versionHtml(p, offer); }
     // The setup is drawn again only when what it can be changes (added, loaded), so typing isn't lost.
     const setup = pg.querySelector('.pp-setup'), fields = extra.filter((f) => f.plugin === p.name);
     const shape = p.kind === 'core' ? 'core' : `${p.added}/${p.loaded}/${S.settings ? fields.map((f) => f.key).join(',') : '?'}`;
@@ -695,20 +729,23 @@ async function lookAt(from, where = $('#plug-preview')) {
     const p = await post('/api/plugins/preview', { from });
     msg.textContent = '';
     const sandboxed = p.kind !== 'bundled' && !p.outside;
-    where.innerHTML = `<div class="plug-look"><div><b>${esc(p.label)}</b> ${esc(p.version)}${p.commit ? ` <span class="k">@ ${esc(p.commit.slice(0, 10))}</span>` : ''}${p.replaces ? ` <span class="k">(replaces ${esc(p.replaces.version)})</span>` : ''}</div>
+    where.innerHTML = `<div class="plug-look"><div><b>${esc(p.label)}</b> ${esc(p.version)}${p.commit ? ` <span class="k">@ ${esc(p.commit.slice(0, 10))}</span>` : ''}${p.replaces ? ` <span class="k">(replaces ${esc(p.replaces.version)}${p.replaces.commit ? ` @ ${esc(p.replaces.commit.slice(0, 10))}` : ''})</span>` : ''}</div>
       ${p.description ? `<div class="k">${esc(p.description)}</div>` : ''}
+      ${p.warning ? `<div class="warn">Careful: ${esc(p.warning)}</div>` : ''}
+      ${p.changes ? `<div class="${p.changes.wider ? 'warn' : 'k'}">Compared with what you have, it ${esc(p.changes.text)}.</div>` : ''}
       <div>${reach(p)}</div>
       ${p.settings.length ? `<div class="k">Settings: ${p.settings.map((x) => `<code>${esc(x)}</code>`).join(', ')}</div>` : ''}
       <div>${p.kind === 'bundled' ? 'Ships with Clearsky and runs inside it.' : sandboxed ? `Runs in a sandbox of its own.${p.sandbox ? '' : ' <span class="warn">The sandbox (srt) isn\'t installed here, so it won\'t run until it is.</span>'}` : `<span class="warn">Runs outside the sandbox, as you: ${esc(p.outside)}</span>`}</div>
       ${p.outside && p.kind !== 'bundled' ? '<label><input type="checkbox" id="plug-trust"> I trust its code: run it outside the sandbox</label>' : ''}
-      <div class="row"><button id="plug-add" data-token="${esc(p.token)}">Add ${esc(p.label)}</button><button class="secondary" id="plug-cancel">Cancel</button><span class="msg"></span></div></div>`;
+      <div class="row"><button id="plug-add" data-token="${esc(p.token)}">${p.replaces ? (p.replaces.commit && p.replaces.commit === p.commit ? 'Take it again' : `Update to ${esc(p.version)}${p.commit ? ` @ ${esc(p.commit.slice(0, 7))}` : ''}`) : `Add ${esc(p.label)}`}</button><button class="secondary" id="plug-cancel">Cancel</button><span class="msg"></span></div></div>`;
   } catch (e) { msg.textContent = e.message; msg.className = 'msg bad'; }
 }
 document.addEventListener('click', async (e) => {
-  const b = e.target.closest('#plug-look,[data-plug-add],#plug-add,#plug-cancel,[data-plug-remove],[data-plug-update],#plug-restart-btn,[data-restart]');
+  const b = e.target.closest('#plug-look,[data-plug-add],#plug-add,#plug-cancel,[data-plug-remove],[data-plug-check],#plug-restart-btn,[data-restart]');
   if (!b) return;
   if (b.id === 'plug-look') return lookAt($('#plug-from').value.trim());
-  if (b.dataset.plugAdd) return lookAt(b.dataset.plugAdd, b.closest('.pp')?.querySelector('.pp-preview'));
+  if (b.dataset.plugAdd) return lookAt(b.dataset.plugAdd, b.closest('.team-plug, .pp')?.querySelector('.pp-preview'));
+  if (b.dataset.plugCheck) return checkUpdates(b);
   if (b.id === 'plug-cancel') { b.closest('.plug-look').remove(); return; }
   const msg = b.parentElement.querySelector('.msg') || $('#plug-msg');
   b.disabled = true;
@@ -716,13 +753,30 @@ document.addEventListener('click', async (e) => {
     if (b.id === 'plug-restart-btn' || 'restart' in b.dataset) { await post('/api/restart', { force: false }); msg.textContent = 'Restarting when no chat is busy…'; return; }
     if (b.dataset.plugRemove && !confirm(`Remove ${b.dataset.plugRemove}? What it kept stays, in case you add it again.`)) { b.disabled = false; return; }
     const r = b.id === 'plug-add' ? await post('/api/plugins/add', { token: b.dataset.token, trust: !!$('#plug-trust')?.checked })
-      : await post(b.dataset.plugRemove ? '/api/plugins/remove' : '/api/plugins/update', { name: b.dataset.plugRemove || b.dataset.plugUpdate });
+      : await post('/api/plugins/remove', { name: b.dataset.plugRemove });
     renderPlugins.changed = true;
     if (b.id === 'plug-add') { b.closest('.plug-look').remove(); $('#plug-from').value = ''; }
     if (b.dataset.plugRemove) location.hash = '#plugins';
     renderPlugins(r);
   } catch (err) { msg.textContent = err.message; msg.className = 'msg bad'; b.disabled = false; }
 });
+
+// Newer versions of a plugin, without fetching its code: buttons to look at each.
+async function checkUpdates(b) {
+  const row = b.parentElement, msg = row.querySelector('.msg'), out = row.querySelector('.pp-newer');
+  msg.textContent = 'Checking…'; msg.className = 'msg'; out.innerHTML = ''; b.disabled = true;
+  try {
+    const c = await post('/api/plugins/check', { name: b.dataset.plugCheck });
+    const p = S.plugins.all.find((x) => x.name === c.name);
+    const says = [c.problem, c.moved && `The tag ${c.ref} now points to other code (${c.latest.slice(0, 10)}) than you have. Tags shouldn't move.`,
+      c.behind && `${c.branch || 'Its branch'} has new commits.`].filter(Boolean);
+    msg.textContent = says.join(' ') || (c.newer.length ? '' : 'Up to date.');
+    msg.className = c.moved || c.problem ? 'msg bad' : 'msg';
+    out.innerHTML = [c.behind && p ? `<button data-plug-add="${esc(p.from)}">Look at the new commits</button>` : '',
+      ...c.newer.map((n) => `<button class="secondary" data-plug-add="${esc(n.from)}">Look at ${esc(n.tag)}</button>`)].join('');
+  } catch (err) { msg.textContent = err.message; msg.className = 'msg bad'; }
+  b.disabled = false;
+}
 
 async function load() {
   loadPlugins();

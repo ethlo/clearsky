@@ -42,7 +42,7 @@ import { githubFilter, REGISTRY_HOSTS, GITHUB_LOG_HOSTS, SHARED_BRANCH } from '.
 import { githubAdvice, jiraAdvice, outsideAdvice, parseRules, ruleLabel } from '../lib/advice.mjs';
 import { attentionItems, diffAttention, desktopNotify, DbusNotifier } from '../lib/notify.mjs';
 import { loadSources, makeContext, hook, asList } from '../lib/sources.mjs';
-import { loadPlugins, migrateBundled, pluginPaths, listPlugins, preparePlugin, removePlugin, updatePlugin } from '../lib/plugins.mjs';
+import { loadPlugins, migrateBundled, pluginPaths, listPlugins, preparePlugin, removePlugin, updatePlugin, checkPlugin, readRegistry, withRef, changesText } from '../lib/plugins.mjs';
 import { sandboxedSource, srtCli } from '../lib/plugin-sandbox.mjs';
 import { pluginItems } from '../lib/items.mjs';
 import { findBrowser, BROWSERS } from '../lib/browser.mjs';
@@ -52,7 +52,7 @@ import { logEvent } from '../lib/event-log.mjs';
 import { startDemo, demoPort, isDemo } from '../lib/demo.mjs';
 import { checks as doctorChecks, suggestions as doctorSuggestions, doctorText, ready as doctorReady } from '../lib/doctor.mjs';
 import { edsCalendars } from '../lib/eds.mjs';
-import { joinPack, joinSummary, readTeam, exportPack, TEAM_KEYS } from '../lib/team.mjs';
+import { joinPack, joinSummary, readTeam, exportPack, TEAM_KEYS, applyWaiting, pluginOffers } from '../lib/team.mjs';
 import { readHandoffs, saveHandoffs, addHandoff, nextHandoff, settleAfterRestart, handoffPrompt, handoffResult, updateHandoff } from '../lib/handoff.mjs';
 import { srtInstalled } from '../lib/doctor.mjs';
 import { ownRead, chatPushes } from '../lib/own-read.mjs';
@@ -948,15 +948,27 @@ async function loginStatus() {
 }
 
 // Join a team pack (lib/team.mjs): settings through the settings file, links and skills too.
+// A plugin's settings it lets a team set (manifest "team": true) count as team settings; the
+// pack's values for plugins you haven't added wait until you add them (teamWaiting).
+const teamKey = (k) => !!settings.FIELDS[k]?.team;
+const teamIo = () => ({
+  readEnv: () => Object.fromEntries([...TEAM_KEYS, ...Object.keys(settings.FIELDS).filter(teamKey)].map((k) => [k, process.env[k] || ''])),
+  writeEnv: (v) => { settings.writeEnvFile(userEnvFile, v); applySettings(v); },
+  validate: (w) => settings.validate(Object.fromEntries(Object.entries(w).filter(([k]) => settings.FIELDS[k]))),
+});
 function joinTeam(from) {
   return joinPack(from, {
-    confDir: dirname(userEnvFile), skillsDir: join(homedir(), '.copilot', 'skills'),
-    readEnv: () => Object.fromEntries(TEAM_KEYS.map((k) => [k, process.env[k] || ''])),
-    writeEnv: (v) => { settings.writeEnvFile(userEnvFile, v); applySettings(v); },
-    // A team setting for a plugin you haven't added is left out.
-    validate: (w) => settings.validate(Object.fromEntries(Object.entries(w).filter(([k]) => settings.FIELDS[k]))), readLinks: () => readLinks(linksFile()), saveLinks: (d) => saveLinks(linksFile(), d),
+    confDir: dirname(userEnvFile), skillsDir: join(homedir(), '.copilot', 'skills'), ...teamIo(),
+    readLinks: () => readLinks(linksFile()), saveLinks: (d) => saveLinks(linksFile(), d),
+    teamKey, known: (k) => !!settings.FIELDS[k], added: () => readRegistry(pluginDirs.registry).plugins,
   });
 }
+function teamWaiting() {
+  try { const w = applyWaiting(dirname(userEnvFile), { teamKey, ...teamIo() }); if (w.length) logEvent(`team pack settings filled in for a plugin you added: ${w.join(', ')}`); }
+  catch (e) { console.error(`clearsky: team pack settings: ${e.message}`); }
+}
+// The team pack's plugins next to yours, for Settings → Plugins.
+const teamPlugins = () => { const t = readTeam(dirname(userEnvFile)); return t?.plugins?.length ? { name: t.name, plugins: pluginOffers(t.plugins, readRegistry(pluginDirs.registry).plugins) } : null; };
 
 // `clearsky doctor` and the welcome page: what this machine has for Clearsky.
 const machineChecks = () => doctorChecks({ acliBin: config.jira.acli, copilotBin: copilot.findCopilot(process.env.COPILOT_BIN),
@@ -2400,9 +2412,11 @@ function pluginList() {
     ...available.map((p) => ({ name: p.name, label: p.label, description: p.description, area: p.manifest?.area || 'personal', kind: 'bundled', from: p.name,
       version: p.manifest?.version || '', added: false, loaded: false, ready: false, reach: shape(p.manifest) })),
   ];
+  const pins = readRegistry(pluginDirs.registry).plugins;
+  for (const p of all) if (pins[p.name]?.pin && p.added) p.pin = pins[p.name].pin;
   return {
     all, added: added.map((p) => ({ ...strip(p), loaded: loaded(p) })),
-    available: available.map(strip), errors: plugins.errors, sandbox: !!srtCli(),
+    available: available.map(strip), errors: plugins.errors, sandbox: !!srtCli(), team: teamPlugins(),
   };
 }
 
@@ -2415,7 +2429,8 @@ async function previewPlugin(from) {
   const m = p.manifest;
   return { token, name: m.name, label: m.label, version: m.version, description: m.description, from, kind: p.spec.kind,
     commit: p.got.commit || null, hosts: m.hosts, clis: m.clis, files: m.files, secrets: m.secrets, settings: Object.keys(m.settings),
-    outside: m.outside || null, replaces: p.had ? { version: p.had.version, commit: p.had.commit || null } : null, sandbox: !!srtCli() };
+    outside: m.outside || null, replaces: p.had ? { version: p.had.version, commit: p.had.commit || null, from: p.had.from } : null, sandbox: !!srtCli(),
+    changes: p.changes && { ...p.changes, text: changesText(p.changes) }, warning: p.warning || null };
 }
 
 // `clearsky add | remove | plugins | update`.
@@ -2434,10 +2449,55 @@ async function pluginCommand(args) {
     }
     if (!name && cmd !== 'update') { say(`usage: clearsky ${cmd} <plugin>`); return 2; }
     if (cmd === 'remove') { removePlugin(name, { paths: pluginDirs, data: flag('--data') }); say(`Removed ${name}${flag('--data') ? ', and what it kept' : ''}. Restart Clearsky to drop it.`); return 0; }
+    const ask = async (q) => {
+      if (flag('--yes')) return true;
+      if (!process.stdin.isTTY) return false;
+      const rl = (await import('node:readline/promises')).createInterface({ input: process.stdin, output: process.stdout });
+      const yes = /^y(es)?$/i.test((await rl.question(`${q} [y/N] `)).trim());
+      rl.close();
+      return yes;
+    };
+    const opt = (f) => { const i = args.indexOf(f); return i > -1 ? (args[i + 1] ?? '') : undefined; };
+    // clearsky update [name] [--to v1.3.0 | --to ''] [--check] [--yes]
     if (cmd === 'update') {
-      const names = name ? [name] : Object.keys(listPlugins({ paths: pluginDirs }).added.reduce((o, p) => (p.kind === 'bundled' ? o : { ...o, [p.name]: 1 }), {}));
-      for (const n of names) { const r = await updatePlugin(n, { paths: pluginDirs }); say(`${n}: ${r.before.commit && r.commit ? `${r.before.commit.slice(0, 10)} → ${r.commit.slice(0, 10)}` : `${r.before.version} → ${r.version}`}`); }
-      if (names.length) say('Restart Clearsky to load the new code.'); else say('Nothing to update.');
+      const named = name && !name.startsWith('--') ? name : null;
+      const names = named ? [named] : listPlugins({ paths: pluginDirs }).added.filter((p) => p.kind !== 'bundled').map((p) => p.name);
+      const to = opt('--to');
+      let changed = 0;
+      for (const n of names) {
+        if (flag('--check')) {
+          const c = await checkPlugin(n, { paths: pluginDirs }).catch((e) => ({ problem: e.message }));
+          const where = c.pin === 'tag' || c.pin === 'branch' ? `${c.pin} ${c.ref}` : c.pin === 'default' ? `follows ${c.branch || 'the default branch'}` : c.pin;
+          say(`${n}: ${[where, c.problem, c.behind && 'has new commits', c.moved && `the tag now points to other code (${c.latest?.slice(0, 10)})`,
+            c.newer?.length && `newer: ${c.newer.map((x) => x.tag).join(', ')}`].filter(Boolean).join('; ') || 'up to date'}`);
+          continue;
+        }
+        const had = readRegistry(pluginDirs.registry).plugins[n];
+        const p = await preparePlugin(to === undefined ? had?.from || n : withRef(had.from, to), { paths: pluginDirs });
+        const before = { version: p.had?.version, commit: p.had?.commit };
+        if (p.warning) say(`${n}: careful, ${p.warning}`);
+        if (p.manifest.outside && p.had?.run !== 'inside') { p.discard(); say(`${n}: not updated, the new version wants to run outside the sandbox (${p.manifest.outside}). Add it again with --trust if you trust it.`); continue; }
+        if (p.changes?.wider) {
+          say(`${n}: the new version ${changesText(p.changes)}.`);
+          if (!await ask('Take it?')) { p.discard(); say(`${n}: not updated.`); continue; }
+        }
+        const r = p.done({ trust: p.had?.run === 'inside' });
+        changed++;
+        say(`${n}: ${before.commit && r.commit ? `${before.commit.slice(0, 10)} → ${r.commit.slice(0, 10)}` : `${before.version} → ${r.version}`}${r.from !== p.had?.from ? ` (now ${r.from})` : ''}`);
+      }
+      if (changed) say('Restart Clearsky to load the new code.'); else if (!names.length) say('Nothing to update.');
+      return 0;
+    }
+    // clearsky add --team: each of the team pack's plugins you haven't got (or have at another version).
+    if (cmd === 'add' && name === '--team') {
+      const t = teamPlugins();
+      const todo = (t?.plugins || []).filter((p) => p.state !== 'added');
+      if (!todo.length) { say(t ? `You have all of ${t.name}'s plugins.` : 'You haven\'t joined a team pack with plugins. `clearsky join <pack>` first.'); return 0; }
+      for (const o of todo) {
+        say(`\n${o.state === 'new' ? 'Team plugin' : `Team version of ${o.name} (you have ${o.yours})`}: ${o.from}${o.note ? ` — ${o.note}` : ''}`);
+        const code = await pluginCommand(['add', o.from, ...args.filter((a) => a === '--yes' || a === '--trust')]);
+        if (code) say('  skipped');
+      }
       return 0;
     }
     // add: show what it is and what it reaches before any of its code runs, then ask.
@@ -2450,13 +2510,10 @@ async function pluginCommand(args) {
     else if (m.outside) say(`  runs OUTSIDE the sandbox, as you: ${m.outside}`);
     else say(`  runs in a sandbox of its own${srtCli() ? '' : ' (not installed here, so it won\'t run until it is)'}`);
     if (m.outside && p.spec.kind !== 'bundled' && !flag('--trust')) { p.discard(); say('Not added: it can do anything you can. Add it again with --trust if you trust its code.'); return 1; }
+    if (p.had) say(`  replaces ${p.had.from}${p.changes?.wider ? `; the new version ${changesText(p.changes)}` : ''}`);
+    if (p.warning) say(`  careful: ${p.warning}`);
     if (!flag('--yes') && !process.stdin.isTTY) { p.discard(); say('Not added: say yes with --yes when there\'s no terminal to ask in.'); return 1; }
-    if (!flag('--yes')) {
-      const rl = (await import('node:readline/promises')).createInterface({ input: process.stdin, output: process.stdout });
-      const yes = /^y(es)?$/i.test((await rl.question('Add it? [y/N] ')).trim());
-      rl.close();
-      if (!yes) { p.discard(); say('Not added.'); return 1; }
-    }
+    if (!await ask('Add it?')) { p.discard(); say('Not added.'); return 1; }
     const r = p.done({ trust: flag('--trust') });
     say(`Added ${r.name}. Restart Clearsky (or Settings → Restart) to load it${Object.keys(m.settings).length ? ', then fill in its settings' : ''}.`);
     return 0;
@@ -2473,6 +2530,7 @@ function serve() {
   console.error = (...a) => { err0(...a); logEvent(a.map(String).join(' ').replace(/^clearsky: /, 'error: ').slice(0, 2000), { echo: false }); };
   for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.once(sig, () => { logEvent(`stopped by ${sig}, ${chatsBusy()} busy chat(s)`, { echo: false }); process.exit(0); });
   loadSourceCache(join(dirname(userEnvFile), 'sources-cache.json'));
+  if (!isDemo()) teamWaiting();
   // Every state-changing request must carry this token and come from this origin, so other
   // websites open in the browser can't change settings or start logins. It's kept across
   // restarts so an open page keeps working.
@@ -2517,8 +2575,14 @@ function serve() {
           if (!p) return json(res, 400, { error: 'look at it again first; that preview has run out' });
           pendingPlugins.delete(String(token));
           clearTimeout(p.timer);
-          try { const r = p.done({ trust: trust === true }); logEvent(`plugin ${r.name} added from ${r.from} (${r.run === 'inside' ? 'runs inside Clearsky' : 'sandboxed'})`); return json(res, 200, { added: r, ...pluginList() }); }
+          // A new version of one you trusted keeps that trust; one that newly wants out needs your tick.
+          try { const r = p.done({ trust: trust === true || p.had?.run === 'inside' }); logEvent(`plugin ${r.name} ${p.had ? `updated to ${r.from}${r.commit ? ` @ ${r.commit.slice(0, 10)}` : ''}` : 'added from ' + r.from} (${r.run === 'inside' ? 'runs inside Clearsky' : 'sandboxed'})`); return json(res, 200, { added: r, ...pluginList() }); }
           catch (e) { return json(res, 400, { error: e.message }); }
+        }
+        // Is there a newer version? Looks at the repo's tags and branch, without fetching code.
+        if (url.pathname === '/api/plugins/check') {
+          const { name } = await readJson(req);
+          try { return json(res, 200, await checkPlugin(String(name || ''), { paths: pluginDirs })); } catch (e) { return json(res, 400, { error: e.message }); }
         }
         if (url.pathname === '/api/plugins/remove' || url.pathname === '/api/plugins/update') {
           const { name, data } = await readJson(req);
@@ -3319,7 +3383,11 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.a
     const from = args[1] || readTeam(dirname(userEnvFile))?.from;
     if (!from) { console.error('usage: clearsky join <git repo | https://…/clearsky-team.json | file>'); process.exitCode = 2; }
     else {
-      try { const r = await joinTeam(from); console.log(`Joined ${r.name}: ${joinSummary(r)}`); }
+      try {
+        const r = await joinTeam(from);
+        console.log(`Joined ${r.name}: ${joinSummary(r)}`);
+        if (r.plugins.some((p) => p.state !== 'added')) console.log('Look at the team\'s plugins and add them with `clearsky add --team` (or in Settings → Plugins).');
+      }
       catch (e) { console.error(`clearsky: ${e.message}`); process.exitCode = 1; }
     }
   } else if (args[0] === 'team' && args[1] === 'export') {
