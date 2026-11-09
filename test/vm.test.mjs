@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VmImage, ChatVm, reapOrphans, vmSize, VM_DEFAULT, loginForwarder, loginHead } from '../lib/vm.mjs';
+import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VmImage, ChatVm, reapOrphans, cpuSample, cpuBusy, vmSize, VM_DEFAULT, loginForwarder, loginHead } from '../lib/vm.mjs';
 import { registryWrite, githubFilter } from '../lib/github-gate.mjs';
 import { srtSettings } from '../lib/sandbox.mjs';
 import { needs, serveBroker } from '../lib/broker.mjs';
@@ -191,4 +191,15 @@ test('VMs left running by a Clearsky that was killed are stopped; nothing else i
   const out = reapOrphans('/h/.cache/clearsky/vm', { proc, kill: (pid, sig) => killed.push([pid, sig]), self: new Set([{ qemu: { pid: 104 } }]) });
   assert.deepEqual(out, [101], 'not another QEMU, not a non-QEMU process, not a VM this Clearsky runs');
   assert.deepEqual(killed, [[101, 'SIGKILL']]);
+});
+
+test('VM CPU use comes from two looks at the guest\'s /proc/stat', () => {
+  const a = cpuSample('cpu  100 0 50 800 50 0 0 0 0 0');
+  assert.deepEqual(a, { busy: 150, total: 1000 });
+  const b = cpuSample('cpu  400 0 150 1100 50 0 0 0 0 0\n');
+  assert.equal(cpuBusy(a, b), 57); // 400 of 700 jiffies busy
+  assert.equal(cpuBusy(null, b), null);
+  assert.equal(cpuBusy(b, a), null);
+  assert.equal(cpuSample('nonsense'), null);
+  assert.equal(cpuSample(''), null);
 });
