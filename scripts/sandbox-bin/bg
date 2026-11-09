@@ -1,0 +1,7 @@
+#!/usr/bin/env node
+// `bg <command>` in Clearsky's sandbox: runs the command as a background job (lib/jobs.mjs), in
+// this sandbox; `bg vm <command>` in this chat's VM; `bg outside <command>` on your machine after
+// your OK. It answers at once with the job's id: end your turn, and Clearsky wakes the chat with
+// the result when the job ends. For builds, test runs and CI waits that take minutes.
+if (process.argv.length < 3) { process.stderr.write('usage: bg <command> [args…] | bg vm <command> | bg outside <command> (only in Clearsky\'s sandbox)\n'); process.exit(2); }
+require('./shim.js').viaClearsky('bg', process.argv.slice(2));

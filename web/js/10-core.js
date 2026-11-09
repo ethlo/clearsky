@@ -141,7 +141,7 @@ function loadAll(force) {
 // Which Copilot sessions are about each PR or ticket, and which are busy or waiting on you,
 // whether they run here, in a terminal or in an editor.
 let cpLinks = { links: {}, live: [] };
-const STATUS_TEXT = { working: 'working', 'needs-you': 'needs your OK', waiting: 'waiting for you', closed: '' };
+const STATUS_TEXT = { working: 'working', 'needs-you': 'needs your OK', background: 'job running', waiting: 'waiting for you', closed: '' };
 function itemKey(url) {
   const r = refFromUrl(url);
   return r && refKeyOf(r);
@@ -160,6 +160,7 @@ async function loadLinks() {
   try { cpLinks = await getJson('/api/copilot/links'); } catch { return; }
   renderToday();
   drawCtx();
+  followAutoTurn();
 }
 document.addEventListener('click', (e) => {
   const c = e.target.closest('.cp-chip');

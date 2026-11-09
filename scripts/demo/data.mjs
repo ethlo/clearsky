@@ -110,6 +110,18 @@ export function calendar() {
 }
 
 // The VMs view (/api/vms): two chats' VMs building, two more waiting in line for one.
+// A chat's background jobs and its watchdog, for the chat's side pane.
+export function jobs(chat, now = Date.now()) {
+  const job = (id, where, command, state, startMin, endMin, code = null) => ({ id, where, command, cwd: '~/dev/acme/payments-api', state, code,
+    startedAt: new Date(now - startMin * 6e4).toISOString(), endedAt: endMin == null ? null : new Date(now - endMin * 6e4).toISOString(), ms: ((endMin == null ? 0 : -endMin) + startMin) * 6e4, told: true });
+  const list = chat === 'demo-pay412-refunds' ? [
+    job('j9b20d', 'sandbox', 'gh run watch 9214 --exit-status', 'running', 3, null),
+    job('j4c1e9', 'vm', './mvnw verify -pl refunds', 'done', 19, 11.8, 0),
+    job('j77a03', 'vm', './mvnw verify -pl refunds -Dit.test=RefundServiceIT', 'failed', 41, 37, 1),
+  ] : [];
+  return { jobs: list, watchdog: { on: true, max: 3, minutes: 2, nudges: chat === 'demo-pay412-refunds' ? 1 : 0, paused: false, gaveUp: false, due: null, reason: null, last: null } };
+}
+
 export function vms(now = Date.now()) {
   const wob = (base, span) => Math.round(base + Math.sin(now / 7000 + base) * span);
   const ctr = (name, image, status, cpu, memMb, ports = '') => ({ name, image, state: 'running', status, ports, cpu: `${cpu.toFixed(2)}%`, mem: `${memMb}MiB / 7.8GiB` });
