@@ -12,6 +12,11 @@ const print = (o) => process.stdout.write(JSON.stringify(o));
 
 if (args[1] === 'auth' && args[2] === 'status') {
   process.stdout.write('✓ Authenticated\n  Site: acme.atlassian.net\n  Email: me@work.test\n');
+} else if (args[1] === 'project' && args[2] === 'list') {
+  print([{ key: 'OPS', name: 'Operations' }, { key: 'ABC', name: 'Alpha' }, { name: 'no key' }]);
+} else if (args[1] === 'project' && args[2] === 'view') {
+  // OPS has its versions on the project; ABC doesn't, so they come from its tickets.
+  print(arg('--key') === 'OPS' ? { key: 'OPS', versions: [{ name: '1.0', released: true, releaseDate: '2026-01-10' }, { name: '1.1', releaseDate: '2026-12-01' }, { name: '0.9', archived: true }] } : { key: arg('--key') });
 } else if (args[1] === 'workitem' && args[2] === 'search') {
   const jql = arg('--jql');
   // Real acli rejects some fields in search.
@@ -20,7 +25,15 @@ if (args[1] === 'auth' && args[2] === 'status') {
     process.stderr.write(`✗ Error: fields '${refused.join(', ')}' are not allowed\n`);
     process.exit(1);
   }
-  if (jql.startsWith('assignee = currentUser() ORDER')) {
+  if (jql.startsWith('project = "ABC" AND fixVersion is not EMPTY')) {
+    print([{ key: 'ABC-1', fields: { fixVersions: [{ name: '2.0' }] } }, { key: 'ABC-2', fields: { fixVersions: [{ name: '2.0' }, { name: '2.1', released: true }] } }]);
+  } else if (jql.startsWith('project = "OPS" AND fixVersion = "1.1')) {
+    print([
+      { key: 'OPS-1', self: self('OPS-1'), fields: { summary: 'Rotate certs', status: { name: 'In Progress', statusCategory: { key: 'indeterminate' } }, issuetype: { name: 'Task' }, priority: { name: 'High' }, assignee: { displayName: 'Alex' } } },
+      { key: 'OPS-3', self: self('OPS-3'), fields: { summary: 'New runbook', status: { name: 'Done', statusCategory: { key: 'done' } }, issuetype: { name: 'Story' }, assignee: null } },
+      { key: 'OPS-4', self: self('OPS-4'), fields: { summary: 'Alerts', status: { name: 'To Do', statusCategory: { key: 'new' } }, issuetype: { name: 'Bug' } } },
+    ]);
+  } else if (jql.startsWith('assignee = currentUser() ORDER')) {
     print([{ key: 'OPS-1', self: self('OPS-1'), fields: { assignee: { accountId: 'abc123', displayName: 'Alex' } } }]);
   } else if (jql.startsWith('assignee')) {
     print([{ key: 'OPS-1', self: self('OPS-1'), fields: { summary: 'Rotate certs',

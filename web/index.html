@@ -27,6 +27,7 @@
       <a class="ni" href="#mentions" data-nav="mentions"><span class="ico" data-i="at"></span><span class="lab">Mentions</span><b id="n-mentions"></b></a>
       <a class="ni" href="#tickets" data-nav="tickets"><span class="ico" data-i="ticket"></span><span class="lab">Tickets</span><b id="n-tickets"></b></a>
     </nav>
+    <a class="ni" href="#versions" data-nav="versions" title="How far a fix version of your starred Jira projects is"><span class="ico" data-i="version"></span><span class="lab">Versions</span></a>
     <a class="ni" href="#builds" data-nav="builds"><span class="ico" data-i="build"></span><span class="lab">Builds</span><b id="n-builds"></b></a>
     <a class="ni" href="#servers" data-nav="servers"><span class="ico" data-i="server"></span><span class="lab">Servers</span><b id="n-servers"></b></a>
     <a class="ni" href="#vms" data-nav="vms" title="Copilot's VMs for builds with Docker: what runs in them and who waits for one"><span class="ico" data-i="vm"></span><span class="lab">VMs</span><b id="n-vms"></b></a>
@@ -96,6 +97,12 @@
     <header class="vh"><h1 title="The VMs Copilot's chats run Docker builds in (Testcontainers). Settings → Copilot sets how many run at the same time; other chats wait in line and start on their own.">VMs</h1><span class="sub" id="vms-sub"></span><span class="spacer"></span>
       <div class="vh-acts"><button type="button" class="icon-btn" id="vms-refresh" title="Look again" aria-label="Look again"><span data-i="refresh" data-size="14"></span></button></div></header>
     <div class="view-b"><div class="page" id="vms"></div></div>
+  </section>
+  <section class="view" id="v-versions" hidden>
+    <header class="vh"><h1 title="A fix version of a starred Jira project: its tickets by status, with filters. Star projects here or in Settings → Plugins → Jira.">Versions</h1><span class="spacer"></span>
+      <div class="vh-acts"><button type="button" class="icon-btn" id="ver-projects" title="Star the Jira projects you follow" aria-expanded="false">☆ Projects</button>
+        <button type="button" class="icon-btn" id="ver-refresh" title="Check again" aria-label="Check again"><span data-i="refresh" data-size="14"></span></button></div></header>
+    <div class="view-b"><div class="page" id="versions"></div></div>
   </section>
   <section class="view" id="v-builds" hidden>
     <header class="vh"><h1 title="How each repo's main branch builds now, and the newest artifact and release it made. Pick the repos in Settings → GitHub.">Builds</h1><span class="spacer"></span>

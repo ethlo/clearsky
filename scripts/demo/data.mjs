@@ -86,6 +86,53 @@ export const tickets = [
   { key: 'PAY-431', summary: 'Payout report shows wrong currency for SEK', status: 'To Do', cat: 'new', priority: 'High', type: 'Bug', updated: ago(26) },
   { key: 'PAY-433', summary: 'Rotate the webhook signing secret', status: 'To Do', cat: 'new', priority: 'Low', type: 'Task', updated: ago(70) },
 ];
+// The Jira projects you can see, their fix versions, and the tickets in each (the Versions page).
+export const jiraProjects = [
+  { key: 'PAY', name: 'Payments' }, { key: 'WEB', name: 'Web shop' }, { key: 'OPS', name: 'Operations' },
+  { key: 'DATA', name: 'Data platform' }, { key: 'MOB', name: 'Mobile app' }, { key: 'SEC', name: 'Security' },
+];
+const day = (d) => new Date(Date.now() + d * 24 * H).toISOString().slice(0, 10);
+export const jiraVersions = {
+  PAY: [{ name: '2.13', released: true, releaseDate: day(-12) }, { name: '2.14', released: false, releaseDate: day(9) }, { name: '2.15', released: false, releaseDate: day(37) },
+    { name: '2.12', released: true, releaseDate: day(-40) }, { name: '2.11', released: true, archived: true, releaseDate: day(-80) }],
+  WEB: [{ name: 'Spring sale', released: false, releaseDate: day(4) }, { name: 'Checkout v3', released: false }],
+  OPS: [{ name: '2026-Q4', released: false, releaseDate: day(50) }],
+};
+// [key, summary, status, category, type, priority, assignee]
+const vt = (rows) => rows.map(([key, summary, status, cat, type, priority, assignee]) => ({ key, summary, status, cat, type, priority, assignee, updated: ago(key.length * 3) }));
+export const versionTickets = {
+  'PAY 2.14': vt([
+    ['PAY-412', 'Partial refunds for split payments', 'In Progress', 'indeterminate', 'Story', 'High', 'Alex Kim'],
+    ['PAY-420', 'Ledger export as CSV', 'In Progress', 'indeterminate', 'Story', 'Medium', 'Alex Kim'],
+    ['PAY-398', 'Show refund status on the order page', 'In Review', 'indeterminate', 'Story', 'Medium', 'Alex Kim'],
+    ['PAY-415', 'Retry webhook delivery with backoff', 'In Review', 'indeterminate', 'Story', 'High', 'Anna Berg'],
+    ['PAY-431', 'Payout report shows wrong currency for SEK', 'To Do', 'new', 'Bug', 'High', 'Alex Kim'],
+    ['PAY-433', 'Rotate the webhook signing secret', 'To Do', 'new', 'Task', 'Low', null],
+    ['PAY-401', 'Refund API: idempotency keys', 'Done', 'done', 'Story', 'High', 'Bob Lee'],
+    ['PAY-402', 'Refund events on the ledger stream', 'Done', 'done', 'Story', 'Medium', 'Anna Berg'],
+    ['PAY-405', 'Rounding error on three-way split', 'Done', 'done', 'Bug', 'High', 'Bob Lee'],
+    ['PAY-408', 'Docs: partial refunds', 'Done', 'done', 'Task', 'Low', 'Carla Diaz'],
+    ['PAY-410', 'Gift card refunds go to the wrong balance', 'In QA', 'indeterminate', 'Bug', 'Highest', 'Bob Lee'],
+    ['PAY-417', 'Load test the refund endpoint', 'Blocked', 'indeterminate', 'Task', 'Medium', 'Carla Diaz'],
+    ['PAY-422', 'Feature flag for partial refunds', 'Done', 'done', 'Task', 'Medium', 'Alex Kim'],
+    ['PAY-425', 'Refund reason codes', 'To Do', 'new', 'Story', 'Medium', 'Anna Berg'],
+  ]),
+  'PAY 2.15': vt([
+    ['PAY-440', 'Multi-currency payouts', 'To Do', 'new', 'Epic', 'High', null],
+    ['PAY-441', 'Payout scheduling', 'To Do', 'new', 'Story', 'Medium', 'Bob Lee'],
+    ['PAY-442', 'Payout preview', 'In Progress', 'indeterminate', 'Story', 'Medium', 'Anna Berg'],
+  ]),
+  'PAY 2.13': vt([
+    ['PAY-380', 'Saved cards for returning customers', 'Done', 'done', 'Story', 'High', 'Alex Kim'],
+    ['PAY-384', 'Card expiry reminders', 'Done', 'done', 'Story', 'Medium', 'Bob Lee'],
+  ]),
+  'WEB Spring sale': vt([
+    ['WEB-1301', 'Sale banner on the start page', 'Done', 'done', 'Story', 'Medium', 'Bob Lee'],
+    ['WEB-1307', 'Checkout: show saved cards first', 'In Review', 'indeterminate', 'Story', 'High', 'Bob Lee'],
+    ['WEB-1312', 'Countdown timer drifts on mobile', 'To Do', 'new', 'Bug', 'Medium', 'Anna Berg'],
+  ]),
+};
+
 export const mentionTickets = [
   { key: 'PAY-415', summary: 'Retry webhook delivery with backoff', status: 'In Review', by: 'Anna Berg', text: 'can you take the review on this one? Delivery.java is the interesting part.', h: 3 },
   { key: 'OPS-88', summary: 'Payments on-call handbook', status: 'Open', by: 'Carla Diaz', text: 'added a section on refunds, could you check the steps still match?', h: 20 },

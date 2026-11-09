@@ -40,6 +40,7 @@ function route() {
   $('#v-changes').hidden = h !== 'changes';
   $('#v-handoffs').hidden = h !== 'handoffs';
   $('#v-builds').hidden = h !== 'builds';
+  $('#v-versions').hidden = h !== 'versions';
   $('#v-servers').hidden = h !== 'servers';
   $('#v-vms').hidden = h !== 'vms';
   $('#v-map').hidden = h !== 'map';
@@ -56,6 +57,7 @@ function route() {
   if (h === 'changes') renderChanges();
   if (h === 'handoffs') loadHandoffs();
   if (h === 'builds') loadBuilds(false);
+  if (h === 'versions') loadVersions(false);
   if (h === 'servers') loadServers();
   if (h === 'vms') loadVms();
   if (h === 'map') renderMap();

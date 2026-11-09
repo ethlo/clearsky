@@ -69,6 +69,8 @@
   .ed-pick { flex-direction: row; flex-wrap: wrap; gap: 6px 18px; }
   .ed-pick label { display: flex; gap: 6px; align-items: center; margin: 0; font-size: 13.5px; font-weight: 400; color: var(--text); }
   .ed-pick input { width: auto; margin: 0; }
+  .ed-pick label[hidden] { display: none; }
+  .ed-pick input.ed-find { width: 100%; flex: 1 1 100%; }
   /* Plugins: one list, and a page for each laid out the same way. */
   .plugs { margin-top: 12px; font-size: 12.5px; border-bottom: 1px solid var(--line); }
   .pl { display: grid; grid-template-columns: 150px minmax(0, 1fr) auto auto 10px; gap: 10px; align-items: baseline; padding: 9px 4px; border-top: 1px solid var(--line); color: var(--text); }
@@ -179,6 +181,9 @@
         <span class="msg" id="jira-msg"></span>
       </div>
       <p class="hint">Logs in with the Atlassian CLI, in your browser.<span class="more">It runs <code>acli jira auth login --web</code>. Clearsky stores no Jira credentials.</span></p>
+      <label for="JIRA_STARRED_PROJECTS">Starred projects<span class="more">The projects on the <a href="/#versions">Versions</a> page, where you pick a fix version and see its tickets by status. You can also star them there with <b>☆ Projects</b>.</span></label>
+      <input id="JIRA_STARRED_PROJECTS" data-key="JIRA_STARRED_PROJECTS" data-pick="jira">
+      <div class="row"><button class="save" data-keys="JIRA_STARRED_PROJECTS">Save</button><span class="msg"></span></div>
     </div>
     <div data-setup="calendar">
       <p id="cal-detail"></p>
@@ -380,6 +385,15 @@ function render(s) {
   $('#jira-login').hidden = j.cli === 'missing';
   $('#jira-login').textContent = j.cli === 'logged-in' ? 'Log in again' : 'Log in to Atlassian';
   $('#jira-login').className = j.cli === 'logged-in' ? 'secondary' : '';
+  $('#JIRA_STARRED_PROJECTS').value = j.starred || '';
+  if (j.cli !== 'logged-in' && !S.jiraProjects) S.jiraProjectsError = 'Log in to Atlassian to list your projects.';
+  if (j.cli === 'logged-in' && !S.jiraProjects && !S.jiraLoading) {
+    S.jiraProjectsError = null;
+    S.jiraLoading = true;
+    fetch('/api/jira/projects').then((x) => x.json()).then((d) => { if (d.error) throw new Error(d.error); S.jiraProjects = d.projects; })
+      .catch((e) => { S.jiraProjectsError = `Couldn't list your Jira projects: ${e.message}`; })
+      .finally(() => { const i = $('#JIRA_STARRED_PROJECTS'); if (i.ed) i.ed.draw(); });
+  }
 
   const evo = s.calendar.evolution || [];
   const evoOk = evo.some((c) => c.synced);
@@ -557,9 +571,16 @@ function editor(input) {
     box.innerHTML = '';
     if (kind === 'pick') {
       // The plugins to tick, and anything saved that isn't one (so it isn't lost).
-      const have = parse(input.value), all = (S.plugins?.all || []).filter((p) => p.added).map((p) => [p.name, p.label]);
+      // data-pick="jira": your Jira projects (GET /api/jira/projects), with a box to find one.
+      const jira = input.dataset.pick === 'jira';
+      const have = parse(input.value), all = jira ? (S.jiraProjects || []).map((p) => [p.key, `${p.name} (${p.key})`])
+        : (S.plugins?.all || []).filter((p) => p.added).map((p) => [p.name, p.label]);
       for (const n of have) if (!all.some(([a]) => a === n)) all.push([n, n]);
-      box.innerHTML = all.map(([n, l]) => `<label><input type="checkbox" value="${esc(n)}"${have.includes(n) ? ' checked' : ''}> ${esc(l)}</label>`).join('') || '<span class="ed-empty">No plugins yet.</span>';
+      const none = jira ? (S.jiraProjectsError || (S.jiraProjects ? 'No Jira projects.' : 'Loading your Jira projects…')) : 'No plugins yet.';
+      box.innerHTML = (jira && all.length > 10 ? '<input type="search" class="ed-find" placeholder="Find a project" aria-label="Find a project">' : '')
+        + (all.map(([n, l]) => `<label><input type="checkbox" value="${esc(n)}"${have.includes(n) ? ' checked' : ''}> ${esc(l)}</label>`).join('') || `<span class="ed-empty">${esc(none)}</span>`);
+      const find = box.querySelector('.ed-find');
+      if (find) find.oninput = () => { const q = find.value.trim().toLowerCase(); for (const l of box.querySelectorAll('label')) l.hidden = !!q && !l.textContent.toLowerCase().includes(q); };
       input.shown = input.value;
       return;
     }
