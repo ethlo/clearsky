@@ -540,7 +540,11 @@ function renderList() {
   const by = (f) => live.filter(f);
   const sources = [['GitHub', state.github], ['Jira', state.jira], ['Jira mentions', state.jiraMentions],
     ...extraSources.filter((x) => x.area === 'work' && x.panel.zone === 'needs').map((x) => [x.panel.title, state[x.name]])];
-  const errs = sources.filter(([, s]) => s?.error).map(([n, s]) => `<div class="err">${esc(n)}: ${esc(s.error)}</div>`).join('')
+  // Which Settings page logs a source in again (Jira and its mentions share the acli login).
+  const loginPage = (n) => ({ GitHub: 'github', Jira: 'jira', 'Jira mentions': 'jira' }[n] || extraSources.find((x) => x.panel.title === n)?.name);
+  const relogin = (n, s) => (s.needsLogin && loginPage(n) ? ` <a href="/settings#plugins/${esc(loginPage(n))}">Log in again in Settings</a>` : '');
+  const errs = sources.filter(([, s]) => s?.error).map(([n, s]) => `<div class="err">${esc(n)}: ${esc(s.error)}${relogin(n, s)}</div>`).join('')
+    + sources.filter(([, s]) => !s?.error && s?.notUpdating).map(([n, s]) => `<div class="paused">${esc(n)}: ${esc(s.notUpdating)}${relogin(n, s)}</div>`).join('')
     + sources.filter(([, s]) => s?.paused).map(([n, s]) => `<div class="paused">${esc(n)}: paused, ${esc(s.paused)}</div>`).join('');
   const loading = sources.some(([, s]) => !s);
   const groups = [];
