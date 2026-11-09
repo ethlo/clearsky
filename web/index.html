@@ -35,6 +35,7 @@
     <a class="ni" href="#notifications" data-nav="notifications"><span class="ico" data-i="bell"></span><span class="lab">Notifications</span></a>
     <a class="ni" href="#handoffs" data-nav="handoffs" title="PRs and tickets you handed to Copilot to work on by itself"><span class="ico" data-i="handoff"></span><span class="lab">Hand-offs</span><b id="n-handoffs"></b></a>
     <a class="ni" href="#changes" data-nav="changes"><span class="ico" data-i="spark"></span><span class="lab">Copilot's changes</span></a>
+    <a class="ni" href="#usage" data-nav="usage" title="AI credits Copilot used, and what they cost"><span class="ico" data-i="usage"></span><span class="lab">Usage</span><b id="n-usage"></b></a>
     <a class="ni" href="#map" data-nav="map"><span class="ico" data-i="map"></span><span class="lab">Agent map</span></a>
   </nav>
   <div class="sg">Copilot <button type="button" id="cp-new-side" title="New chat (Alt+N)" aria-label="New chat"><span data-i="plus" data-size="14"></span></button></div>
@@ -98,6 +99,11 @@
   <section class="view" id="v-handoffs" hidden>
     <header class="vh"><h1 title="PRs and tickets you handed to Copilot (✦ on a row → Hand off). It works on them one at a time, in the sandbox, and ends with a draft PR or a note on what it needs from you.">Hand-offs</h1><span class="sub" id="ho-sub"></span><span class="spacer"></span></header>
     <div class="view-b"><div class="page" id="handoffs"></div></div>
+  </section>
+  <section class="view" id="v-usage" hidden>
+    <header class="vh"><h1 title="The AI credits all Copilot chats used, from their own session logs, and what they cost. Set the price and your currency in Settings → Copilot.">Usage</h1><span class="spacer"></span>
+      <div class="vh-acts"><button type="button" class="icon-btn" id="usage-refresh" title="Count again" aria-label="Count again"><span data-i="refresh" data-size="14"></span></button></div></header>
+    <div class="view-b"><div class="page" id="usage"></div></div>
   </section>
   <section class="view" id="v-changes" hidden>
     <header class="vh"><h1 title="What Copilot changed as you on GitHub and Jira, and what it read in Grafana, from its sandbox">Copilot's changes</h1><span class="spacer"></span></header>

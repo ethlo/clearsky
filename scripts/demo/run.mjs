@@ -111,14 +111,40 @@ writeFileSync(join(conf, '.env'), [
   'GITHUB_TOKEN=demo', `GITHUB_API_URL=${base}`, 'GITHUB_ORGS=acme', `ACLI_BIN=${join(here, 'acli.mjs')}`, 'JIRA_URL=https://acme.atlassian.net', 'JIRA_ACCOUNT_ID=me-1',
   'SLACK_TOKEN=demo', `SLACK_API_URL=${base}/slack`, `GOOGLE_CALENDAR_ICS=${base}/calendar.ics`, 'CLEARSKY_POLL_MINUTES=0', `CLEARSKY_STANDUP_TIME=${hhmm(standupAt())}`, 'CLEARSKY_NOTIFY=off',
   `COPILOT_BIN=${join(here, 'copilot.mjs')}`, 'GRAFANA_INSTANCES=test=https://grafana.test.example.com,prod=https://grafana.example.com',
+  'CLEARSKY_CURRENCY=EUR', 'CLEARSKY_FX_RATE=0.92', // made-up costs on the Usage page
   `VPN_CHECK=127.0.0.1:${fake.address().port}`, // the made-up VPN is always on
 ].join('\n'), { mode: 0o600 });
 const copilotHome = join(home, '.copilot');
+// Made-up model calls for the Usage page and each chat's info: a few weeks of work, more on
+// weekdays, the most on the chat that's open. Only numbers, like Copilot's own session log.
+function demoUsage(s) {
+  let seed = [...s.sessionId].reduce((n, c) => n * 31 + c.charCodeAt(0), 7) >>> 0;
+  const rnd = () => ((seed = (seed * 1103515245 + 12345) >>> 0) / 2 ** 32);
+  const weight = { [CHAT.id]: 3, 'demo-review-482': 1.2 }[s.sessionId] || 0.6;
+  const lines = [];
+  const end = Date.parse(s.updatedAt) || Date.now();
+  for (let day = 34; day >= 0; day--) {
+    const t0 = end - day * 864e5;
+    const dow = new Date(t0).getDay();
+    if ((dow === 0 || dow === 6) && rnd() < 0.8) continue;
+    const calls = Math.round(rnd() * 14 * weight);
+    for (let i = 0; i < calls; i++) {
+      const at = new Date(Math.min(end, t0 - rnd() * 8 * 36e5)).toISOString();
+      const model = rnd() < 0.8 ? 'Claude Opus 5.5' : 'GPT-5.4';
+      const input = 20_000 + Math.round(rnd() * 60_000);
+      lines.push(JSON.stringify({ type: 'session.usage_record', timestamp: at, data: { usage: { model, modelDisplayName: model, inputTokens: input, cacheReadTokens: Math.round(input * 0.8), outputTokens: 400 + Math.round(rnd() * 3000),
+        accounting: { usageId: `${s.sessionId}-${day}-${i}` }, copilotUsage: { totalNanoAiu: Math.round((1 + rnd() * 9) * 1e9) } } } }));
+    }
+  }
+  lines.sort((a, b) => JSON.parse(a).timestamp.localeCompare(JSON.parse(b).timestamp));
+  return `${lines.join('\n')}\n`;
+}
 for (const s of SESSIONS) {
   const d = join(copilotHome, 'session-state', s.sessionId);
   mkdirSync(join(d, 'files'), { recursive: true });
   mkdirSync(join(d, 'research'), { recursive: true });
   mkdirSync(s.cwd, { recursive: true });
+  writeFileSync(join(d, 'events.jsonl'), demoUsage(s));
   writeFileSync(join(d, 'workspace.yaml'), `id: ${s.sessionId}\ncwd: ${s.cwd}\n${s.branch ? `repository: acme/payments-api\nbranch: ${s.branch}\n` : ''}`);
 }
 const files = join(copilotHome, 'session-state', CHAT.id);

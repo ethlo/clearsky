@@ -244,6 +244,14 @@
     <label for="COPILOT_VM_MAX">VMs at the same time<span class="more">1 to 8, empty is 1. Another chat's <code>vm</code> command waits in line, and its chat shows where it is. A VM with nothing running in it gives its place to the next in line, and starts again from the snapshot on its chat's next command.</span></label>
     <input id="COPILOT_VM_MAX" data-key="COPILOT_VM_MAX" inputmode="numeric" spellcheck="false" placeholder="1" style="max-width:8em">
     <div class="row"><button class="save" data-keys="COPILOT_MODEL,COPILOT_EFFORT,COPILOT_PERMISSION,COPILOT_CWD,COPILOT_FOLDERS,COPILOT_ASSISTED_ALLOW,COPILOT_SANDBOX,COPILOT_SANDBOX_TOKEN,COPILOT_DISCLOSE,COPILOT_READ,COPILOT_DOMAINS,COPILOT_VM_IMAGES,COPILOT_GATE_RULES,COPILOT_VM_CPUS,COPILOT_VM_MEMORY_GB,COPILOT_VM_MAX">Save</button><span class="msg"></span></div>
+    <h3 id="cost" style="margin-top:28px">Credits and cost<span class="more">The <a href="/#usage">Usage</a> page adds up the AI credits every chat used, from Copilot's own session logs, and shows what they cost. Credits become dollars at the price below (check your Copilot plan), and dollars become your currency at your rate. With the live rate on, Clearsky looks the rate up once a day from the European Central Bank's public rates (frankfurter.dev, no account or token); if that fails it uses your rate.</span></h3>
+    <label for="COPILOT_CREDIT_USD">Dollars per credit</label>
+    <input id="COPILOT_CREDIT_USD" data-key="COPILOT_CREDIT_USD" inputmode="decimal" spellcheck="false" placeholder="0.01" style="max-width:8em">
+    <label for="CLEARSKY_CURRENCY">Your currency and what one dollar is in it<span class="more">A three-letter code like NOK, EUR or SEK. Leave it empty to see dollars only.</span></label>
+    <div class="row"><input id="CLEARSKY_CURRENCY" data-key="CLEARSKY_CURRENCY" spellcheck="false" placeholder="NOK" maxlength="3" style="max-width:6em;text-transform:uppercase"> <input id="CLEARSKY_FX_RATE" data-key="CLEARSKY_FX_RATE" aria-label="One dollar in your currency" inputmode="decimal" spellcheck="false" placeholder="rate" style="max-width:8em"></div>
+    <label for="CLEARSKY_FX_LIVE">Live rate</label>
+    <select id="CLEARSKY_FX_LIVE" data-key="CLEARSKY_FX_LIVE"><option value="">Off: use my rate</option><option value="on">On: look it up once a day</option></select>
+    <div class="row"><button class="save" data-keys="COPILOT_CREDIT_USD,CLEARSKY_CURRENCY,CLEARSKY_FX_RATE,CLEARSKY_FX_LIVE">Save</button><span class="msg"></span></div>
     <h3 id="memory" style="margin-top:28px">Memory<span class="more">Kept in <code id="memory-path">~/.local/share/clearsky/memory/memory.md</code> on this machine. Copilot is told never to change this file (in the sandbox it can't): it suggests notes in the chat, and they're saved only when you press Save on the card. Put notes for one repo under a <code>## owner/name</code> heading.</span></h3>
     <textarea id="memory-text" rows="8" aria-label="Copilot's memory" spellcheck="false" placeholder="Nothing yet. Notes you save from a chat's Remember card show up here."></textarea>
     <p class="hint">Notes every new chat reads. <span id="memory-size"></span></p>
@@ -292,9 +300,12 @@
     }).join('');
     if (nav.innerHTML !== html) nav.innerHTML = html;
   }
-  addEventListener('hashchange', () => { draw(); document.querySelector('.set-b').scrollTop = 0; });
+  // #copilot/cost: the Copilot tab, scrolled to its Credits and cost part.
+  const toPart = () => { const [tab, part] = location.hash.slice(1).split('/'); if (tab === 'copilot' && part) setTimeout(() => document.getElementById(part)?.scrollIntoView({ block: 'start' }), 0); };
+  addEventListener('hashchange', () => { draw(); document.querySelector('.set-b').scrollTop = 0; toPart(); });
   new MutationObserver(draw).observe(main, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['hidden', 'class'] });
   draw();
+  toPart();
 })();
 const CSRF = '__CSRF__';
 const SECRET = new Set(['GITHUB_TOKEN', 'GOOGLE_CALENDAR_ICS', 'COPILOT_SANDBOX_TOKEN']);
@@ -417,6 +428,10 @@ function render(s) {
   $('#COPILOT_VM_CPUS').value = cp.vmCpus || '';
   $('#COPILOT_VM_MEMORY_GB').value = cp.vmMemoryGb || '';
   $('#COPILOT_VM_MAX').value = cp.vmMax || '';
+  $('#COPILOT_CREDIT_USD').value = cp.creditUsd || '';
+  $('#CLEARSKY_CURRENCY').value = cp.currency || '';
+  $('#CLEARSKY_FX_RATE').value = cp.fxRate || '';
+  $('#CLEARSKY_FX_LIVE').value = cp.fxLive ? 'on' : '';
   $('#COPILOT_VM_CPUS').placeholder = cp.vmDefault ? `${cp.vmDefault.cpus} cores` : 'cores';
   $('#COPILOT_VM_MEMORY_GB').placeholder = cp.vmDefault ? `${cp.vmDefault.memGb} GB` : 'GB';
   $('#COPILOT_DOMAINS').placeholder = cp.defaultDomains || '';

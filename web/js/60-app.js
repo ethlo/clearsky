@@ -42,6 +42,7 @@ function route() {
   $('#v-builds').hidden = h !== 'builds';
   $('#v-servers').hidden = h !== 'servers';
   $('#v-map').hidden = h !== 'map';
+  $('#v-usage').hidden = h !== 'usage';
   $('#v-links').hidden = h !== 'links' && h !== 'links-personal';
   $('#chat').hidden = h !== 'copilot';
   for (const a of document.querySelectorAll('[data-nav]')) a.classList.toggle('on', a.dataset.nav === (h === 'item' ? returnTo : h));
@@ -56,6 +57,7 @@ function route() {
   if (h === 'builds') loadBuilds(false);
   if (h === 'servers') loadServers();
   if (h === 'map') renderMap();
+  if (h === 'usage') loadUsage(false);
   if (h === 'links' || h === 'links-personal') renderLinks(h === 'links' ? 'work' : 'personal');
   if (h === 'standup' && !standupData) { renderStandup(); loadStandup(false); }
   if (h.startsWith('src-')) { $('#src-body').innerHTML = ''; renderExtra(); }
