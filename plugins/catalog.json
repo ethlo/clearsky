@@ -4,10 +4,10 @@
     {
       "name": "flyt",
       "aka": [
-        "school"
+        "visma-flyt"
       ],
-      "folder": "clearsky-school",
-      "from": "github:ethlo/clearsky-school#v1.0.0"
+      "folder": "clearsky-visma-flyt",
+      "from": "github:ethlo/clearsky-visma-flyt#v1.0.0"
     },
     {
       "name": "slack",

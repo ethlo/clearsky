@@ -63,9 +63,9 @@ test('where a plugin comes from', () => {
   assert.deepEqual(parseSpec('npm:@acme/clearsky-weather@1.2.0'), { kind: 'npm', pkg: '@acme/clearsky-weather@1.2.0', from: 'npm:@acme/clearsky-weather@1.2.0' });
   assert.equal(parseSpec('./here').kind, 'folder');
   // A name from the catalog is its own repo, at the pinned version.
-  const school = parseSpec('school');
+  const school = parseSpec('visma-flyt');
   assert.deepEqual([school.kind, school.catalog, school.ref], ['git', 'flyt', 'v1.0.0']);
-  assert.match(school.url, /\/clearsky-school\.git$/);
+  assert.match(school.url, /\/clearsky-visma-flyt\.git$/);
   assert.equal(parseSpec('flyt').url, school.url);
   // A folder in plugins/ that isn't in the catalog is found by its manifest's name.
   const here = tmp('bundled');

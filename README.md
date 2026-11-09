@@ -17,7 +17,7 @@ The first time, Clearsky opens a **welcome page** that checks what this machine 
 
 - `clearsky app` opens it in a window of its own (it's in your app menu too).
 - If your team has a shared setup, join it: `clearsky join <the team's repo>` (see [Team packs](#team-packs)).
-- Add what else you use: `clearsky add slack`, `clearsky add grafana --trust`, `clearsky add school --trust` (see [Plugins](#plugins)).
+- Add what else you use: `clearsky add slack`, `clearsky add grafana --trust`, `clearsky add visma-flyt --trust` (see [Plugins](#plugins)).
 - Run `clearsky doctor` if something looks off.
 
 Everything you set is in `~/.config/clearsky/` and can be changed under **Settings**.
@@ -127,7 +127,7 @@ Clearsky's core is GitHub, Jira, your calendars, Copilot and your links. Everyth
 | --- | --- | --- |
 | `slack` | Slack messages that @mention you | [clearsky-slack](plugins/clearsky-slack/) |
 | `grafana` | Logs and metrics for Copilot chats, read only, through `grafana …` | [clearsky-grafana](plugins/clearsky-grafana/) |
-| `school` | Messages, forms and weekly plans from Visma Flyt Skole | [clearsky-school](plugins/clearsky-school/) |
+| `visma-flyt` | Messages, forms and weekly plans from Visma Flyt Skole | [clearsky-visma-flyt](plugins/clearsky-visma-flyt/) |
 | `slack-mcp` | Slack through Slack's MCP server: mentions and read-only `door slack …` for chats, no token | [clearsky-slack-mcp](plugins/clearsky-slack-mcp/) |
 | `confluence` | Read-only Confluence search and pages for chats, through Atlassian's MCP server | [clearsky-confluence](plugins/clearsky-confluence/) |
 

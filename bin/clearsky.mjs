@@ -3793,7 +3793,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.a
   } else if (args[0] === 'school-handover') {
     // The School plugin's own code, wherever it is: added from its repo, or its folder here.
     const dir = [codeDir(pluginDirs.root, 'flyt'), bundledDir('flyt')].find((d) => d && existsSync(join(d, 'lib', 'flyt.mjs')));
-    if (!dir) { console.error('clearsky: the School plugin isn\'t added here (`clearsky add school --trust`)'); process.exitCode = 1; } else {
+    if (!dir) { console.error('clearsky: the School plugin isn\'t added here (`clearsky add visma-flyt --trust`)'); process.exitCode = 1; } else {
       const { handOverLogin } = await import(pathToFileURL(join(dir, 'lib', 'flyt.mjs')).href);
       const where = await handOverLogin();
       console.log(where ? `School login moved to ${where}; Clearsky's container takes it from there.` : 'No school login here to hand over.');

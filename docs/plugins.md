@@ -10,7 +10,7 @@ clearsky add github:someone/plugins/weather#v1.2  # a folder in a repo, at a tag
 clearsky add https://git.example.com/me/plug.git  # any git repo, fetched with your own git login
 clearsky add npm:clearsky-weather@1.2.0           # an npm package
 clearsky add ./my-plugin                          # a folder here
-clearsky add school                               # one from the catalog: its repo, at the pinned tag
+clearsky add visma-flyt                               # one from the catalog: its repo, at the pinned tag
 ```
 
 Settings → Plugins does the same: paste where it comes from, **Look at it**, then **Add**. Either way Clearsky first fetches it and shows its manifest (hosts, programs, files, settings, and whether it runs in the sandbox), and nothing of the plugin has run yet: a git clone brings no hooks, and npm packages are fetched with `--ignore-scripts`. What you add is what you looked at. Clearsky loads plugins when it starts, so restart after adding one (Settings has the button).
@@ -158,10 +158,10 @@ Put the folder in a git repo, and people add it with `clearsky add github:you/cl
 `plugins/catalog.json` names the plugins anyone gets with a short name, each pinned to a tag:
 
 ```json
-{ "plugins": [{ "name": "flyt", "aka": ["school"], "folder": "clearsky-school", "from": "github:ethlo/clearsky-school#v1.0.0" }] }
+{ "plugins": [{ "name": "flyt", "aka": ["visma-flyt"], "folder": "clearsky-visma-flyt", "from": "github:ethlo/clearsky-visma-flyt#v1.0.0" }] }
 ```
 
-`clearsky add school` is then `clearsky add github:ethlo/clearsky-school#v1.0.0`. A new release of a plugin is a new tag in its repo and a one-line change to the pin here. Anyone who added a plugin from its folder in `plugins/` (before it had a repo) keeps it working from that folder, and gets **Move to its repo** in Settings → Plugins (or `clearsky add school`). Once a folder is deleted from `plugins/`, a plugin still added from it says where it lives now.
+`clearsky add visma-flyt` is then `clearsky add github:ethlo/clearsky-visma-flyt#v1.0.0`. A new release of a plugin is a new tag in its repo and a one-line change to the pin here. Anyone who added a plugin from its folder in `plugins/` (before it had a repo) keeps it working from that folder, and gets **Move to its repo** in Settings → Plugins (or `clearsky add visma-flyt`). Once a folder is deleted from `plugins/`, a plugin still added from it says where it lives now.
 
 A plugin's tests that load it the way Clearsky does need a Clearsky checkout: `test/core.mjs` finds it in `CLEARSKY_CORE`, or in the Clearsky the folder sits in.
 

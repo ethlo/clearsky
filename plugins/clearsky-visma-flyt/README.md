@@ -1,14 +1,14 @@
-# School for Clearsky (Visma Flyt Skole)
+# Visma Flyt Skole for Clearsky
 
 A [Clearsky](https://github.com/ethlo/clearsky) plugin. If your children's school uses Visma Flyt Skole (Min Skole / Flyt Foresatt), it shows what waits for you there: unread messages and notices, and forms and consents to answer. Form deadlines show up in Now / Next. It only reads. It never replies or marks anything as read, so the portal still shows everything as unread.
 
 ## Add it
 
 ```sh
-clearsky add school --trust
+clearsky add visma-flyt --trust
 ```
 
-or **Settings → Plugins → School → Add**. `school` is the name in Clearsky's catalog, pinned to a released version; `clearsky add github:ethlo/clearsky-school#v1.0.0 --trust` is the same thing spelled out. It needs `--trust` (or the box in Settings) because it runs inside Clearsky rather than in a sandbox of its own: the login opens a browser window and the session is kept in your keyring.
+or **Settings → Plugins → School → Add**. `visma-flyt` is the name in Clearsky's catalog, pinned to a released version; `clearsky add github:ethlo/clearsky-visma-flyt#v1.0.0 --trust` is the same thing spelled out. It needs `--trust` (or the box in Settings) because it runs inside Clearsky rather than in a sandbox of its own: the login opens a browser window and the session is kept in your keyring.
 
 Then, in Settings under **Plugins → Visma Flyt Skole**:
 
