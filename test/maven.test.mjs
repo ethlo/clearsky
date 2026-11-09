@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { mavenServers, serverHosts, sandboxSettingsXml, mavenSandbox } from '../lib/maven.mjs';
+import { mavenServers, serverHosts, sandboxSettingsXml, mavenSandbox, withSandboxProxy, PROXY_TOKEN_ENV } from '../lib/maven.mjs';
 import { srtSettings } from '../lib/sandbox.mjs';
 
 const XML = `<settings>
@@ -53,4 +53,35 @@ test('settings with no plain login still get a copy for the sandbox, without sec
   assert.deepEqual(m.credentials, []);
   const copy = readFileSync(m.settings, 'utf8');
   assert.ok(!copy.includes('<password>') && copy.includes('repo.example.com'));
+});
+
+test("Maven in the sandbox goes through srt's proxy with its login, not a proxy of yours", () => {
+  const mine = '<settings>\n  <proxies><proxy><id>office</id><host>proxy.example.org</host><port>8080</port></proxy></proxies>\n  <localRepository>/r</localRepository>\n</settings>\n';
+  const out = withSandboxProxy(mine, { port: 3128 });
+  assert.ok(!out.includes('proxy.example.org'));
+  assert.equal(out.match(/<proxies>/g).length, 1);
+  assert.match(out, /<host>localhost<\/host><port>3128<\/port><username>srt<\/username><password>\$\{env\.CLEARSKY_PROXY_TOKEN\}<\/password>/);
+  assert.equal(PROXY_TOKEN_ENV, 'CLEARSKY_PROXY_TOKEN');
+  assert.match(out, /<localRepository>\/r<\/localRepository>/);
+  assert.match(out, /<\/proxies>\n<\/settings>\n$/);
+  // The same again (a second chat) leaves one proxy.
+  assert.equal(withSandboxProxy(out, { port: 3128 }), out);
+  // No settings of yours, or an empty one; a proxy without a login.
+  assert.match(withSandboxProxy('', { port: 9 }), /^<settings>\n  <proxies>.*<port>9<\/port><username>srt<\/username>/);
+  assert.ok(!withSandboxProxy('', { port: 9, token: false }).includes('<password>'));
+  assert.match(withSandboxProxy('<settings xmlns="x"/>', { port: 9 }), /^<settings xmlns="x">\n  <proxies>[\s\S]*<\/settings>$/);
+  // Something after the root element: your settings stay, and so does it.
+  const tail = withSandboxProxy('<settings><localRepository>/r</localRepository></settings><!-- managed -->\n', { port: 9 });
+  assert.match(tail, /<localRepository>\/r<\/localRepository>\n  <proxies>[\s\S]*<\/proxies>\n<\/settings><!-- managed -->\n$/);
+});
+
+test("the copy with logins also gets srt's proxy, still without the password", () => {
+  const home = mkdtempSync(join(tmpdir(), 'm2-'));
+  mkdirSync(join(home, '.m2'));
+  writeFileSync(join(home, '.m2', 'settings.xml'), XML);
+  const run = (cmd, args) => { const i = args.indexOf('-out'); if (i >= 0) { writeFileSync(args[i + 1], 'cert'); writeFileSync(args[args.indexOf('-keyout') + 1], 'key'); } const k = args.indexOf('-keystore'); if (k >= 0) writeFileSync(args[k + 1], 'p12'); };
+  const m = mavenSandbox({ home, out: join(home, 'out'), keep: join(home, 'keep'), run });
+  assert.match(m.javaOptions, /-Djavax\.net\.ssl\.trustStore=/);
+  const copy = withSandboxProxy(readFileSync(m.settings, 'utf8'), { port: 3128 });
+  assert.ok(!copy.includes('s3cret') && copy.includes('CLEARSKY_M2_0') && copy.includes('clearsky-sandbox'));
 });

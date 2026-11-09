@@ -21,7 +21,7 @@ import * as copilot from '../lib/copilot.mjs';
 import { AcpAgent, chatEvent } from '../lib/acp.mjs';
 import { sessionEvents, sessionUsage } from '../lib/copilot-events.mjs';
 import { branchesFor } from '../lib/branches.mjs';
-import { sandboxedCommand, sandboxEnded, stopSandbox, sandboxProxy, sandboxNetwork, githubLogin, DEFAULT_DOMAINS, READ_DEFAULT, parseDomains } from '../lib/sandbox.mjs';
+import { sandboxedCommand, sandboxEnded, stopSandbox, sandboxProxy, sandboxProxyLogin, sandboxNetwork, githubLogin, DEFAULT_DOMAINS, READ_DEFAULT, parseDomains } from '../lib/sandbox.mjs';
 import { HostDoor, ruleMatches } from '../lib/host-door.mjs';
 import { VmImage, ChatVm, vmSupport, VM_DOMAINS, reapOrphans, vmsLoad } from '../lib/vm.mjs';
 import { VmQueue } from '../lib/vm-queue.mjs';
@@ -41,7 +41,7 @@ import { disclosureLine, disclosureFields, creditSplit, DISCLOSE_HINT } from '..
 import { parseReviewArgs, changeOf, reviewPrompt, writeBaseFiles, reviewDecision, USAGE as REVIEW_USAGE } from '../lib/review.mjs';
 import { buildMap, buildKind } from '../lib/map.mjs';
 import { serveBroker, brokerSocket } from '../lib/broker.mjs';
-import { mavenSandbox, sandboxCa, plainMaven } from '../lib/maven.mjs';
+import { mavenSandbox, sandboxCa, plainMaven, withSandboxProxy, PROXY_TOKEN_ENV } from '../lib/maven.mjs';
 import { githubFilter, REGISTRY_HOSTS, GITHUB_LOG_HOSTS, SHARED_BRANCH } from '../lib/github-gate.mjs';
 import { githubAdvice, jiraAdvice, outsideAdvice, parseRules, ruleLabel } from '../lib/advice.mjs';
 import { attentionItems, diffAttention, desktopNotify, DbusNotifier } from '../lib/notify.mjs';
@@ -1150,6 +1150,8 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
     // Without the logins, Maven still runs from your local repository with a copy minus secrets.
     try { maven = plainMaven(readFileSync(join(homedir(), '.m2', 'settings.xml'), 'utf8'), join(dirname(brokerSocket()), 'maven')); } catch { /* no settings */ }
   }
+  // No settings.xml of yours: Maven still needs one, to find srt's proxy (below).
+  if (!maven) try { maven = plainMaven('<settings>\n</settings>\n', join(dirname(brokerSocket()), 'maven')); } catch { /* can't write it */ }
   if (maven) Object.assign(process.env, maven.env);
   const env = copilotEnv();
   const n = Number(env.GIT_CONFIG_COUNT) || 0;
@@ -1160,7 +1162,7 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   env.GIT_CONFIG_COUNT = String(n + SANDBOX_GIT.length + (github ? 1 : 0));
   if (maven) {
     env.MAVEN_ARGS = `${env.MAVEN_ARGS ? `${env.MAVEN_ARGS} ` : ''}--settings ${maven.settings}`;
-    if (maven.javaOptions) env.JAVA_TOOL_OPTIONS = `${env.JAVA_TOOL_OPTIONS ? `${env.JAVA_TOOL_OPTIONS} ` : ''}${maven.javaOptions}`;
+    if (maven.javaOptions) env.MAVEN_OPTS = `${env.MAVEN_OPTS ? `${env.MAVEN_OPTS} ` : ''}${maven.javaOptions}`;
   }
   // The real values never go in: srt sets the stand-ins.
   for (const c of [...(github?.credentials || []), ...(maven?.credentials || [])]) delete env[c.name];
@@ -1179,6 +1181,15 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
     // Read only, so the proxy reads them: CI logs (with GitHub on), Docker Hub (with the VM).
     inspect: [...(github ? GITHUB_LOG_HOSTS : []), ...(vmSupport().ok ? REGISTRY_HOSTS : [])] },
     sandboxGate());
+  // Maven reaches the net only through srt's proxy, with its login (lib/maven.mjs): otherwise a
+  // download gets the proxy's 407, and the host door never asks about the host.
+  const proxy = maven && await sandboxProxyLogin();
+  if (proxy) {
+    try {
+      writeFileSync(maven.settings, withSandboxProxy(readFileSync(maven.settings, 'utf8'), { ...proxy, token: !!proxy.token }), { mode: 0o600 });
+      if (proxy.token) env[PROXY_TOKEN_ENV] = proxy.token;
+    } catch (e) { console.error(`clearsky: Maven's proxy for the sandbox: ${e.message}`); }
+  }
   const agent = new AcpAgent(s.bin, s.args, { env, acp: false });
   agent.child.once('exit', sandboxEnded);
   // A background job (`bg <command>`) runs in a sandbox of its own with the same fence: folders,
@@ -1999,6 +2010,8 @@ const SANDBOX_HINT = 'You run in a sandbox: everything inside it runs without as
   + 'Only hosts on the sandbox\'s list are reachable. A request to any other host waits while Clearsky asks me; if it fails as '
   + '"blocked by network allowlist" or "declined", don\'t carry on from memory or guesses: say which host you need and why, and end your turn. '
   + 'When I allow it, Clearsky tells you here and you try again. Sending data to a host I allowed asks me again. '
+  + 'Maven finds the proxy and your repository logins in the settings Clearsky passes in MAVEN_ARGS: keep them (no `-s` or proxy flags of your own). '
+  + 'A 407 from the proxy means a tool skipped the proxy\'s login: say so and which host, don\'t work around it. '
   + 'If you stop before the task is done, Clearsky nudges you to go on; when you are done, or need me, say so plainly.';
 const sandboxHintFor = (permission) => (process.env.COPILOT_SANDBOX === 'srt' || permission === 'sandboxed'
   ? `\n\n${SANDBOX_HINT}${doorHints()}${process.env.COPILOT_DISCLOSE === 'on' ? ` ${DISCLOSE_HINT}` : ''}` : '');
