@@ -41,6 +41,7 @@ function route() {
   $('#v-handoffs').hidden = h !== 'handoffs';
   $('#v-builds').hidden = h !== 'builds';
   $('#v-servers').hidden = h !== 'servers';
+  $('#v-vms').hidden = h !== 'vms';
   $('#v-map').hidden = h !== 'map';
   $('#v-links').hidden = h !== 'links' && h !== 'links-personal';
   $('#chat').hidden = h !== 'copilot';
@@ -55,6 +56,7 @@ function route() {
   if (h === 'handoffs') loadHandoffs();
   if (h === 'builds') loadBuilds(false);
   if (h === 'servers') loadServers();
+  if (h === 'vms') loadVms();
   if (h === 'map') renderMap();
   if (h === 'links' || h === 'links-personal') renderLinks(h === 'links' ? 'work' : 'personal');
   if (h === 'standup' && !standupData) { renderStandup(); loadStandup(false); }

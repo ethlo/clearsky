@@ -29,6 +29,7 @@
     </nav>
     <a class="ni" href="#builds" data-nav="builds"><span class="ico" data-i="build"></span><span class="lab">Builds</span><b id="n-builds"></b></a>
     <a class="ni" href="#servers" data-nav="servers"><span class="ico" data-i="server"></span><span class="lab">Servers</span><b id="n-servers"></b></a>
+    <a class="ni" href="#vms" data-nav="vms" title="Copilot's VMs for builds with Docker: what runs in them and who waits for one"><span class="ico" data-i="vm"></span><span class="lab">VMs</span><b id="n-vms"></b></a>
     <a class="ni" href="#calendar" data-nav="calendar"><span class="ico" data-i="calendar"></span><span class="lab">Calendar</span><b id="n-calendar"></b></a>
     <a class="ni" href="#links" data-nav="links"><span class="ico" data-i="link"></span><span class="lab">Links</span></a>
     <a class="ni" href="#standup" data-nav="standup"><span class="ico" data-i="standup"></span><span class="lab">Stand-up</span></a>
@@ -89,6 +90,11 @@
       <input type="search" id="srv-filter" class="links-filter" placeholder="Filter" aria-label="Filter servers"><span class="spacer"></span>
       <div class="vh-acts"><button type="button" class="icon-btn" id="srv-refresh" title="Read the config again" aria-label="Read the config again"><span data-i="refresh" data-size="14"></span></button></div></header>
     <div class="view-b"><div class="page" id="servers"></div></div>
+  </section>
+  <section class="view" id="v-vms" hidden>
+    <header class="vh"><h1 title="The VMs Copilot's chats run Docker builds in (Testcontainers). Settings → Copilot sets how many run at the same time; other chats wait in line and start on their own.">VMs</h1><span class="sub" id="vms-sub"></span><span class="spacer"></span>
+      <div class="vh-acts"><button type="button" class="icon-btn" id="vms-refresh" title="Look again" aria-label="Look again"><span data-i="refresh" data-size="14"></span></button></div></header>
+    <div class="view-b"><div class="page" id="vms"></div></div>
   </section>
   <section class="view" id="v-builds" hidden>
     <header class="vh"><h1 title="How each repo's main branch builds now, and the newest artifact and release it made. Pick the repos in Settings → GitHub.">Builds</h1><span class="spacer"></span>

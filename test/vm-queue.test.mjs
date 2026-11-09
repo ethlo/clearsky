@@ -90,3 +90,23 @@ test('more places in Settings let whoever waits start', async () => {
   assert.equal(await state(pb), 'in');
   assert.equal(q.view().running, 2);
 });
+
+test('the VMs view sees who has a place, whether it builds, and the line in order', async () => {
+  const q = new VmQueue({ limit: () => 1 });
+  const a = {}, b = {}, c = {};
+  await q.enter(a); // a builds
+  q.enter(b).catch(() => {});
+  q.enter(c).catch(() => {});
+  await tick();
+  const s = q.snapshot();
+  assert.equal(s.limit, 1);
+  assert.equal(s.holders.length, 1);
+  assert.equal(s.holders[0].holder, a);
+  assert.equal(s.holders[0].active, 1);
+  assert.equal(typeof s.holders[0].since, 'number');
+  assert.deepEqual(s.line.map((w) => [w.holder === b ? 'b' : 'c', w.position, w.calls]), [['b', 1, 1], ['c', 2, 1]]);
+  q.drop(b); q.drop(c);
+  q.leave(a);
+  assert.equal(q.snapshot().holders[0].active, 0);
+  assert.deepEqual(q.snapshot().line, []);
+});

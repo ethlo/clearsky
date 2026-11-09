@@ -108,3 +108,31 @@ export function calendar() {
     ev('d5', 'Payments stand-up', at(0, 1), at(0.25, 1)),
   ].join('')}END:VCALENDAR\r\n`;
 }
+
+// The VMs view (/api/vms): two chats' VMs building, two more waiting in line for one.
+export function vms(now = Date.now()) {
+  const wob = (base, span) => Math.round(base + Math.sin(now / 7000 + base) * span);
+  const ctr = (name, image, status, cpu, memMb, ports = '') => ({ name, image, state: 'running', status, ports, cpu: `${cpu.toFixed(2)}%`, mem: `${memMb}MiB / 7.8GiB` });
+  const home = '~/dev/acme';
+  return {
+    limit: 2, running: 2, waiting: 2,
+    vms: [
+      { chat: 'demo-pay412-refunds', title: 'PAY-412: Partial refunds for split payments', state: 'running', place: 'running', busy: true, since: new Date(now - 14 * 6e4).toISOString(),
+        startedAt: new Date(now - 14 * 6e4).toISOString(), cwd: `${home}/payments-api`, commands: 6, vcpus: 6, memMb: 8192, diskBytes: 3.1 * 2 ** 30,
+        system: { memTotalMb: 7936, memUsedMb: wob(5200, 400), cpus: 6, cpuPct: wob(71, 12) },
+        containers: [
+          ctr('testcontainers-ryuk-4f1a', 'testcontainers/ryuk:0.11.0', 'Up 3 minutes', 0.02, 9),
+          ctr('postgres-refunds-it', 'postgres:16-alpine', 'Up 3 minutes', wob(38, 9), wob(212, 20), '0.0.0.0:32771->5432/tcp'),
+          ctr('kafka-ledger-it', 'confluentinc/cp-kafka:7.6.1', 'Up 2 minutes', wob(54, 15), wob(980, 60), '0.0.0.0:32773->9093/tcp'),
+          { name: 'redis-cache-it', image: 'redis:7', state: 'exited', status: 'Exited (0) 4 minutes ago', ports: '' },
+        ] },
+      { chat: 'demo-flaky-it', title: 'Flaky RefundServiceIT', state: 'running', place: 'running', busy: false, since: new Date(now - 32 * 6e4).toISOString(),
+        startedAt: new Date(now - 32 * 6e4).toISOString(), cwd: `${home}/payments-api`, commands: 11, vcpus: 6, memMb: 8192, diskBytes: 2.4 * 2 ** 30,
+        system: { memTotalMb: 7936, memUsedMb: wob(1400, 80), cpus: 6, cpuPct: wob(4, 2) },
+        containers: [] },
+      { chat: 'demo-review-482', title: 'Review acme/payments-api#482', state: 'off', place: 'waiting', position: 1, since: new Date(now - 3 * 6e4).toISOString(), cwd: `${home}/payments-api`, commands: 0, vcpus: 6, memMb: 8192, system: null, containers: [] },
+      { chat: 'demo-webshop-build', title: 'web-shop: checkout tests', state: 'off', place: 'waiting', position: 2, since: new Date(now - 50e3).toISOString(), cwd: `${home}/web-shop`, commands: 0, vcpus: 6, memMb: 8192, system: null, containers: [] },
+    ],
+    host: { cpus: 12, memMb: 31744 },
+  };
+}

@@ -10,7 +10,7 @@ import { createServer } from 'node:http';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, realpathSync, statSync, readdirSync, rmSync } from 'node:fs';
 import { join, dirname, resolve, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { homedir } from 'node:os';
+import { homedir, availableParallelism, totalmem } from 'node:os';
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { delimiter } from 'node:path';
 import { promisify } from 'node:util';
@@ -1413,6 +1413,22 @@ async function vmRun({ key, argv, cwd, java, signal }, out, err) {
   } finally { vmQueue.leave(vm); }
 }
 const vmQueue = new VmQueue();
+// Every chat's VM that runs or waits, running ones first (oldest first), then the line in order.
+async function vmsOverview({ look = true } = {}) {
+  const snap = vmQueue.snapshot();
+  const names = localState.sessionNames(stateFile), titles = new Map((sessionsCache?.data || []).map((x) => [x.id, x.title]));
+  const tilde = (p) => (p && p.startsWith(homedir()) ? `~${p.slice(homedir().length)}` : p);
+  const held = new Map(snap.holders.map((h) => [h.holder, h])), line = new Map(snap.line.map((w) => [w.holder, w]));
+  const chats = [...acpChats].filter(([, c]) => c.vm && (c.vm.state !== 'off' || held.has(c.vm) || line.has(c.vm)));
+  if (look) await Promise.all(chats.map(([, c]) => c.vm.refresh())); // ssh into each: only while the view is open
+  const vms = chats.map(([id, c]) => {
+    const v = c.vm.view(), h = held.get(c.vm), w = line.get(c.vm);
+    return { chat: id, title: names[id] || titles.get(id) || null, state: v.state, place: w ? 'waiting' : h ? 'running' : v.state === 'off' ? 'off' : 'running',
+      position: w?.position ?? null, busy: !!h?.active, since: new Date(w?.since ?? h?.since ?? (Date.parse(v.startedAt) || Date.now())).toISOString(),
+      startedAt: v.startedAt, cwd: tilde(v.cwd), commands: v.commands, vcpus: v.vcpus, memMb: v.memMb, diskBytes: v.diskBytes, system: v.system, containers: v.containers };
+  }).sort((a, b) => (a.place === 'waiting') - (b.place === 'waiting') || (a.position ?? 0) - (b.position ?? 0) || Date.parse(a.since) - Date.parse(b.since));
+  return { limit: snap.limit, running: snap.holders.length, waiting: snap.line.length, vms, host: { cpus: availableParallelism(), memMb: Math.floor(totalmem() / 1048576) } };
+}
 const ordinal = (n) => `${n}${[, 'st', 'nd', 'rd'][n % 100 >> 3 ^ 1 && n % 10] || 'th'}`;
 // VM events show in the chat as they happen (commands and containers; the rest is in its view).
 function bindVm(c) {
@@ -2967,6 +2983,11 @@ function serve() {
         const v = vm.view();
         const tilde = (p) => (p.startsWith(homedir()) ? `~${p.slice(homedir().length)}` : p);
         return json(res, 200, { vm: { ...v, cwd: tilde(v.cwd), shares: v.shares.map(tilde) }, support });
+      }
+      // All chats' VMs (the VMs view): who has a place, who waits in line, and what runs in each.
+      if (url.pathname === '/api/vms') {
+        if (isDemo()) return json(res, 200, { ...(await import('../scripts/demo/data.mjs')).vms(), support: { ok: true } });
+        return json(res, 200, { ...(await vmsOverview({ look: !url.searchParams.has('quick') })), support: vmSupport() });
       }
       if (url.pathname === '/api/copilot/sessions') {
         const info = await copilotInfo();
