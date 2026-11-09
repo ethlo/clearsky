@@ -623,7 +623,7 @@ function plugStatus(p) {
   if (ls.some((l) => (l.many ? !l.many.length || !l.many.every((x) => x.loggedIn) : !l.loggedIn && !l.running))) return { on: 'bad', text: 'not logged in' };
   return { on: true, text: 'on' };
 }
-const kindLabel = (p) => (p.kind === 'core' ? 'Built in' : p.kind === 'bundled' ? 'Ships with Clearsky'
+const kindLabel = (p) => (p.kind === 'core' ? 'Built in' : p.kind === 'bundled' ? 'Ships with Clearsky' : p.kind === 'catalog' ? `From its own repo: ${p.from}`
   : p.kind === 'local' ? 'Your file in ~/.config/clearsky/sources' : `From ${p.from}${p.commit ? ` @ ${p.commit.slice(0, 10)}` : ''}`);
 // How it's pinned (lib/plugins.mjs pinOf), in words.
 const pinLabel = (p) => {
@@ -723,7 +723,7 @@ function drawPlugins() {
     }
     const st = plugStatus(p);
     const acts = p.added && p.kind !== 'core' && p.kind !== 'local'
-      ? `${p.kind === 'bundled' ? '' : `<button class="secondary" data-plug-add="${esc(p.from)}">Update</button>`}<button class="secondary" data-plug-remove="${esc(p.name)}">Remove</button>` : '';
+      ? `${p.kind === 'bundled' ? (p.moveTo ? `<button class="secondary" data-plug-add="${esc(p.moveTo)}" title="It has a repo of its own now">Move to its repo</button>` : '') : `<button class="secondary" data-plug-add="${esc(p.from)}">Update</button>`}<button class="secondary" data-plug-remove="${esc(p.name)}">Remove</button>` : '';
     pg.querySelector('.pp-head').innerHTML = `<div class="pp-top"><h3 class="pp-title">${esc(p.label)} ${pill(st)}</h3><div class="acts">${acts}<span class="msg"></span></div></div>
       <p class="k">${[kindLabel(p), p.version, runLabel(p), `${p.area === 'work' ? 'Work' : 'Personal'} tab`].filter(Boolean).map(esc).join(' · ')}</p>
       ${p.description ? `<p>${esc(p.description)}</p>` : ''}

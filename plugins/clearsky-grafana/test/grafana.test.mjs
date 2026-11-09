@@ -4,9 +4,10 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseInstances, parseTokens, parseCommand, createGrafana, sessionStore, sessionCookie, formatLogs, formatMetrics } from '../lib/grafana.mjs';
-import { redact } from '../../../lib/redact.mjs';
+import { core } from './core.mjs';
 import { readFileSync } from 'node:fs';
-import { validate, addFields } from '../../../lib/settings.mjs';
+const { redact } = await core('lib/redact.mjs');
+const { validate, addFields } = await core('lib/settings.mjs');
 
 // The settings as the plugin declares them, with their checks.
 addFields(JSON.parse(readFileSync(new URL('../clearsky-plugin.json', import.meta.url), 'utf8')).settings, 'Grafana');

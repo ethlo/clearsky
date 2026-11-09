@@ -1,12 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, mkdirSync, appendFileSync, existsSync, readFileSync, readdirSync } from "node:fs";
-import { join } from 'node:path';
+import { mkdtempSync, writeFileSync, mkdirSync, appendFileSync, existsSync, readFileSync, readdirSync, cpSync, rmSync } from "node:fs";
+import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
 import { execFileSync } from 'node:child_process';
 import { parseManifest, parseSpec, addPlugin, removePlugin, listPlugins, loadPlugins, migrateBundled, readRegistry, fetchPlugin, readManifest, codeDir, BUNDLED, treeHash,
-  sourceKey, withRef, pinOf, ghCredential, remoteRefs, checkPlugin, updatePlugin, preparePlugin, reachChanges, versionOf } from '../lib/plugins.mjs';
+  sourceKey, withRef, pinOf, ghCredential, remoteRefs, checkPlugin, updatePlugin, preparePlugin, reachChanges, versionOf, readCatalog, bundledDir } from '../lib/plugins.mjs';
 import { sandboxedSource, runPlugin, pluginSrtSettings, cleanEnv, srtWrap } from '../lib/plugin-sandbox.mjs';
 import { hook, asList } from '../lib/sources.mjs';
 
@@ -62,7 +62,17 @@ test('where a plugin comes from', () => {
   assert.equal(parseSpec('git@example.com:me/plug.git').kind, 'git');
   assert.deepEqual(parseSpec('npm:@acme/clearsky-weather@1.2.0'), { kind: 'npm', pkg: '@acme/clearsky-weather@1.2.0', from: 'npm:@acme/clearsky-weather@1.2.0' });
   assert.equal(parseSpec('./here').kind, 'folder');
-  assert.equal(parseSpec('flyt').kind, 'bundled');
+  // A name from the catalog is its own repo, at the pinned version.
+  const school = parseSpec('school');
+  assert.deepEqual([school.kind, school.catalog, school.ref], ['git', 'flyt', 'v1.0.0']);
+  assert.match(school.url, /\/clearsky-school\.git$/);
+  assert.equal(parseSpec('flyt').url, school.url);
+  // A folder in plugins/ that isn't in the catalog is found by its manifest's name.
+  const here = tmp('bundled');
+  mkdirSync(join(here, 'clearsky-weather'));
+  writeFileSync(join(here, 'clearsky-weather', 'clearsky-plugin.json'), JSON.stringify({ name: 'weather' }));
+  writeFileSync(join(here, 'clearsky-weather', 'source.mjs'), 'export default {};');
+  assert.deepEqual(parseSpec('weather', { bundled: here }), { kind: 'bundled', dir: join(here, 'clearsky-weather'), from: 'weather' });
   assert.throws(() => parseSpec('http://example.com/x.git'), /plain http/);
   assert.throws(() => parseSpec('nosuchplugin'), /ships with Clearsky/);
 });
@@ -202,16 +212,55 @@ test('a source that becomes a plugin later (Slack) is offered once to lists from
   assert.deepEqual(migrateBundled({ SLACK_TOKEN: 'xoxp-1' }, { paths: p }), []);
 });
 
-test('every plugin that ships with Clearsky has a valid manifest and loads', async () => {
+test('every plugin in the catalog has its folder here, a valid manifest, a pin on its version, and loads', async () => {
   const p = paths();
-  for (const n of readdirSync(BUNDLED)) {
-    await addPlugin(n, { paths: p });
-    assert.ok(readFileSync(join(BUNDLED, n, 'clearsky-plugin.json'), 'utf8'));
+  const cat = readCatalog();
+  assert.deepEqual(cat.map((c) => c.name).sort(), ['flyt', 'grafana', 'slack']);
+  const reg = { plugins: {} };
+  for (const c of cat) {
+    const dir = bundledDir(c.name);
+    assert.equal(dir, join(BUNDLED, c.folder));
+    const m = readManifest(dir);
+    // The pin is the version in the folder: tag v<version> when the repo is made.
+    assert.equal(parseSpec(c.name).ref, `v${m.version}`, `${c.name}: the catalog pins v${m.version}`);
+    assert.equal(JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')).version, m.version);
+    for (const f of ['README.md', 'LICENSE', 'test/core.mjs']) assert.ok(existsSync(join(dir, f)), `${c.folder}/${f}`);
+    reg.plugins[c.name] = { from: c.name, kind: 'bundled', version: m.version, run: 'inside' };
   }
+  // Added from its folder before it had a repo: still loads, and is listed as added.
+  mkdirSync(dirname(p.registry), { recursive: true });
+  writeFileSync(p.registry, JSON.stringify(reg));
   const { sources, errors } = await loadPlugins({ paths: p });
   assert.deepEqual(errors, []);
   assert.equal(sources.get('flyt').panel.title, 'School');
-  assert.ok(treeHash(join(BUNDLED, 'flyt')).startsWith('sha256-'));
+  assert.ok(treeHash(bundledDir('flyt')).startsWith('sha256-'));
+  assert.deepEqual(listPlugins({ paths: p }).available, []);
+});
+
+test('a plugin added from its folder here moves to its own repo; once the folder is gone it says so', async () => {
+  const p = paths(), here = tmp('bundled');
+  mkdirSync(join(here, 'clearsky-weather'));
+  writeFileSync(join(here, 'clearsky-weather', 'clearsky-plugin.json'), JSON.stringify({ name: 'weather', label: 'Weather' }));
+  writeFileSync(join(here, 'clearsky-weather', 'source.mjs'), 'export default { fetch() { return {}; } };');
+  // Its repo, with a release.
+  const repo = tmp('repo');
+  cpSync(join(here, 'clearsky-weather'), repo, { recursive: true });
+  const g = (...a) => execFileSync('git', ['-C', repo, ...a], { env: gitEnv }).toString().trim();
+  g('init', '-q'); g('add', '.'); g('commit', '-qm', 'one'); g('tag', 'v1.0.0');
+  writeFileSync(join(here, 'catalog.json'), JSON.stringify({ plugins: [{ name: 'weather', aka: ['rain'], folder: 'clearsky-weather', from: `file://${repo}/.git#v1.0.0` }] }));
+  mkdirSync(dirname(p.registry), { recursive: true });
+  writeFileSync(p.registry, JSON.stringify({ plugins: { weather: { from: 'weather', kind: 'bundled', version: '0.0.0', run: 'inside' } } }));
+  assert.deepEqual((await loadPlugins({ paths: p, bundled: here })).errors, []);
+  await assert.rejects(updatePlugin('weather', { paths: p, bundled: here }), /repo of its own now: `clearsky add rain`/);
+  // Gone from here: it tells you where it went.
+  rmSync(join(here, 'clearsky-weather'), { recursive: true });
+  assert.match((await loadPlugins({ paths: p, bundled: here })).errors[0], /lives in its own repo now/);
+  assert.equal(listPlugins({ paths: p, bundled: here }).added[0].problem.includes('clearsky add rain'), true);
+  // Adding it by name takes it from the repo, at the pin, in a sandbox of its own.
+  const r = await addPlugin('rain', { paths: p, bundled: here });
+  assert.deepEqual([r.kind, r.run, r.pin], ['git', 'sandbox', 'ref']);
+  assert.equal(readRegistry(p.registry).plugins.weather.commit, g('rev-parse', 'HEAD'));
+  assert.deepEqual(listPlugins({ paths: p, bundled: here }).available, []);
 });
 
 // ---------------------------------------------------------------- versions

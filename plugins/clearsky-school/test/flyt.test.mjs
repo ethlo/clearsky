@@ -8,10 +8,11 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { client, renew, collectFlyt, waiting, readFlyt, flytFile, parseKey, osloTime, sessionFromCookies, jwtExpiry, keyringStore, fileStore, FlytAuthError, keepAlive } from '../lib/flyt.mjs';
 import { browserLogin } from '../lib/flyt-login.mjs';
-import { findBrowser } from '../../../lib/browser.mjs';
+import { core } from './core.mjs';
 import { fileURLToPath } from 'node:url';
-import { hook } from '../../../lib/sources.mjs';
-import { sourceFromDir } from '../../../lib/plugins.mjs';
+const { findBrowser } = await core('lib/browser.mjs');
+const { hook } = await core('lib/sources.mjs');
+const { sourceFromDir } = await core('lib/plugins.mjs');
 
 const jwt = (expMs) => `h.${Buffer.from(JSON.stringify({ exp: Math.floor(expMs / 1000) })).toString('base64url')}.s`;
 const memStore = (v) => ({ v, where: 'memory', async get() { return this.v; }, async set(x) { this.v = x; } });

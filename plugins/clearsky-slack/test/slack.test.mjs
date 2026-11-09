@@ -2,9 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { fetchMentions, slackText } from '../lib/slack.mjs';
-import { sourceFromDir } from '../../../lib/plugins.mjs';
-import { hook } from '../../../lib/sources.mjs';
-import { pluginItems } from '../../../lib/items.mjs';
+import { core } from './core.mjs';
+
+const { sourceFromDir } = await core('lib/plugins.mjs');
+const { hook } = await core('lib/sources.mjs');
+const { pluginItems } = await core('lib/items.mjs');
 
 const NOW = Date.parse('2026-11-08T10:00:00Z');
 const ts = (h) => String((NOW - h * 36e5) / 1000);

@@ -9,7 +9,7 @@
 import { createServer } from 'node:http';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, realpathSync, statSync, readdirSync, rmSync } from 'node:fs';
 import { join, dirname, resolve, basename } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { homedir, availableParallelism, totalmem } from 'node:os';
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { delimiter } from 'node:path';
@@ -46,7 +46,7 @@ import { githubFilter, REGISTRY_HOSTS, GITHUB_LOG_HOSTS, SHARED_BRANCH } from '.
 import { githubAdvice, jiraAdvice, outsideAdvice, parseRules, ruleLabel } from '../lib/advice.mjs';
 import { attentionItems, diffAttention, desktopNotify, DbusNotifier } from '../lib/notify.mjs';
 import { loadSources, makeContext, hook, asList } from '../lib/sources.mjs';
-import { loadPlugins, migrateBundled, pluginPaths, listPlugins, preparePlugin, removePlugin, updatePlugin, checkPlugin, readRegistry, withRef, changesText } from '../lib/plugins.mjs';
+import { loadPlugins, migrateBundled, pluginPaths, listPlugins, preparePlugin, removePlugin, updatePlugin, checkPlugin, readRegistry, withRef, changesText, catalogEntry, bundledDir, codeDir } from '../lib/plugins.mjs';
 import { sandboxedSource, srtCli } from '../lib/plugin-sandbox.mjs';
 import { pluginItems } from '../lib/items.mjs';
 import { findBrowser, BROWSERS } from '../lib/browser.mjs';
@@ -2658,11 +2658,13 @@ function pluginList() {
     ...added.filter((p) => !plugins.sources.has(p.name)).map((p) => ({
       name: p.name, label: p.label, description: p.description, area: p.manifest?.area || 'personal', kind: p.kind, from: p.from, version: p.version || '', commit: p.commit || null,
       run: p.run, added: true, loaded: false, ready: true, problem: p.problem, reach: shape(p.manifest) })),
-    ...available.map((p) => ({ name: p.name, label: p.label, description: p.description, area: p.manifest?.area || 'personal', kind: 'bundled', from: p.name,
+    ...available.map((p) => ({ name: p.name, label: p.label, description: p.description, area: p.manifest?.area || 'personal', kind: p.kind, from: p.from,
       version: p.manifest?.version || '', added: false, loaded: false, ready: false, reach: shape(p.manifest) })),
   ];
   const pins = readRegistry(pluginDirs.registry).plugins;
   for (const p of all) if (pins[p.name]?.pin && p.added) p.pin = pins[p.name].pin;
+  // Added from its folder here, and it has a repo of its own now: offer the move.
+  for (const p of all) if (p.kind === 'bundled' && p.added) { const c = catalogEntry(p.name); if (c) p.moveTo = c.from; }
   return {
     all, added: added.map((p) => ({ ...strip(p), loaded: loaded(p) })),
     available: available.map(strip), errors: plugins.errors, sandbox: !!srtCli(), team: teamPlugins(),
@@ -2692,7 +2694,7 @@ async function pluginCommand(args) {
       const { added, available } = listPlugins({ paths: pluginDirs });
       say(added.length ? 'Added:' : 'No plugins added. `clearsky add <plugin>` adds one.');
       for (const p of added) say(`  ${p.name} ${p.version || ''}  ${p.run === 'inside' ? 'inside Clearsky' : 'sandboxed'}  from ${p.from}${p.commit ? ` @ ${p.commit.slice(0, 10)}` : ''}${p.problem ? `  (${p.problem})` : ''}`);
-      if (available.length) { say('Ship with Clearsky (`clearsky add <name>`):'); for (const p of available) say(`  ${p.name}  ${p.description}`); }
+      if (available.length) { say('To add (`clearsky add <name>`):'); for (const p of available) say(`  ${catalogEntry(p.name)?.aka[0] || p.name}  ${p.description}${p.kind === 'catalog' ? `  (${p.from})` : ''}`); }
       if (!srtCli()) say('The sandbox (srt) isn\'t installed, so sandboxed plugins won\'t run. `clearsky doctor` says how to get it.');
       return 0;
     }
@@ -3756,9 +3758,13 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.a
   } else if (['add', 'remove', 'plugins', 'update'].includes(args[0])) {
     process.exitCode = await pluginCommand(args);
   } else if (args[0] === 'school-handover') {
-    const { handOverLogin } = await import('../plugins/flyt/lib/flyt.mjs');
-    const where = await handOverLogin();
-    console.log(where ? `School login moved to ${where}; Clearsky's container takes it from there.` : 'No school login here to hand over.');
+    // The School plugin's own code, wherever it is: added from its repo, or its folder here.
+    const dir = [codeDir(pluginDirs.root, 'flyt'), bundledDir('flyt')].find((d) => d && existsSync(join(d, 'lib', 'flyt.mjs')));
+    if (!dir) { console.error('clearsky: the School plugin isn\'t added here (`clearsky add school --trust`)'); process.exitCode = 1; } else {
+      const { handOverLogin } = await import(pathToFileURL(join(dir, 'lib', 'flyt.mjs')).href);
+      const where = await handOverLogin();
+      console.log(where ? `School login moved to ${where}; Clearsky's container takes it from there.` : 'No school login here to hand over.');
+    }
   } else if (args[0] === 'jira-debug') {
     await jiraDebug();
   } else if (args[0] === 'serve') {

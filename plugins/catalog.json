@@ -1,0 +1,8 @@
+{
+  "about": "Plugins that have a home of their own. `clearsky add <name>` adds one from here, at the version pinned below. Each folder next to this file is that plugin's code, kept here until its repo exists; scripts/split-plugins.mjs turns a folder into a repo.",
+  "plugins": [
+    { "name": "flyt", "aka": ["school"], "folder": "clearsky-school", "from": "github:ethlo/clearsky-school#v1.0.0" },
+    { "name": "slack", "folder": "clearsky-slack", "from": "github:ethlo/clearsky-slack#v1.0.0" },
+    { "name": "grafana", "folder": "clearsky-grafana", "from": "github:ethlo/clearsky-grafana#v1.0.0" }
+  ]
+}
