@@ -6,7 +6,7 @@ Website, with a getting started guide: **https://clearsky.ethlo.com** (built fro
 
 ## Quick start
 
-You need [Node 22+](https://nodejs.org) and git. For real data you also want the [GitHub CLI](https://cli.github.com) and, if you use Jira, the [Atlassian CLI](https://developer.atlassian.com/cloud/acli/guides/install-acli/). Linux, macOS and Windows (WSL for the installer) all work.
+You need [Node 22+](https://nodejs.org) and git. For real data you also want the [GitHub CLI](https://cli.github.com) and, if you use Jira, the [Atlassian CLI](https://developer.atlassian.com/cloud/acli/guides/install-acli/). Linux, macOS and Windows all work; on Windows Clearsky runs in WSL2 (Ubuntu) and you use it from your Windows browser, see [Clearsky on Windows](docs/windows.md).
 
 ```sh
 git clone https://github.com/ethlo/clearsky && cd clearsky
@@ -170,7 +170,7 @@ PRs and tickets link to each other: a PR shows the Jira tickets in its title or 
 
 ### In Docker
 
-`clearsky docker up` (that is, `node bin/clearsky.mjs docker up`) builds and starts Clearsky in a Linux container, on http://127.0.0.1:7777. It takes everything from the same settings as natively: the folders under Settings → Copilot → "Folders Copilot may use" (and the general-chat folder) are mounted at the same paths, so they are also the container's fence. Tool folders you have are mounted alongside: Clearsky's and Copilot's, `~/.gitconfig`, JDKs, `~/.m2`, `~/.gradle`, `~/.sdkman` and GNOME's calendar caches. `clearsky docker mounts` lists them. After changing the folders in Settings, run `clearsky docker up` again to mount them; Settings points out a folder the container doesn't have. Also: `clearsky docker down`, `clearsky docker logs`. Anything extra goes in `docker-compose.override.yml`. On Windows, run it from WSL: paths are mounted as they are.
+`clearsky docker up` (that is, `node bin/clearsky.mjs docker up`) builds and starts Clearsky in a Linux container, on http://127.0.0.1:7777. It takes everything from the same settings as natively: the folders under Settings → Copilot → "Folders Copilot may use" (and the general-chat folder) are mounted at the same paths, so they are also the container's fence. Tool folders you have are mounted alongside: Clearsky's and Copilot's, `~/.gitconfig`, JDKs, `~/.m2`, `~/.gradle`, `~/.sdkman` and GNOME's calendar caches. `clearsky docker mounts` lists them. After changing the folders in Settings, run `clearsky docker up` again to mount them; Settings points out a folder the container doesn't have. Also: `clearsky docker down`, `clearsky docker logs`. Anything extra goes in `docker-compose.override.yml`. On Windows, run it from WSL: paths are mounted as they are. Natively in WSL2 is simpler, though: see [Clearsky on Windows](docs/windows.md).
 
 A container has no keyring, and acli can only keep its login in one, so Clearsky's container runs a keyring of its own, kept in `~/.config/clearsky/container/` (yours only). Log in once after the first start: `clearsky docker login` brings over the logins this machine already has: gh's, which Copilot uses too. acli's login can't be copied, so acli logs in through your browser as usual: its login calls back to a port on 127.0.0.1, so that runs in a one-off container on this machine's network while Clearsky pauses, and it prints the link to open. Anything else it can't bring over is done in the browser too. Your machine's own keyring and logins aren't used or changed.
 

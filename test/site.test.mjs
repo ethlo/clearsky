@@ -8,7 +8,7 @@ import { build } from '../scripts/build-site.mjs';
 test('the website builds, and every link and image on it is there', () => {
   const out = build(mkdtempSync(join(tmpdir(), 'clearsky-site-')));
   try {
-    const pages = ['index.html', 'getting-started.html', 'guide.html', 'docs/architecture.html', 'docs/plugins.html', 'docs/team-pack.html'];
+    const pages = ['index.html', 'getting-started.html', 'guide.html', 'docs/architecture.html', 'docs/plugins.html', 'docs/team-pack.html', 'docs/windows.html'];
     for (const p of pages) assert.ok(existsSync(join(out, p)), `${p} is missing`);
     assert.equal(readFileSync(join(out, 'CNAME'), 'utf8').trim().split('\n').length, 1);
     const html = (p) => readFileSync(join(out, p), 'utf8');
