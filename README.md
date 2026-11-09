@@ -49,6 +49,7 @@ Tokens:
   - **iCal link:** in Google Calendar, open Settings, pick your calendar, then **Integrate calendar**, and copy **Secret address in iCal format** into `GOOGLE_CALENDAR_ICS`. Several addresses can be given, separated by spaces. Workspace admins often turn this off.
 - **Slack (optional):** a plugin that ships with Clearsky (`clearsky add slack`, or Settings → Plugins), with a user token, see below.
 - **Slack through MCP (optional, no token):** `clearsky add slack-mcp` talks to Slack's own MCP server read only. You log in from Settings in your browser, Copilot chats read Slack with `door slack …`, and mentions show like the token plugin's. See [plugins/slack-mcp](plugins/slack-mcp/README.md).
+- **Confluence (optional, no token):** `clearsky add confluence` lets Copilot chats search and read Confluence with `confluence …`, read only, through Atlassian's MCP server. You log in from Settings in your browser; Clearsky registers itself as a client, so there's no app or token to create. Jira stays on `acli`. See [plugins/confluence](plugins/confluence/README.md).
 
 ### Slack token
 
