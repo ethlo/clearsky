@@ -1,7 +1,7 @@
 {
   "name": "clearsky",
   "version": "0.1.0",
-  "description": "One view of what needs your attention on GitHub and Jira",
+  "description": "One local page for what needs your attention at work, with a sandboxed Copilot next to it",
   "type": "module",
   "bin": { "clearsky": "bin/clearsky.mjs" },
   "scripts": {
@@ -9,7 +9,7 @@
     "test": "node --test test/*.test.mjs plugins/*/test/*.test.mjs",
     "docs": "node scripts/render-docs.mjs"
   },
-  "files": ["bin", "lib", "web", "scripts", "contrib", "docs", "README.md"],
+  "files": ["bin", "lib", "web", "scripts", "contrib", "docs", "plugins", "README.md", "LICENSE"],
   "engines": { "node": ">=22" },
   "optionalDependencies": { "@anthropic-ai/sandbox-runtime": "0.0.79" },
   "license": "MIT"
