@@ -41,6 +41,23 @@
   .cal-list small { color: var(--muted); font-size: 12px; }
   .hint { color: var(--muted); font-size: 12.5px; margin: 6px 0 0; }
   .hint.warn { color: var(--amber); }
+  /* (i): the longer explanation, on hover or focus, kept open with a click. */
+  .more { display: none; }
+  .lab { display: flex; align-items: center; gap: 4px; margin: 14px 0 4px; }
+  .lab > label { margin: 0; }
+  h3 .i-wrap, p .i-wrap { margin-left: 4px; }
+  .i-wrap { display: inline-flex; vertical-align: middle; }
+  .lab, h3:has(.i-wrap), p:has(.i-wrap) { position: relative; } /* the bubble lines up with its label */
+  section button.info { height: 16px; width: 16px; padding: 0; border-radius: 99px; justify-content: center; font: italic 600 10.5px/1 Georgia, serif;
+    color: var(--muted); border-color: var(--line-strong); background: none; }
+  section button.info:hover, section button.info[aria-expanded="true"] { color: var(--accent); border-color: var(--accent); }
+  .pop { display: none; position: absolute; left: 0; top: 100%; z-index: 20; width: min(440px, calc(100vw - 32px)); padding: 10px 12px; margin-top: 6px;
+    background: var(--surface); border: 1px solid var(--line-strong); border-radius: 8px; box-shadow: 0 6px 24px rgb(0 0 0 / .14);
+    font: 400 12.5px/1.5 inherit; color: var(--text-2); text-align: left; white-space: normal; letter-spacing: normal; max-height: 60vh; overflow-y: auto; }
+  .pop::before { content: ''; position: absolute; left: 0; right: 0; top: -8px; height: 8px; } /* no gap to fall through on the way in */
+  .pop ol { margin: 6px 0 0; padding-left: 18px; } .pop code { font-size: 11.5px; }
+  .i-wrap:hover .pop, .i-wrap.open .pop, button.info:focus-visible + .pop { display: block; }
+  @media (hover: none) { .i-wrap:hover:not(.open) .pop { display: none; } }
   /* Lists and maps: a row per item. */
   .ed { display: flex; flex-direction: column; gap: 6px; }
   .ed-row { display: flex; gap: 6px; align-items: center; }
@@ -111,20 +128,20 @@
     <label for="CLEARSKY_POLL_MINUTES">Check GitHub, Jira mentions and plugins every … minutes</label>
     <input id="CLEARSKY_POLL_MINUTES" data-key="CLEARSKY_POLL_MINUTES" inputmode="numeric" placeholder="3">
     <div class="row"><button class="save" data-keys="CLEARSKY_STANDUP_TIME,CLEARSKY_WORKDAYS,CLEARSKY_WORKDAY_END,CLEARSKY_MENTION_DAYS,CLEARSKY_TIME_FORMAT,CLEARSKY_POLL_MINUTES">Save</button><span class="msg"></span></div>
-    <h3>Team pack</h3>
-    <p class="hint" id="team-now">Your team's shared setup (organizations, stand-up time, links, Copilot skills), from a git repo, an https link or a file the team keeps. Settings you changed yourself are kept. <code>clearsky team export</code> makes one from your settings.</p>
+    <h3>Team pack<span class="more">Your team's shared setup: organizations, stand-up time, links and Copilot skills, from a git repo, an https link or a file the team keeps. Settings you changed yourself are kept. <code>clearsky team export</code> makes one from your settings.</span></h3>
+    <p class="hint" id="team-now">Your team's shared setup.</p>
     <div class="row"><input id="team-from" placeholder="https://github.com/acme/clearsky-team.git" spellcheck="false" style="flex:1;min-width:220px"><button class="secondary" id="team-join" type="button">Join</button><span class="msg" id="team-msg"></span></div>
-    <h3>Set-up check</h3>
-    <p class="hint">What this machine has for Clearsky (gh, acli, Copilot, the sandbox, a calendar) and how to get what's missing: <a href="/welcome">the welcome page</a>, or <code>clearsky doctor</code> in a terminal.</p>
-    <h3>Demo</h3>
-    <p class="hint">Clearsky with made-up data, in a new tab: for showing it to others without your own work on screen. Nothing of yours is read or shown, and it stops when you click Leave demo in its menu.</p>
+    <h3>Set-up check<span class="more">Checks gh, acli, Copilot, the sandbox and a calendar, and says how to get what's missing. In a terminal: <code>clearsky doctor</code>.</span></h3>
+    <p class="hint">See what this machine has on <a href="/welcome">the welcome page</a>.</p>
+    <h3>Demo<span class="more">For showing Clearsky to others without your own work on screen. Nothing of yours is read or shown. It stops when you click Leave demo in its menu.</span></h3>
+    <p class="hint">Clearsky with made-up data, in a new tab.</p>
     <div class="row"><button class="secondary" id="demo-start" type="button">Try with demo data</button><span class="msg" id="demo-msg"></span></div>
   </section>
 
   <section id="plugins">
     <h2>Plugins <span class="state" id="plug-state"></span></h2>
     <div id="plug-list">
-      <p class="hint">Everything Clearsky reads from. Open one to set it up and see what it holds and reaches. One you add from a git repo, npm or a folder runs in a sandbox of its own, and you see what it reaches before any of its code runs.</p>
+      <p class="hint">Everything Clearsky reads from. Open one to set it up.<span class="more">Each page also shows what the plugin holds and reaches. One you add from a git repo, npm or a folder runs in a sandbox of its own: it reaches only the hosts it lists, keeps files only in its own folder, and gets only its own settings. You see what it reaches before any of its code runs.</span></p>
       <div class="plugs" id="plugs"></div>
       <div class="row" id="plug-restart" hidden><button id="plug-restart-btn">Restart to load</button><span class="msg">Clearsky loads plugins when it starts.</span></div>
       <label for="plug-from">Add a plugin</label>
@@ -157,31 +174,26 @@
         <button id="jira-login">Log in to Atlassian</button>
         <span class="msg" id="jira-msg"></span>
       </div>
-      <p>This runs <code>acli jira auth login --web</code>, which opens the Atlassian login in your browser. Clearsky stores no Jira credentials.</p>
+      <p class="hint">Logs in with the Atlassian CLI, in your browser.<span class="more">It runs <code>acli jira auth login --web</code>. Clearsky stores no Jira credentials.</span></p>
     </div>
     <div data-setup="calendar">
       <p id="cal-detail"></p>
-      <p><b>Option A, no new login:</b> add your work Google account in your desktop's <b>Settings → Online Accounts → Google</b>, with Calendar switched on. Enter your work email below and save. Clearsky reads the calendar GNOME syncs.</p>
+      <h3>From GNOME Online Accounts<span class="more">No new login: add your work Google account in your desktop's <b>Settings → Online Accounts → Google</b>, with Calendar switched on. Enter your work email below and save. Clearsky reads the calendar GNOME syncs.</span></h3>
       <label for="CALENDAR_EMAIL">Your work calendar email</label>
       <input id="CALENDAR_EMAIL" data-key="CALENDAR_EMAIL" type="email" placeholder="you@company.com">
       <div id="cal-pick" hidden>
-        <label>Calendars to include</label>
+        <label>Calendars to include<span class="more">Add a personal Google account in Online Accounts (Calendar only) to see family appointments here too.</span></label>
         <div id="cal-list" class="cal-list"></div>
-        <p class="hint">Add a personal Google account in Online Accounts (Calendar only) to see family appointments here too.
-          On a shared calendar (one not named after your address, like "Family"), events only take your time when you're invited,
-          or when one of these names is in the title; the rest just show in the agenda.</p>
-        <label for="CALENDAR_MY_NAMES">Your names in shared calendar titles</label>
+        <label for="CALENDAR_MY_NAMES">Your names in shared calendar titles<span class="more">On a shared calendar (one not named after your address, like &quot;Family&quot;), events take your time only when you're invited or when one of these names is in the title. The rest just show in the agenda.</span></label>
         <input id="CALENDAR_MY_NAMES" data-key="CALENDAR_MY_NAMES" data-list data-item="Alex">
       </div>
       <input type="hidden" id="EVOLUTION_CALENDARS" data-key="EVOLUTION_CALENDARS">
       <div class="row"><button class="save" data-keys="CALENDAR_EMAIL,EVOLUTION_CALENDARS,CALENDAR_MY_NAMES">Save</button><span class="msg"></span></div>
-      <p style="margin-top:14px"><b>Option B, iCal link</b> (only if your admin allows it). You can use both; meetings are merged:</p>
-      <ol>
+      <h3 style="margin-top:22px">Or a Google iCal link<span class="more">Only if your admin allows it. You can use both; meetings are merged.<ol>
         <li>Open <a href="https://calendar.google.com/calendar/r/settings" target="_blank" rel="noopener">Google Calendar settings</a>.</li>
         <li>Under <b>Settings for my calendars</b>, click your calendar, then <b>Integrate calendar</b>.</li>
-        <li>Copy <b>Secret address in iCal format</b> and paste it below.</li>
-      </ol>
-      <label for="GOOGLE_CALENDAR_ICS">Secret address in iCal format (several? separate them with spaces)</label>
+        <li>Copy <b>Secret address in iCal format</b> and paste it below.</li></ol></span></h3>
+      <label for="GOOGLE_CALENDAR_ICS">Secret address in iCal format<span class="more">Several? Separate them with spaces.</span></label>
       <input id="GOOGLE_CALENDAR_ICS" data-key="GOOGLE_CALENDAR_ICS" type="password" autocomplete="off" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics">
       <div class="row"><button class="save" data-keys="GOOGLE_CALENDAR_ICS">Save</button>
         <button class="secondary" id="cal-remove" hidden>Remove link</button><span class="msg"></span></div>
@@ -192,7 +204,7 @@
 
   <section>
     <h2>Copilot</h2>
-    <p class="hint" style="margin:0 0 4px">Defaults for a new chat. The pickers in a chat still change that chat.</p>
+    <p class="hint" style="margin:0 0 4px">Defaults for a new chat. A chat's own pickers still change that chat.</p>
     <label for="COPILOT_MODEL">Model</label>
     <input id="COPILOT_MODEL" data-key="COPILOT_MODEL" list="cp-models" placeholder="Copilot's default" spellcheck="false">
     <datalist id="cp-models"></datalist>
@@ -200,47 +212,37 @@
     <select id="COPILOT_EFFORT" data-key="COPILOT_EFFORT"></select>
     <label for="COPILOT_PERMISSION">Access</label>
     <select id="COPILOT_PERMISSION" data-key="COPILOT_PERMISSION"></select>
-    <label for="COPILOT_CWD">Folder for general chats</label>
+    <label for="COPILOT_CWD">Folder for general chats<span class="more">Where a chat runs when it isn't about a PR or ticket. Chats about a PR or ticket run in that repo's clone, or the worktree with the PR's branch. Clearsky's own skills (stand-up, triage) work only from the Clearsky folder.</span></label>
     <input id="COPILOT_CWD" data-key="COPILOT_CWD" placeholder="the Clearsky folder" spellcheck="false">
-    <p class="hint">Where a chat runs when it isn't about a PR or ticket. Chats about a PR or ticket run in that repo's clone, or the worktree with the PR's branch. Clearsky's own skills (stand-up, triage) are available only from the Clearsky folder.</p>
-    <label for="COPILOT_FOLDERS">Folders Copilot can change (read and write)</label>
+    <label for="COPILOT_FOLDERS">Folders Copilot can change (read and write)<span class="more">Copilot can read and change files there, including worktrees next to your clones, without the "Access paths outside trusted directories" question. Commands and edits still follow the access mode. Running chats pick changes up on their next message.</span></label>
     <input id="COPILOT_FOLDERS" data-key="COPILOT_FOLDERS" data-list data-item="~/dev/work" placeholder="~/dev" spellcheck="false">
-    <p class="hint">Copilot can read and change files there, including worktrees next to your clones, without the "Access paths outside trusted directories" question. Commands and edits still follow the access mode. Empty means <code>~/dev</code>. Running chats pick changes up on their next message.</p>
     <p class="hint warn" id="copilot-unmounted" hidden></p>
-    <label for="COPILOT_READ">Folders Copilot can only read</label>
+    <label for="COPILOT_READ">Folders Copilot can only read<span class="more">In the sandbox, Copilot can read these but not change them. It can also always read <span id="read-default"></span> (what it needs to run and build) and files outside your home, like <code>/usr/lib/jvm</code>. The rest of your home is hidden from it: mail, documents, browser profiles, shell history and logins. Maven still reaches your repositories: Copilot gets a copy of <code>~/.m2/settings.xml</code> without the passwords, and the sandbox adds your login on the way out, only to the hosts that login is for.</span></label>
     <input id="COPILOT_READ" data-key="COPILOT_READ" data-list data-item="~/notes" placeholder="nothing more" spellcheck="false">
-    <p class="hint">In the sandbox, Copilot can read these but not change them. It can also always read <span id="read-default"></span> (what it needs to run and build) and files outside your home, like <code>/usr/lib/jvm</code>. The rest of your home is hidden from it: mail, documents, browser profiles, shell history and logins. Maven still reaches your repositories: Copilot gets a copy of <code>~/.m2/settings.xml</code> without the passwords, and the sandbox adds your login on the way out, only to the hosts that login is for.</p>
-    <label for="COPILOT_ASSISTED_ALLOW">Never ask before</label>
+    <label for="COPILOT_ASSISTED_ALLOW">Never ask before<span class="more">In the sandbox, Copilot runs everything without asking, and asks you only at its doors out: <code>git push</code> and GitHub changes (held at the sandbox's network until you click Allow), Jira changes through <code>acli</code>, and <code>outside</code> (a command run on your machine, like tests that start Docker containers). <code>outside</code> commands only match exactly, like <code>outside ./mvnw verify</code>.</span></label>
     <input id="COPILOT_ASSISTED_ALLOW" data-key="COPILOT_ASSISTED_ALLOW" data-list data-item="acli jira workitem transition" placeholder="nothing" spellcheck="false">
-    <p class="hint">In the sandbox, Copilot runs everything without asking, and asks you only at its doors out: <code>git push</code> and GitHub changes (held at the sandbox's network until you click Allow), Jira changes through <code>acli</code>, and <code>outside</code> (a command run on your machine, like tests that start Docker containers). Jira and <code>outside</code> commands that start like one of these go through without asking. <code>outside</code> commands only match exactly, like <code>outside ./mvnw verify</code>.</p>
-    <label for="COPILOT_SANDBOX">Sandbox</label>
+    <p class="hint">Jira and <code>outside</code> commands that start like one of these.</p>
+    <label for="COPILOT_SANDBOX">Sandbox<span class="more">Copilot and everything it runs can write only in the chat's folder, the folders above, <code>~/.copilot</code> and <code>/tmp</code>. It reads only the parts of your home listed above (never <code>~/.ssh</code>, keyrings, browser profiles or Clearsky's own settings), and reaches only the hosts below. That holds in every access mode, Full included. The <b>Sandboxed</b> access mode always runs in it, and runs every step inside without asking; only its doors out ask.<br><br>Your GitHub login never enters it: Copilot, git and gh inside get stand-ins, and the sandbox's proxy adds your <code>gh</code> login on the way to GitHub. Reading goes through; a push or any change waits until you click Allow in the chat. Hosts are checked by name only, so an allowed host can be written to as well as read.<br><br>srt comes with Clearsky. Linux also needs <code>bubblewrap</code>, <code>socat</code> and <code>ripgrep</code>.</span></label>
     <select id="COPILOT_SANDBOX" data-key="COPILOT_SANDBOX"><option value="off">Off</option><option value="srt">Anthropic sandbox runtime (srt)</option></select>
-    <p class="hint">With the sandbox on, Copilot and everything it runs can write only in the chat's folder, the folders above, <code>~/.copilot</code> and <code>/tmp</code>, can read only the parts of your home listed under <b>Also readable</b> (never <code>~/.ssh</code>, keyrings, browser profiles or Clearsky's own settings), and can reach only the hosts below. That holds in every access mode, Full included. The <b>Sandboxed</b> access mode always runs in it, and then runs every step inside without asking; only its doors out ask (see <b>Never ask before</b>). srt comes with Clearsky (Linux also needs <code>bubblewrap</code>, <code>socat</code> and <code>ripgrep</code>). Hosts are checked by name only: an allowed host can be written to as well as read. Your GitHub login never enters it: Copilot, git and gh inside get stand-ins, and the sandbox's proxy adds your <code>gh</code> login on the way to GitHub. Reading GitHub goes through; a push or any change (a PR, a comment, a review) waits until you click Allow in the chat. Inside it, git reaches GitHub over https instead of ssh.</p>
-    <label for="COPILOT_SANDBOX_TOKEN">GitHub token for the sandbox (optional)</label>
+    <p class="hint">Keeps Copilot to your folders and the hosts below.</p>
+    <label for="COPILOT_SANDBOX_TOKEN">GitHub token for the sandbox (optional)<span class="more">Not needed: by default the sandbox uses your <code>gh</code> login. A fine-grained token (with <b>Copilot Requests</b>) is used instead if you give one, for example one that can only read your work repos. Either way it stays out of the sandbox, and changes still wait for your Allow.</span></label>
     <input id="COPILOT_SANDBOX_TOKEN" data-key="COPILOT_SANDBOX_TOKEN" type="password" autocomplete="off" placeholder="leave empty to use your gh login">
-    <p class="hint">Not needed: by default the sandbox uses your <code>gh</code> login. If you can create a fine-grained token (with <b>Copilot Requests</b>), the sandbox uses it instead, for example one that can only read your work repos. Either way it stays out of the sandbox and changes still wait for your Allow.</p>
-    <label for="COPILOT_DISCLOSE">Say what did the work</label>
+    <label for="COPILOT_DISCLOSE">Say what did the work<span class="more">When a sandboxed chat is done, it ends the PR description (and the ticket description, if it wrote that) with a line like <i>Implemented with Copilot (Claude Opus 5.5). 939 credits used.</i> The model and credits come from the chat's own session log. Applies to chats started after you switch it on.</span></label>
     <select id="COPILOT_DISCLOSE" data-key="COPILOT_DISCLOSE"><option value="">Off</option><option value="on">On: last line of the PR description</option></select>
-    <p class="hint">When a sandboxed chat is done, it ends the PR description (and the ticket description, if it wrote that) with a line like <i>Implemented with Copilot (Claude Opus 5.5). 939 credits used.</i> The model and credits come from the chat's own session log, through Clearsky. Applies to chats started after you switch it on.</p>
-    <label for="COPILOT_DOMAINS">Hosts a sandboxed Copilot may reach</label>
+    <label for="COPILOT_DOMAINS">Hosts a sandboxed Copilot may reach<span class="more">Wildcards like <code>*.atlassian.net</code> are allowed. Add package registries (say <code>repo.maven.apache.org</code>, <code>registry.npmjs.org</code>) if builds need them.</span></label>
     <input id="COPILOT_DOMAINS" data-key="COPILOT_DOMAINS" data-list data-words data-item="registry.npmjs.org" spellcheck="false">
-    <p class="hint">Wildcards like <code>*.atlassian.net</code> are allowed. Empty means Copilot, GitHub and your Jira site. Add package registries (say <code>repo.maven.apache.org</code>, <code>registry.npmjs.org</code>) if builds need them.</p>
-    <label for="COPILOT_VM_IMAGES">Images the VM copies from your Docker</label>
+    <label for="COPILOT_VM_IMAGES">Images the VM copies from your Docker<span class="more">For private images tests need, say from your company's registry: a whole image like <code>registry.example.com/team/app:main</code>, or a name prefix like <code>registry.example.com/</code> (then the newest tag of each image there). Before each <code>vm</code> command, the ones your own Docker has are copied into the chat's VM if it doesn't have that version yet. Your registry login never goes in the VM; <code>docker pull</code> on your machine when an image changes.</span></label>
     <input id="COPILOT_VM_IMAGES" data-key="COPILOT_VM_IMAGES" data-list data-item="registry.example.com/team/" placeholder="none" spellcheck="false">
-    <p class="hint">For private images tests need (say from your company's registry): a whole image like <code>registry.example.com/team/app:main</code>, or a name prefix like <code>registry.example.com/</code> (then the newest tag of each image there). Before each <code>vm</code> command, the ones your own Docker has are copied into the chat's VM if it doesn't have that version yet. Your registry login never goes in the VM. The VM gets what your Docker has: <code>docker pull</code> on your machine when the image changes.</p>
-    <label for="COPILOT_GATE_RULES">Let through without asking</label>
+    <label for="COPILOT_GATE_RULES">Let through without asking<span class="more">Kinds of change you said to always allow, from <b>Allow, and always for…</b> on a card. Each still shows in the chat and in <b>Copilot's changes</b>. Remove one to be asked again.<br><br><code>merge-ready</code>: merging a PR of the chat's repo when CI is green, it's approved and has no conflicts.<br><code>delete-merged-branch</code>: deleting a branch whose PR is merged.<br><code>repo:owner/name</code>: everyday changes to that repo from any chat.<br><code>jira:KEY</code>: changes to tickets in that Jira project.</span></label>
     <input id="COPILOT_GATE_RULES" data-key="COPILOT_GATE_RULES" data-list data-words data-item="repo:owner/name" placeholder="nothing yet" spellcheck="false">
-    <p class="hint">Kinds of change you said to always allow, from the <b>Allow, and always for…</b> button on a card. Each still shows in the chat and in <b>Copilot's changes</b>. <code>merge-ready</code>: merging a PR of the chat's repo when CI is green, it's approved and has no conflicts. <code>delete-merged-branch</code>: deleting a branch whose PR is merged. <code>repo:owner/name</code>: everyday changes to that repo from any chat. <code>jira:KEY</code>: changes to tickets in that Jira project. Remove one to be asked again.</p>
-    <label for="COPILOT_VM_CPUS">VM size: cores and memory (GB)</label>
+    <label for="COPILOT_VM_CPUS">VM size: cores and memory (GB)<span class="more">For each chat's VM. Empty uses the default shown: half this machine's cores (up to 12) and a quarter of its memory (4 to 16 GB). Memory the VM doesn't use stays yours. Kept within this machine: at most all its cores and half its memory. Applies to the next VM a chat starts; the first one after a change takes about 15 seconds longer (it saves a new snapshot).</span></label>
     <div class="row"><input id="COPILOT_VM_CPUS" data-key="COPILOT_VM_CPUS" inputmode="numeric" spellcheck="false" style="max-width:8em"> <input id="COPILOT_VM_MEMORY_GB" data-key="COPILOT_VM_MEMORY_GB" aria-label="VM memory in GB" inputmode="decimal" spellcheck="false" style="max-width:8em"></div>
-    <p class="hint">For each chat's VM. Empty uses the default shown: half this machine's cores (up to 12) and a quarter of its memory (4 to 16 GB). Memory the VM doesn't use stays yours. Kept within this machine: at most all its cores and half its memory. Applies to the next VM a chat starts; the first one after a change takes about 15 seconds longer (it saves a new snapshot).</p>
-    <label for="COPILOT_VM_MAX">VMs at the same time</label>
+    <label for="COPILOT_VM_MAX">VMs at the same time<span class="more">1 to 8, empty is 1. Another chat's <code>vm</code> command waits in line, and its chat shows where it is. A VM with nothing running in it gives its place to the next in line, and starts again from the snapshot on its chat's next command.</span></label>
     <input id="COPILOT_VM_MAX" data-key="COPILOT_VM_MAX" inputmode="numeric" spellcheck="false" placeholder="1" style="max-width:8em">
-    <p class="hint">How many chats can have a VM running at once (1 to 8, empty is 1). Another chat's <code>vm</code> command waits in line and its chat shows where it is. A VM with nothing running in it gives its place to the next in line; it starts again, from the snapshot, on its chat's next command.</p>
     <div class="row"><button class="save" data-keys="COPILOT_MODEL,COPILOT_EFFORT,COPILOT_PERMISSION,COPILOT_CWD,COPILOT_FOLDERS,COPILOT_ASSISTED_ALLOW,COPILOT_SANDBOX,COPILOT_SANDBOX_TOKEN,COPILOT_DISCLOSE,COPILOT_READ,COPILOT_DOMAINS,COPILOT_VM_IMAGES,COPILOT_GATE_RULES,COPILOT_VM_CPUS,COPILOT_VM_MEMORY_GB,COPILOT_VM_MAX">Save</button><span class="msg"></span></div>
-    <h3 id="memory" style="margin-top:28px">Memory</h3>
+    <h3 id="memory" style="margin-top:28px">Memory<span class="more">Kept in <code id="memory-path">~/.local/share/clearsky/memory/memory.md</code> on this machine. Copilot is told never to change this file (in the sandbox it can't): it suggests notes in the chat, and they're saved only when you press Save on the card. Put notes for one repo under a <code>## owner/name</code> heading.</span></h3>
     <textarea id="memory-text" rows="8" aria-label="Copilot's memory" spellcheck="false" placeholder="Nothing yet. Notes you save from a chat's Remember card show up here."></textarea>
-    <p class="hint">Notes every new chat reads, kept in <code id="memory-path">~/.local/share/clearsky/memory/memory.md</code> on this machine. Copilot is told never to change this file (in the sandbox it can't): it suggests notes in the chat, and they're saved only when you press Save on the card. Put notes for one repo under a <code>## owner/name</code> heading. <span id="memory-size"></span></p>
+    <p class="hint">Notes every new chat reads. <span id="memory-size"></span></p>
     <div class="row"><button id="memory-save" class="save">Save memory</button><span class="msg" id="memory-msg"></span></div>
     <h3 style="margin-top:28px">What Copilot holds and reaches</h3>
     <div class="reach" id="copilot-reach"></div>
@@ -248,9 +250,9 @@
 
   <section>
     <h2>VPN <span class="state" id="vpn-state"></span></h2>
-    <label for="VPN_CHECK">VPN check</label>
+    <label for="VPN_CHECK">VPN check<span class="more">A host or URL. Off the VPN it either can't be reached or refuses you with 403, as many work sites do at their load balancer. Then the menu says <b>VPN off</b>, the plugins ticked below pause instead of failing, plugins' doors (Grafana) say so, and Copilot is told to ask you to connect. Clearsky never runs the VPN itself.</span></label>
     <input id="VPN_CHECK" data-key="VPN_CHECK" spellcheck="false" placeholder="the first host a plugin names, such as your first Grafana">
-    <p class="hint">A host (or URL) behind your work VPN. Off the VPN it either can't be reached or refuses you with 403, as many work sites do at their load balancer; then the menu says <b>VPN off</b>, the plugins ticked next pause instead of failing, plugins' doors (Grafana) say so, and Copilot is told to ask you to connect. Clearsky never runs the VPN itself.</p>
+    <p class="hint">A host behind your work VPN.</p>
     <label for="VPN_NEEDED_BY">Plugins that need the VPN</label>
     <input id="VPN_NEEDED_BY" data-key="VPN_NEEDED_BY" data-pick="plugins" spellcheck="false">
     <div class="row"><button class="save" data-keys="VPN_CHECK,VPN_NEEDED_BY">Save</button><span class="msg"></span></div>
@@ -431,6 +433,38 @@ function render(s) {
   if ((s.logins || []).some((l) => l.running)) render.poll = setTimeout(load, 2000);
 }
 
+// (i) buttons: each <span class="more"> becomes an (i) with that text in a bubble, shown on hover
+// or focus and kept open with a click. In a label, the (i) goes next to it, not inside, so
+// clicking it doesn't jump to the field.
+function infoButtons(root = document) {
+  for (const more of root.querySelectorAll('.more')) {
+    const wrap = document.createElement('span');
+    wrap.className = 'i-wrap';
+    wrap.innerHTML = '<button type="button" class="secondary info" aria-label="More about this" aria-expanded="false">i</button><span class="pop" role="tooltip"></span>';
+    const pop = wrap.lastChild;
+    pop.append(...more.childNodes);
+    const host = more.parentElement;
+    more.remove();
+    if (host.tagName === 'LABEL') {
+      const row = document.createElement('div');
+      row.className = 'lab';
+      host.before(row);
+      row.append(host, wrap);
+    } else host.append(wrap);
+  }
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('button.info');
+  for (const w of document.querySelectorAll('.i-wrap.open')) if (w !== b?.parentElement && !w.contains(e.target)) { w.classList.remove('open'); w.firstChild.setAttribute('aria-expanded', 'false'); }
+  if (b) { const open = b.parentElement.classList.toggle('open'); b.setAttribute('aria-expanded', String(open)); }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const open = document.querySelector('.i-wrap.open, .i-wrap:focus-within');
+  if (open) { open.classList.remove('open'); open.firstChild.setAttribute('aria-expanded', 'false'); open.firstChild.blur(); e.stopImmediatePropagation(); }
+}, true);
+infoButtons();
+
 // Lists and maps are edited as lists and maps: a row per item (name and value for a map), with
 // + Add and ×. The field that's saved stays hidden behind them and holds what the settings file
 // keeps ("a, b" and "a=x, b=y"). data-pick="plugins" is a set to tick, from the plugins.
@@ -582,10 +616,11 @@ function setupHtml(p, fields) {
   if (!p.loaded) return `<div class="row"><button data-restart>Restart to load</button><span class="msg">Clearsky loads plugins when it starts.</span></div>`;
   const kind = (f) => (f.secret ? ' type="password" autocomplete="off"' : f.type === 'list' ? ` data-list data-item="${esc(f.item || '')}" placeholder="${esc(f.empty || '')}"`
     : f.type === 'map' ? ` data-map data-item="${esc(f.item || '')}" data-value="${esc(f.valueItem || '')}" placeholder="${esc(f.empty || '')}"` : '');
-  return `${fields.map((f) => `<label for="${esc(f.key)}">${esc(f.label)}</label>
+  const long = (f) => f.hint.length > 90;
+  return `${fields.map((f) => `<label for="${esc(f.key)}">${esc(f.label)}${f.hint && long(f) ? `<span class="more">${esc(f.hint)}</span>` : ''}</label>
     <input id="${esc(f.key)}" data-key="${esc(f.key)}"${kind(f)}>
     ${f.link ? `<p class="hint"><a href="${esc(f.link.url)}" target="_blank" rel="noopener">${esc(f.link.label)}</a></p>` : ''}
-    ${f.hint ? `<p class="hint">${esc(f.hint)}</p>` : ''}`).join('')}
+    ${f.hint && !long(f) ? `<p class="hint">${esc(f.hint)}</p>` : ''}`).join('')}
     ${fields.length ? `<div class="row"><button class="save" data-keys="${esc(fields.map((f) => f.key).join(','))}">Save</button><span class="msg"></span></div>` : ''}
     <div class="login-slot"></div>
     ${fields.length ? '' : '<p class="k pp-none" hidden>Nothing to set up.</p>'}`;
@@ -627,6 +662,7 @@ function drawPlugins() {
         setup.innerHTML = setupHtml(p, fields);
         for (const f of fields) if (!f.secret) setup.querySelector(`#${CSS.escape(f.key)}`).value = f.value || '';
       }
+      infoButtons(setup);
       drawEditors(setup);
     }
     for (const f of fields) {
