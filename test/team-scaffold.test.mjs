@@ -10,7 +10,7 @@ import { parsePack, joinPack, joinSummary, readTeam } from '../lib/team.mjs';
 const tmp = (p) => mkdtempSync(join(tmpdir(), `clearsky-${p}-`));
 const env = {
   GITHUB_ORGS: 'acme', CLEARSKY_STANDUP_TIME: '09:45', COPILOT_DOMAINS: 'repo.acme.example', GRAFANA_INSTANCES: 'test=https://grafana.test.acme.example',
-  GITHUB_TOKEN: 'ghp_shouldnevergoanywhere000000000000000', SLACK_TOKEN: 'xoxp-1-2', CALENDAR_EMAIL: 'me@acme.example',
+  GITHUB_TOKEN: 'ghp_abcdefghijneverleavesthismachine0000', SLACK_TOKEN: 'xoxp-1-2', CALENDAR_EMAIL: 'me@acme.example',
   COPILOT_GATE_RULES: 'merge-ready, repo:acme/docs, repo:someone/hobby, jira:PAY',
   DEPLOYS_URL: 'https://deploys.acme.example', VPN_CHECK: 'https://u:hunter2@vpn.acme.example',
 };
@@ -78,7 +78,7 @@ test('next steps name the repo, and a pack can be pushed as it is', () => {
 test('clearsky team init writes the pack from your settings file', () => {
   const home = tmp('home');
   mkdirSync(join(home, '.config', 'clearsky'), { recursive: true });
-  writeFileSync(join(home, '.config', 'clearsky', '.env'), 'GITHUB_ORGS=acme\nGITHUB_TOKEN=ghp_shouldnevergoanywhere000000000000000\n');
+  writeFileSync(join(home, '.config', 'clearsky', '.env'), 'GITHUB_ORGS=acme\nGITHUB_TOKEN=ghp_abcdefghijneverleavesthismachine0000\n');
   const dir = join(home, 'dev', 'clearsky-team');
   const out = execFileSync(process.execPath, [join(import.meta.dirname, '..', 'bin', 'clearsky.mjs'), 'team', 'init', dir, '--name', 'Acme', '--repo', 'https://github.com/acme/clearsky-team'],
     { env: { PATH: process.env.PATH, HOME: home, CLEARSKY_PLUGINS_DIR: join(home, 'plugins') }, cwd: home }).toString();
