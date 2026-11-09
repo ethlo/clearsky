@@ -34,8 +34,9 @@ function oneboxIndex() {
   for (const h of serversData?.hosts || []) add('server', h.name, [h.host, h.jump && `via ${h.jump}`].filter(Boolean).join(' · '), () => copyText(`ssh ${h.name}`, `Copied: ssh ${h.name}`));
   // Pages in the menu, and Settings' tabs.
   for (const a of document.querySelectorAll('#nav a[data-nav], #side-personal a[data-nav]')) if (!a.hidden) add('page', a.querySelector('.lab')?.textContent, '', () => { location.hash = a.getAttribute('href') || '#'; });
-  for (const [name, slug, words] of [['General', 'general', 'stand-up workday clock team pack demo'], ['GitHub', 'github', 'organizations token'], ['Jira', 'jira', 'atlassian acli'],
-    ['Calendar', 'google-calendar', 'ical gnome'], ['Plugins', 'plugins', 'slack school add'], ['Copilot', 'copilot', 'sandbox model folders doors'], ['VPN', 'vpn', 'grafana'], ['Modules', 'modules', '']]) {
+  for (const [name, slug, words] of [['General', 'general', 'stand-up workday clock team pack demo'], ['GitHub', 'plugins/github', 'organizations token plugin'], ['Jira', 'plugins/jira', 'atlassian acli plugin'],
+    ['Calendar', 'plugins/calendar', 'ical gnome google plugin'], ['Plugins', 'plugins', 'add sources modules'], ['Copilot', 'copilot', 'sandbox model folders doors'], ['VPN', 'vpn', 'grafana'],
+    ...extraSources.map((x) => [x.label || x.panel?.title || x.name, `plugins/${x.name}`, `${x.name} plugin`])]) {
     add('setting', `Settings: ${name}`, '', () => { location.href = `/settings#${slug}`; }, words);
   }
   // Skills: a new chat that runs it.

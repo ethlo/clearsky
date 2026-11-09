@@ -23,7 +23,7 @@ function renderBuilds() {
   if (!el || $('#v-builds').hidden) return;
   if (!buildsData) { el.innerHTML = skeleton(4); return; }
   if (buildsData.error) { el.innerHTML = `<div class="err">${esc(buildsData.error)}</div>`; return; }
-  if (!buildsData.repos.length) { el.innerHTML = '<div class="empty">No repos yet. Name them in <a href="/settings#github">Settings → GitHub</a>, or they come from your PRs and reviews.</div>'; return; }
+  if (!buildsData.repos.length) { el.innerHTML = '<div class="empty">No repos yet. Name them in <a href="/settings#plugins/github">Settings → Plugins → GitHub</a>, or they come from your PRs and reviews.</div>'; return; }
   const link = (url, text) => (url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${text}</a>` : text);
   el.innerHTML = `<div class="builds">${buildsData.repos.map((r) => {
     if (r.error) return `<div class="build"><span class="dot"></span><div class="b-main"><b>${esc(r.repo)}</b><div class="b-sub">${esc(r.error)}</div></div></div>`;
@@ -40,7 +40,7 @@ function renderBuilds() {
         ${r.artifact ? `<div title="The newest Actions artifact built from ${esc(r.branch || 'the main branch')}">${icon('build', 13)} ${link(r.artifact.url, esc(r.artifact.name))} <span class="b-meta">${esc(ago(r.artifact.at))}${r.artifact.size ? ` · ${bytes(r.artifact.size)}` : ''}${r.artifact.sha && c?.sha && r.artifact.sha !== c.sha ? ` · from ${esc(r.artifact.sha)}` : ''}</span></div>` : '<div class="b-meta">No artifact from this branch</div>'}
         ${r.release ? `<div title="The latest release">${link(r.release.url, esc(r.release.tag))} <span class="b-meta">${esc(ago(r.release.at))}</span></div>` : r.tag ? `<div class="b-meta" title="The newest tag (no releases)">tag ${esc(r.tag)}</div>` : ''}
       </div></div>`;
-  }).join('')}</div><div class="b-foot">Checked ${esc(ago(buildsData.checkedAt))}${buildsData.named ? '' : ' · repos from your PRs and reviews; pick them in <a href="/settings#github">Settings → GitHub</a>'}</div>`;
+  }).join('')}</div><div class="b-foot">Checked ${esc(ago(buildsData.checkedAt))}${buildsData.named ? '' : ' · repos from your PRs and reviews; pick them in <a href="/settings#plugins/github">Settings → Plugins → GitHub</a>'}</div>`;
 }
 $('#builds-refresh').onclick = () => loadBuilds(true);
 // The menu's count of failing builds: a first look shortly after start, then every 10 minutes.

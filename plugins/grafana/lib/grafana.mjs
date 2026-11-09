@@ -79,7 +79,7 @@ export function createGrafana({ instances, tokens = {}, sessions, fetch = global
   async function call(inst, path, { method = 'GET', body } = {}, retried = false) {
     const token = tokens()[inst.name];
     const s = token ? null : sessions.get(inst.name);
-    if (!token && !s) throw Object.assign(new Error(`not logged in to Grafana ${inst.name}: log in under Settings → Other sources`), { login: true });
+    if (!token && !s) throw Object.assign(new Error(`not logged in to Grafana ${inst.name}: log in under Settings → Plugins → Grafana`), { login: true });
     const headers = { Accept: 'application/json', ...(body && { 'Content-Type': 'application/json' }), ...(token ? { Authorization: `Bearer ${token}` } : { Cookie: s.cookie }) };
     const res = await fetch(`${inst.url}${path}`, { method, headers, body: body && JSON.stringify(body), redirect: 'manual', signal: AbortSignal.timeout(timeoutMs) });
     const fresh = sessionCookie(res.headers.getSetCookie?.() || []);
@@ -88,7 +88,7 @@ export function createGrafana({ instances, tokens = {}, sessions, fetch = global
       const r = await fetch(`${inst.url}/api/user/auth-tokens/rotate`, { method: 'POST', headers: { Cookie: s.cookie }, redirect: 'manual', signal: AbortSignal.timeout(timeoutMs) }).catch(() => null);
       const rotated = r && sessionCookie(r.headers.getSetCookie?.() || []);
       if (rotated) { sessions.set(inst.name, rotated); return call(inst, path, { method, body }, true); }
-      throw Object.assign(new Error(`your Grafana ${inst.name} login has expired: log in again under Settings → Other sources`), { login: true });
+      throw Object.assign(new Error(`your Grafana ${inst.name} login has expired: log in again under Settings → Plugins → Grafana`), { login: true });
     }
     const text = await res.text();
     if (!res.ok) throw new Error(`Grafana ${inst.name} answered ${res.status}: ${text.slice(0, 300)}`);
@@ -115,7 +115,7 @@ export function createGrafana({ instances, tokens = {}, sessions, fetch = global
     if (c.cmd === 'help') return USAGE;
     if (c.cmd === 'list') {
       const list = instances();
-      return list.length ? list.map((i) => `${i.name}${i.asks ? '  (asks the user each time)' : ''}`).join('\n') : 'No Grafana environments are set up (Settings → Other sources).';
+      return list.length ? list.map((i) => `${i.name}${i.asks ? '  (asks the user each time)' : ''}`).join('\n') : 'No Grafana environments are set up (Settings → Plugins → Grafana).';
     }
     const inst = find(c.env);
     if (!inst) throw new Error(`no Grafana environment "${c.env}". There are: ${instances().map((i) => i.name).join(', ') || 'none'}`);

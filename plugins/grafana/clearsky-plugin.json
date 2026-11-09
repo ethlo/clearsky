@@ -9,15 +9,21 @@
   "settings": {
     "GRAFANA_INSTANCES": {
       "label": "Grafana environments",
-      "hint": "One per environment, as name=address, separated by commas: test=https://grafana.test.example.com, prod=https://grafana.example.com. Kept in your settings file only.",
+      "hint": "One row per environment: its short name, and its address. Kept in your settings file only.",
       "secret": false,
       "pattern": "^\\s*[A-Za-z][\\w-]{0,30}=https?://[^\\s,]+(\\s*[\\s,]\\s*[A-Za-z][\\w-]{0,30}=https?://[^\\s,]+)*\\s*$",
-      "patternHint": "write each Grafana as name=https://address, separated by commas"
+      "patternHint": "write each Grafana as name=https://address",
+      "type": "map",
+      "item": "test",
+      "valueItem": "https://grafana.test.example.com"
     },
     "GRAFANA_ASK": {
       "label": "Ask every time for",
-      "hint": "Environments that ask in the chat before each read, separated by commas. Empty: every name with \"prod\".",
-      "secret": false
+      "hint": "Environments that ask in the chat before each read.",
+      "secret": false,
+      "type": "list",
+      "item": "prod",
+      "empty": "every name with \"prod\""
     },
     "GRAFANA_TOKENS": {
       "label": "Viewer tokens (optional)",

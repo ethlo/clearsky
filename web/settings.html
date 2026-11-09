@@ -41,31 +41,60 @@
   .cal-list small { color: var(--muted); font-size: 12px; }
   .hint { color: var(--muted); font-size: 12.5px; margin: 6px 0 0; }
   .hint.warn { color: var(--amber); }
-  .mods { margin-top: 10px; font-size: 12.5px; border-bottom: 1px solid var(--line); }
-  .mods details { border-top: 1px solid var(--line); }
-  .mods summary { display: grid; grid-template-columns: 150px minmax(0, 1fr) auto 10px; gap: 10px; align-items: baseline; padding: 8px 4px; cursor: pointer; list-style: none; }
-  .mods summary::-webkit-details-marker { display: none; }
-  .mods summary:hover { background: var(--surface-2); }
-  .mods summary b { font-weight: 600; font-size: 13px; }
-  .mods summary .sum { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .mods summary::after { content: '›'; color: var(--muted); transition: transform .12s; }
-  .mods details[open] summary::after { transform: rotate(90deg); }
-  .mods .body { padding: 0 4px 10px 164px; display: flex; flex-direction: column; gap: 2px; }
-  .plugs { margin-top: 10px; font-size: 12.5px; }
-  .plug { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; padding: 8px 4px; border-top: 1px solid var(--line); }
-  .plug .k, .plug .sum { color: var(--text-2); }
-  .plug .acts { display: flex; gap: 6px; }
+  /* (i): the longer explanation, on hover or focus, kept open with a click. */
+  .more { display: none; }
+  .lab { display: flex; align-items: center; gap: 4px; margin: 14px 0 4px; }
+  .lab > label { margin: 0; }
+  h3 .i-wrap, p .i-wrap { margin-left: 4px; }
+  .i-wrap { display: inline-flex; vertical-align: middle; }
+  .lab, h3:has(.i-wrap), p:has(.i-wrap) { position: relative; } /* the bubble lines up with its label */
+  section button.info { height: 16px; width: 16px; padding: 0; border-radius: 99px; justify-content: center; font: italic 600 10.5px/1 Georgia, serif;
+    color: var(--muted); border-color: var(--line-strong); background: none; }
+  section button.info:hover, section button.info[aria-expanded="true"] { color: var(--accent); border-color: var(--accent); }
+  .pop { display: none; position: absolute; left: 0; top: 100%; z-index: 20; width: min(440px, calc(100vw - 32px)); padding: 10px 12px; margin-top: 6px;
+    background: var(--surface); border: 1px solid var(--line-strong); border-radius: 8px; box-shadow: 0 6px 24px rgb(0 0 0 / .14);
+    font: 400 12.5px/1.5 inherit; color: var(--text-2); text-align: left; white-space: normal; letter-spacing: normal; max-height: 60vh; overflow-y: auto; }
+  .pop::before { content: ''; position: absolute; left: 0; right: 0; top: -8px; height: 8px; } /* no gap to fall through on the way in */
+  .pop ol { margin: 6px 0 0; padding-left: 18px; } .pop code { font-size: 11.5px; }
+  .i-wrap:hover .pop, .i-wrap.open .pop, button.info:focus-visible + .pop { display: block; }
+  @media (hover: none) { .i-wrap:hover:not(.open) .pop { display: none; } }
+  /* Lists and maps: a row per item. */
+  .ed { display: flex; flex-direction: column; gap: 6px; }
+  .ed-row { display: flex; gap: 6px; align-items: center; }
+  .ed-row input { flex: 1; min-width: 0; }
+  .ed-row .ed-eq { color: var(--muted); }
+  section button.ed-x { width: 30px; padding: 0; justify-content: center; color: var(--muted); flex: none; }
+  section button.ed-add { align-self: flex-start; height: 26px; font-size: 12.5px; color: var(--text-2); }
+  .ed-empty { color: var(--muted); font-size: 12.5px; }
+  .ed-pick { flex-direction: row; flex-wrap: wrap; gap: 6px 18px; }
+  .ed-pick label { display: flex; gap: 6px; align-items: center; margin: 0; font-size: 13.5px; font-weight: 400; color: var(--text); }
+  .ed-pick input { width: auto; margin: 0; }
+  /* Plugins: one list, and a page for each laid out the same way. */
+  .plugs { margin-top: 12px; font-size: 12.5px; border-bottom: 1px solid var(--line); }
+  .pl { display: grid; grid-template-columns: 150px minmax(0, 1fr) auto auto 10px; gap: 10px; align-items: baseline; padding: 9px 4px; border-top: 1px solid var(--line); color: var(--text); }
+  .pl:hover { background: var(--surface-2); text-decoration: none !important; }
+  .pl b { font-weight: 600; font-size: 13px; }
+  .pl .sum { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pl::after { content: '›'; color: var(--muted); }
+  .pp-back { display: inline-block; font-size: 12.5px; margin-bottom: 8px; }
+  .pp-top { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .pp-top .pp-title { font-size: 15px; margin: 0; display: flex; gap: 8px; align-items: center; flex: 1; }
+  .pp-top .acts { display: flex; gap: 6px; align-items: center; }
+  .pp-head > p { margin: 4px 0; }
+  .pp-setup { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 2px; }
+  .pp-setup:empty { display: none; }
+  .pp h3 { margin-top: 22px; }
+  .reach { font-size: 12.5px; display: flex; flex-direction: column; gap: 3px; }
+  .reach code { font-size: 11.5px; } .reach .k, .pp .k { color: var(--muted); } .reach .warn { color: var(--amber); }
+  @media (max-width: 520px) { .pl { grid-template-columns: minmax(0, 1fr) auto 10px; } .pl .sum, .pl .k { display: none; } }
   .plug-from { display: flex; gap: 8px; align-items: center; } .plug-from input { flex: 1; margin: 0; }
   .login-head { margin: 14px 0 4px; } .login-slot .row { margin-top: 6px; }
   .plug-look { margin-top: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
   .plug-look .warn { color: var(--amber, #b26b00); }
-  @media (max-width: 520px) { .mods summary { grid-template-columns: 1fr auto 10px; } .mods summary .sum { display: none; } .mods .body { padding-left: 4px; } }
-  .mods code { font-size: 11.5px; }
-  .mods .k { color: var(--muted); }
   input, select, textarea { width: 100%; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--line-strong);
     border-radius: 7px; padding: 6px 9px; }
   input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 14px; padding: 0; border-top: 0; } /* not the app's list rows */
   section button, section .btn { font: inherit; font-size: 13px; font-weight: 500; color: var(--text); background: var(--surface); border: 1px solid var(--line-strong);
     border-radius: 7px; height: 30px; padding: 0 12px; display: inline-flex; align-items: center; }
   section button:hover, section .btn:hover { border-color: var(--text-2); color: var(--text); }
@@ -85,63 +114,6 @@
 <div class="set-b">
 <main>
   <section>
-    <h2>GitHub <span class="state" id="gh-state"></span></h2>
-    <p id="gh-detail"></p>
-    <div class="row">
-      <button id="gh-login">Log in with GitHub</button>
-      <span class="msg" id="gh-msg"></span>
-    </div>
-    <label for="GITHUB_ORGS">Work organizations (comma-separated; empty means all)</label>
-    <input id="GITHUB_ORGS" data-key="GITHUB_ORGS" placeholder="acme">
-    <label for="GITHUB_MY_PRS">Your PRs</label>
-    <select id="GITHUB_MY_PRS" data-key="GITHUB_MY_PRS"><option value="">Only in the work organizations</option><option value="all">Everywhere (also your own repos)</option></select>
-    <label for="GITHUB_BUILD_REPOS">Repos on the Builds page</label>
-    <input id="GITHUB_BUILD_REPOS" data-key="GITHUB_BUILD_REPOS" placeholder="the ones your PRs and reviews are in" spellcheck="false" title="Comma-separated, like acme/api, acme/web. Each shows how its main branch builds and its newest artifact and release.">
-    <label for="GITHUB_TOKEN">Or a personal access token instead of the gh login (optional)</label>
-    <input id="GITHUB_TOKEN" data-key="GITHUB_TOKEN" type="password" autocomplete="off" placeholder="leave empty to keep">
-    <div class="row"><button class="save" data-keys="GITHUB_ORGS,GITHUB_MY_PRS,GITHUB_BUILD_REPOS,GITHUB_TOKEN">Save</button><span class="msg"></span></div>
-  </section>
-
-  <section>
-    <h2>Jira <span class="state" id="jira-state"></span></h2>
-    <p id="jira-detail"></p>
-    <div class="row">
-      <button id="jira-login">Log in to Atlassian</button>
-      <span class="msg" id="jira-msg"></span>
-    </div>
-    <p>This runs <code>acli jira auth login --web</code>, which opens the Atlassian login in your browser. Clearsky stores no Jira credentials.</p>
-  </section>
-
-  <section>
-    <h2>Google Calendar <span class="state" id="cal-state"></span></h2>
-    <p id="cal-detail"></p>
-    <p><b>Option A, no new login:</b> add your work Google account in your desktop's <b>Settings → Online Accounts → Google</b>, with Calendar switched on. Enter your work email below and save. Clearsky reads the calendar GNOME syncs.</p>
-    <label for="CALENDAR_EMAIL">Your work calendar email</label>
-    <input id="CALENDAR_EMAIL" data-key="CALENDAR_EMAIL" type="email" placeholder="you@company.com">
-    <div id="cal-pick" hidden>
-      <label>Calendars to include</label>
-      <div id="cal-list" class="cal-list"></div>
-      <p class="hint">Add a personal Google account in Online Accounts (Calendar only) to see family appointments here too.
-        On a shared calendar (one not named after your address, like "Family"), events only take your time when you're invited,
-        or when one of these names is in the title; the rest just show in the agenda.</p>
-      <label for="CALENDAR_MY_NAMES">Your names in shared calendar titles</label>
-      <input id="CALENDAR_MY_NAMES" data-key="CALENDAR_MY_NAMES" placeholder="Alex, Dad">
-    </div>
-    <input type="hidden" id="EVOLUTION_CALENDARS" data-key="EVOLUTION_CALENDARS">
-    <div class="row"><button class="save" data-keys="CALENDAR_EMAIL,EVOLUTION_CALENDARS,CALENDAR_MY_NAMES">Save</button><span class="msg"></span></div>
-    <p style="margin-top:14px"><b>Option B, iCal link</b> (only if your admin allows it). You can use both; meetings are merged:</p>
-    <ol>
-      <li>Open <a href="https://calendar.google.com/calendar/r/settings" target="_blank" rel="noopener">Google Calendar settings</a>.</li>
-      <li>Under <b>Settings for my calendars</b>, click your calendar, then <b>Integrate calendar</b>.</li>
-      <li>Copy <b>Secret address in iCal format</b> and paste it below.</li>
-    </ol>
-    <label for="GOOGLE_CALENDAR_ICS">Secret address in iCal format (several? separate them with spaces)</label>
-    <input id="GOOGLE_CALENDAR_ICS" data-key="GOOGLE_CALENDAR_ICS" type="password" autocomplete="off" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics">
-    <div class="row"><button class="save" data-keys="GOOGLE_CALENDAR_ICS">Save</button>
-      <button class="secondary" id="cal-remove" hidden>Remove link</button><span class="msg"></span></div>
-  </section>
-
-  <section>
     <h2>General</h2>
     <label for="CLEARSKY_STANDUP_TIME">Daily stand-up at</label>
     <input id="CLEARSKY_STANDUP_TIME" data-key="CLEARSKY_STANDUP_TIME" placeholder="09:45">
@@ -156,19 +128,83 @@
     <label for="CLEARSKY_POLL_MINUTES">Check GitHub, Jira mentions and plugins every … minutes</label>
     <input id="CLEARSKY_POLL_MINUTES" data-key="CLEARSKY_POLL_MINUTES" inputmode="numeric" placeholder="3">
     <div class="row"><button class="save" data-keys="CLEARSKY_STANDUP_TIME,CLEARSKY_WORKDAYS,CLEARSKY_WORKDAY_END,CLEARSKY_MENTION_DAYS,CLEARSKY_TIME_FORMAT,CLEARSKY_POLL_MINUTES">Save</button><span class="msg"></span></div>
-    <h3>Team pack</h3>
-    <p class="hint" id="team-now">Your team's shared setup (organizations, stand-up time, links, Copilot skills), from a git repo, an https link or a file the team keeps. Settings you changed yourself are kept. <code>clearsky team export</code> makes one from your settings.</p>
+    <h3>Team pack<span class="more">Your team's shared setup: organizations, stand-up time, links and Copilot skills, from a git repo, an https link or a file the team keeps. Settings you changed yourself are kept. <code>clearsky team export</code> makes one from your settings.</span></h3>
+    <p class="hint" id="team-now">Your team's shared setup.</p>
     <div class="row"><input id="team-from" placeholder="https://github.com/acme/clearsky-team.git" spellcheck="false" style="flex:1;min-width:220px"><button class="secondary" id="team-join" type="button">Join</button><span class="msg" id="team-msg"></span></div>
-    <h3>Set-up check</h3>
-    <p class="hint">What this machine has for Clearsky (gh, acli, Copilot, the sandbox, a calendar) and how to get what's missing: <a href="/welcome">the welcome page</a>, or <code>clearsky doctor</code> in a terminal.</p>
-    <h3>Demo</h3>
-    <p class="hint">Clearsky with made-up data, in a new tab: for showing it to others without your own work on screen. Nothing of yours is read or shown, and it stops when you click Leave demo in its menu.</p>
+    <h3>Set-up check<span class="more">Checks gh, acli, Copilot, the sandbox and a calendar, and says how to get what's missing. In a terminal: <code>clearsky doctor</code>.</span></h3>
+    <p class="hint">See what this machine has on <a href="/welcome">the welcome page</a>.</p>
+    <h3>Demo<span class="more">For showing Clearsky to others without your own work on screen. Nothing of yours is read or shown. It stops when you click Leave demo in its menu.</span></h3>
+    <p class="hint">Clearsky with made-up data, in a new tab.</p>
     <div class="row"><button class="secondary" id="demo-start" type="button">Try with demo data</button><span class="msg" id="demo-msg"></span></div>
+  </section>
+
+  <section id="plugins">
+    <h2>Plugins <span class="state" id="plug-state"></span></h2>
+    <div id="plug-list">
+      <p class="hint">Everything Clearsky reads from. Open one to set it up.<span class="more">Each page also shows what the plugin holds and reaches. One you add from a git repo, npm or a folder runs in a sandbox of its own: it reaches only the hosts it lists, keeps files only in its own folder, and gets only its own settings. You see what it reaches before any of its code runs.</span></p>
+      <div class="plugs" id="plugs"></div>
+      <div class="row" id="plug-restart" hidden><button id="plug-restart-btn">Restart to load</button><span class="msg">Clearsky loads plugins when it starts.</span></div>
+      <label for="plug-from">Add a plugin</label>
+      <div class="plug-from"><input id="plug-from" spellcheck="false" placeholder="github:owner/repo, https://…/repo.git, npm:package or a folder">
+        <button id="plug-look" class="secondary">Look at it</button></div><span class="msg" id="plug-msg"></span>
+      <div id="plug-preview"></div>
+    </div>
+    <div id="plug-pages"></div>
+
+  <div hidden id="core-setup">
+    <div data-setup="github">
+      <p id="gh-detail"></p>
+      <div class="row">
+        <button id="gh-login">Log in with GitHub</button>
+        <span class="msg" id="gh-msg"></span>
+      </div>
+      <label for="GITHUB_ORGS">Work organizations</label>
+      <input id="GITHUB_ORGS" data-key="GITHUB_ORGS" data-list data-item="acme" placeholder="all of them">
+      <label for="GITHUB_MY_PRS">Your PRs</label>
+      <select id="GITHUB_MY_PRS" data-key="GITHUB_MY_PRS"><option value="">Only in the work organizations</option><option value="all">Everywhere (also your own repos)</option></select>
+      <label for="GITHUB_BUILD_REPOS">Repos on the Builds page</label>
+      <input id="GITHUB_BUILD_REPOS" data-key="GITHUB_BUILD_REPOS" data-list data-words data-item="acme/api" placeholder="the ones your PRs and reviews are in" spellcheck="false" title="Each shows how its main branch builds and its newest artifact and release.">
+      <label for="GITHUB_TOKEN">Or a personal access token instead of the gh login (optional)</label>
+      <input id="GITHUB_TOKEN" data-key="GITHUB_TOKEN" type="password" autocomplete="off" placeholder="leave empty to keep">
+      <div class="row"><button class="save" data-keys="GITHUB_ORGS,GITHUB_MY_PRS,GITHUB_BUILD_REPOS,GITHUB_TOKEN">Save</button><span class="msg"></span></div>
+    </div>
+    <div data-setup="jira">
+      <p id="jira-detail"></p>
+      <div class="row">
+        <button id="jira-login">Log in to Atlassian</button>
+        <span class="msg" id="jira-msg"></span>
+      </div>
+      <p class="hint">Logs in with the Atlassian CLI, in your browser.<span class="more">It runs <code>acli jira auth login --web</code>. Clearsky stores no Jira credentials.</span></p>
+    </div>
+    <div data-setup="calendar">
+      <p id="cal-detail"></p>
+      <h3>From GNOME Online Accounts<span class="more">No new login: add your work Google account in your desktop's <b>Settings → Online Accounts → Google</b>, with Calendar switched on. Enter your work email below and save. Clearsky reads the calendar GNOME syncs.</span></h3>
+      <label for="CALENDAR_EMAIL">Your work calendar email</label>
+      <input id="CALENDAR_EMAIL" data-key="CALENDAR_EMAIL" type="email" placeholder="you@company.com">
+      <div id="cal-pick" hidden>
+        <label>Calendars to include<span class="more">Add a personal Google account in Online Accounts (Calendar only) to see family appointments here too.</span></label>
+        <div id="cal-list" class="cal-list"></div>
+        <label for="CALENDAR_MY_NAMES">Your names in shared calendar titles<span class="more">On a shared calendar (one not named after your address, like &quot;Family&quot;), events take your time only when you're invited or when one of these names is in the title. The rest just show in the agenda.</span></label>
+        <input id="CALENDAR_MY_NAMES" data-key="CALENDAR_MY_NAMES" data-list data-item="Alex">
+      </div>
+      <input type="hidden" id="EVOLUTION_CALENDARS" data-key="EVOLUTION_CALENDARS">
+      <div class="row"><button class="save" data-keys="CALENDAR_EMAIL,EVOLUTION_CALENDARS,CALENDAR_MY_NAMES">Save</button><span class="msg"></span></div>
+      <h3 style="margin-top:22px">Or a Google iCal link<span class="more">Only if your admin allows it. You can use both; meetings are merged.<ol>
+        <li>Open <a href="https://calendar.google.com/calendar/r/settings" target="_blank" rel="noopener">Google Calendar settings</a>.</li>
+        <li>Under <b>Settings for my calendars</b>, click your calendar, then <b>Integrate calendar</b>.</li>
+        <li>Copy <b>Secret address in iCal format</b> and paste it below.</li></ol></span></h3>
+      <label for="GOOGLE_CALENDAR_ICS">Secret address in iCal format<span class="more">Several? Separate them with spaces.</span></label>
+      <input id="GOOGLE_CALENDAR_ICS" data-key="GOOGLE_CALENDAR_ICS" type="password" autocomplete="off" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics">
+      <div class="row"><button class="save" data-keys="GOOGLE_CALENDAR_ICS">Save</button>
+        <button class="secondary" id="cal-remove" hidden>Remove link</button><span class="msg"></span></div>
+    </div>
+    <div data-setup="links"><p>Nothing to set up here: add and change your links on the <a href="/#links">Links</a> page.</p></div>
+  </div>
   </section>
 
   <section>
     <h2>Copilot</h2>
-    <p class="hint" style="margin:0 0 4px">Defaults for a new chat. The pickers in a chat still change that chat.</p>
+    <p class="hint" style="margin:0 0 4px">Defaults for a new chat. A chat's own pickers still change that chat.</p>
     <label for="COPILOT_MODEL">Model</label>
     <input id="COPILOT_MODEL" data-key="COPILOT_MODEL" list="cp-models" placeholder="Copilot's default" spellcheck="false">
     <datalist id="cp-models"></datalist>
@@ -176,83 +212,50 @@
     <select id="COPILOT_EFFORT" data-key="COPILOT_EFFORT"></select>
     <label for="COPILOT_PERMISSION">Access</label>
     <select id="COPILOT_PERMISSION" data-key="COPILOT_PERMISSION"></select>
-    <label for="COPILOT_CWD">Folder for general chats</label>
+    <label for="COPILOT_CWD">Folder for general chats<span class="more">Where a chat runs when it isn't about a PR or ticket. Chats about a PR or ticket run in that repo's clone, or the worktree with the PR's branch. Clearsky's own skills (stand-up, triage) work only from the Clearsky folder.</span></label>
     <input id="COPILOT_CWD" data-key="COPILOT_CWD" placeholder="the Clearsky folder" spellcheck="false">
-    <p class="hint">Where a chat runs when it isn't about a PR or ticket. Chats about a PR or ticket run in that repo's clone, or the worktree with the PR's branch. Clearsky's own skills (stand-up, triage) are available only from the Clearsky folder.</p>
-    <label for="COPILOT_FOLDERS">Folders Copilot can change (read and write)</label>
-    <input id="COPILOT_FOLDERS" data-key="COPILOT_FOLDERS" placeholder="~/dev" spellcheck="false">
-    <p class="hint">Comma-separated, like <code>~/dev/work, ~/dev/mine</code>. Copilot can read and change files there, including worktrees next to your clones, without the "Access paths outside trusted directories" question. Commands and edits still follow the access mode. Empty means <code>~/dev</code>. Running chats pick changes up on their next message.</p>
+    <label for="COPILOT_FOLDERS">Folders Copilot can change (read and write)<span class="more">Copilot can read and change files there, including worktrees next to your clones, without the "Access paths outside trusted directories" question. Commands and edits still follow the access mode. Running chats pick changes up on their next message.</span></label>
+    <input id="COPILOT_FOLDERS" data-key="COPILOT_FOLDERS" data-list data-item="~/dev/work" placeholder="~/dev" spellcheck="false">
     <p class="hint warn" id="copilot-unmounted" hidden></p>
-    <label for="COPILOT_READ">Folders Copilot can only read</label>
-    <textarea id="COPILOT_READ" data-key="COPILOT_READ" rows="2" spellcheck="false" placeholder="~/dev/other-team, ~/notes"></textarea>
-    <p class="hint">Comma-separated. In the sandbox, Copilot can read these but not change them. It can also always read <span id="read-default"></span> (what it needs to run and build) and files outside your home, like <code>/usr/lib/jvm</code>. The rest of your home is hidden from it: mail, documents, browser profiles, shell history and logins. Maven still reaches your repositories: Copilot gets a copy of <code>~/.m2/settings.xml</code> without the passwords, and the sandbox adds your login on the way out, only to the hosts that login is for.</p>
-    <label for="COPILOT_ASSISTED_ALLOW">Never ask before</label>
-    <textarea id="COPILOT_ASSISTED_ALLOW" data-key="COPILOT_ASSISTED_ALLOW" rows="2" spellcheck="false" placeholder="e.g. acli jira workitem transition, git push"></textarea>
-    <p class="hint">In the sandbox, Copilot runs everything without asking, and asks you only at its doors out: <code>git push</code> and GitHub changes (held at the sandbox's network until you click Allow), Jira changes through <code>acli</code>, and <code>outside</code> (a command run on your machine, like tests that start Docker containers). Jira and <code>outside</code> commands that start like one of these (comma-separated) go through without asking. <code>outside</code> commands only match exactly, like <code>outside ./mvnw verify</code>.</p>
-    <label for="COPILOT_SANDBOX">Sandbox</label>
+    <label for="COPILOT_READ">Folders Copilot can only read<span class="more">In the sandbox, Copilot can read these but not change them. It can also always read <span id="read-default"></span> (what it needs to run and build) and files outside your home, like <code>/usr/lib/jvm</code>. The rest of your home is hidden from it: mail, documents, browser profiles, shell history and logins. Maven still reaches your repositories: Copilot gets a copy of <code>~/.m2/settings.xml</code> without the passwords, and the sandbox adds your login on the way out, only to the hosts that login is for.</span></label>
+    <input id="COPILOT_READ" data-key="COPILOT_READ" data-list data-item="~/notes" placeholder="nothing more" spellcheck="false">
+    <label for="COPILOT_ASSISTED_ALLOW">Never ask before<span class="more">In the sandbox, Copilot runs everything without asking, and asks you only at its doors out: <code>git push</code> and GitHub changes (held at the sandbox's network until you click Allow), Jira changes through <code>acli</code>, and <code>outside</code> (a command run on your machine, like tests that start Docker containers). <code>outside</code> commands only match exactly, like <code>outside ./mvnw verify</code>.</span></label>
+    <input id="COPILOT_ASSISTED_ALLOW" data-key="COPILOT_ASSISTED_ALLOW" data-list data-item="acli jira workitem transition" placeholder="nothing" spellcheck="false">
+    <p class="hint">Jira and <code>outside</code> commands that start like one of these.</p>
+    <label for="COPILOT_SANDBOX">Sandbox<span class="more">Copilot and everything it runs can write only in the chat's folder, the folders above, <code>~/.copilot</code> and <code>/tmp</code>. It reads only the parts of your home listed above (never <code>~/.ssh</code>, keyrings, browser profiles or Clearsky's own settings), and reaches only the hosts below. That holds in every access mode, Full included. The <b>Sandboxed</b> access mode always runs in it, and runs every step inside without asking; only its doors out ask.<br><br>Your GitHub login never enters it: Copilot, git and gh inside get stand-ins, and the sandbox's proxy adds your <code>gh</code> login on the way to GitHub. Reading goes through; a push or any change waits until you click Allow in the chat. Hosts are checked by name only, so an allowed host can be written to as well as read.<br><br>srt comes with Clearsky. Linux also needs <code>bubblewrap</code>, <code>socat</code> and <code>ripgrep</code>.</span></label>
     <select id="COPILOT_SANDBOX" data-key="COPILOT_SANDBOX"><option value="off">Off</option><option value="srt">Anthropic sandbox runtime (srt)</option></select>
-    <p class="hint">With the sandbox on, Copilot and everything it runs can write only in the chat's folder, the folders above, <code>~/.copilot</code> and <code>/tmp</code>, can read only the parts of your home listed under <b>Also readable</b> (never <code>~/.ssh</code>, keyrings, browser profiles or Clearsky's own settings), and can reach only the hosts below. That holds in every access mode, Full included. The <b>Sandboxed</b> access mode always runs in it, and then runs every step inside without asking; only its doors out ask (see <b>Never ask before</b>). srt comes with Clearsky (Linux also needs <code>bubblewrap</code>, <code>socat</code> and <code>ripgrep</code>). Hosts are checked by name only: an allowed host can be written to as well as read. Your GitHub login never enters it: Copilot, git and gh inside get stand-ins, and the sandbox's proxy adds your <code>gh</code> login on the way to GitHub. Reading GitHub goes through; a push or any change (a PR, a comment, a review) waits until you click Allow in the chat. Inside it, git reaches GitHub over https instead of ssh.</p>
-    <label for="COPILOT_SANDBOX_TOKEN">GitHub token for the sandbox (optional)</label>
+    <p class="hint">Keeps Copilot to your folders and the hosts below.</p>
+    <label for="COPILOT_SANDBOX_TOKEN">GitHub token for the sandbox (optional)<span class="more">Not needed: by default the sandbox uses your <code>gh</code> login. A fine-grained token (with <b>Copilot Requests</b>) is used instead if you give one, for example one that can only read your work repos. Either way it stays out of the sandbox, and changes still wait for your Allow.</span></label>
     <input id="COPILOT_SANDBOX_TOKEN" data-key="COPILOT_SANDBOX_TOKEN" type="password" autocomplete="off" placeholder="leave empty to use your gh login">
-    <p class="hint">Not needed: by default the sandbox uses your <code>gh</code> login. If you can create a fine-grained token (with <b>Copilot Requests</b>), the sandbox uses it instead, for example one that can only read your work repos. Either way it stays out of the sandbox and changes still wait for your Allow.</p>
-    <label for="COPILOT_DISCLOSE">Say what did the work</label>
+    <label for="COPILOT_DISCLOSE">Say what did the work<span class="more">When a sandboxed chat is done, it ends the PR description (and the ticket description, if it wrote that) with a line like <i>Implemented with Copilot (Claude Opus 5.5). 939 credits used.</i> The model and credits come from the chat's own session log. Applies to chats started after you switch it on.</span></label>
     <select id="COPILOT_DISCLOSE" data-key="COPILOT_DISCLOSE"><option value="">Off</option><option value="on">On: last line of the PR description</option></select>
-    <p class="hint">When a sandboxed chat is done, it ends the PR description (and the ticket description, if it wrote that) with a line like <i>Implemented with Copilot (Claude Opus 5.5). 939 credits used.</i> The model and credits come from the chat's own session log, through Clearsky. Applies to chats started after you switch it on.</p>
-    <label for="COPILOT_DOMAINS">Hosts a sandboxed Copilot may reach</label>
-    <textarea id="COPILOT_DOMAINS" data-key="COPILOT_DOMAINS" rows="2" spellcheck="false"></textarea>
-    <p class="hint">Comma-separated, wildcards like <code>*.atlassian.net</code> allowed. Empty means Copilot, GitHub and your Jira site. Add package registries (say <code>repo.maven.apache.org</code>, <code>registry.npmjs.org</code>) if builds need them.</p>
-    <label for="COPILOT_VM_IMAGES">Images the VM copies from your Docker</label>
-    <textarea id="COPILOT_VM_IMAGES" data-key="COPILOT_VM_IMAGES" rows="2" spellcheck="false" placeholder="registry.example.com/team/"></textarea>
-    <p class="hint">Comma-separated, for private images tests need (say from your company's registry): a whole image like <code>registry.example.com/team/app:main</code>, or a name prefix like <code>registry.example.com/</code> (then the newest tag of each image there). Before each <code>vm</code> command, the ones your own Docker has are copied into the chat's VM if it doesn't have that version yet. Your registry login never goes in the VM. The VM gets what your Docker has: <code>docker pull</code> on your machine when the image changes.</p>
-    <label for="COPILOT_GATE_RULES">Let through without asking</label>
-    <textarea id="COPILOT_GATE_RULES" data-key="COPILOT_GATE_RULES" rows="2" spellcheck="false" placeholder="nothing yet"></textarea>
-    <p class="hint">Kinds of change you said to always allow, from the <b>Allow, and always for…</b> button on a card. Each still shows in the chat and in <b>Copilot's changes</b>. <code>merge-ready</code>: merging a PR of the chat's repo when CI is green, it's approved and has no conflicts. <code>delete-merged-branch</code>: deleting a branch whose PR is merged. <code>repo:owner/name</code>: everyday changes to that repo from any chat. <code>jira:KEY</code>: changes to tickets in that Jira project. Remove one to be asked again.</p>
-    <label for="COPILOT_VM_CPUS">VM size: cores and memory (GB)</label>
+    <label for="COPILOT_DOMAINS">Hosts a sandboxed Copilot may reach<span class="more">Wildcards like <code>*.atlassian.net</code> are allowed. Add package registries (say <code>repo.maven.apache.org</code>, <code>registry.npmjs.org</code>) if builds need them.</span></label>
+    <input id="COPILOT_DOMAINS" data-key="COPILOT_DOMAINS" data-list data-words data-item="registry.npmjs.org" spellcheck="false">
+    <label for="COPILOT_VM_IMAGES">Images the VM copies from your Docker<span class="more">For private images tests need, say from your company's registry: a whole image like <code>registry.example.com/team/app:main</code>, or a name prefix like <code>registry.example.com/</code> (then the newest tag of each image there). Before each <code>vm</code> command, the ones your own Docker has are copied into the chat's VM if it doesn't have that version yet. Your registry login never goes in the VM; <code>docker pull</code> on your machine when an image changes.</span></label>
+    <input id="COPILOT_VM_IMAGES" data-key="COPILOT_VM_IMAGES" data-list data-item="registry.example.com/team/" placeholder="none" spellcheck="false">
+    <label for="COPILOT_GATE_RULES">Let through without asking<span class="more">Kinds of change you said to always allow, from <b>Allow, and always for…</b> on a card. Each still shows in the chat and in <b>Copilot's changes</b>. Remove one to be asked again.<br><br><code>merge-ready</code>: merging a PR of the chat's repo when CI is green, it's approved and has no conflicts.<br><code>delete-merged-branch</code>: deleting a branch whose PR is merged.<br><code>repo:owner/name</code>: everyday changes to that repo from any chat.<br><code>jira:KEY</code>: changes to tickets in that Jira project.</span></label>
+    <input id="COPILOT_GATE_RULES" data-key="COPILOT_GATE_RULES" data-list data-words data-item="repo:owner/name" placeholder="nothing yet" spellcheck="false">
+    <label for="COPILOT_VM_CPUS">VM size: cores and memory (GB)<span class="more">For each chat's VM. Empty uses the default shown: half this machine's cores (up to 12) and a quarter of its memory (4 to 16 GB). Memory the VM doesn't use stays yours. Kept within this machine: at most all its cores and half its memory. Applies to the next VM a chat starts; the first one after a change takes about 15 seconds longer (it saves a new snapshot).</span></label>
     <div class="row"><input id="COPILOT_VM_CPUS" data-key="COPILOT_VM_CPUS" inputmode="numeric" spellcheck="false" style="max-width:8em"> <input id="COPILOT_VM_MEMORY_GB" data-key="COPILOT_VM_MEMORY_GB" aria-label="VM memory in GB" inputmode="decimal" spellcheck="false" style="max-width:8em"></div>
-    <p class="hint">For each chat's VM. Empty uses the default shown: half this machine's cores (up to 12) and a quarter of its memory (4 to 16 GB). Memory the VM doesn't use stays yours. Kept within this machine: at most all its cores and half its memory. Applies to the next VM a chat starts; the first one after a change takes about 15 seconds longer (it saves a new snapshot).</p>
-    <label for="COPILOT_VM_MAX">VMs at the same time</label>
+    <label for="COPILOT_VM_MAX">VMs at the same time<span class="more">1 to 8, empty is 1. Another chat's <code>vm</code> command waits in line, and its chat shows where it is. A VM with nothing running in it gives its place to the next in line, and starts again from the snapshot on its chat's next command.</span></label>
     <input id="COPILOT_VM_MAX" data-key="COPILOT_VM_MAX" inputmode="numeric" spellcheck="false" placeholder="1" style="max-width:8em">
-    <p class="hint">How many chats can have a VM running at once (1 to 8, empty is 1). Another chat's <code>vm</code> command waits in line and its chat shows where it is. A VM with nothing running in it gives its place to the next in line; it starts again, from the snapshot, on its chat's next command.</p>
     <div class="row"><button class="save" data-keys="COPILOT_MODEL,COPILOT_EFFORT,COPILOT_PERMISSION,COPILOT_CWD,COPILOT_FOLDERS,COPILOT_ASSISTED_ALLOW,COPILOT_SANDBOX,COPILOT_SANDBOX_TOKEN,COPILOT_DISCLOSE,COPILOT_READ,COPILOT_DOMAINS,COPILOT_VM_IMAGES,COPILOT_GATE_RULES,COPILOT_VM_CPUS,COPILOT_VM_MEMORY_GB,COPILOT_VM_MAX">Save</button><span class="msg"></span></div>
-    <h3 id="memory" style="margin-top:28px">Memory</h3>
+    <h3 id="memory" style="margin-top:28px">Memory<span class="more">Kept in <code id="memory-path">~/.local/share/clearsky/memory/memory.md</code> on this machine. Copilot is told never to change this file (in the sandbox it can't): it suggests notes in the chat, and they're saved only when you press Save on the card. Put notes for one repo under a <code>## owner/name</code> heading.</span></h3>
     <textarea id="memory-text" rows="8" aria-label="Copilot's memory" spellcheck="false" placeholder="Nothing yet. Notes you save from a chat's Remember card show up here."></textarea>
-    <p class="hint">Notes every new chat reads, kept in <code id="memory-path">~/.local/share/clearsky/memory/memory.md</code> on this machine. Copilot is told never to change this file (in the sandbox it can't): it suggests notes in the chat, and they're saved only when you press Save on the card. Put notes for one repo under a <code>## owner/name</code> heading. <span id="memory-size"></span></p>
+    <p class="hint">Notes every new chat reads. <span id="memory-size"></span></p>
     <div class="row"><button id="memory-save" class="save">Save memory</button><span class="msg" id="memory-msg"></span></div>
+    <h3 style="margin-top:28px">What Copilot holds and reaches</h3>
+    <div class="reach" id="copilot-reach"></div>
   </section>
 
   <section>
     <h2>VPN <span class="state" id="vpn-state"></span></h2>
-    <label for="VPN_CHECK">VPN check</label>
+    <label for="VPN_CHECK">VPN check<span class="more">A host or URL. Off the VPN it either can't be reached or refuses you with 403, as many work sites do at their load balancer. Then the menu says <b>VPN off</b>, the plugins ticked below pause instead of failing, plugins' doors (Grafana) say so, and Copilot is told to ask you to connect. Clearsky never runs the VPN itself.</span></label>
     <input id="VPN_CHECK" data-key="VPN_CHECK" spellcheck="false" placeholder="the first host a plugin names, such as your first Grafana">
-    <p class="hint">A host (or URL) behind your work VPN. Off the VPN it either can't be reached or refuses you with 403, as many work sites do at their load balancer; then the menu says <b>VPN off</b>, the modules listed next pause instead of failing, plugins' doors (Grafana) say so, and Copilot is told to ask you to connect. Clearsky never runs the VPN itself.</p>
-    <label for="VPN_NEEDED_BY">Modules that need the VPN</label>
-    <input id="VPN_NEEDED_BY" data-key="VPN_NEEDED_BY" spellcheck="false" placeholder="for example jira, github">
+    <p class="hint">A host behind your work VPN.</p>
+    <label for="VPN_NEEDED_BY">Plugins that need the VPN</label>
+    <input id="VPN_NEEDED_BY" data-key="VPN_NEEDED_BY" data-pick="plugins" spellcheck="false">
     <div class="row"><button class="save" data-keys="VPN_CHECK,VPN_NEEDED_BY">Save</button><span class="msg"></span></div>
-  </section>
-
-  <section>
-    <h2>Modules</h2>
-    <p class="hint">What each part of Clearsky holds and talks to; click one for the details. Saved secrets are never shown, only whether one is there. Each source gets only its own settings, and a source that lists its hosts can reach only those through Clearsky.</p>
-    <div class="mods" id="mods"></div>
-  </section>
-
-  <section>
-    <h2>Plugins</h2>
-    <p class="hint">Sources you add to Clearsky, such as School. One you add from a git repo, npm or a folder runs in a sandbox of its own: it reaches only the hosts it lists, keeps files only in its own folder, and gets only its own settings. You see what it reaches before any of its code runs.</p>
-    <div class="plugs" id="plugs"></div>
-    <label for="plug-from">Add a plugin</label>
-    <div class="plug-from"><input id="plug-from" spellcheck="false" placeholder="github:owner/repo, https://…/repo.git, npm:package or a folder">
-      <button id="plug-look" class="secondary">Look at it</button></div><span class="msg" id="plug-msg"></span>
-    <div id="plug-preview"></div>
-    <div class="row" id="plug-restart" hidden><button id="plug-restart-btn">Restart to load</button><span class="msg">Clearsky loads plugins when it starts.</span></div>
-  </section>
-
-  <section id="extra" hidden>
-    <h2>Other sources</h2>
-    <p class="hint">Settings for your plugins and for sources in <code>~/.config/clearsky/sources/</code>.</p>
-    <div id="extra-logins"></div>
-    <div id="extra-fields"></div>
-    <div class="row"><button class="save" id="extra-save">Save</button><span class="msg"></span></div>
   </section>
 </main>
 </div>
@@ -265,9 +268,18 @@
   const slug = (sec) => sec.id || (sec.id = sec.querySelector('h2').firstChild.textContent.trim().toLowerCase().replace(/\W+/g, '-'));
   const cards = () => [...main.children].filter((x) => x.tagName === 'SECTION' && !x.hidden);
   document.getElementById('back').onclick = () => { location.href = '/'; };
-  addEventListener('keydown', (e) => { if (e.key === 'Escape' && !/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName)) location.href = '/'; });
+  // Esc: from a plugin's page back to all plugins, else out of Settings.
+  addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName)) return;
+    if (location.hash.startsWith('#plugins/')) location.hash = '#plugins'; else location.href = '/';
+  });
+  // Old addresses (before every source was a plugin) still land on the right page.
+  const OLD = { github: 'plugins/github', jira: 'plugins/jira', 'google-calendar': 'plugins/calendar', modules: 'plugins', extra: 'plugins', 'other-sources': 'plugins' };
+  const moved = () => { if (OLD[location.hash.slice(1)]) history.replaceState(null, '', `#${OLD[location.hash.slice(1)]}`); };
+  moved();
   function draw() {
-    const list = cards(), want = location.hash.slice(1);
+    moved();
+    const list = cards(), want = location.hash.slice(1).split('/')[0];
     const cur = list.find((x) => slug(x) === want) || list[0];
     list.forEach((x) => x.classList.toggle('cur', x === cur));
     const html = list.map((x) => {
@@ -328,7 +340,7 @@ function state(el, on, text) {
 function render(s) {
   $('#file').textContent = `Saved to ${s.file}`;
   const gh = s.github;
-  state($('#gh-state'), gh.cli === 'logged-in' || !!gh.token, gh.token ? 'token' : gh.cli === 'logged-in' ? 'connected' : gh.cli === 'missing' ? 'gh missing' : 'not connected');
+  setStatus('github', gh.cli === 'logged-in' || !!gh.token, gh.token ? 'token' : gh.cli === 'logged-in' ? 'connected' : gh.cli === 'missing' ? 'gh missing' : 'not connected');
   $('#gh-detail').textContent = gh.token ? `Using a personal access token ${gh.token}.`
     : gh.cli === 'logged-in' ? `Using the GitHub CLI login${gh.user ? ` as ${gh.user}` : ''}.`
     : gh.cli === 'missing' ? 'The GitHub CLI (gh) is not installed. Install it, or paste a token below.'
@@ -341,7 +353,7 @@ function render(s) {
   $('#GITHUB_BUILD_REPOS').value = gh.buildRepos || '';
 
   const j = s.jira;
-  state($('#jira-state'), j.cli === 'logged-in' ? true : j.cli === 'missing' ? 'bad' : false,
+  setStatus('jira', j.cli === 'logged-in' ? true : j.cli === 'missing' ? 'bad' : false,
     j.cli === 'logged-in' ? 'connected' : j.cli === 'missing' ? 'acli missing' : 'not connected');
   $('#jira-detail').textContent = j.cli === 'logged-in' ? `acli is logged in${j.site ? ` to ${j.site}` : ''}.`
     : j.cli === 'missing' ? 'The Atlassian CLI (acli) is not installed.' : 'acli is not logged in.';
@@ -352,7 +364,7 @@ function render(s) {
   const evo = s.calendar.evolution || [];
   const evoOk = evo.some((c) => c.synced);
   const using = [s.calendar.url && 'iCal link', evoOk && 'GNOME'].filter(Boolean);
-  state($('#cal-state'), using.length > 0, using.length ? using.join(' + ') : 'not connected');
+  setStatus('calendar', using.length > 0, using.length ? using.join(' + ') : 'not connected');
   $('#cal-detail').textContent = [
     s.calendar.url ? 'iCal link saved.' : '',
     evo.length ? `GNOME Online Accounts: ${evo.map((c) => `${c.name}${c.synced ? '' : ' (not synced yet; open GNOME Calendar once)'}`).join(', ')}.`
@@ -414,81 +426,276 @@ function render(s) {
     $('#COPILOT_PERMISSION').value = cp.permission || '';
   }).catch(() => {});
 
-  const extra = s.extra || [], logins = s.logins || [];
-  $('#extra').hidden = !extra.length && !logins.length;
-  if (extra.length && !$('#extra-fields').children.length) {
-    // Grouped by the plugin they belong to, each with its set-up link if it has one.
-    // A plugin's logins go under its fields (in its slot), so its hints can say "log in below".
-    let last = null;
-    const slot = (src) => (src ? `<div class="login-slot" data-for="${esc(src)}"></div>` : '');
-    $('#extra-fields').innerHTML = extra.map((f) => `${f.source && f.source !== last ? `${slot(last)}<h3>${esc(last = f.source)}</h3>` : ''}<label for="${esc(f.key)}">${esc(f.label)}</label>
-      <input id="${esc(f.key)}" data-key="${esc(f.key)}"${f.secret ? ' type="password" autocomplete="off"' : ''}>
-      ${f.link ? `<p class="hint"><a href="${esc(f.link.url)}" target="_blank" rel="noopener">${esc(f.link.label)}</a></p>` : ''}
-      ${f.hint ? `<p class="hint">${esc(f.hint)}</p>` : ''}`).join('') + slot(last);
-    $('#extra-save').dataset.keys = extra.map((f) => f.key).join(',');
-  }
-  // A login's heading is the plugin's, so in its slot under the fields it's a line, not a second heading.
-  const loginHtml = (l, inSlot) => {
-    const head = (state) => (inSlot ? `<p class="login-head"><b>Login</b> ${state}</p>` : `<h3>${esc(l.label)} ${state}</h3>`);
-    return l.many ? `${head(`<span class="state ${l.many.length && l.many.every((x) => x.loggedIn) ? 'on' : 'bad'}">${
-      l.many.filter((x) => x.loggedIn).length} of ${l.many.length} logged in</span>`)}${l.many.map((x) => `<div class="row"><span><b>${esc(x.label)}</b> <small>${esc(x.detail)}</small></span>
-      <button data-many="${esc(l.name)}" data-id="${esc(x.id)}" class="${x.loggedIn ? 'secondary' : ''}">${x.loggedIn ? 'Log in again' : 'Log in'}</button>${x.canLogOut ? `<button class="secondary" data-many="${esc(l.name)}" data-id="${esc(x.id)}" data-stop>Log out</button>` : ''}<span class="msg"></span></div>`).join('')}`
-    : `${head(`<span class="state ${l.running ? 'off' : l.loggedIn ? 'on' : 'bad'}">${l.running ? 'logging in…' : l.loggedIn ? 'logged in' : 'not logged in'}</span>`)}
-    <div class="row"><button data-login="${esc(l.name)}" class="${l.loggedIn ? 'secondary' : ''}"${l.running ? ' disabled' : ''}>${esc(l.loggedIn ? 'Log in again' : l.button)}</button>
-      <span class="msg${l.error ? ' bad' : ''}">${esc(l.running ? 'A browser window is open. Log in there; it closes by itself when you are in.' : l.error || l.detail)}</span></div>`;
-  };
-  const slots = new Map([...document.querySelectorAll('#extra-fields .login-slot')].map((x) => [x.dataset.for, x]));
-  for (const x of slots.values()) x.innerHTML = '';
-  $('#extra-logins').innerHTML = logins.filter((l) => !slots.has(l.label)).map((l) => loginHtml(l, false)).join('');
-  for (const l of logins) if (slots.has(l.label)) slots.get(l.label).innerHTML = loginHtml(l, true);
+  S.settings = s;
+  drawPlugins();
+  drawEditors();
   clearTimeout(render.poll);
-  if (logins.some((l) => l.running)) render.poll = setTimeout(load, 2000);
-  for (const f of extra) {
-    if (f.secret) { SECRET.add(f.key); $(`#${f.key}`).placeholder = f.value ? `${f.value}; paste a new one to replace` : ''; }
-    else $(`#${f.key}`).value = f.value || '';
+  if ((s.logins || []).some((l) => l.running)) render.poll = setTimeout(load, 2000);
+}
+
+// (i) buttons: each <span class="more"> becomes an (i) with that text in a bubble, shown on hover
+// or focus and kept open with a click. In a label, the (i) goes next to it, not inside, so
+// clicking it doesn't jump to the field.
+function infoButtons(root = document) {
+  for (const more of root.querySelectorAll('.more')) {
+    const wrap = document.createElement('span');
+    wrap.className = 'i-wrap';
+    wrap.innerHTML = '<button type="button" class="secondary info" aria-label="More about this" aria-expanded="false">i</button><span class="pop" role="tooltip"></span>';
+    const pop = wrap.lastChild;
+    pop.append(...more.childNodes);
+    const host = more.parentElement;
+    more.remove();
+    if (host.tagName === 'LABEL') {
+      const row = document.createElement('div');
+      row.className = 'lab';
+      host.before(row);
+      row.append(host, wrap);
+    } else host.append(wrap);
+  }
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('button.info');
+  for (const w of document.querySelectorAll('.i-wrap.open')) if (w !== b?.parentElement && !w.contains(e.target)) { w.classList.remove('open'); w.firstChild.setAttribute('aria-expanded', 'false'); }
+  if (b) { const open = b.parentElement.classList.toggle('open'); b.setAttribute('aria-expanded', String(open)); }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const open = document.querySelector('.i-wrap.open, .i-wrap:focus-within');
+  if (open) { open.classList.remove('open'); open.firstChild.setAttribute('aria-expanded', 'false'); open.firstChild.blur(); e.stopImmediatePropagation(); }
+}, true);
+infoButtons();
+
+// Lists and maps are edited as lists and maps: a row per item (name and value for a map), with
+// + Add and ×. The field that's saved stays hidden behind them and holds what the settings file
+// keeps ("a, b" and "a=x, b=y"). data-pick="plugins" is a set to tick, from the plugins.
+//   data-list           a list; data-words also splits what was saved on spaces
+//   data-map            a map of name=value
+//   data-item, data-value   example item (and value), shown in an empty row
+//   placeholder         what an empty list means
+function editor(input) {
+  if (input.ed) return input.ed;
+  const kind = 'map' in input.dataset ? 'map' : 'pick' in input.dataset ? 'pick' : 'list';
+  const box = document.createElement('div');
+  box.className = kind === 'pick' ? 'ed ed-pick' : 'ed';
+  input.after(box);
+  input.hidden = true;
+  const label = document.querySelector(`label[for="${CSS.escape(input.id)}"]`)?.textContent || '';
+  const parse = (v) => (kind === 'map'
+    ? v.split(/\s*[\n,]\s*/).filter(Boolean).map((x) => { const i = x.indexOf('='); return i < 0 ? [x.trim(), ''] : [x.slice(0, i).trim(), x.slice(i + 1).trim()]; })
+    : v.split('words' in input.dataset || kind === 'pick' ? /[\s,]+/ : /\s*[\n,]\s*/).map((x) => x.trim()).filter(Boolean));
+  const sync = () => {
+    if (kind === 'pick') input.value = [...box.querySelectorAll('input:checked')].map((c) => c.value).join(', ');
+    else input.value = [...box.querySelectorAll('.ed-row')].map((r) => {
+      const [k, v] = [...r.querySelectorAll('input')].map((i) => i.value.trim());
+      return kind === 'map' ? (k ? `${k}=${v}` : '') : k;
+    }).filter(Boolean).join(', ');
+    input.shown = input.value;
+  };
+  const field = (value, ph, aria) => {
+    const i = document.createElement('input');
+    i.value = value; i.placeholder = ph; i.spellcheck = false; i.setAttribute('aria-label', aria);
+    return i;
+  };
+  const empty = () => {
+    const none = !box.querySelector('.ed-row');
+    let note = box.querySelector('.ed-empty');
+    if (none && input.placeholder && !note) { note = Object.assign(document.createElement('span'), { className: 'ed-empty' }); box.prepend(note); }
+    if (note && (!none || !input.placeholder)) note.remove();
+    else if (note) note.textContent = `Empty: ${input.placeholder}`;
+  };
+  const row = (item) => {
+    const r = document.createElement('div');
+    r.className = 'ed-row';
+    const [k, v] = kind === 'map' ? item : [item];
+    r.append(field(k, input.dataset.item || '', kind === 'map' ? `${label}: name` : label));
+    if (kind === 'map') r.append(Object.assign(document.createElement('span'), { className: 'ed-eq', textContent: '=' }), field(v, input.dataset.value || '', `${label}: value`));
+    const x = Object.assign(document.createElement('button'), { type: 'button', className: 'secondary ed-x', textContent: '×', title: 'Remove' });
+    x.setAttribute('aria-label', 'Remove');
+    x.onclick = () => { r.remove(); sync(); empty(); };
+    r.append(x);
+    return r;
+  };
+  const add = (focus) => { const r = row(kind === 'map' ? ['', ''] : ''); box.querySelector('.ed-add').before(r); empty(); if (focus) r.querySelector('input').focus(); return r; };
+  box.addEventListener('input', sync);
+  box.addEventListener('change', sync);
+  // Enter in the last row adds another, as in a list you type down.
+  box.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || kind === 'pick' || e.target.tagName !== 'INPUT') return;
+    e.preventDefault();
+    const r = e.target.closest('.ed-row'), inputs = [...r.querySelectorAll('input')];
+    if (e.target !== inputs.at(-1)) { inputs[inputs.indexOf(e.target) + 1].focus(); return; }
+    (r.nextElementSibling?.classList.contains('ed-row') ? r.nextElementSibling.querySelector('input') : add(true).querySelector('input')).focus();
+  });
+  const draw = () => {
+    box.innerHTML = '';
+    if (kind === 'pick') {
+      // The plugins to tick, and anything saved that isn't one (so it isn't lost).
+      const have = parse(input.value), all = (S.plugins?.all || []).filter((p) => p.added).map((p) => [p.name, p.label]);
+      for (const n of have) if (!all.some(([a]) => a === n)) all.push([n, n]);
+      box.innerHTML = all.map(([n, l]) => `<label><input type="checkbox" value="${esc(n)}"${have.includes(n) ? ' checked' : ''}> ${esc(l)}</label>`).join('') || '<span class="ed-empty">No plugins yet.</span>';
+      input.shown = input.value;
+      return;
+    }
+    for (const item of parse(input.value)) box.append(row(item));
+    const plus = Object.assign(document.createElement('button'), { type: 'button', className: 'secondary ed-add', textContent: '+ Add' });
+    plus.onclick = () => add(true);
+    box.append(plus);
+    empty();
+    input.shown = input.value;
+  };
+  return (input.ed = { draw, kind, empty: () => kind !== 'pick' && empty() });
+}
+// Draws each editor again when its saved value changed underneath it (loaded, or saved and tidied).
+function drawEditors(root = document) {
+  for (const i of root.querySelectorAll('[data-list],[data-map],[data-pick]')) {
+    const e = editor(i);
+    if (i.value !== i.shown || (e.kind === 'pick' && S.plugins && !i.picked)) { if (e.kind === 'pick' && S.plugins) i.picked = true; e.draw(); }
+    else e.empty(); // its placeholder may have come since
   }
 }
 
-const KIND = { token: 'Token', 'web-session': 'Web session (cookies)', 'cli-login': 'Login kept by its CLI', keyring: 'Keyring' };
-function renderModules(list) {
-  const code = (xs) => xs.map((x) => `<code>${esc(x)}</code>`).join(', ');
-  // One line each (what it holds, how many hosts), the rest when you open it.
-  const sum = (m) => [(m.secrets || []).map((x) => `${KIND[x.kind] || x.kind}${x.key ? (x.set ? ' saved' : ' not set') : ''}`).join(', ') || 'Holds nothing',
-    m.hosts.length && `reaches ${m.hosts.length === 1 ? m.hosts[0] : `${m.hosts.length} hosts`}`].filter(Boolean).join(' · ');
-  $('#mods').innerHTML = list.map((m) => `<details><summary><b>${esc(m.label)}</b><span class="sum">${esc(sum(m))}</span><span class="k">${esc(m.area)}</span></summary><div class="body">
-    ${(m.secrets || []).map((x) => `<div><b>${esc(KIND[x.kind] || x.kind)}</b>${x.key ? ` <code>${esc(x.key)}</code> ${x.set ? '· saved' : '· not set'}` : ''}${x.note ? ` <span class="k">${esc(x.note)}</span>` : ''}</div>`).join('') || '<div class="k">Holds nothing</div>'}
-    ${m.hosts.length ? `<div><span class="k">Reaches</span> ${code(m.hosts)}</div>` : ''}
-    ${m.clis.length ? `<div><span class="k">Runs</span> ${code(m.clis)}</div>` : ''}
-    ${m.files.length ? `<div><span class="k">Files</span> ${code(m.files)}</div>` : ''}
-    ${m.dbus ? '<div><span class="k">Uses the desktop session bus (D-Bus)</span></div>' : ''}
-    ${m.note ? `<div class="k">${esc(m.note)}</div>` : ''}</div></details>`).join('');
+// Plugins: one list of everything Clearsky reads from, Clearsky's own included, and a page for
+// each that's laid out the same way: how it's doing, its setup (logins and settings), and what
+// it holds and reaches.
+const S = { settings: null, plugins: null, core: {} };
+function setStatus(name, on, text) { S.core[name] = { on, text }; }
+const pill = (st) => `<span class="state ${st.on === true ? 'on' : st.on === 'bad' ? 'bad' : 'off'}">${esc(st.text)}</span>`;
+function plugStatus(p) {
+  if (S.core[p.name]) return S.core[p.name];
+  if (p.kind === 'core') return { on: true, text: 'on' };
+  if (!p.added) return { on: null, text: 'not added' };
+  if (p.problem) return { on: 'bad', text: 'broken' };
+  if (!p.loaded) return { on: null, text: 'restart to load' };
+  if (p.run === 'sandbox' && !S.plugins.sandbox) return { on: 'bad', text: 'needs srt' };
+  if (!p.ready) return { on: null, text: 'not set up' };
+  const ls = (S.settings?.logins || []).filter((l) => l.name === p.name);
+  if (ls.some((l) => (l.many ? !l.many.length || !l.many.every((x) => x.loggedIn) : !l.loggedIn && !l.running))) return { on: 'bad', text: 'not logged in' };
+  return { on: true, text: 'on' };
 }
-
-// Plugins: what's added (and how it runs), what ships with Clearsky, and adding one after a look.
-const runLabel = (p) => (p.run === 'inside' ? (p.kind === 'bundled' ? 'ships with Clearsky' : 'runs inside Clearsky, as you') : 'sandboxed');
+const kindLabel = (p) => (p.kind === 'core' ? 'Built in' : p.kind === 'bundled' ? 'Ships with Clearsky'
+  : p.kind === 'local' ? 'Your file in ~/.config/clearsky/sources' : `From ${p.from}${p.commit ? ` @ ${p.commit.slice(0, 10)}` : ''}`);
+const runLabel = (p) => (p.kind === 'core' ? '' : p.run === 'sandbox' ? 'sandboxed' : p.kind === 'bundled' || p.kind === 'local' ? '' : 'runs inside Clearsky, as you');
+const KIND = { token: 'Token', 'web-session': 'Web session (cookies)', 'cli-login': 'Login kept by its CLI', keyring: 'Keyring' };
+// What it holds and reaches: the same lines for every plugin (and for Copilot).
+function reachHtml(m) {
+  if (!m) return '';
+  const code = (xs) => xs.map((x) => `<code>${esc(x)}</code>`).join(', ');
+  return `${(m.secrets || []).map((x) => `<div><b>${esc(KIND[x.kind] || x.kind)}</b>${x.key ? ` <code>${esc(x.key)}</code>${'set' in x ? (x.set ? ' · saved' : ' · not set') : ''}` : ''}${x.note ? ` <span class="k">${esc(x.note)}</span>` : ''}</div>`).join('') || '<div class="k">Holds no secrets</div>'}
+    <div><span class="k">Reaches</span> ${m.hosts?.length ? code(m.hosts) : 'no hosts'}</div>
+    ${m.clis?.length ? `<div><span class="k">Runs</span> ${code(m.clis)}</div>` : ''}
+    ${m.files?.length ? `<div><span class="k">Files</span> ${code(m.files)}</div>` : ''}
+    ${m.dbus ? '<div><span class="k">Uses the desktop session bus (D-Bus)</span></div>' : ''}
+    ${m.outside ? `<div class="warn">Runs outside the sandbox: ${esc(m.outside)}</div>` : ''}
+    ${m.note ? `<div class="k">${esc(m.note)}</div>` : ''}`;
+}
+// The one-line version, for a plugin you're about to add.
 function reach(m) {
   if (!m) return '';
   const code = (xs) => xs.map((x) => `<code>${esc(x)}</code>`).join(', ');
   return [m.hosts?.length ? `reaches ${code(m.hosts)}` : 'reaches no hosts', m.clis?.length && `runs ${code(m.clis)}`, m.files?.length && `keeps ${code(m.files)}`].filter(Boolean).join(' · ');
 }
+// In use first, then what you could add; by name within each.
+const plugOrder = (a, b) => (b.added - a.added) || a.label.localeCompare(b.label);
 function renderPlugins(r) {
-  const added = r.added.map((p) => `<div class="plug"><div><b>${esc(p.label)}</b> <span class="k">${esc(p.version || '')} · ${esc(runLabel(p))}${p.kind === 'bundled' ? '' : ` · from <code>${esc(p.from)}</code>${p.commit ? ` @ ${esc(p.commit.slice(0, 10))}` : ''}`}</span>
-      <div class="sum">${p.problem ? `<span class="bad">${esc(p.problem)}</span>` : reach(p.manifest)}${p.loaded ? '' : ' · <b>restart to load</b>'}${p.run === 'sandbox' && !r.sandbox ? ' · <span class="bad">needs the sandbox (srt), not installed</span>' : ''}</div></div>
-      <div class="acts">${p.kind === 'bundled' ? '' : `<button class="secondary" data-plug-update="${esc(p.name)}">Update</button>`}<button class="secondary" data-plug-remove="${esc(p.name)}">Remove</button></div></div>`);
-  const shipped = r.available.map((p) => `<div class="plug"><div><b>${esc(p.label)}</b> <span class="k">ships with Clearsky, not added</span><div class="sum">${esc(p.description)}</div></div>
-      <div class="acts"><button data-plug-add="${esc(p.name)}">Add</button></div></div>`);
-  $('#plugs').innerHTML = [...added, ...shipped].join('') || '<p class="k">None added yet.</p>';
-  $('#plug-restart').hidden = r.added.every((p) => p.loaded) && !renderPlugins.changed;
+  S.plugins = r;
+  drawPlugins();
 }
+// A plugin's logins under its settings: one button, or a row per environment.
+function loginHtml(l) {
+  const head = (state) => `<p class="login-head"><b>Login</b> ${state}</p>`;
+  return l.many ? `${head(`<span class="state ${l.many.length && l.many.every((x) => x.loggedIn) ? 'on' : 'bad'}">${
+    l.many.filter((x) => x.loggedIn).length} of ${l.many.length} logged in</span>`)}${l.many.map((x) => `<div class="row"><span><b>${esc(x.label)}</b> <small>${esc(x.detail)}</small></span>
+    <button data-many="${esc(l.name)}" data-id="${esc(x.id)}" class="${x.loggedIn ? 'secondary' : ''}">${x.loggedIn ? 'Log in again' : 'Log in'}</button>${x.canLogOut ? `<button class="secondary" data-many="${esc(l.name)}" data-id="${esc(x.id)}" data-stop>Log out</button>` : ''}<span class="msg"></span></div>`).join('')}`
+  : `${head(`<span class="state ${l.running ? 'off' : l.loggedIn ? 'on' : 'bad'}">${l.running ? 'logging in…' : l.loggedIn ? 'logged in' : 'not logged in'}</span>`)}
+  <div class="row"><button data-login="${esc(l.name)}" class="${l.loggedIn ? 'secondary' : ''}"${l.running ? ' disabled' : ''}>${esc(l.loggedIn ? 'Log in again' : l.button)}</button>
+    <span class="msg${l.error ? ' bad' : ''}">${esc(l.running ? 'A browser window is open. Log in there; it closes by itself when you are in.' : l.error || l.detail)}</span></div>`;
+}
+// Its setup: Clearsky's own have theirs in the page; a plugin's comes from its manifest.
+function setupHtml(p, fields) {
+  if (!p.added) return `<div class="row"><button data-plug-add="${esc(p.name)}">Add ${esc(p.label)}</button><span class="msg"></span></div><div class="pp-preview"></div>`;
+  if (!p.loaded) return `<div class="row"><button data-restart>Restart to load</button><span class="msg">Clearsky loads plugins when it starts.</span></div>`;
+  const kind = (f) => (f.secret ? ' type="password" autocomplete="off"' : f.type === 'list' ? ` data-list data-item="${esc(f.item || '')}" placeholder="${esc(f.empty || '')}"`
+    : f.type === 'map' ? ` data-map data-item="${esc(f.item || '')}" data-value="${esc(f.valueItem || '')}" placeholder="${esc(f.empty || '')}"` : '');
+  const long = (f) => f.hint.length > 90;
+  return `${fields.map((f) => `<label for="${esc(f.key)}">${esc(f.label)}${f.hint && long(f) ? `<span class="more">${esc(f.hint)}</span>` : ''}</label>
+    <input id="${esc(f.key)}" data-key="${esc(f.key)}"${kind(f)}>
+    ${f.link ? `<p class="hint"><a href="${esc(f.link.url)}" target="_blank" rel="noopener">${esc(f.link.label)}</a></p>` : ''}
+    ${f.hint && !long(f) ? `<p class="hint">${esc(f.hint)}</p>` : ''}`).join('')}
+    ${fields.length ? `<div class="row"><button class="save" data-keys="${esc(fields.map((f) => f.key).join(','))}">Save</button><span class="msg"></span></div>` : ''}
+    <div class="login-slot"></div>
+    ${fields.length ? '' : '<p class="k pp-none" hidden>Nothing to set up.</p>'}`;
+}
+function drawPlugins() {
+  if (!S.plugins?.all) return;
+  const list = [...S.plugins.all].sort(plugOrder), s = S.settings || {};
+  const extra = s.extra || [], logins = s.logins || [];
+  $('#plugs').innerHTML = list.map((p) => `<a class="pl" href="#plugins/${esc(p.name)}"><b>${esc(p.label)}</b><span class="sum">${esc(p.description)}</span>
+    <span class="k">${esc(p.area === 'work' ? 'Work' : 'Personal')}</span>${pill(plugStatus(p))}</a>`).join('');
+  const bad = list.filter((p) => plugStatus(p).on === 'bad').length;
+  state($('#plug-state'), bad ? 'bad' : null, bad ? `${bad} need${bad === 1 ? 's' : ''} you` : '');
+  $('#plug-restart').hidden = list.every((p) => !p.added || p.loaded) && !renderPlugins.changed;
+  const pages = $('#plug-pages');
+  for (const p of list) {
+    let pg = pages.querySelector(`.pp[data-plugin="${CSS.escape(p.name)}"]`);
+    if (!pg) {
+      pg = document.createElement('div');
+      pg.className = 'pp'; pg.dataset.plugin = p.name; pg.hidden = true;
+      pg.innerHTML = `<a class="pp-back" href="#plugins">‹ All plugins</a><div class="pp-head"></div><div class="pp-setup"></div>
+        <h3>What it holds and reaches</h3><div class="reach pp-reach"></div>`;
+      pages.append(pg);
+    }
+    const st = plugStatus(p);
+    const acts = p.added && p.kind !== 'core' && p.kind !== 'local'
+      ? `${p.kind === 'bundled' ? '' : `<button class="secondary" data-plug-update="${esc(p.name)}">Update</button>`}<button class="secondary" data-plug-remove="${esc(p.name)}">Remove</button>` : '';
+    pg.querySelector('.pp-head').innerHTML = `<div class="pp-top"><h3 class="pp-title">${esc(p.label)} ${pill(st)}</h3><div class="acts">${acts}<span class="msg"></span></div></div>
+      <p class="k">${[kindLabel(p), p.version, runLabel(p), `${p.area === 'work' ? 'Work' : 'Personal'} tab`].filter(Boolean).map(esc).join(' · ')}</p>
+      ${p.description ? `<p>${esc(p.description)}</p>` : ''}
+      ${p.problem ? `<p class="bad">${esc(p.problem)}</p>` : ''}
+      ${p.run === 'sandbox' && !S.plugins.sandbox ? '<p class="bad">It runs in the sandbox (srt), which isn\'t installed here.</p>' : ''}`;
+    // The setup is drawn again only when what it can be changes (added, loaded), so typing isn't lost.
+    const setup = pg.querySelector('.pp-setup'), fields = extra.filter((f) => f.plugin === p.name);
+    const shape = p.kind === 'core' ? 'core' : `${p.added}/${p.loaded}/${S.settings ? fields.map((f) => f.key).join(',') : '?'}`;
+    if (setup.dataset.shape !== shape) {
+      setup.dataset.shape = shape;
+      if (p.kind === 'core') { const own = document.querySelector(`#core-setup [data-setup="${CSS.escape(p.name)}"]`); if (own) setup.append(own); }
+      else {
+        setup.innerHTML = setupHtml(p, fields);
+        for (const f of fields) if (!f.secret) setup.querySelector(`#${CSS.escape(f.key)}`).value = f.value || '';
+      }
+      infoButtons(setup);
+      drawEditors(setup);
+    }
+    for (const f of fields) {
+      const el = setup.querySelector(`#${CSS.escape(f.key)}`);
+      if (el && f.secret) { SECRET.add(f.key); el.placeholder = f.value ? `${f.value}; paste a new one to replace` : ''; }
+    }
+    const slot = setup.querySelector('.login-slot'), mine = logins.filter((l) => l.name === p.name);
+    if (slot) slot.innerHTML = mine.map(loginHtml).join('');
+    const none = setup.querySelector('.pp-none');
+    if (none) none.hidden = !!mine.length;
+    pg.querySelector('.pp-reach').innerHTML = reachHtml(p.reach);
+  }
+  drawEditors();
+  showPlugin();
+}
+// #plugins/<name> opens that plugin's page; #plugins the list.
+function showPlugin() {
+  const want = location.hash.startsWith('#plugins/') ? decodeURIComponent(location.hash.slice(9)) : '';
+  let found = false;
+  for (const pg of document.querySelectorAll('#plug-pages .pp')) { const on = pg.dataset.plugin === want; pg.hidden = !on; found ||= on; }
+  $('#plug-list').hidden = found;
+}
+addEventListener('hashchange', showPlugin);
 const loadPlugins = () => fetch('/api/plugins').then((x) => x.json()).then(renderPlugins).catch(() => {});
-async function lookAt(from) {
-  const msg = $('#plug-msg');
-  msg.textContent = 'Fetching…'; msg.className = 'msg'; $('#plug-preview').innerHTML = '';
+// A look at a plugin before it's added: in its own page, or under "Add a plugin".
+async function lookAt(from, where = $('#plug-preview')) {
+  const msg = where === $('#plug-preview') ? $('#plug-msg') : where.previousElementSibling.querySelector('.msg');
+  msg.textContent = 'Fetching…'; msg.className = 'msg'; where.innerHTML = '';
   try {
     const p = await post('/api/plugins/preview', { from });
     msg.textContent = '';
     const sandboxed = p.kind !== 'bundled' && !p.outside;
-    $('#plug-preview').innerHTML = `<div class="plug-look"><div><b>${esc(p.label)}</b> ${esc(p.version)}${p.commit ? ` <span class="k">@ ${esc(p.commit.slice(0, 10))}</span>` : ''}${p.replaces ? ` <span class="k">(replaces ${esc(p.replaces.version)})</span>` : ''}</div>
+    where.innerHTML = `<div class="plug-look"><div><b>${esc(p.label)}</b> ${esc(p.version)}${p.commit ? ` <span class="k">@ ${esc(p.commit.slice(0, 10))}</span>` : ''}${p.replaces ? ` <span class="k">(replaces ${esc(p.replaces.version)})</span>` : ''}</div>
       ${p.description ? `<div class="k">${esc(p.description)}</div>` : ''}
       <div>${reach(p)}</div>
       ${p.settings.length ? `<div class="k">Settings: ${p.settings.map((x) => `<code>${esc(x)}</code>`).join(', ')}</div>` : ''}
@@ -498,28 +705,29 @@ async function lookAt(from) {
   } catch (e) { msg.textContent = e.message; msg.className = 'msg bad'; }
 }
 document.addEventListener('click', async (e) => {
-  const b = e.target.closest('#plug-look,[data-plug-add],#plug-add,#plug-cancel,[data-plug-remove],[data-plug-update],#plug-restart-btn');
+  const b = e.target.closest('#plug-look,[data-plug-add],#plug-add,#plug-cancel,[data-plug-remove],[data-plug-update],#plug-restart-btn,[data-restart]');
   if (!b) return;
   if (b.id === 'plug-look') return lookAt($('#plug-from').value.trim());
-  if (b.dataset.plugAdd) return lookAt(b.dataset.plugAdd);
-  if (b.id === 'plug-cancel') { $('#plug-preview').innerHTML = ''; return; }
+  if (b.dataset.plugAdd) return lookAt(b.dataset.plugAdd, b.closest('.pp')?.querySelector('.pp-preview'));
+  if (b.id === 'plug-cancel') { b.closest('.plug-look').remove(); return; }
   const msg = b.parentElement.querySelector('.msg') || $('#plug-msg');
   b.disabled = true;
   try {
-    if (b.id === 'plug-restart-btn') { await post('/api/restart', { force: false }); msg.textContent = 'Restarting when no chat is busy…'; return; }
+    if (b.id === 'plug-restart-btn' || 'restart' in b.dataset) { await post('/api/restart', { force: false }); msg.textContent = 'Restarting when no chat is busy…'; return; }
     if (b.dataset.plugRemove && !confirm(`Remove ${b.dataset.plugRemove}? What it kept stays, in case you add it again.`)) { b.disabled = false; return; }
     const r = b.id === 'plug-add' ? await post('/api/plugins/add', { token: b.dataset.token, trust: !!$('#plug-trust')?.checked })
       : await post(b.dataset.plugRemove ? '/api/plugins/remove' : '/api/plugins/update', { name: b.dataset.plugRemove || b.dataset.plugUpdate });
     renderPlugins.changed = true;
-    if (b.id === 'plug-add') { $('#plug-preview').innerHTML = ''; $('#plug-from').value = ''; }
+    if (b.id === 'plug-add') { b.closest('.plug-look').remove(); $('#plug-from').value = ''; }
+    if (b.dataset.plugRemove) location.hash = '#plugins';
     renderPlugins(r);
   } catch (err) { msg.textContent = err.message; msg.className = 'msg bad'; b.disabled = false; }
 });
 
 async function load() {
-  render(await (await fetch('/api/settings')).json());
-  fetch('/api/modules').then((r) => r.json()).then((r) => renderModules(r.modules || [])).catch(() => {});
   loadPlugins();
+  render(await (await fetch('/api/settings')).json());
+  fetch('/api/modules').then((r) => r.json()).then((r) => { $('#copilot-reach').innerHTML = reachHtml((r.modules || []).find((m) => m.name === 'copilot')); }).catch(() => {});
 }
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

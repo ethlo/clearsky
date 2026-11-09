@@ -180,6 +180,25 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
     await page.waitForTimeout(400);
   }
 
+  // Settings → Plugins: one list with Clearsky's own and the plugins alike, a page for each; old addresses still land there.
+  await page.goto(`${base}/settings#plugins`);
+  await page.waitForSelector('#plugs a.pl[href="#plugins/github"]');
+  assert.ok(await page.locator('#plugs a.pl[href="#plugins/slack"]').count(), 'Slack is in the same list as GitHub');
+  await page.click('#plugs a.pl[href="#plugins/github"]');
+  await page.waitForSelector('.pp[data-plugin="github"]:not([hidden]) #GITHUB_ORGS + .ed');
+  assert.equal(await page.locator('#plug-list').isHidden(), true);
+  // A list is edited as a list: a row per item, saved as the settings file keeps it.
+  const orgs = page.locator('#GITHUB_ORGS + .ed');
+  await orgs.locator('.ed-add').click();
+  await page.keyboard.type('acme-labs');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('acme-web');
+  assert.equal(await page.locator('#GITHUB_ORGS').inputValue(), 'acme, acme-labs, acme-web');
+  await orgs.locator('.ed-row').first().locator('.ed-x').click();
+  assert.equal(await page.locator('#GITHUB_ORGS').inputValue(), 'acme-labs, acme-web');
+  await page.goto(`${base}/settings#extra`);
+  await page.waitForFunction(() => location.hash === '#plugins' && !document.querySelector('#plug-list').hidden);
+
   // Settings → Copilot: defaults for new chats, with Copilot's own choices; a saved default is used by a new chat.
   await page.goto(`${base}/settings#copilot`);
   await page.waitForSelector('#COPILOT_PERMISSION option[value="full"]', { state: 'attached' });

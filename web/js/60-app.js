@@ -202,7 +202,7 @@ async function openReader(src, key, url) {
       ${thread(d.messages || [], file, d.title)}`;
   } catch (e) {
     if (curItem !== it) return;
-    el.innerHTML = `<h2>Couldn’t open this</h2>${open(url)}<div class="err" style="margin:0">${esc(e.message)}${/log in/i.test(e.message) ? ' <a href="/settings#extra">Log in again in Settings</a>' : ''}</div>`;
+    el.innerHTML = `<h2>Couldn’t open this</h2>${open(url)}<div class="err" style="margin:0">${esc(e.message)}${/log in/i.test(e.message) ? ' <a href="/settings#plugins">Log in again in Settings</a>' : ''}</div>`;
   }
 }
 
