@@ -33,6 +33,7 @@ import { fileRoots, checkFileRef, findFiles, fileRefLine } from '../lib/file-ref
 import * as memory from '../lib/memory.mjs';
 import { sshHosts } from '../lib/ssh-hosts.mjs';
 import { buildRepos } from '../lib/builds.mjs';
+import { allCreditRecords, creditTotals, costRates, costOf, liveRate } from '../lib/credit-usage.mjs';
 import { disclosureLine, disclosureFields, creditSplit, DISCLOSE_HINT } from '../lib/disclosure.mjs';
 import { parseReviewArgs, changeOf, reviewPrompt, writeBaseFiles, reviewDecision, USAGE as REVIEW_USAGE } from '../lib/review.mjs';
 import { buildMap, buildKind } from '../lib/map.mjs';
@@ -1648,6 +1649,12 @@ async function reviewRun({ key, argv, cwd, signal }, out, err) {
   }
 }
 
+// The last looked-up dollar rate (Settings → Copilot, live rate), without asking again.
+function readFx() {
+  if (process.env.CLEARSKY_FX_LIVE !== 'on') return null;
+  try { return JSON.parse(readFileSync(join(homedir(), '.cache', 'clearsky', 'fx.json'), 'utf8')); } catch { return null; }
+}
+
 // What a chat's work cost, split the way a ticket records it: the chat itself (implementation)
 // and the reviewers it ran with `review` (code review), each from its own session log.
 function chatCredits(id, model = null) {
@@ -2998,10 +3005,32 @@ function serve() {
           sandbox: process.env.COPILOT_SANDBOX === 'srt',
           usage: /^[\w-]{8,64}$/.test(id) ? sessionUsage(join(homedir(), '.copilot'), id) : null,
           // What it cost so far, split like the line at the end of a PR (lib/disclosure.mjs).
-          credits: /^[\w-]{8,64}$/.test(id) ? (() => { const sp = chatCredits(id, c?.model); return sp.total != null ? { ...sp, line: disclosureLine(sp) } : null; })() : null,
+          credits: /^[\w-]{8,64}$/.test(id) ? (() => { const sp = chatCredits(id, c?.model); return sp.total != null ? { ...sp, line: disclosureLine(sp), cost: costOf(sp.total, costRates(process.env, readFx())) } : null; })() : null,
           // When it last did anything (its log's time), and what it's about: for "start fresh".
           lastAt: /^[\w-]{8,64}$/.test(id) ? (() => { try { return statSync(join(homedir(), '.copilot', 'session-state', id, 'events.jsonl')).mtimeMs; } catch { return null; } })() : null,
           refs: localState.sessionRefs(stateFile)[id] || [],
+        });
+      }
+      // AI credits across all chats (today, this week, this month, all time; by day, week and
+      // chat), with what they cost in dollars and your currency (lib/credit-usage.mjs).
+      if (url.pathname === '/api/copilot/usage') {
+        const home = join(homedir(), '.copilot');
+        const t = creditTotals(allCreditRecords(home));
+        const env = process.env;
+        const live = env.CLEARSKY_FX_LIVE === 'on' ? await liveRate(String(env.CLEARSKY_CURRENCY || '').trim().toUpperCase(), join(homedir(), '.cache', 'clearsky', 'fx.json')) : null;
+        const rates = costRates(env, live);
+        // Chat names, if Copilot's list is at hand (never waits long for it).
+        let names = {};
+        try {
+          const info = await copilotInfo();
+          if (info.available) names = Object.fromEntries((await Promise.race([copilotSessions(info.bin, false), new Promise((r) => setTimeout(() => r([]), 3000))])).map((x) => [x.id, x.title]));
+        } catch { /* ids only */ }
+        const cost = (n) => costOf(n, rates);
+        return json(res, 200, {
+          ...t, rates, liveFailed: rates.live && !!rates.currency && rates.rateFrom !== 'live',
+          cost: { total: cost(t.total), today: cost(t.today), week: cost(t.week), month: cost(t.month) },
+          days: t.days.map((d) => ({ ...d, cost: cost(d.credits) })), weeks: t.weeks.map((w) => ({ ...w, cost: cost(w.credits) })),
+          chats: t.chats.map((c) => ({ ...c, title: names[c.id] || null, cost: cost(c.credits) })),
         });
       }
       // What Copilot changed as you on GitHub and Jira (all chats, or one).

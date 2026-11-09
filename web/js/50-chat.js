@@ -205,7 +205,7 @@ async function drawInfo(force) {
     ['Effort', $('#cp-effort').selectedOptions[0]?.textContent || 'Balanced'],
     u && ['Tokens', `in ${k(u.input)}${u.input ? ` (${Math.floor(100 * u.cached / u.input)}% cached)` : ''} · out ${k(u.output)}${u.premium != null ? ` · ${u.premium} premium` : ''}`],
     // AI credits so far, split like the line a finished chat puts on its PR and ticket.
-    d.credits && ['Credits', `${fmtCredits(d.credits.total)}${d.credits.parts.filter((p) => p.credits != null).length > 1 ? ` (${d.credits.parts.filter((p) => p.credits != null).map((p) => `${p.kind} ${fmtCredits(p.credits)}`).join(' · ')})` : ''}`],
+    d.credits && ['Credits', `${fmtCredits(d.credits.total)}${d.credits.cost ? ` · ${costText(d.credits.cost)}` : ''}${d.credits.parts.filter((p) => p.credits != null).length > 1 ? ` (${d.credits.parts.filter((p) => p.credits != null).map((p) => `${p.kind} ${fmtCredits(p.credits)}`).join(' · ')})` : ''}`],
     u?.context != null && ['Context', `${k(u.context)}${u.limit ? ` of ${k(u.limit)}` : ''}`],
     d.cwd && ['Folder', d.cwd],
     d.folders?.length && ['Can change', d.folders.join(', ')],
