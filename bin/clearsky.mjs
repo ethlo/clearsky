@@ -12,7 +12,7 @@ import { join, dirname, resolve, basename } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { homedir, availableParallelism, totalmem } from 'node:os';
 import { execFile, execFileSync, spawn } from 'node:child_process';
-import { delimiter } from 'node:path';
+import { delimiter, sep } from 'node:path';
 import { promisify } from 'node:util';
 import { randomBytes } from 'node:crypto';
 import * as settings from '../lib/settings.mjs';
@@ -57,6 +57,7 @@ import { startDemo, demoPort, isDemo } from '../lib/demo.mjs';
 import { checks as doctorChecks, suggestions as doctorSuggestions, doctorText, ready as doctorReady } from '../lib/doctor.mjs';
 import { edsCalendars } from '../lib/eds.mjs';
 import { joinPack, joinSummary, readTeam, exportPack, TEAM_KEYS, applyWaiting, pluginOffers } from '../lib/team.mjs';
+import { scaffoldPack, writeScaffold, nextSteps } from '../lib/team-scaffold.mjs';
 import { readHandoffs, saveHandoffs, addHandoff, nextHandoff, settleAfterRestart, handoffPrompt, handoffResult, updateHandoff } from '../lib/handoff.mjs';
 import { srtInstalled } from '../lib/doctor.mjs';
 import { ownRead, chatPushes } from '../lib/own-read.mjs';
@@ -971,6 +972,15 @@ function joinTeam(from) {
 function teamWaiting() {
   try { const w = applyWaiting(dirname(userEnvFile), { teamKey, ...teamIo() }); if (w.length) logEvent(`team pack settings filled in for a plugin you added: ${w.join(', ')}`); }
   catch (e) { console.error(`clearsky: team pack settings: ${e.message}`); }
+}
+// A new team pack repo from your own settings (lib/team-scaffold.mjs): `clearsky team init` and Settings.
+function makeTeamPack({ dir, name, repo, jiraSite, links = false, force = false }) {
+  if (!dir) throw new Error('say which folder to write it to');
+  const env = Object.fromEntries(Object.keys(settings.FIELDS).filter((k) => process.env[k]).map((k) => [k, process.env[k]]));
+  const { pack, files, warnings } = scaffoldPack({ name: name || 'Team', repo, jiraSite, env, teamKeys: Object.keys(settings.FIELDS).filter(teamKey),
+    links: links ? readLinks(linksFile()) : null, registry: readRegistry(pluginDirs.registry).plugins, catalogFrom: (n) => catalogEntry(n)?.from || null });
+  const w = writeScaffold(dir, files, { force });
+  return { ...w, pack, warnings, next: nextSteps(w.dir, repo) };
 }
 // The team pack's plugins next to yours, for Settings → Plugins.
 const teamPlugins = () => { const t = readTeam(dirname(userEnvFile)); return t?.plugins?.length ? { name: t.name, plugins: pluginOffers(t.plugins, readRegistry(pluginDirs.registry).plugins) } : null; };
@@ -3153,6 +3163,15 @@ function serve() {
           try { const r = await joinTeam(src); return json(res, 200, { name: r.name, summary: joinSummary(r), result: r }); }
           catch (e) { return json(res, 400, { error: e.message }); }
         }
+        // Make a team pack: a new folder with the pack, a README for colleagues, skills and plugins.
+        if (url.pathname === '/api/team/scaffold') {
+          if (isDemo()) return json(res, 400, { error: 'not in the demo' });
+          const b = await readJson(req);
+          const dir = resolve(String(b.dir || '').trim().replace(/^~(?=\/|\\|$)/, homedir()));
+          if (!String(b.dir || '').trim() || !dir.startsWith(homedir() + sep)) return json(res, 400, { error: 'pick a folder in your home folder' });
+          try { return json(res, 200, makeTeamPack({ dir, name: String(b.name || '').trim(), repo: String(b.repo || '').trim(), jiraSite: String(b.jiraSite || '').trim(), links: !!b.links })); }
+          catch (e) { return json(res, 400, { error: e.message }); }
+        }
         // Try with demo data: the demo on a port of its own; the page opens it in a new tab.
         if (url.pathname === '/api/demo/start') {
           if (isDemo()) return json(res, 400, { error: 'this is the demo already' });
@@ -3711,7 +3730,7 @@ async function dockerCommand([sub = 'up', ...rest]) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
   const args = process.argv.slice(2);
   if (args.includes('-h') || args.includes('--help')) {
-    console.log('usage: clearsky [--json] | clearsky try [--port N] [--no-open] | clearsky doctor [--json] | clearsky join [<team pack>] | clearsky team export [--name N] [--links] | clearsky add <plugin> [--trust] [--yes] | clearsky remove <plugin> [--data] | clearsky plugins | clearsky update [<plugin>] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky app [--port N] | clearsky docker [up|start|down|logs|login|mounts] [--port N] | clearsky school-handover | clearsky jira-debug');
+    console.log('usage: clearsky [--json] | clearsky try [--port N] [--no-open] | clearsky doctor [--json] | clearsky join [<team pack>] | clearsky team init <folder> [--name N] [--repo URL] [--links] | clearsky team export [--name N] [--links] | clearsky add <plugin> [--trust] [--yes] | clearsky remove <plugin> [--data] | clearsky plugins | clearsky update [<plugin>] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky app [--port N] | clearsky docker [up|start|down|logs|login|mounts] [--port N] | clearsky school-handover | clearsky jira-debug');
   } else if (args[0] === 'try') {
     // Clearsky with made-up data, in this terminal: Ctrl+C stops it.
     const p = args.indexOf('--port');
@@ -3731,6 +3750,20 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.a
         if (r.plugins.some((p) => p.state !== 'added')) console.log('Look at the team\'s plugins and add them with `clearsky add --team` (or in Settings → Plugins).');
       }
       catch (e) { console.error(`clearsky: ${e.message}`); process.exitCode = 1; }
+    }
+  } else if (args[0] === 'team' && args[1] === 'init') {
+    // clearsky team init <folder> [--name N] [--repo URL] [--jira-site S] [--links] [--force]
+    const opt = (f) => { const i = args.indexOf(f); return i > -1 ? args[i + 1] : undefined; };
+    const dir = args[2] && !args[2].startsWith('--') ? args[2] : null;
+    if (!dir) { console.error('usage: clearsky team init <folder> [--name "Payments team"] [--repo https://github.com/acme/clearsky-team] [--jira-site acme.atlassian.net] [--links] [--force]'); process.exitCode = 2; }
+    else {
+      try {
+        const r = makeTeamPack({ dir, name: opt('--name'), repo: opt('--repo'), jiraSite: opt('--jira-site'), links: args.includes('--links'), force: args.includes('--force') });
+        console.log(`Wrote ${r.pack.name}'s team pack to ${r.dir}: ${r.written.join(', ')}`);
+        for (const w of r.warnings) console.log(`  note: ${w}`);
+        console.log('\nLook through clearsky-team.json, then:\n');
+        for (const n of r.next) console.log(`  ${n}`);
+      } catch (e) { console.error(`clearsky: ${e.message}`); process.exitCode = 1; }
     }
   } else if (args[0] === 'team' && args[1] === 'export') {
     // A team pack from your own settings (and, with --links, your work links), to share.

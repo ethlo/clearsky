@@ -36,6 +36,8 @@
   section ol { padding-left: 20px; }
   label { display: block; font-size: 12.5px; color: var(--text-2); font-weight: 500; margin: 14px 0 4px; }
   .cal-list { display: flex; flex-direction: column; gap: 4px; }
+  label.tick { display: flex; align-items: center; gap: 8px; font-weight: 400; color: var(--text); }
+  label.tick input { width: auto; margin: 0; }
   .cal-list label.cal { display: flex; align-items: baseline; gap: 8px; margin: 0; font-size: 13.5px; font-weight: 400; color: var(--text); }
   .cal-list input { width: auto; flex: none; margin: 0; }
   .cal-list small { color: var(--muted); font-size: 12px; }
@@ -136,6 +138,19 @@
     <h3>Team pack<span class="more">Your team's shared setup: organizations, stand-up time, links and Copilot skills, from a git repo, an https link or a file the team keeps. Settings you changed yourself are kept. <code>clearsky team export</code> makes one from your settings.</span></h3>
     <p class="hint" id="team-now">Your team's shared setup.</p>
     <div class="row"><input id="team-from" placeholder="https://github.com/acme/clearsky-team.git" spellcheck="false" style="flex:1;min-width:220px"><button class="secondary" id="team-join" type="button">Join</button><span class="msg" id="team-msg"></span></div>
+    <h3>Make a team pack<span class="more">Starts the repo your company keeps its Clearsky setup in, from your own settings: organizations, stand-up, Copilot's folders and hosts, Grafana, the plugins you use with their versions, and the kinds of change you let through without asking (offered to colleagues, never forced on them). It writes a README for colleagues and folders for shared skills and work-only plugins. No tokens or other secrets go in. Nothing is pushed: you look it through, then push it to a private repo. In a terminal: <code>clearsky team init &lt;folder&gt;</code>.</span></h3>
+    <p class="hint">A ready repo for your team's shared setup, with no secrets in it.</p>
+    <label for="scaf-name">Team name</label>
+    <input id="scaf-name" placeholder="Payments team">
+    <label for="scaf-repo">Where it will live<span class="more">The private repo you'll push it to. It goes in the README's <code>clearsky join</code> line; leave it empty to fill in later.</span></label>
+    <input id="scaf-repo" placeholder="https://github.com/acme/clearsky-team" spellcheck="false">
+    <label for="scaf-jira">Jira site</label>
+    <input id="scaf-jira" placeholder="acme.atlassian.net" spellcheck="false">
+    <label for="scaf-dir">Folder to write it to</label>
+    <input id="scaf-dir" placeholder="~/dev/clearsky-team" value="~/dev/clearsky-team" spellcheck="false">
+    <label class="tick"><input type="checkbox" id="scaf-links"> Include my work links</label>
+    <div class="row"><button class="secondary" id="scaf-go" type="button">Make it</button><span class="msg" id="scaf-msg"></span></div>
+    <pre id="scaf-out" class="hint" hidden></pre>
     <h3>Set-up check<span class="more">Checks gh, acli, Copilot, the sandbox and a calendar, and says how to get what's missing. In a terminal: <code>clearsky doctor</code>.</span></h3>
     <p class="hint">See what this machine has on <a href="/welcome">the welcome page</a>.</p>
     <h3>Demo<span class="more">For showing Clearsky to others without your own work on screen. Nothing of yours is read or shown. It stops when you click Leave demo in its menu.</span></h3>
@@ -246,6 +261,7 @@
     <input id="COPILOT_VM_IMAGES" data-key="COPILOT_VM_IMAGES" data-list data-item="registry.example.com/team/" placeholder="none" spellcheck="false">
     <label for="COPILOT_GATE_RULES">Let through without asking<span class="more">Kinds of change you said to always allow, from <b>Allow, and always for…</b> on a card. Each still shows in the chat and in <b>Copilot's changes</b>. Remove one to be asked again.<br><br><code>merge-ready</code>: merging a PR of the chat's repo when CI is green, it's approved and has no conflicts.<br><code>delete-merged-branch</code>: deleting a branch whose PR is merged.<br><code>repo:owner/name</code>: everyday changes to that repo from any chat.<br><code>jira:KEY</code>: changes to tickets in that Jira project.</span></label>
     <input id="COPILOT_GATE_RULES" data-key="COPILOT_GATE_RULES" data-list data-words data-item="repo:owner/name" placeholder="nothing yet" spellcheck="false">
+    <div id="team-gate" class="hint" hidden></div>
     <label for="COPILOT_VM_CPUS">VM size: cores and memory (GB)<span class="more">For each chat's VM. Empty uses the default shown: half this machine's cores (up to 12) and a quarter of its memory (4 to 16 GB). Memory the VM doesn't use stays yours. Kept within this machine: at most all its cores and half its memory. Applies to the next VM a chat starts; the first one after a change takes about 15 seconds longer (it saves a new snapshot).</span></label>
     <div class="row"><input id="COPILOT_VM_CPUS" data-key="COPILOT_VM_CPUS" inputmode="numeric" spellcheck="false" style="max-width:8em"> <input id="COPILOT_VM_MEMORY_GB" data-key="COPILOT_VM_MEMORY_GB" aria-label="VM memory in GB" inputmode="decimal" spellcheck="false" style="max-width:8em"></div>
     <label for="COPILOT_VM_MAX">VMs at the same time<span class="more">1 to 8, empty is 1. Another chat's <code>vm</code> command waits in line, and its chat shows where it is. A VM with nothing running in it gives its place to the next in line, and starts again from the snapshot on its chat's next command.</span></label>
@@ -357,6 +373,33 @@ $('#team-join').onclick = async () => {
   catch (e) { $('#team-msg').textContent = e.message; }
 };
 drawTeam().catch(() => {});
+// Make a team pack: writes the folder, then says what to do next.
+$('#scaf-go').onclick = async () => {
+  const out = $('#scaf-out');
+  $('#scaf-msg').textContent = 'Writing…'; out.hidden = true;
+  try {
+    const r = await post('/api/team/scaffold', { name: $('#scaf-name').value.trim(), repo: $('#scaf-repo').value.trim(), jiraSite: $('#scaf-jira').value.trim(),
+      dir: $('#scaf-dir').value.trim(), links: $('#scaf-links').checked });
+    $('#scaf-msg').textContent = `Wrote ${r.written.length} files to ${r.dir}.`;
+    out.textContent = [...r.warnings.map((w) => `Note: ${w}`), r.warnings.length ? '' : null, 'Look through clearsky-team.json, then in a terminal:', ...r.next.map((n) => `  ${n}`)].filter((x) => x !== null).join('\n');
+    out.hidden = false;
+  } catch (e) { $('#scaf-msg').textContent = e.message; }
+};
+// Kinds of change your team pack suggests letting through: offered, yours to add (then Save).
+async function drawTeamGate() {
+  const t = (await (await fetch('/api/team')).json()).team, box = $('#team-gate'), input = $('#COPILOT_GATE_RULES');
+  const have = new Set(input.value.split(/[\s,]+/).filter(Boolean));
+  const todo = (t?.gate?.suggest || []).filter((r) => !have.has(r));
+  box.hidden = !todo.length;
+  if (!todo.length) return;
+  box.innerHTML = `${esc(t.name)} suggests letting through: ${todo.map((r) => `<code>${esc(r)}</code> <button type="button" class="secondary" data-gate-add="${esc(r)}">Add</button>`).join(' ')}`;
+  for (const b of box.querySelectorAll('[data-gate-add]')) b.onclick = () => {
+    input.value = [...input.value.split(/[\s,]+/).filter(Boolean), b.dataset.gateAdd].join(', ');
+    input.ed?.draw();
+    b.previousElementSibling.remove(); b.remove();
+    if (!box.querySelector('[data-gate-add]')) box.textContent = 'Added. Save to keep it.';
+  };
+}
 if (document.querySelector('meta[name=demo]')) { $('#demo-start').disabled = true; $('#demo-msg').textContent = 'This is the demo.'; }
 
 function state(el, on, text) {
@@ -447,6 +490,7 @@ function render(s) {
   $('#COPILOT_READ_HOSTS').value = cp.readHosts || '';
   $('#COPILOT_VM_IMAGES').value = cp.vmImages || '';
   $('#COPILOT_GATE_RULES').value = cp.gateRules || '';
+  drawTeamGate().catch(() => {});
   $('#COPILOT_VM_CPUS').value = cp.vmCpus || '';
   $('#COPILOT_VM_MEMORY_GB').value = cp.vmMemoryGb || '';
   $('#COPILOT_VM_MAX').value = cp.vmMax || '';

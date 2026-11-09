@@ -35,7 +35,7 @@
 <body><div class="wrap">
 <div class="crumb"><a href="index.html">Clearsky design docs</a></div>
 <h1>Team packs</h1>
-<nav class="toc"><b>Contents</b><ol><li><a href="#what-s-in-one">What's in one</a></li><li><a href="#what-joining-does">What joining does</a></li><li><a href="#plugins-in-a-pack">Plugins in a pack</a></li><li><a href="#using-clearsky-at-work">Using Clearsky at work</a></li></ol></nav>
+<nav class="toc"><b>Contents</b><ol><li><a href="#what-s-in-one">What's in one</a></li><li><a href="#starting-one">Starting one</a></li><li><a href="#what-joining-does">What joining does</a></li><li><a href="#plugins-in-a-pack">Plugins in a pack</a></li><li><a href="#using-clearsky-at-work">Using Clearsky at work</a></li></ol></nav>
 <p>A team pack is your team's shared Clearsky setup. It lives in a git repo (or a file) that the team owns, not in Clearsky, so nothing about your company ends up in this repo. A new colleague joins it once:</p>
 <pre class="lang-sh"><code>clearsky join https://github.com/acme/clearsky-team.git</code></pre>
 <p>or pastes the same address on the welcome page or in Settings → General → Team pack. Running <code>clearsky join</code> again, or <strong>Update</strong> in Settings, fetches the newest version.</p>
@@ -62,11 +62,25 @@
   &quot;plugins&quot;: [
     &quot;github:someone/clearsky-weather#v1.2.0&quot;,
     { &quot;from&quot;: &quot;./plugins/deploys&quot;, &quot;note&quot;: &quot;Our deploy board&quot; }
-  ]
+  ],
+  &quot;jira&quot;: { &quot;site&quot;: &quot;acme.atlassian.net&quot; },
+  &quot;gate&quot;: { &quot;suggest&quot;: [&quot;repo:acme/docs&quot;, &quot;jira:PAY&quot;] }
 }</code></pre>
-<p><code>clearsky team export --name &quot;Payments team&quot;</code> prints one made from your own settings; add <code>--links</code> to include your work links. Check it before you share it.</p>
+<h2 id="starting-one">Starting one</h2>
+<pre class="lang-sh"><code>clearsky team init ~/dev/clearsky-team --name &quot;Payments team&quot; \
+  --repo https://github.com/acme/clearsky-team --jira-site acme.atlassian.net [--links]</code></pre>
+<p>or Settings → General → <strong>Make a team pack</strong>. It writes a folder that's ready to push:</p>
+<pre><code>clearsky-team/
+  clearsky-team.json   from your settings: the ones a team may set, never a secret
+  README.md            for colleagues: install, log in, join, what joining changes
+  skills/README.md     put shared Copilot skills here
+  plugins/README.md    put work-only plugins here
+  .gitignore</code></pre>
+<p>The plugins you added are listed with where they come from and their pins (one that follows a branch is pointed out, and one added from a folder here is left out, since colleagues can't fetch it). Your &quot;always&quot; rules become the pack's suggestions, minus repos outside the team's organizations. A value that looks like a token or a password is left out and named. Look it through, run <code>node scripts/leak-check.mjs &lt;folder&gt;</code> from a Clearsky checkout once it's a git repo, then push it with the <code>gh repo create … --private</code> line it prints. Nothing is pushed for you.</p>
+<p><code>clearsky team export --name &quot;Payments team&quot;</code> prints just the JSON from your own settings; add <code>--links</code> to include your work links.</p>
 <h2 id="what-joining-does">What joining does</h2>
 <ul><li><strong>Settings:</strong> a pack value fills a setting you haven't set, or one the pack set before. A setting you changed yourself is kept, and joining says so. Only team-wide settings are taken (organizations, stand-up, workdays, Copilot defaults and folders, the sandbox's extra hosts, Grafana, VPN check). Tokens, your calendar, and the sandbox's doors (<strong>Never ask before</strong>, the &quot;always&quot; rules) are never taken from a pack: those stay your own decisions.</li><li><strong>The sandbox:</strong> extra hosts in <code>COPILOT_DOMAINS</code> or <code>COPILOT_VM_IMAGES</code> are named when you join, so you know the sandbox may reach them.</li><li><strong>Links</strong> are added to your work links. Links you already have aren't added twice.</li><li><strong>Skills</strong> are copied to <code>~/.copilot/skills</code>, so Copilot has them in every repo. A skill you already have with the same name is left alone.</li></ul>
+<ul><li><strong>Suggested rules</strong> (<code>gate.suggest</code>): kinds of change the team lets through without asking, such as a docs repo's everyday changes (<code>repo:acme/docs</code>) or one Jira project's tickets (<code>jira:PAY</code>). They're offered under Settings → Copilot → Let through without asking, each with <strong>Add</strong>; the pack never changes your gate itself.</li><li><strong>Jira</strong> (<code>jira.site</code>): joining tells you which site to log in to with <code>acli</code>.</li></ul>
 <ul><li><strong>Plugins</strong> are offered, never added unseen. They show under Settings → Plugins → From *your team*, each with <strong>Look at it</strong>, and <code>clearsky add --team</code> goes through them in a terminal. You see what each one reaches before it's added, like any plugin.</li></ul>
 <p>A git pack is fetched with your own git login (and your gh login for github.com), so a private team repo works without a token. What you joined is remembered in <code>~/.config/clearsky/team.json</code>.</p>
 <h2 id="plugins-in-a-pack">Plugins in a pack</h2>
