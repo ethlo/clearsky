@@ -16,3 +16,4 @@ docker-compose.override.yml
 .vscode/
 .claude/agents/
 .claude/commands/
+_site/

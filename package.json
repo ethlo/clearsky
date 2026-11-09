@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node bin/clearsky.mjs serve",
     "test": "node --test test/*.test.mjs plugins/*/test/*.test.mjs",
-    "docs": "node scripts/render-docs.mjs"
+    "docs": "node scripts/render-docs.mjs",
+    "site": "node scripts/build-site.mjs"
   },
   "files": ["bin", "lib", "web", "scripts", "contrib", "docs", "plugins", "README.md", "LICENSE"],
   "engines": { "node": ">=22" },
