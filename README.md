@@ -78,7 +78,7 @@ The config is read from `./.env`, then the repo's `.env`, then `~/.config/clears
 
 ### Team packs
 
-If your team shares a setup, join it: `clearsky join <git repo, https link or file>` (or paste it on the welcome page, or in Settings → General). It fills in the organizations, stand-up time, Copilot defaults, links and skills the team agreed on, and keeps anything you set yourself. Tokens and the sandbox's doors are never part of a pack. See [docs/team-pack.md](docs/team-pack.md).
+If your team shares a setup, join it: `clearsky join <git repo, https link or file>` (or paste it on the welcome page, or in Settings → General). It fills in the organizations, stand-up time, Copilot defaults, links and skills the team agreed on, and keeps anything you set yourself. Tokens and the sandbox's doors are never part of a pack. A pack can also list the team's plugins, pinned to versions, which you look at and add yourself. See [docs/team-pack.md](docs/team-pack.md), which also describes a setup for using Clearsky at a company: Clearsky and plugins in public repos, the company's config in a private one.
 
 ## Use
 
@@ -118,7 +118,9 @@ clearsky add npm:clearsky-weather@1.2.0          # an npm package, fetched witho
 clearsky add ./my-plugin                         # a folder here
 clearsky add flyt                                # one that ships with Clearsky
 clearsky plugins                                 # what's added, and what ships with Clearsky
-clearsky update [<name>]                         # fetch again from where it came from
+clearsky update [<name>]                         # fetch again from where it came from (a #tag stays put)
+clearsky update --check                          # newer version tags, without fetching code
+clearsky update <name> --to v1.3.0               # move it to another tag, branch or commit
 clearsky remove <name> [--data]
 ```
 

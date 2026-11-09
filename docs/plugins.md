@@ -19,6 +19,24 @@ Settings → Plugins lists every plugin the same way, Clearsky's own GitHub, Jir
 
 `clearsky plugins` lists what's added and what ships with Clearsky, `clearsky update [name]` fetches again from where it came from, and `clearsky remove name` takes it out (`--data` also removes what it kept).
 
+A private repo on github.com works with your gh login: while fetching, git asks `gh auth git-credential` for it. Nothing is stored and there's no token to make. Other hosts use whatever login your git has.
+
+## Versions
+
+Where you add a plugin from says which version you get:
+
+| You add | You get | Update |
+|---|---|---|
+| `github:someone/clearsky-weather` | the newest commit on its default branch | takes the new commits |
+| `github:someone/clearsky-weather#v1.2.0` | that tag | fetches v1.2.0 again; it stays there |
+| `github:someone/clearsky-weather#<commit>` | that commit | stays there |
+| `npm:clearsky-weather@1.2.0` | that version | stays there |
+| `npm:clearsky-weather` | npm's latest | takes a newer one |
+
+`clearsky update --check` (or **Check for updates** on its page in Settings) looks at the repo's tags and branch without fetching any code, and lists newer version tags. `clearsky update weather --to v1.3.0` moves it to one, and `--to ''` goes back to following the branch. In Settings each newer tag gets a **Look at** button.
+
+Every update is shown before it's taken. If the new version reaches anything the old one didn't (a host, a program, a file, a door, a secret setting, or running outside the sandbox), Settings shows it and the terminal asks. A tag that comes back as different code from when you added it is called out, since a published tag shouldn't move. `~/.config/clearsky/plugins.json` records each plugin's source, commit and a hash of its files, so it doubles as your lock file: a plugin whose files changed is not loaded.
+
 ## Where things live
 
 | What | Where |
@@ -80,7 +98,7 @@ clearsky-weather/
 | `entry` | Its module, inside the folder. |
 | `area` | `work` or `personal` (default): which tab its page is on. |
 | `panel` | Its page: `title`, `zone` (`needs` puts its rows with what needs you, `track` keeps them on its page), `view: "table"` for an inbox, and `page: false` for a `needs` plugin whose rows need no page of their own (Slack's are in Mentions). |
-| `settings` | Fields on its page under Settings → Plugins, saved to `.env`. Only these reach the plugin. A field can have a `pattern` (a regular expression Settings checks) with a `patternHint`, a `link` (`{ "label", "url" }`) to where you get the value, and a `type`: `"list"` or `"map"` get a row per item (a map's rows are a name and a value), saved as `a, b` and `a=x, b=y`. `item` and `valueItem` are examples shown in an empty row, and `empty` says what an empty list means. |
+| `settings` | Fields on its page under Settings → Plugins, saved to `.env`. Only these reach the plugin. `"team": true` lets a [team pack](team-pack.md) set one (never a secret). A field can have a `pattern` (a regular expression Settings checks) with a `patternHint`, a `link` (`{ "label", "url" }`) to where you get the value, and a `type`: `"list"` or `"map"` get a row per item (a map's rows are a name and a value), saved as `a, b` and `a=x, b=y`. `item` and `valueItem` are examples shown in an empty row, and `empty` says what an empty list means. |
 | `enabledWhen` | Settings that must be filled in before Clearsky fetches anything. |
 | `hosts` | All it may reach. `*.example.com` covers the subdomains. |
 | `clis` | Programs it may run through `ctx.run`. |
@@ -133,7 +151,7 @@ A door has to be listed in the manifest's `doors`, needs `outside` (a sandboxed 
 
 ## Publishing one
 
-Put the folder in a git repo, and people add it with `clearsky add github:you/clearsky-weather`. Tag releases so they can pin one (`#v1.0.0`). For npm, add a `package.json` with a `files` list that has `clearsky-plugin.json` and your code, and `npm publish`; people add it with `clearsky add npm:clearsky-weather`. The plugins in `plugins/` each have their own `package.json`, so they can be published on their own the same way.
+Put the folder in a git repo, and people add it with `clearsky add github:you/clearsky-weather`. Tag releases as `v1.2.0` (any `vX.Y.Z` or `X.Y.Z` tag counts) so people can pin one and see when there's a newer one, and don't move a tag once it's out. A plugin that's only for your company can live in a private repo, or in the team pack's own repo (see [team packs](team-pack.md)). For npm, add a `package.json` with a `files` list that has `clearsky-plugin.json` and your code, and `npm publish`; people add it with `clearsky add npm:clearsky-weather`. The plugins in `plugins/` each have their own `package.json`, so they can be published on their own the same way.
 
 ## What's next
 

@@ -33,7 +33,11 @@ clearsky-team/
   "links": [
     { "name": "Team", "links": [{ "title": "Board", "url": "https://acme.atlassian.net/jira/software/projects/PAY/boards/12" }] }
   ],
-  "skills": "skills"
+  "skills": "skills",
+  "plugins": [
+    "github:someone/clearsky-weather#v1.2.0",
+    { "from": "./plugins/deploys", "note": "Our deploy board" }
+  ]
 }
 ```
 
@@ -46,4 +50,24 @@ clearsky-team/
 - **Links** are added to your work links. Links you already have aren't added twice.
 - **Skills** are copied to `~/.copilot/skills`, so Copilot has them in every repo. A skill you already have with the same name is left alone.
 
-A git pack is fetched with your own git login, so a private team repo works without a token. What you joined is remembered in `~/.config/clearsky/team.json`.
+- **Plugins** are offered, never added unseen. They show under Settings → Plugins → From *your team*, each with **Look at it**, and `clearsky add --team` goes through them in a terminal. You see what each one reaches before it's added, like any plugin.
+
+A git pack is fetched with your own git login (and your gh login for github.com), so a private team repo works without a token. What you joined is remembered in `~/.config/clearsky/team.json`.
+
+## Plugins in a pack
+
+Each entry is anything `clearsky add` takes, or `./folder` for a plugin kept in the pack's own repo (fetched from that repo, with your login, like any git plugin). A plugin only your company uses can live there or in a private repo of its own; nothing of it needs to be public.
+
+The pin in the pack is the team's version. Pin with a tag (`#v1.2.0`); when the team moves it to `#v1.3.0` and you update the pack, the plugin shows "you have another version" with **Look at the team's version**. A plugin without a pin follows its default branch for everyone.
+
+A plugin can let a team set some of its settings by marking them `"team": true` in its manifest (never a secret). Put the values in the pack's `settings` like any other. If you haven't added the plugin yet, they wait in `team.json` and are filled in at the first start after you add it. Your own values win, as with every team setting.
+
+## Using Clearsky at work
+
+A setup that keeps the company out of every public repo:
+
+1. **Clearsky** and any general plugins are public repos, with nothing about the company in them.
+2. **A work repo** (private, in the company's GitHub) holds `clearsky-team.json`: organizations, Jira site, stand-up, Copilot's folders and hosts, links, skills, and the list of plugins with their versions. Work-only plugins live in it under `plugins/`, or in private repos of their own.
+3. **Each person** installs Clearsky, logs in with `gh auth login` and `acli`, and runs `clearsky join https://github.com/acme/clearsky-team` (or pastes it on the welcome page). Logins stay on each laptop; the work repo holds no secrets.
+
+Changing the team's setup is a pull request to the work repo. People get it with **Update** in Settings → General → Team pack, or `clearsky join`.

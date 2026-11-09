@@ -5,7 +5,8 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
 import { execFileSync } from 'node:child_process';
-import { parseManifest, parseSpec, addPlugin, removePlugin, listPlugins, loadPlugins, migrateBundled, readRegistry, fetchPlugin, readManifest, codeDir, BUNDLED, treeHash } from '../lib/plugins.mjs';
+import { parseManifest, parseSpec, addPlugin, removePlugin, listPlugins, loadPlugins, migrateBundled, readRegistry, fetchPlugin, readManifest, codeDir, BUNDLED, treeHash,
+  sourceKey, withRef, pinOf, ghCredential, remoteRefs, checkPlugin, updatePlugin, preparePlugin, reachChanges, versionOf } from '../lib/plugins.mjs';
 import { sandboxedSource, runPlugin, pluginSrtSettings, cleanEnv, srtWrap } from '../lib/plugin-sandbox.mjs';
 import { hook, asList } from '../lib/sources.mjs';
 
@@ -211,4 +212,110 @@ test('every plugin that ships with Clearsky has a valid manifest and loads', asy
   assert.deepEqual(errors, []);
   assert.equal(sources.get('flyt').panel.title, 'School');
   assert.ok(treeHash(join(BUNDLED, 'flyt')).startsWith('sha256-'));
+});
+
+// ---------------------------------------------------------------- versions
+
+const gitEnv = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.com', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.com' };
+// A plugin's repo with releases: `release(manifest, tag)` commits and tags one.
+function pluginRepo() {
+  const work = tmp('work'), bare = join(tmp('bare'), 'weather.git');
+  const g = (...a) => execFileSync('git', ['-C', work, ...a], { env: gitEnv }).toString().trim();
+  g('init', '-q', '-b', 'main');
+  execFileSync('git', ['init', '-q', '--bare', '-b', 'main', bare]);
+  g('remote', 'add', 'origin', bare);
+  const release = (manifest, tag) => {
+    writeFileSync(join(work, 'clearsky-plugin.json'), JSON.stringify({ name: 'weather', clearsky: 1, ...manifest }));
+    writeFileSync(join(work, 'source.mjs'), `export default { fetch() { return { v: ${JSON.stringify(manifest.version)} }; } };`);
+    g('add', '.'); g('commit', '-q', '--allow-empty', '-m', manifest.version || 'x');
+    if (tag) g('tag', '-f', '-a', tag, '-m', tag);
+    g('push', '-q', '-f', 'origin', 'main', '--tags');
+    return g('rev-parse', 'HEAD');
+  };
+  return { url: `file://${bare}`, release, g };
+}
+
+test('a source at another version is the same plugin; pins are read from the ref', () => {
+  assert.deepEqual(parseSpec('https://git.example.com/team/tools.git/plugins/deploys#v1'), { kind: 'git', url: 'https://git.example.com/team/tools.git', sub: 'plugins/deploys', ref: 'v1', from: 'https://git.example.com/team/tools.git/plugins/deploys#v1' });
+  assert.throws(() => parseSpec('https://git.example.com/team/tools.git/../x'), /outside the repo/);
+  assert.equal(sourceKey('github:acme/weather#v1.0.0'), sourceKey('https://github.com/acme/weather.git#v2.0.0'));
+  assert.notEqual(sourceKey('github:acme/weather/a'), sourceKey('github:acme/weather/b'));
+  assert.equal(sourceKey('npm:@acme/w@1.0.0'), sourceKey('npm:@acme/w'));
+  assert.equal(withRef('github:acme/weather/sub#v1', 'v2'), 'github:acme/weather/sub#v2');
+  assert.equal(withRef('github:acme/weather#v1', ''), 'github:acme/weather');
+  assert.equal(withRef('npm:@acme/w@1.0.0', '1.1.0'), 'npm:@acme/w@1.1.0');
+  assert.throws(() => withRef('./here', 'v1'), /git or npm/);
+  assert.equal(pinOf(parseSpec('github:a/b')), 'default');
+  assert.equal(pinOf(parseSpec('github:a/b#v1.2.0')), 'ref');
+  assert.equal(pinOf(parseSpec(`github:a/b#${'a'.repeat(40)}`)), 'commit');
+  assert.equal(pinOf(parseSpec('npm:w@1.2.0')), 'version');
+  assert.equal(pinOf(parseSpec('npm:w@^1.2.0')), 'range');
+  assert.deepEqual(versionOf('v1.2'), [1, 2, 0]);
+  assert.equal(versionOf('nightly'), null);
+});
+
+test('a private repo on github.com is fetched with your gh login, nothing else', () => {
+  assert.deepEqual(ghCredential('https://github.com/acme/private.git', { has: () => true }), ['-c', 'credential.https://github.com.helper=!gh auth git-credential']);
+  assert.deepEqual(ghCredential('https://github.com/acme/private.git', { has: () => false }), []);
+  assert.deepEqual(ghCredential('https://git.example.com/acme/private.git', { has: () => true }), []);
+});
+
+test('tags, branches and the default branch, read without fetching code', async () => {
+  const sha = (c) => c.repeat(40);
+  const run = async () => ({ stdout: [`ref: refs/heads/main\tHEAD`, `${sha('a')}\tHEAD`, `${sha('a')}\trefs/heads/main`, `${sha('b')}\trefs/tags/v1.0.0`, `${sha('c')}\trefs/tags/v1.0.0^{}`, `${sha('d')}\trefs/tags/v1.1.0`].join('\n') });
+  const r = await remoteRefs('https://example.com/x.git', { run });
+  assert.deepEqual(r, { tags: { 'v1.0.0': sha('c'), 'v1.1.0': sha('d') }, heads: { main: sha('a') }, head: sha('a'), defaultBranch: 'main' });
+});
+
+test('pinned to a tag: stays there, newer tags are offered, a moved tag is called out', async () => {
+  const p = paths(), repo = pluginRepo();
+  const one = repo.release({ version: '1.0.0', hosts: ['api.example.com'] }, 'v1.0.0');
+  const r = await addPlugin(`${repo.url}#v1.0.0`, { paths: p });
+  assert.equal(r.commit, one);
+  assert.equal(r.pin, 'ref');
+  repo.release({ version: '1.1.0', hosts: ['api.example.com'] }, 'v1.1.0');
+  let c = await checkPlugin('weather', { paths: p });
+  assert.equal(c.pin, 'tag');
+  assert.deepEqual(c.newer.map((x) => x.tag), ['v1.1.0']);
+  assert.equal(c.newer[0].from, `${repo.url}#v1.1.0`);
+  assert.equal(c.moved, false);
+  // Update without a new pin fetches v1.0.0 again; nothing moves.
+  assert.equal((await updatePlugin('weather', { paths: p })).commit, one);
+  // Moving the pin: the same plugin at another tag.
+  const moved = await updatePlugin('weather', { paths: p, to: 'v1.1.0' });
+  assert.equal(moved.from, `${repo.url}#v1.1.0`);
+  assert.equal(moved.version, '1.1.0');
+  // Someone moves the v1.1.0 tag to other code: checking and updating both say so.
+  repo.release({ version: '1.1.0', hosts: ['api.example.com'] }, 'v1.1.0');
+  c = await checkPlugin('weather', { paths: p });
+  assert.equal(c.moved, true);
+  const prep = await preparePlugin(`${repo.url}#v1.1.0`, { paths: p });
+  assert.match(prep.warning, /tag v1\.1\.0 now points to other code/);
+  prep.discard();
+});
+
+test('following the branch: Update takes new commits, but not wider reach unseen', async () => {
+  const p = paths(), repo = pluginRepo();
+  repo.release({ version: '1.0.0', hosts: ['api.example.com'] });
+  await addPlugin(repo.url, { paths: p });
+  let c = await checkPlugin('weather', { paths: p });
+  assert.equal(c.pin, 'default');
+  assert.equal(c.behind, false);
+  const two = repo.release({ version: '1.0.1', hosts: ['api.example.com'] });
+  c = await checkPlugin('weather', { paths: p });
+  assert.equal(c.behind, true);
+  assert.equal(c.latest, two);
+  assert.equal((await updatePlugin('weather', { paths: p })).commit, two);
+  repo.release({ version: '1.1.0', hosts: ['api.example.com', 'tracker.example.net'] });
+  await assert.rejects(updatePlugin('weather', { paths: p }), /also reaches tracker\.example\.net/);
+  assert.equal(readRegistry(p.registry).plugins.weather.commit, two);
+  assert.equal((await updatePlugin('weather', { paths: p, accept: true })).version, '1.1.0');
+});
+
+test('what a new version reaches that the old one didn\'t', () => {
+  const was = parseManifest({ name: 'ww', hosts: ['a.example.com'], settings: { W_URL: { label: 'u' } } });
+  assert.equal(reachChanges(was, was).wider, false);
+  const c = reachChanges(was, parseManifest({ name: 'ww', hosts: ['a.example.com', 'b.example.com'], settings: { W_URL: { label: 'u' }, W_KEY: { label: 'k', secret: true } } }));
+  assert.deepEqual([c.hosts, c.settings, c.wider], [['b.example.com'], ['W_KEY'], true]);
+  assert.equal(reachChanges(was, parseManifest({ name: 'ww', hosts: ['a.example.com'], settings: { W_URL: {}, W_SITE: { label: 's' } } })).wider, false);
 });

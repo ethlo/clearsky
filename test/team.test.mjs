@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
-import { packKind, parsePack, planSettings, joinPack, joinSummary, exportPack } from '../lib/team.mjs';
+import { packKind, parsePack, planSettings, joinPack, joinSummary, exportPack, packPlugins, pluginOffers, applyWaiting, readTeam } from '../lib/team.mjs';
 import { readEnvFile, writeEnvFile, validate } from '../lib/settings.mjs';
 import { readLinks, saveLinks } from '../lib/links.mjs';
 
@@ -80,4 +80,47 @@ test('export makes a pack from your settings, without secrets or personal links'
     links: { groups: [{ name: 'Daily', area: 'work', links: [{ title: 'Board', url: 'https://example.com/b' }] }, { name: 'Home', area: 'personal', links: [{ title: 'Bank', url: 'https://bank.example' }] }] } });
   assert.deepEqual(p.settings, { GITHUB_ORGS: 'acme' });
   assert.deepEqual(p.links.map((g) => g.name), ['Daily']);
+});
+
+test('a pack lists plugins; a folder in the pack is fetched from the pack\'s own repo', () => {
+  const pack = parsePack(JSON.stringify({ plugins: ['github:someone/clearsky-weather#v1.2.0', { from: './plugins/deploys', note: 'Deploy board' }, './../escape', 'not a plugin', { nope: 1 }, 'slack'] }));
+  assert.equal(pack.plugins.length, 5);
+  const git = packPlugins(pack, 'https://github.com/acme/clearsky-team');
+  assert.deepEqual(git.plugins.map((p) => p.from), ['github:someone/clearsky-weather#v1.2.0', 'https://github.com/acme/clearsky-team.git/plugins/deploys', 'slack']);
+  assert.equal(git.plugins[1].note, 'Deploy board');
+  assert.equal(git.plugins[1].inPack, './plugins/deploys');
+  assert.deepEqual(git.bad, ['./../escape', 'not a plugin']);
+  assert.equal(packPlugins(pack, 'git@github.com:acme/clearsky-team.git').plugins[1].from, 'git@github.com:acme/clearsky-team.git/plugins/deploys');
+  assert.equal(packPlugins(pack, '/home/u/team/clearsky-team.json').plugins[1].from, '/home/u/team/plugins/deploys');
+  assert.ok(packPlugins(pack, 'https://example.com/clearsky-team.json').bad.includes('./plugins/deploys'), 'a pack behind a plain link has no folder to take plugins from');
+});
+
+test('the team\'s plugins next to yours: added, another version, or new', () => {
+  const offers = pluginOffers([{ from: 'github:a/weather#v1.1.0' }, { from: 'github:a/deploys' }, { from: 'github:a/notes#v2' }], {
+    weather: { from: 'github:a/weather#v1.0.0', version: '1.0.0' }, notes: { from: 'github:a/notes#v2' } });
+  assert.deepEqual(offers.map((o) => [o.from, o.state, o.name || null]), [['github:a/weather#v1.1.0', 'other-version', 'weather'], ['github:a/deploys', 'new', null], ['github:a/notes#v2', 'added', 'notes']]);
+  assert.match(joinSummary({ written: [], kept: [], links: 0, skills: { installed: [], skipped: [] }, widens: [], ignored: [], plugins: offers, waiting: [] }), /offers 1 plugin to add \(github:a\/deploys\); uses another version of weather/);
+});
+
+test('a plugin\'s team settings: set when you join if you have it, else once you add it; never a secret', async () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'clearsky-team-'));
+  const conf = join(tmp, 'conf'), envFile = join(conf, '.env'), packFile = join(tmp, 'clearsky-team.json');
+  writeFileSync(packFile, JSON.stringify({ name: 'Ops', settings: { DEPLOYS_URL: 'https://deploys.acme.example', DEPLOYS_TOKEN: 'nope', WEATHER_PLACE: 'Oslo' }, plugins: ['./plugins/deploys'] }));
+  // Clearsky knows weather (added; WEATHER_PLACE is a team setting) and DEPLOYS_TOKEN (a secret); deploys isn't added yet.
+  let fields = { WEATHER_PLACE: { team: true }, DEPLOYS_TOKEN: { secret: true } };
+  const io = { readEnv: () => readEnvFile(envFile), writeEnv: (v) => writeEnvFile(envFile, v), validate: (w) => w };
+  const teamKey = (k) => !!fields[k]?.team, known = (k) => !!fields[k];
+  const r = await joinPack(packFile, { confDir: conf, skillsDir: join(tmp, 'skills'), ...io, readLinks: () => ({ groups: [] }), saveLinks: () => {}, teamKey, known });
+  assert.deepEqual(r.written, ['WEATHER_PLACE']);
+  assert.deepEqual(r.waiting, ['DEPLOYS_URL']);
+  assert.deepEqual(r.ignored, ['DEPLOYS_TOKEN']);
+  assert.deepEqual(r.plugins.map((p) => [p.from, p.state]), [[join(tmp, 'plugins', 'deploys'), 'new']]);
+  assert.equal(readEnvFile(envFile).DEPLOYS_URL, undefined);
+  // You add deploys; at the next start its settings are known, and the pack's value is filled in.
+  fields = { ...fields, DEPLOYS_URL: { team: true } };
+  assert.deepEqual(applyWaiting(conf, { teamKey, ...io }), ['DEPLOYS_URL']);
+  assert.equal(readEnvFile(envFile).DEPLOYS_URL, 'https://deploys.acme.example');
+  assert.equal(readTeam(conf).waiting, undefined);
+  assert.equal(readTeam(conf).applied.DEPLOYS_URL, 'https://deploys.acme.example');
+  assert.deepEqual(applyWaiting(conf, { teamKey, ...io }), []);
 });
