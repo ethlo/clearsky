@@ -29,6 +29,18 @@ test('parseUsage sums model calls once and keeps the latest checkpoint and conte
   const text = [rec('a', 100, 3), rec('b', 200, 7), rec('a', 100, 3),
     JSON.stringify({ type: 'session.usage_checkpoint', data: { totalPremiumRequests: 4 } }),
     JSON.stringify({ type: 'tool.execution_complete', data: { toolTelemetry: { metrics: { context_current_tokens: 900, context_token_limit: 200000 } } } })].join('\n');
-  assert.deepEqual(parseUsage(text), { input: 300, cached: 290, output: 10, calls: 2, premium: 4, context: 900, limit: 200000, models: [], credits: null });
+  assert.deepEqual(parseUsage(text), { input: 300, cached: 280, output: 10, calls: 2, premium: 4, context: 900, limit: 200000, models: [], credits: null });
   assert.equal(parseUsage(''), null);
+});
+
+test('parseUsage counts only cache reads as cached input', () => {
+  const rec = (id, usage) => JSON.stringify({ type: 'session.usage_record', data: { usage: { outputTokens: 1, accounting: { usageId: id }, ...usage } } });
+  // First call writes the cache, the second reads it back: half the input was cached, not all.
+  const u = parseUsage([rec('a', { inputTokens: 1000, cacheWriteTokens: 1000 }), rec('b', { inputTokens: 1000, cacheReadTokens: 1000 })].join('\n'));
+  assert.equal(u.input, 2000);
+  assert.equal(u.cached, 1000);
+  // A log whose inputTokens leaves the cached part out still adds up to at most 100%.
+  const v = parseUsage(rec('c', { inputTokens: 50, cacheReadTokens: 900, cacheWriteTokens: 50 }));
+  assert.equal(v.input, 1000);
+  assert.equal(v.cached, 900);
 });
