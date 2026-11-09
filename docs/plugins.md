@@ -1,6 +1,6 @@
 # Plugins
 
-Clearsky ships as a core (GitHub, Jira, calendars, Copilot, links) and everything else is a plugin you add. A plugin is a plain folder: a `clearsky-plugin.json` that says what it is and what it reaches, and one ES module that does the work. There's no build step and nothing to `npm install`; a plugin has no dependencies, like Clearsky itself. These have a repo of their own and are in Clearsky's catalog (`plugins/catalog.json`): Slack, Slack (MCP), Confluence, Grafana and School. `clearsky add slack` adds one from its repo, at the version the catalog pins.
+Clearsky ships as a core (GitHub, Jira, calendars, Copilot, links) and everything else is a plugin you add. A plugin is a plain folder: a `clearsky-plugin.json` that says what it is and what it reaches, and one ES module that does the work. There's no build step and nothing to `npm install`; a plugin has no dependencies, like Clearsky itself. These have a repo of their own and are in Clearsky's catalog (`plugins/catalog.json`): Slack (MCP), Confluence, Grafana and Visma Flyt Skole. `clearsky add slack-mcp` adds one from its repo, at the version the catalog pins.
 
 ## Adding one
 
@@ -161,7 +161,7 @@ Put the folder in a git repo, and people add it with `clearsky add github:you/cl
 { "plugins": [{ "name": "flyt", "aka": ["visma-flyt"], "folder": "clearsky-visma-flyt", "from": "github:ethlo/clearsky-visma-flyt#v1.0.0" }] }
 ```
 
-`clearsky add visma-flyt` is then `clearsky add github:ethlo/clearsky-visma-flyt#v1.0.0`. A new release of a plugin is a new tag in its repo and a one-line change to the pin here. Anyone who added a plugin from its folder in `plugins/` (before it had a repo) keeps it working from that folder, and gets **Move to its repo** in Settings → Plugins (or `clearsky add visma-flyt`). Once a folder is deleted from `plugins/`, a plugin still added from it says where it lives now.
+`clearsky add visma-flyt` is then `clearsky add github:ethlo/clearsky-visma-flyt#v1.0.0`. A new release of a plugin is a new tag in its repo and a one-line change to the pin here. Anyone who added a plugin from its folder in `plugins/` (before it had a repo) keeps it working from that folder, and gets **Move to its repo** in Settings → Plugins (or `clearsky add visma-flyt`). Once a folder is deleted from `plugins/`, a plugin still added from it says where it lives now. A plugin that's gone for good is listed under `retired` with what to use instead (`{ "name": "slack", "use": "slack-mcp", "why": "…" }`): anyone who still has it added is told, and its old name adds the new one.
 
 A plugin's tests that load it the way Clearsky does need a Clearsky checkout: `test/core.mjs` finds it in `CLEARSKY_CORE`, or in the Clearsky the folder sits in.
 

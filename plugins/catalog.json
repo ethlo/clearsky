@@ -1,5 +1,5 @@
 {
-  "about": "Plugins that have a home of their own. `clearsky add <name>` adds one from here, at the version pinned below. Each folder next to this file is that plugin's code, kept here until its repo exists; scripts/split-plugins.mjs turns a folder into a repo.",
+  "about": "Plugins that have a home of their own. `clearsky add <name>` adds one from here, at the version pinned below. Each folder next to this file is that plugin's code, kept here until its repo exists; scripts/split-plugins.mjs turns a folder into a repo. `retired` names plugins that are gone, and what to use instead.",
   "plugins": [
     {
       "name": "flyt",
@@ -10,11 +10,6 @@
       "from": "github:ethlo/clearsky-visma-flyt#v1.0.0"
     },
     {
-      "name": "slack",
-      "folder": "clearsky-slack",
-      "from": "github:ethlo/clearsky-slack#v1.0.0"
-    },
-    {
       "name": "grafana",
       "folder": "clearsky-grafana",
       "from": "github:ethlo/clearsky-grafana#v1.0.0"
@@ -22,12 +17,22 @@
     {
       "name": "slack-mcp",
       "folder": "clearsky-slack-mcp",
-      "from": "github:ethlo/clearsky-slack-mcp#v1.0.0"
+      "from": "github:ethlo/clearsky-slack-mcp#v1.0.0",
+      "aka": [
+        "slack"
+      ]
     },
     {
       "name": "confluence",
       "folder": "clearsky-confluence",
       "from": "github:ethlo/clearsky-confluence#v1.0.0"
+    }
+  ],
+  "retired": [
+    {
+      "name": "slack",
+      "use": "slack-mcp",
+      "why": "The token-based Slack plugin is retired: Slack (MCP) does the same mentions with a browser login and no token, and gives chats Slack to read too."
     }
   ]
 }

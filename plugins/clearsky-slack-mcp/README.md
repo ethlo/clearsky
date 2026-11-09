@@ -20,9 +20,9 @@ Then `clearsky add slack-mcp` (or Add under Settings → Plugins), fill in **Sla
 
 The client ID is your workspace's: it lives in your settings file only, never in a repo.
 
-## Next to the Slack plugin
+## The old Slack plugin
 
-The `slack` plugin does mentions with a user token you paste. This one needs no token and also gives chats Slack to read. Use one of them for mentions, or you'll see each twice.
+This replaces the token-based `slack` plugin, which is retired. If you have that one, add this one and remove it (`clearsky remove slack`), or you'll see each mention twice. `clearsky add slack` now adds this one.
 
 ## Develop
 

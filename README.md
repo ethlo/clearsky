@@ -17,7 +17,7 @@ The first time, Clearsky opens a **welcome page** that checks what this machine 
 
 - `clearsky app` opens it in a window of its own (it's in your app menu too).
 - If your team has a shared setup, join it: `clearsky join <the team's repo>` (see [Team packs](#team-packs)).
-- Add what else you use: `clearsky add slack`, `clearsky add grafana --trust`, `clearsky add visma-flyt --trust` (see [Plugins](#plugins)).
+- Add what else you use: `clearsky add slack-mcp --trust`, `clearsky add grafana --trust`, `clearsky add visma-flyt --trust` (see [Plugins](#plugins)).
 - Run `clearsky doctor` if something looks off.
 
 Everything you set is in `~/.config/clearsky/` and can be changed under **Settings**.
@@ -80,8 +80,7 @@ The welcome page (`/welcome`) shows what this machine has (Node, git, gh, acli, 
   - **Today's schedule** under Now / Next shows the day as a timeline: meetings as blocks (overlaps on their own line), your free slot in green, the rest of the workday, and a line for now. Hover over a meeting for its details (time, place, organizer, link, description); click to keep them open. The calendar names below the timeline hide or show each one (saved as `CALENDAR_HIDDEN`); a hidden calendar doesn't take your time either.
   - Times are 24-hour unless you pick 12-hour under Settings → General (`CLEARSKY_TIME_FORMAT=12`).
   - **iCal link:** in Google Calendar, open Settings, pick your calendar, then **Integrate calendar**, and copy **Secret address in iCal format** into `GOOGLE_CALENDAR_ICS`. Several addresses can be given, separated by spaces. Workspace admins often turn this off.
-- **Slack (optional):** the Slack plugin (`clearsky add slack`, or Settings → Plugins), with a user token; its [README](plugins/clearsky-slack/README.md) shows how to make one.
-- **Slack through MCP (optional, no token):** `clearsky add slack-mcp` talks to Slack's own MCP server read only. You log in from Settings in your browser, Copilot chats read Slack with `door slack …`, and mentions show like the token plugin's. See [clearsky-slack-mcp](plugins/clearsky-slack-mcp/README.md).
+- **Slack (optional, no token):** `clearsky add slack-mcp --trust` talks to Slack's own MCP server read only. You log in from Settings in your browser, Copilot chats read Slack with `door slack …`, and mentions show under Needs you. See [clearsky-slack-mcp](plugins/clearsky-slack-mcp/README.md).
 - **Confluence (optional, no token):** `clearsky add confluence` lets Copilot chats search and read Confluence with `confluence …`, read only, through Atlassian's MCP server. You log in from Settings in your browser; Clearsky registers itself as a client, so there's no app or token to create. Jira stays on `acli`. See [clearsky-confluence](plugins/clearsky-confluence/README.md).
 
 The Settings page (`/settings`) runs `gh auth login --web` and `acli jira auth login --web` for you. Pasted tokens and URLs are written to `~/.config/clearsky/.env` (mode 600) and never shown back. The page only listens on 127.0.0.1, and changes need a per-run token, so other websites can't use it. The config is read from `./.env`, then the repo's `.env`, then `~/.config/clearsky/.env`. Real environment variables override all of them.
@@ -125,14 +124,13 @@ Clearsky's core is GitHub, Jira, your calendars, Copilot and your links. Everyth
 
 | Name | What it does | Repo |
 | --- | --- | --- |
-| `slack` | Slack messages that @mention you | [clearsky-slack](plugins/clearsky-slack/) |
 | `grafana` | Logs and metrics for Copilot chats, read only, through `grafana …` | [clearsky-grafana](plugins/clearsky-grafana/) |
 | `visma-flyt` | Messages, forms and weekly plans from Visma Flyt Skole | [clearsky-visma-flyt](plugins/clearsky-visma-flyt/) |
 | `slack-mcp` | Slack through Slack's MCP server: mentions and read-only `door slack …` for chats, no token | [clearsky-slack-mcp](plugins/clearsky-slack-mcp/) |
 | `confluence` | Read-only Confluence search and pages for chats, through Atlassian's MCP server | [clearsky-confluence](plugins/clearsky-confluence/) |
 
 ```
-clearsky add slack                               # from the catalog: its repo, at the pinned tag
+clearsky add slack-mcp                           # from the catalog: its repo, at the pinned tag
 clearsky add github:someone/clearsky-weather     # a GitHub repo (#ref and /sub/folder work too)
 clearsky add https://git.example.com/me/plug.git # any git repo, with your own git login
 clearsky add npm:clearsky-weather@1.2.0          # an npm package, fetched without running its scripts

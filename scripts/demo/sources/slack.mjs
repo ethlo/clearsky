@@ -1,6 +1,8 @@
-// Slack: messages that @mention you, through search.messages with your user token.
+// Slack for the demo and the tests: mentions from a made-up Slack (SLACK_API_URL), shaped like
+// the Slack plugins' rows. Real Slack is the slack-mcp plugin (plugins/clearsky-slack-mcp).
+// The demo copies this file to its ~/.config/clearsky/sources; it needs no token.
 
-export function slackText(text, me) {
+function slackText(text, me) {
   const plain = (text || '')
     .replaceAll(`<@${me}>`, '@you')
     .replace(/<@[A-Z0-9]+(?:\|([^>]+))?>/g, (_, name) => `@${name || 'someone'}`)
@@ -16,7 +18,7 @@ export function slackText(text, me) {
 
 // The messages from the last `days` days that mention you, newest first. `api` is Slack's Web API
 // address (tests and the demo point it elsewhere).
-export async function fetchMentions({ token, api = 'https://slack.com/api', days = 14, now = Date.now(), fetchImpl = fetch }) {
+async function fetchMentions({ token, api = 'https://slack.com/api', days = 14, now = Date.now(), fetchImpl = fetch }) {
   async function slack(method, params = {}) {
     const url = new URL(`${api.replace(/\/$/, '')}/${method}`);
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
@@ -45,3 +47,37 @@ export async function fetchMentions({ token, api = 'https://slack.com/api', days
     }));
   return { user: auth.user, team: auth.team, mentions };
 }
+
+const recent = (iso, hours, now = Date.now()) => now - Date.parse(iso) < hours * 36e5;
+const ago = (iso) => { const m = Math.max(1, Math.round((Date.now() - Date.parse(iso)) / 6e4)); return m < 60 ? `${m}m ago` : m < 1440 ? `${Math.round(m / 60)}h ago` : `${Math.round(m / 1440)}d ago`; };
+
+export default {
+  name: 'slack',
+  label: 'Slack',
+  area: 'work',
+  panel: { title: 'Slack', zone: 'needs', page: false },
+  enabled: () => !!process.env.SLACK_API_URL,
+  async fetch() {
+    return fetchMentions({
+      token: 'demo',
+      api: process.env.SLACK_API_URL,
+      days: Math.max(1, Number(process.env.CLEARSKY_MENTION_DAYS) || 14),
+    });
+  },
+
+  items: (d) => (d.mentions || []).map((m) => ({
+    key: m.url, stamp: m.stamp, url: m.url, at: m.at, ref: m.channel,
+    kind: 'mention', next: 'reply', open: 'Open in Slack', quoteLabel: 'Message',
+    title: `${m.by} in ${m.channel}`, quote: m.excerpt, meta: m.excerpt,
+    why: `${m.by} mentioned you in ${m.channel}.`,
+  })),
+
+  attention: (d) => (d.mentions || []).map((m) => ({ key: m.url, stamp: m.stamp, at: m.at, url: m.url, title: `${m.by} in ${m.channel}`, body: m.excerpt })),
+
+  // Mentions from the last day are worth five minutes between meetings.
+  plan: (d) => (d.mentions || []).filter((m) => recent(m.at, 24))
+    .map((m) => ({ key: m.url, title: `Reply to ${m.by} in ${m.channel}`, detail: m.excerpt, url: m.url, stamp: m.stamp, minutes: 5, why: 'Slack mention' })),
+
+  // The markdown summary (`clearsky`, `--md`): one line each.
+  markdown: (d) => ({ title: 'Slack mentions', lines: (d.mentions || []).map((m) => `[${m.channel}](${m.url}) ${m.by}, ${ago(m.at)}: "${m.excerpt}"`) }),
+};

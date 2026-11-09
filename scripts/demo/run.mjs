@@ -7,7 +7,7 @@
 import { HOME as home, MADE } from './home.mjs';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
-import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdirSync, writeFileSync, rmSync, copyFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -107,9 +107,12 @@ Host globex-prod-api
 Host globex-prod-db
   HostName 172.16.4.12
 `);
+// Slack mentions come from a made-up Slack through a source of the demo's own (no plugin, no token).
+mkdirSync(join(conf, 'sources'), { recursive: true, mode: 0o700 });
+copyFileSync(join(here, 'sources', 'slack.mjs'), join(conf, 'sources', 'slack.mjs'));
 writeFileSync(join(conf, '.env'), [
   'GITHUB_TOKEN=demo', `GITHUB_API_URL=${base}`, 'GITHUB_ORGS=acme', `ACLI_BIN=${join(here, 'acli.mjs')}`, 'JIRA_URL=https://acme.atlassian.net', 'JIRA_ACCOUNT_ID=me-1', 'JIRA_STARRED_PROJECTS=PAY, WEB',
-  'SLACK_TOKEN=demo', `SLACK_API_URL=${base}/slack`, `GOOGLE_CALENDAR_ICS=${base}/calendar.ics`, 'CLEARSKY_POLL_MINUTES=0', `CLEARSKY_STANDUP_TIME=${hhmm(standupAt())}`, 'CLEARSKY_NOTIFY=off',
+  `SLACK_API_URL=${base}/slack`, `GOOGLE_CALENDAR_ICS=${base}/calendar.ics`, 'CLEARSKY_POLL_MINUTES=0', `CLEARSKY_STANDUP_TIME=${hhmm(standupAt())}`, 'CLEARSKY_NOTIFY=off',
   `COPILOT_BIN=${join(here, 'copilot.mjs')}`, 'GRAFANA_INSTANCES=test=https://grafana.test.example.com,prod=https://grafana.example.com',
   'CLEARSKY_CURRENCY=EUR', 'CLEARSKY_FX_RATE=0.92', // made-up costs on the Usage page
   `VPN_CHECK=127.0.0.1:${fake.address().port}`, // the made-up VPN is always on

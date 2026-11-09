@@ -201,21 +201,34 @@ test('School, once part of Clearsky, is a plugin now: added for you if it was se
   assert.deepEqual(readRegistry(q.registry).plugins, {});
 });
 
-test('a source that becomes a plugin later (Slack) is offered once to lists from before', async () => {
+test('a source that becomes a plugin later (Grafana) is offered once to lists from before', async () => {
   const p = paths();
   mkdirSync(join(p.registry, '..'), { recursive: true });
   // A list from before `offered`: School was offered then, and you removed it since.
   writeFileSync(p.registry, JSON.stringify({ plugins: {} }));
-  assert.deepEqual(migrateBundled({ FLYT_SCHOOL_KEY: 'x', SLACK_TOKEN: 'xoxp-1' }, { paths: p }), ['slack']);
-  assert.deepEqual(Object.keys(readRegistry(p.registry).plugins), ['slack']);
-  removePlugin('slack', { paths: p });
-  assert.deepEqual(migrateBundled({ SLACK_TOKEN: 'xoxp-1' }, { paths: p }), []);
+  assert.deepEqual(migrateBundled({ FLYT_SCHOOL_KEY: 'x', GRAFANA_INSTANCES: 'test=https://g.example.com' }, { paths: p }), ['grafana']);
+  assert.deepEqual(Object.keys(readRegistry(p.registry).plugins), ['grafana']);
+  removePlugin('grafana', { paths: p });
+  assert.deepEqual(migrateBundled({ GRAFANA_INSTANCES: 'test=https://g.example.com' }, { paths: p }), []);
+});
+
+test('a retired plugin says what to use instead, and its old name adds the new one', async () => {
+  const p = paths();
+  mkdirSync(dirname(p.registry), { recursive: true });
+  writeFileSync(p.registry, JSON.stringify({ plugins: { slack: { from: 'slack', kind: 'bundled', version: '1.0.0', run: 'inside' } } }));
+  const err = (await loadPlugins({ paths: p })).errors[0];
+  assert.match(err, /retired/);
+  assert.match(err, /clearsky add slack-mcp --trust`\), then remove slack/);
+  assert.match(listPlugins({ paths: p }).added[0].problem, /slack-mcp/);
+  await assert.rejects(updatePlugin('slack', { paths: p }), /retired/);
+  assert.match(parseSpec('slack').url, /\/clearsky-slack-mcp\.git$/);
+  assert.ok(listPlugins({ paths: p }).available.some((x) => x.name === 'slack-mcp'));
 });
 
 test('every plugin in the catalog has its folder here, a valid manifest, a pin on its version, and loads', async () => {
   const p = paths();
   const cat = readCatalog();
-  assert.deepEqual(cat.map((c) => c.name).sort(), ['confluence', 'flyt', 'grafana', 'slack', 'slack-mcp']);
+  assert.deepEqual(cat.map((c) => c.name).sort(), ['confluence', 'flyt', 'grafana', 'slack-mcp']);
   const reg = { plugins: {} };
   for (const c of cat) {
     const dir = bundledDir(c.name);

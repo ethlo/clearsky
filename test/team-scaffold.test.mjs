@@ -23,13 +23,13 @@ const registry = {
 
 test('a team pack from your settings: team settings only, no secrets, pinned plugins, your rules as suggestions', () => {
   const { pack, files, warnings } = scaffoldPack({ name: 'Payments team', repo: 'https://github.com/acme/clearsky-team', jiraSite: 'https://acme.atlassian.net/', env,
-    teamKeys: ['DEPLOYS_URL'], registry, catalogFrom: (n) => (n === 'slack' ? 'github:ethlo/clearsky-slack#v1.0.0' : null) });
+    teamKeys: ['DEPLOYS_URL'], registry, catalogFrom: (n) => (n === 'slack' ? 'github:ethlo/clearsky-slack-mcp#v1.0.0' : null) });
   assert.deepEqual(Object.keys(pack.settings).sort(), ['CLEARSKY_STANDUP_TIME', 'COPILOT_DOMAINS', 'DEPLOYS_URL', 'GITHUB_ORGS', 'GRAFANA_INSTANCES']);
   const all = Object.values(files).join('\n');
   for (const secret of ['ghp_', 'xoxp-', 'me@acme.example', 'hunter2']) assert.ok(!all.includes(secret), `${secret} stays out`);
   assert.ok(warnings.some((w) => /left out VPN_CHECK/.test(w)), 'a value with a password in it is named, not written');
   assert.deepEqual(pack.jira, { site: 'acme.atlassian.net' });
-  assert.deepEqual(pack.plugins, ['github:ethlo/clearsky-slack#v1.0.0', 'github:someone/clearsky-edge', 'github:someone/clearsky-weather#v1.2.0']);
+  assert.deepEqual(pack.plugins, ['github:ethlo/clearsky-slack-mcp#v1.0.0', 'github:someone/clearsky-edge', 'github:someone/clearsky-weather#v1.2.0']);
   assert.ok(warnings.some((w) => /mine: added from a folder/.test(w) || /left out mine/.test(w)));
   assert.ok(warnings.some((w) => /edge follows a branch/.test(w)));
   // Your own projects' rules stay yours.

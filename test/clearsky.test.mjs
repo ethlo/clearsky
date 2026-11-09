@@ -93,13 +93,13 @@ before(async () => {
     GITHUB_TOKEN: 'gh-test', GITHUB_API_URL: base, GITHUB_ORGS: 'acme',
     ACLI_BIN: fileURLToPath(new URL('./fake-acli.mjs', import.meta.url)), FAKE_ACLI_LOG: acliLog,
     CLEARSKY_IGNORE_AUTHORS: 'dependabot[bot]',
-    SLACK_TOKEN: 'xoxp-test', SLACK_API_URL: `${base}/slack`,
+    SLACK_API_URL: `${base}/slack`, CLEARSKY_SOURCES_DIR: fileURLToPath(new URL('../scripts/demo/sources', import.meta.url)),
     COPILOT_BIN: fileURLToPath(new URL('./fake-copilot.mjs', import.meta.url)), CLEARSKY_COPILOT_HOME: copilotHome,
   });
 });
 after(() => server.close());
 
-test('collects GitHub, Jira and the Slack plugin into one view', async () => {
+test('collects GitHub, Jira and a Slack source into one view', async () => {
   const { collect, toMarkdown } = await import('../bin/clearsky.mjs');
   const d = await collect();
 
@@ -122,7 +122,7 @@ test('collects GitHub, Jira and the Slack plugin into one view', async () => {
     reviewsWaiting: 1, myPrsNeedingAction: 2, myPrsWaitingOnOthers: 1, mentions: 4, jiraOpen: 1, jiraInProgress: 1,
   });
 
-  // Slack is a plugin now, added for you because SLACK_TOKEN was set.
+  // Slack mentions from a source (the demo's made-up Slack): its rows join the rest like a plugin's.
   const sl = d.sources.slack;
   assert.equal(sl.error, undefined);
   assert.deepEqual(sl.mentions.map((m) => m.channel), ['#payments', 'DM'], 'own and old messages dropped');
@@ -132,7 +132,7 @@ test('collects GitHub, Jira and the Slack plugin into one view', async () => {
   assert.deepEqual(rows.map((i) => [i.kind, i.group, i.next.label, i.ref]), [['mention', 'needs', 'Reply', '#payments'], ['mention', 'needs', 'Reply', 'DM']]);
   assert.equal(rows[0].k, `slack:${sl.mentions[0].url}`);
   const search = seen.find((s) => s.url.startsWith('/slack/search.messages'));
-  assert.equal(search.auth, 'Bearer xoxp-test');
+  assert.equal(search.auth, 'Bearer demo');
   assert.match(decodeURIComponent(search.url), /query=<@U1>[+ ]after:\d{4}-\d{2}-\d{2}/);
 
   // GitHub search is scoped to the org; Jira went through acli and fell back after the rejected JQL.

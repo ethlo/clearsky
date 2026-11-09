@@ -46,7 +46,7 @@ import { githubFilter, REGISTRY_HOSTS, GITHUB_LOG_HOSTS, SHARED_BRANCH } from '.
 import { githubAdvice, jiraAdvice, outsideAdvice, parseRules, ruleLabel } from '../lib/advice.mjs';
 import { attentionItems, diffAttention, desktopNotify, DbusNotifier } from '../lib/notify.mjs';
 import { loadSources, makeContext, hook, asList } from '../lib/sources.mjs';
-import { loadPlugins, migrateBundled, pluginPaths, listPlugins, preparePlugin, removePlugin, updatePlugin, checkPlugin, readRegistry, withRef, changesText, catalogEntry, bundledDir, codeDir } from '../lib/plugins.mjs';
+import { loadPlugins, migrateBundled, pluginPaths, listPlugins, preparePlugin, removePlugin, updatePlugin, checkPlugin, readRegistry, withRef, changesText, catalogEntry, bundledDir, codeDir, retiredText } from '../lib/plugins.mjs';
 import { sandboxedSource, srtCli } from '../lib/plugin-sandbox.mjs';
 import { pluginItems } from '../lib/items.mjs';
 import { findBrowser, BROWSERS } from '../lib/browser.mjs';
@@ -157,6 +157,8 @@ const plugins = await loadSources([process.env.CLEARSKY_SOURCES_DIR || join(home
     else plugins.sources.set(n, p);
   }
   plugins.errors.push(...added.errors);
+  // A retired plugin still loads if you have its code, but says what to use instead.
+  for (const n of added.sources.keys()) { const t = retiredText(n); if (t) plugins.errors.push(t); }
 }
 for (const e of plugins.errors) console.error(`clearsky: ${e}`);
 globalThis.clearskyPlugins = plugins;
@@ -2674,7 +2676,7 @@ function pluginList() {
   const pins = readRegistry(pluginDirs.registry).plugins;
   for (const p of all) if (pins[p.name]?.pin && p.added) p.pin = pins[p.name].pin;
   // Added from its folder here, and it has a repo of its own now: offer the move.
-  for (const p of all) if (p.kind === 'bundled' && p.added) { const c = catalogEntry(p.name); if (c) p.moveTo = c.from; }
+  for (const p of all) if (p.kind === 'bundled' && p.added && !retiredText(p.name)) { const c = catalogEntry(p.name); if (c) p.moveTo = c.from; }
   return {
     all, added: added.map((p) => ({ ...strip(p), loaded: loaded(p) })),
     available: available.map(strip), errors: plugins.errors, sandbox: !!srtCli(), team: teamPlugins(),
