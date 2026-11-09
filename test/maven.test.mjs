@@ -69,7 +69,10 @@ test("Maven in the sandbox goes through srt's proxy with its login, not a proxy 
   // No settings of yours, or an empty one; a proxy without a login.
   assert.match(withSandboxProxy('', { port: 9 }), /^<settings>\n  <proxies>.*<port>9<\/port><username>srt<\/username>/);
   assert.ok(!withSandboxProxy('', { port: 9, token: false }).includes('<password>'));
-  assert.match(withSandboxProxy('<settings xmlns="x"/>', { port: 9 }), /^<settings xmlns="x">\n  <proxies>[\s\S]*<\/settings>\n$/);
+  assert.match(withSandboxProxy('<settings xmlns="x"/>', { port: 9 }), /^<settings xmlns="x">\n  <proxies>[\s\S]*<\/settings>$/);
+  // Something after the root element: your settings stay, and so does it.
+  const tail = withSandboxProxy('<settings><localRepository>/r</localRepository></settings><!-- managed -->\n', { port: 9 });
+  assert.match(tail, /<localRepository>\/r<\/localRepository>\n  <proxies>[\s\S]*<\/proxies>\n<\/settings><!-- managed -->\n$/);
 });
 
 test("the copy with logins also gets srt's proxy, still without the password", () => {
