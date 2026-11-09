@@ -312,7 +312,70 @@ async function drawVm() {
   const stop = $('#vm-stop');
   if (stop) stop.onclick = async () => { stop.disabled = true; await post('/api/vm/stop', { chat: id }).catch(() => {}); drawVm(); };
 }
-setInterval(() => { if (!$('#chat').hidden && !document.hidden && chat.turns) drawVm(); }, 3000);
+setInterval(() => { if (!$('#chat').hidden && !document.hidden && chat.turns) { drawVm(); if (jobsData?.jobs?.some((j) => j.state === 'running') || Date.now() - jobsAt > 15_000) drawJobs(); } }, 3000);
+
+// ---- background jobs and the watchdog (lib/jobs.mjs, lib/watchdog.mjs)
+// Messages Clearsky sent the chat on its own: a job's result, a nudge. Shown as Clearsky's, with
+// a job's output folded away.
+const AUTO_MARK = '[Clearsky] ';
+const isAuto = (t) => String(t || '').trimStart().startsWith(AUTO_MARK);
+function autoMsg(text) {
+  const body = text.trimStart().slice(AUTO_MARK.length);
+  const nl = body.indexOf('\n');
+  const head = nl < 0 ? body : body.slice(0, nl), rest = nl < 0 ? '' : body.slice(nl + 1).replace(/^The last lines of its output:\n```\n?|\n?```(?=\nAll of it)/g, '');
+  const kind = /^Background job/.test(head) ? (/ finished: exit 0/.test(head) ? 'ok' : 'bad') : 'nudge';
+  return addMsg(`auto a-${kind}`, `<span class="auto-who">${icon(kind === 'nudge' ? 'refresh' : 'source', 12)} Clearsky</span>${esc(head).replace(/`([^`]+)`/g, '<code>$1</code>')}${rest.trim() ? `<details><summary>Output</summary><pre>${esc(rest.trim())}</pre></details>` : ''}`);
+}
+// A chat Clearsky woke (a job ended, a nudge) while you look at it: follow that turn here.
+function followAutoTurn() {
+  if (!chat.turns || chat.stop || chat.following || $('#chat').hidden) return;
+  const me = (cpLinks.live || []).find((x) => x.id === chat.session);
+  if (!me?.here || (me.status !== 'working' && me.status !== 'needs-you')) return;
+  chat.following = true;
+  openSession(chat.session, chat.cwd).finally(() => { chat.following = false; });
+}
+let jobsData = null, jobsFor = null, jobsAt = 0;
+async function drawJobs() {
+  const el = $('#cp-jobs'), id = chat.turns ? chat.session : null;
+  if (id !== jobsFor) { jobsFor = id; jobsData = null; }
+  if (!id) { el.hidden = true; return; }
+  try { const d = await getJson(`/api/copilot/jobs?chat=${encodeURIComponent(id)}`); if (jobsFor === id) { jobsData = d; jobsAt = Date.now(); } } catch {}
+  const d = jobsData;
+  if (!d) { el.hidden = true; return; }
+  const w = d.watchdog || {}, list = d.jobs || [];
+  const dur = (ms) => { const s = Math.round(ms / 1000); return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${Math.floor(s / 3600)}h ${Math.floor(s / 60) % 60}m`; };
+  const WHERE = { sandbox: 'sandbox', vm: 'VM', outside: 'your machine' };
+  const STATE = { running: 'running', done: 'passed', failed: 'failed', stopped: 'stopped', interrupted: 'cut short by a restart' };
+  const rows = list.slice(0, 6).map((j) => `<li class="job j-${esc(j.state)}"><i></i><div><code title="${esc(`${j.command}\nin ${j.cwd}`)}">${esc(j.command)}</code>
+      <small>${esc(STATE[j.state] || j.state)}${j.code != null && j.state === 'failed' ? ` (exit ${j.code})` : ''} · ${esc(WHERE[j.where] || j.where)} · ${dur(j.ms)}${j.state !== 'running' && !j.told ? ' · telling the chat' : ''}</small>
+      <span class="job-acts"><button type="button" class="linkish" data-job-log="${esc(j.id)}">Output</button>${j.state === 'running' ? ` · <button type="button" class="linkish" data-job-stop="${esc(j.id)}" title="Stop it; the chat hears it was stopped">Stop</button>` : ''}</span>
+      <pre class="job-log" data-log-for="${esc(j.id)}" hidden></pre></div></li>`).join('');
+  // The watchdog for this chat: on or paused, how many nudges so far, and the next one.
+  const wd = !w.on ? 'Off (Settings → Copilot → Long tasks)'
+    : w.paused ? 'Paused for this chat'
+      : w.due ? `Nudging at ${clock(Date.parse(w.due))}: ${esc(w.reason || '')} (${w.nudges + 1} of ${w.max})`
+        : w.gaveUp ? `Gave up after ${w.max} nudges: over to you`
+          : `On · ${w.nudges ? `nudged ${w.nudges} of ${w.max} times since your last message` : `up to ${w.max} nudges if it stops early`}`;
+  const open = [...el.querySelectorAll('.job-log:not([hidden])')].map((x) => x.dataset.logFor);
+  el.hidden = false;
+  el.innerHTML = `${list.length ? `<h4>Background jobs</h4><ul class="jobs-l">${rows}</ul>` : ''}
+    <div class="wd"><span class="wd-st${w.on && !w.paused ? ' on' : ''}${w.due ? ' due' : ''}"><i></i>Watchdog</span> <span>${wd}</span>
+    ${w.on ? `<button type="button" class="linkish" data-wd="${w.paused ? 'on' : 'pause'}">${w.paused ? 'Resume' : 'Pause'}</button>` : ''}</div>`;
+  for (const jid of open) showJobLog(jid);
+}
+async function showJobLog(jid) {
+  const pre = $('#cp-jobs').querySelector(`[data-log-for="${CSS.escape(jid)}"]`);
+  if (!pre) return;
+  try { pre.textContent = (await getJson(`/api/copilot/job-log?chat=${encodeURIComponent(chat.session)}&id=${encodeURIComponent(jid)}`)).log || '(no output yet)'; } catch (e) { pre.textContent = e.message; }
+  pre.hidden = false;
+  pre.scrollTop = pre.scrollHeight;
+}
+$('#cp-jobs').addEventListener('click', async (e) => {
+  const log = e.target.closest('[data-job-log]'), stop = e.target.closest('[data-job-stop]'), wd = e.target.closest('[data-wd]');
+  if (log) { const pre = $('#cp-jobs').querySelector(`[data-log-for="${CSS.escape(log.dataset.jobLog)}"]`); if (pre && !pre.hidden) pre.hidden = true; else showJobLog(log.dataset.jobLog); }
+  if (stop) { stop.disabled = true; await post('/api/copilot/jobs/stop', { chat: chat.session, id: stop.dataset.jobStop }).catch(() => {}); drawJobs(); }
+  if (wd) { await post('/api/copilot/watchdog', { chat: chat.session, paused: wd.dataset.wd === 'pause' }).catch(() => {}); drawJobs(); }
+});
 
 // What this chat changed on GitHub and Jira (all chats: Copilot's changes in the menu).
 async function drawChanges() {
@@ -640,7 +703,7 @@ async function rememberClick(b) {
   const mark = (k) => { try { localStorage.setItem(MEM_SKIP_KEY, JSON.stringify([...memSkipped(), k].slice(-200))); } catch {} };
   if (act === 'skip') { mark(memKey(note)); return done('Skipped'); }
   if (act === 'edit') {
-    card.querySelector('ul').outerHTML = `<textarea class="remember-edit" rows="${Math.min(8, note.lines.length + 1)}" aria-label="Notes to remember, one per line">${esc(note.lines.join('\n'))}</textarea>`;
+    card.querySelector('ul').outerHTML = `<textarea class="remember-edit" spellcheck="true" rows="${Math.min(8, note.lines.length + 1)}" aria-label="Notes to remember, one per line">${esc(note.lines.join('\n'))}</textarea>`;
     card.querySelector('.remember-b').innerHTML = '<button type="button" class="r-save" data-remember="save">Save</button><button type="button" data-remember="cancel">Cancel</button>';
     card.querySelector('textarea').focus();
     return;
@@ -815,12 +878,13 @@ async function openSession(id, cwd) {
     chat.title = h.title || h.messages.find((m) => m.role === 'me')?.text.trim().split('\n')[0].slice(0, 120) || null;
     $('#chat-log').innerHTML = '';
     for (const m of h.messages) {
-      if (m.role === 'me') addMsg('me', esc(m.text));
+      if (m.role === 'me') { if (isAuto(m.text)) autoMsg(m.text); else addMsg('me', esc(m.text)); }
       else { const el = addMsg('cp', renderAnswer(m.segs)); el.segs = m.segs; }
     }
     if (!h.messages.length && !h.busy) addMsg('cp', '<span class="perm-done">Nothing said in this session yet. Carry on below.</span>');
     rememberChat();
     remember(h.id, h.cwd);
+    jobsAt = 0; drawJobs();
     if (h.busy) attachLive(h.id);
   } catch (e) {
     if (chat.view !== view) return;
@@ -1193,6 +1257,7 @@ document.addEventListener('mousedown', (e) => { if (!e.target.closest('.ref-pick
 for (const id of ['#cp-model', '#cp-effort', '#cp-perm']) $(id).addEventListener('change', saveCp);
 $('#chat-form').onsubmit = (e) => {
   e.preventDefault();
+  autoFixLast($('#chat-text'));
   const t = $('#chat-text').value;
   // While Copilot works, a message waits for the turn to end; an empty box means Stop.
   if (chat.stop && !t.trim()) return chat.halt ? chat.halt() : chat.stop();

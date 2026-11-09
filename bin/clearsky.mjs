@@ -24,6 +24,8 @@ import { branchesFor } from '../lib/branches.mjs';
 import { sandboxedCommand, sandboxEnded, stopSandbox, sandboxProxy, githubLogin, DEFAULT_DOMAINS, READ_DEFAULT, parseDomains } from '../lib/sandbox.mjs';
 import { VmImage, ChatVm, vmSupport, VM_DOMAINS, reapOrphans } from '../lib/vm.mjs';
 import { VmQueue } from '../lib/vm-queue.mjs';
+import { Jobs, jobReport, jobView, shellLine, tailOf } from '../lib/jobs.mjs';
+import { Watchdog, watchdogSettings, nudgeText, REASONS as NUDGE_REASONS, AUTO_MARK } from '../lib/watchdog.mjs';
 import { logWrite, readWrites } from '../lib/agent-log.mjs';
 import { cookieLogin } from '../lib/browser-login.mjs';
 import { redact } from '../lib/redact.mjs';
@@ -1079,13 +1081,17 @@ const hintOwed = new Set(); // resumed chats whose first message was a command: 
 // Ask-mode chats keep a Copilot process running between turns, keyed by Copilot's session id.
 const acpChats = new Map();
 setInterval(() => {
-  for (const [id, c] of acpChats) if (!c.busy && !c.waiting.size && Date.now() - c.lastUsed > 20 * 6e4) { c.agent.close(); c.vm?.stop(); acpChats.delete(id); }
+  // Not one with a background job running (its VM runs it) or a nudge due (lib/watchdog.mjs).
+  for (const [id, c] of acpChats) if (!c.busy && !c.waiting.size && Date.now() - c.lastUsed > 20 * 6e4 && !jobs.running(id).length && !watchdog.view(id).due) { c.agent.close(); c.vm?.stop(); acpChats.delete(id); }
 }, 60_000).unref();
 
 // Stop a turn on purpose. Closing the page or switching chats leaves it running.
 function stopCopilot(chat) {
   const c = acpChats.get(chat);
   if (c) {
+    c.userStopped = true; // no nudge for a turn you stopped
+    watchdog.cancel(chat);
+    autoInbox.delete(chat);
     c.agent.cancel();
     for (const r of c.waiting.values()) r({ outcome: 'cancelled' });
     c.waiting.clear(); c.pending.clear();
@@ -1147,7 +1153,7 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   // asks you in this chat. The key tells Clearsky which chat a request comes from.
   const key = randomBytes(16).toString('hex');
   if (process.platform === 'linux') {
-    broker ||= serveBroker({ bins: { acli: config.jira.acli }, allow: assistedAllow, ask: brokerAsk, where: brokerWhere, vm: vmSupport().ok ? vmRun : null, doors: pluginDoor, review: reviewRun, usage: usageRun, log: console.log });
+    broker ||= serveBroker({ bins: { acli: config.jira.acli }, allow: assistedAllow, ask: brokerAsk, where: brokerWhere, vm: vmSupport().ok ? vmRun : null, doors: pluginDoor, review: reviewRun, usage: usageRun, jobs: jobsDoor, log: console.log });
     Object.assign(env, { CLEARSKY_BROKER_SOCKET: brokerSocket(), CLEARSKY_BROKER_KEY: key });
     env.PATH = `${join(here, '..', 'scripts', 'sandbox-bin')}${delimiter}${env.PATH}`;
   }
@@ -1158,6 +1164,11 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
     { filterRequest: githubFilter(githubAsk, { told: githubTold, look: githubLook, scope: githubScope }) });
   const agent = new AcpAgent(s.bin, s.args, { env, acp: false });
   agent.child.once('exit', sandboxEnded);
+  // A background job (`bg <command>`) runs in a sandbox of its own with the same fence: folders,
+  // hosts, logins added on the way out, and the GitHub gate.
+  agent.inSandbox = async (argv, dir) => ({ env, ...await sandboxedCommand(argv[0], argv.slice(1), { ...sandboxOpts(dir, folders), domains, maven, github, ca: sandboxCa(keep),
+    inspect: [...(github ? GITHUB_LOG_HOSTS : []), ...(vmSupport().ok ? REGISTRY_HOSTS : [])] },
+  { filterRequest: githubFilter(githubAsk, { told: githubTold, look: githubLook, scope: githubScope }) }) });
   return Object.assign(agent, { sandboxed: true, brokerKey: key,
     github: github ? `${process.env.COPILOT_SANDBOX_TOKEN ? 'your sandbox token' : 'your gh login'}, added on the way out; changes ask you` : 'not signed in (gh auth login)',
     hosts: [...new Set([...domains, ...(maven?.hosts || []), ...(github?.read || [])])] });
@@ -1427,6 +1438,136 @@ async function vmRun({ key, argv, cwd, java, signal }, out, err) {
   } finally { vmQueue.leave(vm); }
 }
 const vmQueue = new VmQueue();
+
+// ---------------------------------------------------------------- background jobs and the watchdog
+// Chats stopped on long tasks: a turn that waits on a 20-minute build or a CI run runs into its
+// limits, or Copilot gives up on the wait. So a long command runs as a background job
+// (lib/jobs.mjs, `bg <command>`), the chat ends its turn, and Clearsky wakes it with the result.
+// And a chat that stops before its task is done gets a nudge to go on (lib/watchdog.mjs).
+const tildeHome = (p) => (p && p.startsWith(homedir()) ? `~${p.slice(homedir().length)}` : p);
+const jobGroups = new Set(); // process groups of jobs running here, ended with Clearsky
+process.on('exit', () => { for (const pid of jobGroups) { try { process.kill(-pid, 'SIGTERM'); } catch {} } });
+// Run a command in its own process group, its output to out/err, until it ends or `signal` stops it.
+function spawnJob(bin, args, { cwd, env, signal, hours = 4 }, out, err) {
+  return new Promise((done) => {
+    const child = spawn(bin, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
+    if (child.pid) jobGroups.add(child.pid);
+    const kill = () => { try { if (process.platform !== 'win32') process.kill(-child.pid, 'SIGTERM'); else child.kill('SIGTERM'); } catch {} };
+    const timer = setTimeout(() => { err(`\nClearsky: stopped after ${hours} hours.\n`); kill(); }, hours * 36e5);
+    signal?.addEventListener('abort', () => { err('\nClearsky: stopped.\n'); kill(); }, { once: true });
+    child.stdout.on('data', (d) => out(d));
+    child.stderr.on('data', (d) => err(d));
+    child.on('error', (e) => { err(`${e.message}\n`); });
+    child.on('close', (code) => { clearTimeout(timer); jobGroups.delete(child.pid); done(code ?? 1); });
+  });
+}
+// Where a job runs is the fence of the chat that started it.
+async function runJob(job, out, err, signal) {
+  const c = acpChats.get(job.chat);
+  if (job.where === 'vm') return vmRun({ key: c?.agent.brokerKey, argv: job.argv, cwd: job.cwd, java: job.java, signal }, out, err);
+  if (job.where === 'outside') return spawnJob(job.argv[0], job.argv.slice(1), { cwd: job.cwd, env: copilotEnv(), signal }, out, err);
+  if (!c?.agent.inSandbox) throw new Error('this chat\'s sandbox has stopped');
+  const s = await c.agent.inSandbox(job.argv, job.cwd);
+  try { return await spawnJob(s.bin, s.args, { cwd: job.cwd, env: s.env, signal }, out, err); } finally { sandboxEnded(); }
+}
+const jobs = new Jobs({ file: join(dirname(stateFile), 'jobs.json'), logDir: () => join(copilotTmp(), 'jobs'), run: runJob, onEnd: jobEnded });
+function jobEnded(job) {
+  console.log(`clearsky: background job ${job.where} -> ${job.state}${job.code != null ? ` (exit ${job.code})` : ''}`);
+  const c = acpChats.get(job.chat);
+  c?.emit({ type: 'note', text: `Job ${job.id} ${job.state === 'done' ? 'finished' : job.state}: ${shellLine(job.argv).slice(0, 120)}` });
+  tellChat(job.chat, `${AUTO_MARK}${jobReport(job, jobs.tail(job.id, 40, 16 * 1024), { tilde: tildeHome })}`, { ...job.ctx, onSent: () => jobs.told(job.id) });
+}
+// The `bg` and `jobs` doors (lib/broker.mjs, scripts/sandbox-bin/bg and jobs).
+function jobsDoor({ key, tool, where, argv, cwd, java }) {
+  const c = chatByKey(key);
+  if (!c) return { code: 1, stdout: '', stderr: 'Clearsky: this chat is closed.\n' };
+  if (tool === 'bg') {
+    const job = jobs.start({ chat: c.id, where, argv, cwd, ctx: { options: c.options, cwd: c.cwd } });
+    if (java?.startsWith('/usr/lib/jvm/')) job.java = java;
+    c.emit({ type: 'note', text: `Job ${job.id} started ${where === 'sandbox' ? 'in the sandbox' : where === 'vm' ? 'in the VM' : 'outside the sandbox'}: ${shellLine(argv).slice(0, 120)}` });
+    return { code: 0, stderr: '', stdout: `Started background job ${job.id}. Its output goes to ${tildeHome(job.log)}.\n`
+      + 'End your turn now (say what you are waiting for): Clearsky wakes you in this chat with the result when it ends. '
+      + `Meanwhile \`jobs log ${job.id}\` shows its output so far; don't wait for it with sleep.\n` };
+  }
+  const [cmd = 'list', id, n] = argv;
+  if (cmd === 'list' || cmd === 'ls') {
+    const mine = jobs.list(c.id).slice(0, 15);
+    return { code: 0, stderr: '', stdout: mine.length ? `${mine.map((j) => { const v = jobView(j); return `${j.id}  ${v.state}${j.code != null ? ` (exit ${j.code})` : ''}  ${j.where}  ${Math.round(v.ms / 1000)}s  ${v.command}`; }).join('\n')}\n` : 'No background jobs in this chat.\n' };
+  }
+  const job = id && jobs.get(id);
+  if (!job || job.chat !== c.id) return { code: 1, stdout: '', stderr: `Clearsky: no job ${id || ''} in this chat (\`jobs\` lists them).\n` };
+  if (cmd === 'log') return { code: 0, stderr: '', stdout: `${tailOf(job.log, Math.min(Math.max(Number(n) || 60, 1), 2000), 512 * 1024)}\n` };
+  if (cmd === 'stop') return jobs.stop(job.id) ? { code: 0, stderr: '', stdout: `Stopping ${job.id}.\n` } : { code: 1, stdout: '', stderr: `Clearsky: ${job.id} isn't running.\n` };
+  return { code: 2, stdout: '', stderr: 'usage: jobs [list] | jobs log <id> [lines] | jobs stop <id>\n' };
+}
+
+// Messages Clearsky sends a chat on its own (a job's result, a nudge): one turn at a time, after
+// the chat's own; a chat whose Copilot closed meanwhile is resumed, as your next message would.
+const autoInbox = new Map(); // chat → [{ text, ctx }]
+const autoBusy = new Set();
+function tellChat(id, text, ctx = {}) {
+  autoInbox.set(id, [...(autoInbox.get(id) || []), { text, ctx }]);
+  setImmediate(() => pumpChat(id));
+}
+async function pumpChat(id) {
+  const c = acpChats.get(id);
+  if (autoBusy.has(id) || c?.busy || c?.waiting.size || startingChats.has(id)) return; // its turn's end comes back here
+  const q = autoInbox.get(id);
+  if (!q?.length) return;
+  autoInbox.delete(id);
+  const ctx = Object.assign({}, ...q.map((x) => x.ctx));
+  const options = c?.options || ctx.options, cwd = c?.cwd || ctx.cwd;
+  if (!options || !cwd || !isDir(cwd)) { console.log('clearsky: a chat to wake has no mode or folder any more; left for its next message'); return; }
+  autoBusy.add(id);
+  try {
+    const info = await copilotInfo();
+    if (!info.available) throw new Error('Copilot CLI not found');
+    // A chat that goes on in a new Copilot gets the sandbox's rules again, as for your message.
+    const hint = sandboxHintFor(options.permission);
+    const owed = hint && (!c || c.agent.closed || hintOwed.has(id));
+    hintOwed.delete(id);
+    const message = q.map((x) => x.text).join('\n\n');
+    const prompt = owed ? `${UPDATE_INTRO}${hint}${MSG_MARK}${message}` : message;
+    sessionsCache = null;
+    // Nobody watches yet: an open page sees the chat working and follows it (attachCopilot).
+    await acpTurn({ chat: id, options, prompt, resumeId: id, cwd, emit: () => {}, res: { on() {} }, bin: info.bin, auto: true });
+    for (const x of q) x.ctx.onSent?.();
+  } catch (e) {
+    console.log(`clearsky: waking a chat didn't work: ${e.message}`);
+  } finally { autoBusy.delete(id); }
+  setImmediate(() => pumpChat(id));
+}
+
+const watchdog = new Watchdog();
+// A turn ended: Clearsky's own messages go first; then a chat with a job running waits for it;
+// else the watchdog looks at how the turn ended.
+function afterTurn(c, { stopReason, error, command }) {
+  const id = c.id;
+  if (autoInbox.get(id)?.length) { setImmediate(() => pumpChat(id)); return; }
+  if (command || jobs.running(id).length) return;
+  const reason = watchdog.turnEnded(id, { stopReason, error: error?.message || null, text: c.turnText, stuck: c.stuck, stopped: c.userStopped });
+  const w = watchdog.view(id);
+  if (reason) c.emit({ type: 'note', text: `Watchdog: ${NUDGE_REASONS[reason]}. Nudging it to go on ${reason === 'stuck' ? 'now' : `in ${w.minutes} min`} unless you write first (${w.nudges + 1} of ${w.max}).` });
+  else if (w.gaveUp) c.emit({ type: 'note', text: `Watchdog: still not finished after ${w.max} nudges; over to you.` });
+}
+// Every 15 seconds: a turn with nothing running and no word for long is stopped (and so nudged);
+// due nudges go out to chats that are free.
+setInterval(() => {
+  const cfg = watchdogSettings();
+  if (!cfg.nudges) return;
+  for (const c of acpChats.values()) {
+    if (c.busy && !c.stuck && !c.waiting.size && !c.running.size && Date.now() - (c.lastEvent || Date.now()) > cfg.stuckMinutes * 6e4) {
+      console.log('clearsky: watchdog: a turn had no word and nothing running, stopping it');
+      c.stuck = true;
+      c.agent.cancel();
+    }
+  }
+  const free = (id) => { const c = acpChats.get(id); return !!c && !c.agent.closed && !c.busy && !c.waiting.size && !jobs.running(id).length && !autoInbox.get(id)?.length; };
+  for (const { id, reason, n, max } of watchdog.due(free)) {
+    logEvent(`watchdog nudged a chat (${reason}, ${n} of ${max})`, { echo: false });
+    tellChat(id, nudgeText(reason, n, max));
+  }
+}, 15_000).unref();
 // Every chat's VM that runs or waits, running ones first (oldest first), then the line in order.
 async function vmsOverview({ look = true } = {}) {
   const snap = vmQueue.snapshot();
@@ -1501,7 +1642,7 @@ function brokerWhere(key) {
   return c && [c.cwd, ...copilotFolders().map((d) => d.replace(/^~(?=\/|$)/, homedir())), ...chatFolders(c.id)];
 }
 // Ask in the chat, as for any step Copilot wants to take, and wait for your answer.
-function brokerAsk({ key, tool, argv, cwd, vm = false }) {
+function brokerAsk({ key, tool, argv, cwd, vm = false, background = false }) {
   const c = chatByKey(key);
   if (!c) return Promise.resolve(false);
   const line = [tool, ...argv].map((a) => (/^[\w@%+=:,./-]+$/.test(a) ? a : `'${a.replace(/'/g, `'\\''`)}'`)).join(' ');
@@ -1514,7 +1655,7 @@ function brokerAsk({ key, tool, argv, cwd, vm = false }) {
     c.emit({ type: 'note', text: `Jira: ${line}` });
     return Promise.resolve(true);
   }
-  const title = { git: 'Push from your machine', gh: 'Change GitHub as you', acli: 'Change Jira as you', outside: 'Run on your machine, outside the sandbox' }[tool];
+  const title = { git: 'Push from your machine', gh: 'Change GitHub as you', acli: 'Change Jira as you', outside: `Run on your machine, outside the sandbox${background ? ', in the background' : ''}` }[tool];
   return new Promise((done) => {
     const id = randomBytes(6).toString('hex');
     // The same command again (a test run after a fix) can be allowed for the rest of this chat.
@@ -1785,7 +1926,15 @@ const SANDBOX_HINT = 'You run in a sandbox: everything inside it runs without as
   + 'failures (fix those, or ask me), and don\'t quote arguments you don\'t need to. '
   + 'Before you open a pull request, run `review --ticket <KEY>` (or `review --goal "<what it is for>"` without a ticket; `--base <branch>` '
   + 'when it doesn\'t go to the default branch): a fresh reviewer that sees only the goal and the code reviews your change. Give it the goal only, '
-  + 'never your reasoning. Fix what holds up, say why you skip the rest, and run it again until it says "VERDICT: ready" (three rounds at most).';
+  + 'never your reasoning. Fix what holds up, say why you skip the rest, and run it again until it says "VERDICT: ready" (three rounds at most). '
+  + 'Anything that takes more than a few minutes (a full build, a `vm` test run, waiting for CI with `gh run watch <id> --exit-status`) '
+  + 'runs as a background job: `bg <command>` in the sandbox, `bg vm <command>` in the VM, `bg outside <command>` on my machine after my OK. '
+  + 'It answers at once with the job\'s id; then end your turn, saying what you wait for. Clearsky wakes you here with the result and the end of '
+  + 'its output when it ends, so a long wait never ends your work. `jobs` lists this chat\'s jobs, `jobs log <id>` shows output so far, '
+  + '`jobs stop <id>` stops one. Never wait with sleep loops. '
+  + 'If you stop before the task is done, Clearsky nudges you to go on; when you are done, or need me, say so plainly.';
+const sandboxHintFor = (permission) => (process.env.COPILOT_SANDBOX === 'srt' || permission === 'sandboxed'
+  ? `\n\n${SANDBOX_HINT}${doorHints()}${process.env.COPILOT_DISCLOSE === 'on' ? ` ${DISCLOSE_HINT}` : ''}` : '');
 // What you typed, without the dashboard and references Clearsky added in front.
 const MSG_MARK = '\n\n---\nMy message:\n';
 export function typedPart(text) {
@@ -1826,7 +1975,7 @@ function withStatus(list) {
   return list.map((x) => {
     const c = acpChats.get(x.id);
     const status = needsYou(c) ? 'needs-you' : c?.busy || open[x.id]?.working ? 'working'
-      : c || open[x.id] ? 'waiting' : 'closed';
+      : jobs.running(x.id).length ? 'background' : c || open[x.id] ? 'waiting' : 'closed';
     return { ...x, open: !!open[x.id] && !c, working: status === 'working', here: !!c, status };
   });
 }
@@ -2081,7 +2230,16 @@ function noteBuild(c, u) {
     chats: [chatRef(c)], decided: u.status === 'completed' ? 'passed' : 'failed', ms: Date.now() - b.at });
 }
 
-async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, scope = [] }) {
+const startingChats = new Map(); // chat → while its Copilot starts
+async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, scope = [], auto = false }) {
+  // One turn at a time in a chat: a message that comes while Clearsky's own turn runs (a job's
+  // result, a nudge), or while the chat's Copilot starts, waits for it.
+  for (;;) {
+    const b = acpChats.get(chat);
+    if (b?.busy) { await b.turnDone; continue; }
+    if (startingChats.has(chat)) { await startingChats.get(chat); continue; }
+    break;
+  }
   // Changing the folders in Settings starts the chat's Copilot again (resuming it) on its next turn.
   // Changing a chat's own folders (its side panel) does the same.
   const extra = chatFolders(chat);
@@ -2093,7 +2251,9 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, s
   // A new Copilot for the same chat keeps its VM, and the repos and Jira projects it works on.
   let keep = {};
   if (c && (c.sig !== sig || c.agent.closed)) { resumeId = c.agent.sessionId; keep = { vm: c.vm, repos: c.repos, jira: c.jira, tickets: c.tickets }; c.agent.close(); acpChats.delete(chat); c = null; }
-  if (!c) {
+  let started = null;
+  if (!c) startingChats.set(chat, new Promise((d) => { started = d; }));
+  try { if (!c) {
     const agent = await startAgent(bin, args, cwd, { sandbox, folders: extra });
     c = { agent, sig, cwd, vm: keep.vm || null, repos: keep.repos || new Set(), jira: keep.jira || new Set(), tickets: keep.tickets || new Set(), waiting: new Map(), pending: new Map(), approved: new Set(), running: new Set(), shared: new Set(), emit: () => {}, lastUsed: Date.now() };
     bindVm(c);
@@ -2102,10 +2262,11 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, s
     acpChats.set(id, c);
     // A new chat gets Copilot's own session id; the panel keeps using that from now on.
     if (id !== chat) emit({ type: 'session', id });
-  }
+  } } finally { if (started) { startingChats.delete(chat); started(); } }
   c.lastUsed = Date.now();
   c.mode = options.permission;
   c.model = options.model || null;
+  c.options = options; // for Clearsky's own turns in this chat (a job's result, a nudge)
   // What this chat is about (the items it was started with, the tickets you named): its writes
   // to those go through without asking.
   for (const x of scope) {
@@ -2123,6 +2284,10 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, s
     else if (u.sessionUpdate === 'tool_call' || u.sessionUpdate === 'tool_call_update') c.running.add(u.toolCallId);
     noteBuild(c, u);
     noteFiles(c, u);
+    // For the watchdog: when it last did anything, and what it said after its last step.
+    c.lastEvent = Date.now();
+    if (u.sessionUpdate === 'tool_call') c.turnText = '';
+    else if (u.sessionUpdate === 'agent_message_chunk' && u.content?.type === 'text') c.turnText += u.content.text;
     const e = chatEvent(u); if (e && (e.type !== 'text' || e.text)) c.emit(e);
   };
   const autoAllow = copilot.PERMISSIONS[options.permission]?.autoAllow || [];
@@ -2153,11 +2318,18 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, s
   // Switching chats or reloading the page leaves the turn running; Stop ends it.
   res.on('close', () => { if (c.emit === emit) c.emit = () => {}; });
   c.busy = true;
+  let turnOver;
+  c.turnDone = new Promise((d) => { turnOver = d; });
+  Object.assign(c, { turnText: '', lastEvent: Date.now(), userStopped: false, stuck: false, auto });
+  watchdog.cancel(c.id);
   // /compact: Copilot's answer to it isn't a reliable end (sometimes it never comes), so the
   // compaction's own record in the session's log ends the turn.
   const compact = /^\s*\/compact\b/.test(prompt) ? watchCompaction(c, chat) : null;
-  const r = await (compact ? Promise.race([agent.prompt(prompt), compact]) : agent.prompt(prompt))
-    .finally(() => { compact?.turnOver(); c.busy = false; c.approved.clear(); c.running.clear(); });
+  let r = null, error = null;
+  try { r = await (compact ? Promise.race([agent.prompt(prompt), compact]) : agent.prompt(prompt)); } catch (e) { error = e; }
+  finally { compact?.turnOver(); c.busy = false; c.approved.clear(); c.running.clear(); turnOver(); }
+  afterTurn(c, { stopReason: r?.stopReason, error, command: /^\s*\//.test(typedPart(prompt)) });
+  if (error) throw error;
   c.emit({ type: 'done', stopReason: r?.stopReason });
   c.emit = () => {};
 }
@@ -2330,7 +2502,8 @@ function startPolling() {
 const restart = { pending: null, timer: null, server: null };
 // A restart waits for chats started here that are mid-answer or waiting on your Allow/Deny.
 // Chats done with their turn, and Copilot in a terminal or editor, don't hold it up.
-const chatsBusy = () => [...acpChats.values()].filter((c) => c.busy || c.waiting.size).length;
+// A background job running holds it up too (Restart now cuts it short; its chat hears so after).
+const chatsBusy = () => [...acpChats.values()].filter((c) => c.busy || c.waiting.size).length + jobs.running().length;
 function busyChats() {
   const names = localState.sessionNames(stateFile), titles = new Map((sessionsCache?.data || []).map((x) => [x.id, x.title]));
   return [...acpChats.entries()].filter(([, c]) => c.busy || c.waiting.size)
@@ -2376,6 +2549,7 @@ function restartWhenIdle({ maxWaitMinutes = 60, force = false } = {}) {
     clearInterval(restart.timer);
     const busyNow = chatsBusy();
     logEvent(`restarting (${restart.pending.force ? 'Restart now' : 'when idle'}, ${busyNow} busy chat(s) stopped)`);
+    jobs.closing = true; // what's still running is 'interrupted' for the next Clearsky, which tells its chats
     for (const c of acpChats.values()) { c.agent.close(); c.vm?.stop(); }
     stopSandbox().catch(() => {});
     restart.server?.close();
@@ -2625,7 +2799,7 @@ function serve() {
         if (url.pathname === '/api/copilot/close') {
           const { chat } = await readJson(req);
           const c = acpChats.get(String(chat || ''));
-          if (c) { stopCopilot(String(chat)); c.agent.close(); c.vm?.stop(); acpChats.delete(String(chat)); }
+          if (c) { stopCopilot(String(chat)); jobs.stopChat(String(chat)); watchdog.forget(String(chat)); c.agent.close(); c.vm?.stop(); acpChats.delete(String(chat)); }
           return json(res, 200, { closed: !!c });
         }
         if (url.pathname === '/api/vm/stop') {
@@ -2633,6 +2807,18 @@ function serve() {
           const vm = acpChats.get(String(chat || ''))?.vm;
           if (vm && (vm.state !== 'off' || vm.queue?.().position)) { vm.event('Stopped from Clearsky'); vm.stop(); }
           return json(res, 200, { stopped: !!vm });
+        }
+        // A background job stopped from the chat's side panel.
+        if (url.pathname === '/api/copilot/jobs/stop') {
+          const { chat, id } = await readJson(req);
+          return json(res, 200, { stopped: jobs.stop(String(id || ''), String(chat || '')) });
+        }
+        // The watchdog paused (or on again) for one chat.
+        if (url.pathname === '/api/copilot/watchdog') {
+          const { chat, paused } = await readJson(req);
+          if (!/^[\w-]{8,64}$/.test(String(chat || ''))) return json(res, 400, { error: 'bad chat' });
+          watchdog.pause(String(chat), paused === true);
+          return json(res, 200, { watchdog: watchdog.view(String(chat)) });
         }
         if (url.pathname === '/api/copilot/stop') {
           const { chat } = await readJson(req);
@@ -2766,7 +2952,7 @@ function serve() {
           const options = { model: body.model, effort: body.effort, permission: copilot.PERMISSIONS[body.permission] ? body.permission : 'ask',
             allow: list(body.allow), deny: list(body.deny) };
           // The first turn carries the dashboard so Copilot knows what you're looking at.
-          const sandboxHint = process.env.COPILOT_SANDBOX === 'srt' || body.permission === 'sandboxed' ? `\n\n${SANDBOX_HINT}${doorHints()}${process.env.COPILOT_DISCLOSE === 'on' ? ` ${DISCLOSE_HINT}` : ''}` : '';
+          const sandboxHint = sandboxHintFor(body.permission);
           const folders = foldersHint();
           // A Copilot command (/compact, say) only works as the whole message: nothing goes in front.
           // The sandbox hint a resumed chat is owed then goes with the next message instead.
@@ -2804,6 +2990,7 @@ function serve() {
           sessionsCache = null;
           try {
             const named = [...String(message).matchAll(/\b([A-Z][A-Z0-9_]+)-\d+\b/g)].map((m) => ({ kind: 'issue', key: m[0] }));
+            watchdog.userMessage(body.session); // a message from you: a new task, so a fresh count of nudges
             await acpTurn({ chat: body.session, options, prompt, resumeId: body.resume ? body.session : null, cwd, emit, res, bin: info.bin, scope: [...refs, ...named] });
           } catch (e) { emit({ type: 'error', message: e.message }); }
           return res.end();
@@ -3020,6 +3207,17 @@ function serve() {
         const cwd = url.searchParams.get('cwd') || '';
         const dir = cwd && isDir(cwd) ? cwd : null;
         return json(res, 200, { files: findFiles(url.searchParams.get('q') || '', { roots: chatReadRoots(id, dir), home: homedir(), cwd: dir || acpChats.get(id)?.cwd || copilotCwd() }) });
+      }
+      // A chat's background jobs, newest first, and the end of one's output.
+      if (url.pathname === '/api/copilot/jobs') {
+        const id = url.searchParams.get('chat') || '';
+        if (isDemo()) return json(res, 200, (await import('../scripts/demo/data.mjs')).jobs(id));
+        return json(res, 200, { jobs: jobs.list(id).slice(0, 20).map((j) => jobView(j, { tilde: tildeHome })), watchdog: watchdog.view(id) });
+      }
+      if (url.pathname === '/api/copilot/job-log') {
+        const j = jobs.get(url.searchParams.get('id') || '');
+        if (!j || j.chat !== url.searchParams.get('chat')) return json(res, 404, { error: 'no such job' });
+        return json(res, 200, { log: tailOf(j.log, 400, 256 * 1024) });
       }
       // What one chat runs with, for the panel beside it.
       if (url.pathname === '/api/copilot/chat') {
@@ -3243,6 +3441,12 @@ function serve() {
     if (process.env.CLEARSKY_POLL_MINUTES !== '0') startPolling();
     keepLoginsAlive();
     startHandoffs(csrf);
+    // Job results a restart kept from their chats (and jobs it cut short): they go out now.
+    const owed = jobs.load();
+    setTimeout(() => {
+      if (owed.length) logEvent(`telling ${owed.length} chat(s) about background jobs from before the restart`);
+      for (const j of owed) jobEnded(j);
+    }, isDemo() ? 0 : 5000).unref();
     // Only once this server holds the port, so a second Clearsky can't stop the first one's VMs.
     if (vmSupport().ok) {
       const n = reapOrphans().length;

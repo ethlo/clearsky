@@ -248,7 +248,12 @@
     <div class="row"><input id="COPILOT_VM_CPUS" data-key="COPILOT_VM_CPUS" inputmode="numeric" spellcheck="false" style="max-width:8em"> <input id="COPILOT_VM_MEMORY_GB" data-key="COPILOT_VM_MEMORY_GB" aria-label="VM memory in GB" inputmode="decimal" spellcheck="false" style="max-width:8em"></div>
     <label for="COPILOT_VM_MAX">VMs at the same time<span class="more">1 to 8, empty is 1. Another chat's <code>vm</code> command waits in line, and its chat shows where it is. A VM with nothing running in it gives its place to the next in line, and starts again from the snapshot on its chat's next command.</span></label>
     <input id="COPILOT_VM_MAX" data-key="COPILOT_VM_MAX" inputmode="numeric" spellcheck="false" placeholder="1" style="max-width:8em">
-    <div class="row"><button class="save" data-keys="COPILOT_MODEL,COPILOT_EFFORT,COPILOT_PERMISSION,COPILOT_CWD,COPILOT_FOLDERS,COPILOT_ASSISTED_ALLOW,COPILOT_SANDBOX,COPILOT_SANDBOX_TOKEN,COPILOT_DISCLOSE,COPILOT_READ,COPILOT_DOMAINS,COPILOT_VM_IMAGES,COPILOT_GATE_RULES,COPILOT_VM_CPUS,COPILOT_VM_MEMORY_GB,COPILOT_VM_MAX">Save</button><span class="msg"></span></div>
+    <h3 id="long-tasks" style="margin-top:28px">Long tasks<span class="more">Sandboxed chats run long commands (a full build, <code>vm</code> tests, waiting for CI) as background jobs with <code>bg</code>: the chat ends its turn, and Clearsky wakes it with the result when the job ends. Jobs show in the chat's side panel, where you can stop one. A restart waits for running jobs; <b>Restart now</b> cuts them short, and their chats hear so after the restart.<br><br>The watchdog nudges a chat that stops before its task is done: its turn hit a limit or ended with an error, its answer stops mid-step or says there's more to do, or the turn had no word and nothing running for a long time (then it's stopped first). It never nudges a chat that asks you something, waits on your OK, has a job running, or that you stopped. Your next message starts the count again; you can pause it per chat in the side panel.</span></h3>
+    <label for="COPILOT_NUDGES">Nudges per task<span class="more">0 to 10, empty is 3. 0 turns the watchdog off.</span></label>
+    <input id="COPILOT_NUDGES" data-key="COPILOT_NUDGES" inputmode="numeric" spellcheck="false" placeholder="3" style="max-width:8em">
+    <label for="COPILOT_NUDGE_MINUTES">Nudge after (minutes) and stuck after (minutes)<span class="more">How long a chat stays quiet after its turn before the nudge, so you can answer first (1 to 60, empty is 2); and how long a turn may go with no word and nothing running before it counts as stuck (5 to 120, empty is 15). A build or test that's running never counts as stuck.</span></label>
+    <div class="row"><input id="COPILOT_NUDGE_MINUTES" data-key="COPILOT_NUDGE_MINUTES" inputmode="numeric" spellcheck="false" placeholder="2" style="max-width:8em"> <input id="COPILOT_STUCK_MINUTES" data-key="COPILOT_STUCK_MINUTES" aria-label="Stuck after, in minutes" inputmode="numeric" spellcheck="false" placeholder="15" style="max-width:8em"></div>
+    <div class="row"><button class="save" data-keys="COPILOT_MODEL,COPILOT_EFFORT,COPILOT_PERMISSION,COPILOT_CWD,COPILOT_FOLDERS,COPILOT_ASSISTED_ALLOW,COPILOT_SANDBOX,COPILOT_SANDBOX_TOKEN,COPILOT_DISCLOSE,COPILOT_READ,COPILOT_DOMAINS,COPILOT_VM_IMAGES,COPILOT_GATE_RULES,COPILOT_VM_CPUS,COPILOT_VM_MEMORY_GB,COPILOT_VM_MAX,COPILOT_NUDGES,COPILOT_NUDGE_MINUTES,COPILOT_STUCK_MINUTES">Save</button><span class="msg"></span></div>
     <h3 id="cost" style="margin-top:28px">Credits and cost<span class="more">The <a href="/#usage">Usage</a> page adds up the AI credits every chat used, from Copilot's own session logs, and shows what they cost. Credits become dollars at the price below (check your Copilot plan), and dollars become your currency at your rate. With the live rate on, Clearsky looks the rate up once a day from the European Central Bank's public rates (frankfurter.dev, no account or token); if that fails it uses your rate.</span></h3>
     <label for="COPILOT_CREDIT_USD">Dollars per credit</label>
     <input id="COPILOT_CREDIT_USD" data-key="COPILOT_CREDIT_USD" inputmode="decimal" spellcheck="false" placeholder="0.01" style="max-width:8em">
@@ -258,7 +263,7 @@
     <select id="CLEARSKY_FX_LIVE" data-key="CLEARSKY_FX_LIVE"><option value="">Off: use my rate</option><option value="on">On: look it up once a day</option></select>
     <div class="row"><button class="save" data-keys="COPILOT_CREDIT_USD,CLEARSKY_CURRENCY,CLEARSKY_FX_RATE,CLEARSKY_FX_LIVE">Save</button><span class="msg"></span></div>
     <h3 id="memory" style="margin-top:28px">Memory<span class="more">Kept in <code id="memory-path">~/.local/share/clearsky/memory/memory.md</code> on this machine. Copilot is told never to change this file (in the sandbox it can't): it suggests notes in the chat, and they're saved only when you press Save on the card. Put notes for one repo under a <code>## owner/name</code> heading.</span></h3>
-    <textarea id="memory-text" rows="8" aria-label="Copilot's memory" spellcheck="false" placeholder="Nothing yet. Notes you save from a chat's Remember card show up here."></textarea>
+    <textarea id="memory-text" rows="8" aria-label="Copilot's memory" spellcheck="true" placeholder="Nothing yet. Notes you save from a chat's Remember card show up here."></textarea>
     <p class="hint">Notes every new chat reads. <span id="memory-size"></span></p>
     <div class="row"><button id="memory-save" class="save">Save memory</button><span class="msg" id="memory-msg"></span></div>
     <h3 style="margin-top:28px">What Copilot holds and reaches</h3>
@@ -442,6 +447,9 @@ function render(s) {
   $('#COPILOT_VM_CPUS').value = cp.vmCpus || '';
   $('#COPILOT_VM_MEMORY_GB').value = cp.vmMemoryGb || '';
   $('#COPILOT_VM_MAX').value = cp.vmMax || '';
+  $('#COPILOT_NUDGES').value = cp.nudges || '';
+  $('#COPILOT_NUDGE_MINUTES').value = cp.nudgeMinutes || '';
+  $('#COPILOT_STUCK_MINUTES').value = cp.stuckMinutes || '';
   $('#COPILOT_CREDIT_USD').value = cp.creditUsd || '';
   $('#CLEARSKY_CURRENCY').value = cp.currency || '';
   $('#CLEARSKY_FX_RATE').value = cp.fxRate || '';
