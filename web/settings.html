@@ -41,31 +41,32 @@
   .cal-list small { color: var(--muted); font-size: 12px; }
   .hint { color: var(--muted); font-size: 12.5px; margin: 6px 0 0; }
   .hint.warn { color: var(--amber); }
-  .mods { margin-top: 10px; font-size: 12.5px; border-bottom: 1px solid var(--line); }
-  .mods details { border-top: 1px solid var(--line); }
-  .mods summary { display: grid; grid-template-columns: 150px minmax(0, 1fr) auto 10px; gap: 10px; align-items: baseline; padding: 8px 4px; cursor: pointer; list-style: none; }
-  .mods summary::-webkit-details-marker { display: none; }
-  .mods summary:hover { background: var(--surface-2); }
-  .mods summary b { font-weight: 600; font-size: 13px; }
-  .mods summary .sum { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .mods summary::after { content: '›'; color: var(--muted); transition: transform .12s; }
-  .mods details[open] summary::after { transform: rotate(90deg); }
-  .mods .body { padding: 0 4px 10px 164px; display: flex; flex-direction: column; gap: 2px; }
-  .plugs { margin-top: 10px; font-size: 12.5px; }
-  .plug { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; padding: 8px 4px; border-top: 1px solid var(--line); }
-  .plug .k, .plug .sum { color: var(--text-2); }
-  .plug .acts { display: flex; gap: 6px; }
+  /* Plugins: one list, and a page for each laid out the same way. */
+  .plugs { margin-top: 12px; font-size: 12.5px; border-bottom: 1px solid var(--line); }
+  .pl { display: grid; grid-template-columns: 150px minmax(0, 1fr) auto auto 10px; gap: 10px; align-items: baseline; padding: 9px 4px; border-top: 1px solid var(--line); color: var(--text); }
+  .pl:hover { background: var(--surface-2); text-decoration: none !important; }
+  .pl b { font-weight: 600; font-size: 13px; }
+  .pl .sum { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pl::after { content: '›'; color: var(--muted); }
+  .pp-back { display: inline-block; font-size: 12.5px; margin-bottom: 8px; }
+  .pp-top { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .pp-top .pp-title { font-size: 15px; margin: 0; display: flex; gap: 8px; align-items: center; flex: 1; }
+  .pp-top .acts { display: flex; gap: 6px; align-items: center; }
+  .pp-head > p { margin: 4px 0; }
+  .pp-setup { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 2px; }
+  .pp-setup:empty { display: none; }
+  .pp h3 { margin-top: 22px; }
+  .reach { font-size: 12.5px; display: flex; flex-direction: column; gap: 3px; }
+  .reach code { font-size: 11.5px; } .reach .k, .pp .k { color: var(--muted); } .reach .warn { color: var(--amber); }
+  @media (max-width: 520px) { .pl { grid-template-columns: minmax(0, 1fr) auto 10px; } .pl .sum, .pl .k { display: none; } }
   .plug-from { display: flex; gap: 8px; align-items: center; } .plug-from input { flex: 1; margin: 0; }
   .login-head { margin: 14px 0 4px; } .login-slot .row { margin-top: 6px; }
   .plug-look { margin-top: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
   .plug-look .warn { color: var(--amber, #b26b00); }
-  @media (max-width: 520px) { .mods summary { grid-template-columns: 1fr auto 10px; } .mods summary .sum { display: none; } .mods .body { padding-left: 4px; } }
-  .mods code { font-size: 11.5px; }
-  .mods .k { color: var(--muted); }
   input, select, textarea { width: 100%; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--line-strong);
     border-radius: 7px; padding: 6px 9px; }
   input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 14px; padding: 0; border-top: 0; } /* not the app's list rows */
   section button, section .btn { font: inherit; font-size: 13px; font-weight: 500; color: var(--text); background: var(--surface); border: 1px solid var(--line-strong);
     border-radius: 7px; height: 30px; padding: 0 12px; display: inline-flex; align-items: center; }
   section button:hover, section .btn:hover { border-color: var(--text-2); color: var(--text); }
@@ -84,63 +85,6 @@
 <nav class="tabs" id="tabs" aria-label="Settings"></nav>
 <div class="set-b">
 <main>
-  <section>
-    <h2>GitHub <span class="state" id="gh-state"></span></h2>
-    <p id="gh-detail"></p>
-    <div class="row">
-      <button id="gh-login">Log in with GitHub</button>
-      <span class="msg" id="gh-msg"></span>
-    </div>
-    <label for="GITHUB_ORGS">Work organizations (comma-separated; empty means all)</label>
-    <input id="GITHUB_ORGS" data-key="GITHUB_ORGS" placeholder="acme">
-    <label for="GITHUB_MY_PRS">Your PRs</label>
-    <select id="GITHUB_MY_PRS" data-key="GITHUB_MY_PRS"><option value="">Only in the work organizations</option><option value="all">Everywhere (also your own repos)</option></select>
-    <label for="GITHUB_BUILD_REPOS">Repos on the Builds page</label>
-    <input id="GITHUB_BUILD_REPOS" data-key="GITHUB_BUILD_REPOS" placeholder="the ones your PRs and reviews are in" spellcheck="false" title="Comma-separated, like acme/api, acme/web. Each shows how its main branch builds and its newest artifact and release.">
-    <label for="GITHUB_TOKEN">Or a personal access token instead of the gh login (optional)</label>
-    <input id="GITHUB_TOKEN" data-key="GITHUB_TOKEN" type="password" autocomplete="off" placeholder="leave empty to keep">
-    <div class="row"><button class="save" data-keys="GITHUB_ORGS,GITHUB_MY_PRS,GITHUB_BUILD_REPOS,GITHUB_TOKEN">Save</button><span class="msg"></span></div>
-  </section>
-
-  <section>
-    <h2>Jira <span class="state" id="jira-state"></span></h2>
-    <p id="jira-detail"></p>
-    <div class="row">
-      <button id="jira-login">Log in to Atlassian</button>
-      <span class="msg" id="jira-msg"></span>
-    </div>
-    <p>This runs <code>acli jira auth login --web</code>, which opens the Atlassian login in your browser. Clearsky stores no Jira credentials.</p>
-  </section>
-
-  <section>
-    <h2>Google Calendar <span class="state" id="cal-state"></span></h2>
-    <p id="cal-detail"></p>
-    <p><b>Option A, no new login:</b> add your work Google account in your desktop's <b>Settings → Online Accounts → Google</b>, with Calendar switched on. Enter your work email below and save. Clearsky reads the calendar GNOME syncs.</p>
-    <label for="CALENDAR_EMAIL">Your work calendar email</label>
-    <input id="CALENDAR_EMAIL" data-key="CALENDAR_EMAIL" type="email" placeholder="you@company.com">
-    <div id="cal-pick" hidden>
-      <label>Calendars to include</label>
-      <div id="cal-list" class="cal-list"></div>
-      <p class="hint">Add a personal Google account in Online Accounts (Calendar only) to see family appointments here too.
-        On a shared calendar (one not named after your address, like "Family"), events only take your time when you're invited,
-        or when one of these names is in the title; the rest just show in the agenda.</p>
-      <label for="CALENDAR_MY_NAMES">Your names in shared calendar titles</label>
-      <input id="CALENDAR_MY_NAMES" data-key="CALENDAR_MY_NAMES" placeholder="Alex, Dad">
-    </div>
-    <input type="hidden" id="EVOLUTION_CALENDARS" data-key="EVOLUTION_CALENDARS">
-    <div class="row"><button class="save" data-keys="CALENDAR_EMAIL,EVOLUTION_CALENDARS,CALENDAR_MY_NAMES">Save</button><span class="msg"></span></div>
-    <p style="margin-top:14px"><b>Option B, iCal link</b> (only if your admin allows it). You can use both; meetings are merged:</p>
-    <ol>
-      <li>Open <a href="https://calendar.google.com/calendar/r/settings" target="_blank" rel="noopener">Google Calendar settings</a>.</li>
-      <li>Under <b>Settings for my calendars</b>, click your calendar, then <b>Integrate calendar</b>.</li>
-      <li>Copy <b>Secret address in iCal format</b> and paste it below.</li>
-    </ol>
-    <label for="GOOGLE_CALENDAR_ICS">Secret address in iCal format (several? separate them with spaces)</label>
-    <input id="GOOGLE_CALENDAR_ICS" data-key="GOOGLE_CALENDAR_ICS" type="password" autocomplete="off" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics">
-    <div class="row"><button class="save" data-keys="GOOGLE_CALENDAR_ICS">Save</button>
-      <button class="secondary" id="cal-remove" hidden>Remove link</button><span class="msg"></span></div>
-  </section>
-
   <section>
     <h2>General</h2>
     <label for="CLEARSKY_STANDUP_TIME">Daily stand-up at</label>
@@ -164,6 +108,75 @@
     <h3>Demo</h3>
     <p class="hint">Clearsky with made-up data, in a new tab: for showing it to others without your own work on screen. Nothing of yours is read or shown, and it stops when you click Leave demo in its menu.</p>
     <div class="row"><button class="secondary" id="demo-start" type="button">Try with demo data</button><span class="msg" id="demo-msg"></span></div>
+  </section>
+
+  <section id="plugins">
+    <h2>Plugins <span class="state" id="plug-state"></span></h2>
+    <div id="plug-list">
+      <p class="hint">Everything Clearsky reads from. Open one to set it up and see what it holds and reaches. One you add from a git repo, npm or a folder runs in a sandbox of its own, and you see what it reaches before any of its code runs.</p>
+      <div class="plugs" id="plugs"></div>
+      <div class="row" id="plug-restart" hidden><button id="plug-restart-btn">Restart to load</button><span class="msg">Clearsky loads plugins when it starts.</span></div>
+      <label for="plug-from">Add a plugin</label>
+      <div class="plug-from"><input id="plug-from" spellcheck="false" placeholder="github:owner/repo, https://…/repo.git, npm:package or a folder">
+        <button id="plug-look" class="secondary">Look at it</button></div><span class="msg" id="plug-msg"></span>
+      <div id="plug-preview"></div>
+    </div>
+    <div id="plug-pages"></div>
+
+  <div hidden id="core-setup">
+    <div data-setup="github">
+      <p id="gh-detail"></p>
+      <div class="row">
+        <button id="gh-login">Log in with GitHub</button>
+        <span class="msg" id="gh-msg"></span>
+      </div>
+      <label for="GITHUB_ORGS">Work organizations (comma-separated; empty means all)</label>
+      <input id="GITHUB_ORGS" data-key="GITHUB_ORGS" placeholder="acme">
+      <label for="GITHUB_MY_PRS">Your PRs</label>
+      <select id="GITHUB_MY_PRS" data-key="GITHUB_MY_PRS"><option value="">Only in the work organizations</option><option value="all">Everywhere (also your own repos)</option></select>
+      <label for="GITHUB_BUILD_REPOS">Repos on the Builds page</label>
+      <input id="GITHUB_BUILD_REPOS" data-key="GITHUB_BUILD_REPOS" placeholder="the ones your PRs and reviews are in" spellcheck="false" title="Comma-separated, like acme/api, acme/web. Each shows how its main branch builds and its newest artifact and release.">
+      <label for="GITHUB_TOKEN">Or a personal access token instead of the gh login (optional)</label>
+      <input id="GITHUB_TOKEN" data-key="GITHUB_TOKEN" type="password" autocomplete="off" placeholder="leave empty to keep">
+      <div class="row"><button class="save" data-keys="GITHUB_ORGS,GITHUB_MY_PRS,GITHUB_BUILD_REPOS,GITHUB_TOKEN">Save</button><span class="msg"></span></div>
+    </div>
+    <div data-setup="jira">
+      <p id="jira-detail"></p>
+      <div class="row">
+        <button id="jira-login">Log in to Atlassian</button>
+        <span class="msg" id="jira-msg"></span>
+      </div>
+      <p>This runs <code>acli jira auth login --web</code>, which opens the Atlassian login in your browser. Clearsky stores no Jira credentials.</p>
+    </div>
+    <div data-setup="calendar">
+      <p id="cal-detail"></p>
+      <p><b>Option A, no new login:</b> add your work Google account in your desktop's <b>Settings → Online Accounts → Google</b>, with Calendar switched on. Enter your work email below and save. Clearsky reads the calendar GNOME syncs.</p>
+      <label for="CALENDAR_EMAIL">Your work calendar email</label>
+      <input id="CALENDAR_EMAIL" data-key="CALENDAR_EMAIL" type="email" placeholder="you@company.com">
+      <div id="cal-pick" hidden>
+        <label>Calendars to include</label>
+        <div id="cal-list" class="cal-list"></div>
+        <p class="hint">Add a personal Google account in Online Accounts (Calendar only) to see family appointments here too.
+          On a shared calendar (one not named after your address, like "Family"), events only take your time when you're invited,
+          or when one of these names is in the title; the rest just show in the agenda.</p>
+        <label for="CALENDAR_MY_NAMES">Your names in shared calendar titles</label>
+        <input id="CALENDAR_MY_NAMES" data-key="CALENDAR_MY_NAMES" placeholder="Alex, Dad">
+      </div>
+      <input type="hidden" id="EVOLUTION_CALENDARS" data-key="EVOLUTION_CALENDARS">
+      <div class="row"><button class="save" data-keys="CALENDAR_EMAIL,EVOLUTION_CALENDARS,CALENDAR_MY_NAMES">Save</button><span class="msg"></span></div>
+      <p style="margin-top:14px"><b>Option B, iCal link</b> (only if your admin allows it). You can use both; meetings are merged:</p>
+      <ol>
+        <li>Open <a href="https://calendar.google.com/calendar/r/settings" target="_blank" rel="noopener">Google Calendar settings</a>.</li>
+        <li>Under <b>Settings for my calendars</b>, click your calendar, then <b>Integrate calendar</b>.</li>
+        <li>Copy <b>Secret address in iCal format</b> and paste it below.</li>
+      </ol>
+      <label for="GOOGLE_CALENDAR_ICS">Secret address in iCal format (several? separate them with spaces)</label>
+      <input id="GOOGLE_CALENDAR_ICS" data-key="GOOGLE_CALENDAR_ICS" type="password" autocomplete="off" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics">
+      <div class="row"><button class="save" data-keys="GOOGLE_CALENDAR_ICS">Save</button>
+        <button class="secondary" id="cal-remove" hidden>Remove link</button><span class="msg"></span></div>
+    </div>
+    <div data-setup="links"><p>Nothing to set up here: add and change your links on the <a href="/#links">Links</a> page.</p></div>
+  </div>
   </section>
 
   <section>
@@ -218,6 +231,8 @@
     <textarea id="memory-text" rows="8" aria-label="Copilot's memory" spellcheck="false" placeholder="Nothing yet. Notes you save from a chat's Remember card show up here."></textarea>
     <p class="hint">Notes every new chat reads, kept in <code id="memory-path">~/.local/share/clearsky/memory/memory.md</code> on this machine. Copilot is told never to change this file (in the sandbox it can't): it suggests notes in the chat, and they're saved only when you press Save on the card. Put notes for one repo under a <code>## owner/name</code> heading. <span id="memory-size"></span></p>
     <div class="row"><button id="memory-save" class="save">Save memory</button><span class="msg" id="memory-msg"></span></div>
+    <h3 style="margin-top:28px">What Copilot holds and reaches</h3>
+    <div class="reach" id="copilot-reach"></div>
   </section>
 
   <section>
@@ -228,31 +243,6 @@
     <label for="VPN_NEEDED_BY">Modules that need the VPN</label>
     <input id="VPN_NEEDED_BY" data-key="VPN_NEEDED_BY" spellcheck="false" placeholder="for example jira, github">
     <div class="row"><button class="save" data-keys="VPN_CHECK,VPN_NEEDED_BY">Save</button><span class="msg"></span></div>
-  </section>
-
-  <section>
-    <h2>Modules</h2>
-    <p class="hint">What each part of Clearsky holds and talks to; click one for the details. Saved secrets are never shown, only whether one is there. Each source gets only its own settings, and a source that lists its hosts can reach only those through Clearsky.</p>
-    <div class="mods" id="mods"></div>
-  </section>
-
-  <section>
-    <h2>Plugins</h2>
-    <p class="hint">Sources you add to Clearsky, such as School. One you add from a git repo, npm or a folder runs in a sandbox of its own: it reaches only the hosts it lists, keeps files only in its own folder, and gets only its own settings. You see what it reaches before any of its code runs.</p>
-    <div class="plugs" id="plugs"></div>
-    <label for="plug-from">Add a plugin</label>
-    <div class="plug-from"><input id="plug-from" spellcheck="false" placeholder="github:owner/repo, https://…/repo.git, npm:package or a folder">
-      <button id="plug-look" class="secondary">Look at it</button></div><span class="msg" id="plug-msg"></span>
-    <div id="plug-preview"></div>
-    <div class="row" id="plug-restart" hidden><button id="plug-restart-btn">Restart to load</button><span class="msg">Clearsky loads plugins when it starts.</span></div>
-  </section>
-
-  <section id="extra" hidden>
-    <h2>Other sources</h2>
-    <p class="hint">Settings for your plugins and for sources in <code>~/.config/clearsky/sources/</code>.</p>
-    <div id="extra-logins"></div>
-    <div id="extra-fields"></div>
-    <div class="row"><button class="save" id="extra-save">Save</button><span class="msg"></span></div>
   </section>
 </main>
 </div>
@@ -265,9 +255,18 @@
   const slug = (sec) => sec.id || (sec.id = sec.querySelector('h2').firstChild.textContent.trim().toLowerCase().replace(/\W+/g, '-'));
   const cards = () => [...main.children].filter((x) => x.tagName === 'SECTION' && !x.hidden);
   document.getElementById('back').onclick = () => { location.href = '/'; };
-  addEventListener('keydown', (e) => { if (e.key === 'Escape' && !/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName)) location.href = '/'; });
+  // Esc: from a plugin's page back to all plugins, else out of Settings.
+  addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || /^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement?.tagName)) return;
+    if (location.hash.startsWith('#plugins/')) location.hash = '#plugins'; else location.href = '/';
+  });
+  // Old addresses (before every source was a plugin) still land on the right page.
+  const OLD = { github: 'plugins/github', jira: 'plugins/jira', 'google-calendar': 'plugins/calendar', modules: 'plugins', extra: 'plugins', 'other-sources': 'plugins' };
+  const moved = () => { if (OLD[location.hash.slice(1)]) history.replaceState(null, '', `#${OLD[location.hash.slice(1)]}`); };
+  moved();
   function draw() {
-    const list = cards(), want = location.hash.slice(1);
+    moved();
+    const list = cards(), want = location.hash.slice(1).split('/')[0];
     const cur = list.find((x) => slug(x) === want) || list[0];
     list.forEach((x) => x.classList.toggle('cur', x === cur));
     const html = list.map((x) => {
@@ -328,7 +327,7 @@ function state(el, on, text) {
 function render(s) {
   $('#file').textContent = `Saved to ${s.file}`;
   const gh = s.github;
-  state($('#gh-state'), gh.cli === 'logged-in' || !!gh.token, gh.token ? 'token' : gh.cli === 'logged-in' ? 'connected' : gh.cli === 'missing' ? 'gh missing' : 'not connected');
+  setStatus('github', gh.cli === 'logged-in' || !!gh.token, gh.token ? 'token' : gh.cli === 'logged-in' ? 'connected' : gh.cli === 'missing' ? 'gh missing' : 'not connected');
   $('#gh-detail').textContent = gh.token ? `Using a personal access token ${gh.token}.`
     : gh.cli === 'logged-in' ? `Using the GitHub CLI login${gh.user ? ` as ${gh.user}` : ''}.`
     : gh.cli === 'missing' ? 'The GitHub CLI (gh) is not installed. Install it, or paste a token below.'
@@ -341,7 +340,7 @@ function render(s) {
   $('#GITHUB_BUILD_REPOS').value = gh.buildRepos || '';
 
   const j = s.jira;
-  state($('#jira-state'), j.cli === 'logged-in' ? true : j.cli === 'missing' ? 'bad' : false,
+  setStatus('jira', j.cli === 'logged-in' ? true : j.cli === 'missing' ? 'bad' : false,
     j.cli === 'logged-in' ? 'connected' : j.cli === 'missing' ? 'acli missing' : 'not connected');
   $('#jira-detail').textContent = j.cli === 'logged-in' ? `acli is logged in${j.site ? ` to ${j.site}` : ''}.`
     : j.cli === 'missing' ? 'The Atlassian CLI (acli) is not installed.' : 'acli is not logged in.';
@@ -352,7 +351,7 @@ function render(s) {
   const evo = s.calendar.evolution || [];
   const evoOk = evo.some((c) => c.synced);
   const using = [s.calendar.url && 'iCal link', evoOk && 'GNOME'].filter(Boolean);
-  state($('#cal-state'), using.length > 0, using.length ? using.join(' + ') : 'not connected');
+  setStatus('calendar', using.length > 0, using.length ? using.join(' + ') : 'not connected');
   $('#cal-detail').textContent = [
     s.calendar.url ? 'iCal link saved.' : '',
     evo.length ? `GNOME Online Accounts: ${evo.map((c) => `${c.name}${c.synced ? '' : ' (not synced yet; open GNOME Calendar once)'}`).join(', ')}.`
@@ -414,81 +413,148 @@ function render(s) {
     $('#COPILOT_PERMISSION').value = cp.permission || '';
   }).catch(() => {});
 
-  const extra = s.extra || [], logins = s.logins || [];
-  $('#extra').hidden = !extra.length && !logins.length;
-  if (extra.length && !$('#extra-fields').children.length) {
-    // Grouped by the plugin they belong to, each with its set-up link if it has one.
-    // A plugin's logins go under its fields (in its slot), so its hints can say "log in below".
-    let last = null;
-    const slot = (src) => (src ? `<div class="login-slot" data-for="${esc(src)}"></div>` : '');
-    $('#extra-fields').innerHTML = extra.map((f) => `${f.source && f.source !== last ? `${slot(last)}<h3>${esc(last = f.source)}</h3>` : ''}<label for="${esc(f.key)}">${esc(f.label)}</label>
-      <input id="${esc(f.key)}" data-key="${esc(f.key)}"${f.secret ? ' type="password" autocomplete="off"' : ''}>
-      ${f.link ? `<p class="hint"><a href="${esc(f.link.url)}" target="_blank" rel="noopener">${esc(f.link.label)}</a></p>` : ''}
-      ${f.hint ? `<p class="hint">${esc(f.hint)}</p>` : ''}`).join('') + slot(last);
-    $('#extra-save').dataset.keys = extra.map((f) => f.key).join(',');
-  }
-  // A login's heading is the plugin's, so in its slot under the fields it's a line, not a second heading.
-  const loginHtml = (l, inSlot) => {
-    const head = (state) => (inSlot ? `<p class="login-head"><b>Login</b> ${state}</p>` : `<h3>${esc(l.label)} ${state}</h3>`);
-    return l.many ? `${head(`<span class="state ${l.many.length && l.many.every((x) => x.loggedIn) ? 'on' : 'bad'}">${
-      l.many.filter((x) => x.loggedIn).length} of ${l.many.length} logged in</span>`)}${l.many.map((x) => `<div class="row"><span><b>${esc(x.label)}</b> <small>${esc(x.detail)}</small></span>
-      <button data-many="${esc(l.name)}" data-id="${esc(x.id)}" class="${x.loggedIn ? 'secondary' : ''}">${x.loggedIn ? 'Log in again' : 'Log in'}</button>${x.canLogOut ? `<button class="secondary" data-many="${esc(l.name)}" data-id="${esc(x.id)}" data-stop>Log out</button>` : ''}<span class="msg"></span></div>`).join('')}`
-    : `${head(`<span class="state ${l.running ? 'off' : l.loggedIn ? 'on' : 'bad'}">${l.running ? 'logging in…' : l.loggedIn ? 'logged in' : 'not logged in'}</span>`)}
-    <div class="row"><button data-login="${esc(l.name)}" class="${l.loggedIn ? 'secondary' : ''}"${l.running ? ' disabled' : ''}>${esc(l.loggedIn ? 'Log in again' : l.button)}</button>
-      <span class="msg${l.error ? ' bad' : ''}">${esc(l.running ? 'A browser window is open. Log in there; it closes by itself when you are in.' : l.error || l.detail)}</span></div>`;
-  };
-  const slots = new Map([...document.querySelectorAll('#extra-fields .login-slot')].map((x) => [x.dataset.for, x]));
-  for (const x of slots.values()) x.innerHTML = '';
-  $('#extra-logins').innerHTML = logins.filter((l) => !slots.has(l.label)).map((l) => loginHtml(l, false)).join('');
-  for (const l of logins) if (slots.has(l.label)) slots.get(l.label).innerHTML = loginHtml(l, true);
+  S.settings = s;
+  drawPlugins();
   clearTimeout(render.poll);
-  if (logins.some((l) => l.running)) render.poll = setTimeout(load, 2000);
-  for (const f of extra) {
-    if (f.secret) { SECRET.add(f.key); $(`#${f.key}`).placeholder = f.value ? `${f.value}; paste a new one to replace` : ''; }
-    else $(`#${f.key}`).value = f.value || '';
-  }
+  if ((s.logins || []).some((l) => l.running)) render.poll = setTimeout(load, 2000);
 }
 
+// Plugins: one list of everything Clearsky reads from, Clearsky's own included, and a page for
+// each that's laid out the same way: how it's doing, its setup (logins and settings), and what
+// it holds and reaches.
+const S = { settings: null, plugins: null, core: {} };
+function setStatus(name, on, text) { S.core[name] = { on, text }; }
+const pill = (st) => `<span class="state ${st.on === true ? 'on' : st.on === 'bad' ? 'bad' : 'off'}">${esc(st.text)}</span>`;
+function plugStatus(p) {
+  if (S.core[p.name]) return S.core[p.name];
+  if (p.kind === 'core') return { on: true, text: 'on' };
+  if (!p.added) return { on: null, text: 'not added' };
+  if (p.problem) return { on: 'bad', text: 'broken' };
+  if (!p.loaded) return { on: null, text: 'restart to load' };
+  if (p.run === 'sandbox' && !S.plugins.sandbox) return { on: 'bad', text: 'needs srt' };
+  if (!p.ready) return { on: null, text: 'not set up' };
+  const ls = (S.settings?.logins || []).filter((l) => l.name === p.name);
+  if (ls.some((l) => (l.many ? !l.many.length || !l.many.every((x) => x.loggedIn) : !l.loggedIn && !l.running))) return { on: 'bad', text: 'not logged in' };
+  return { on: true, text: 'on' };
+}
+const kindLabel = (p) => (p.kind === 'core' ? 'Built in' : p.kind === 'bundled' ? 'Ships with Clearsky'
+  : p.kind === 'local' ? 'Your file in ~/.config/clearsky/sources' : `From ${p.from}${p.commit ? ` @ ${p.commit.slice(0, 10)}` : ''}`);
+const runLabel = (p) => (p.kind === 'core' ? '' : p.run === 'sandbox' ? 'sandboxed' : p.kind === 'bundled' || p.kind === 'local' ? '' : 'runs inside Clearsky, as you');
 const KIND = { token: 'Token', 'web-session': 'Web session (cookies)', 'cli-login': 'Login kept by its CLI', keyring: 'Keyring' };
-function renderModules(list) {
+// What it holds and reaches: the same lines for every plugin (and for Copilot).
+function reachHtml(m) {
+  if (!m) return '';
   const code = (xs) => xs.map((x) => `<code>${esc(x)}</code>`).join(', ');
-  // One line each (what it holds, how many hosts), the rest when you open it.
-  const sum = (m) => [(m.secrets || []).map((x) => `${KIND[x.kind] || x.kind}${x.key ? (x.set ? ' saved' : ' not set') : ''}`).join(', ') || 'Holds nothing',
-    m.hosts.length && `reaches ${m.hosts.length === 1 ? m.hosts[0] : `${m.hosts.length} hosts`}`].filter(Boolean).join(' · ');
-  $('#mods').innerHTML = list.map((m) => `<details><summary><b>${esc(m.label)}</b><span class="sum">${esc(sum(m))}</span><span class="k">${esc(m.area)}</span></summary><div class="body">
-    ${(m.secrets || []).map((x) => `<div><b>${esc(KIND[x.kind] || x.kind)}</b>${x.key ? ` <code>${esc(x.key)}</code> ${x.set ? '· saved' : '· not set'}` : ''}${x.note ? ` <span class="k">${esc(x.note)}</span>` : ''}</div>`).join('') || '<div class="k">Holds nothing</div>'}
-    ${m.hosts.length ? `<div><span class="k">Reaches</span> ${code(m.hosts)}</div>` : ''}
-    ${m.clis.length ? `<div><span class="k">Runs</span> ${code(m.clis)}</div>` : ''}
-    ${m.files.length ? `<div><span class="k">Files</span> ${code(m.files)}</div>` : ''}
+  return `${(m.secrets || []).map((x) => `<div><b>${esc(KIND[x.kind] || x.kind)}</b>${x.key ? ` <code>${esc(x.key)}</code>${'set' in x ? (x.set ? ' · saved' : ' · not set') : ''}` : ''}${x.note ? ` <span class="k">${esc(x.note)}</span>` : ''}</div>`).join('') || '<div class="k">Holds no secrets</div>'}
+    <div><span class="k">Reaches</span> ${m.hosts?.length ? code(m.hosts) : 'no hosts'}</div>
+    ${m.clis?.length ? `<div><span class="k">Runs</span> ${code(m.clis)}</div>` : ''}
+    ${m.files?.length ? `<div><span class="k">Files</span> ${code(m.files)}</div>` : ''}
     ${m.dbus ? '<div><span class="k">Uses the desktop session bus (D-Bus)</span></div>' : ''}
-    ${m.note ? `<div class="k">${esc(m.note)}</div>` : ''}</div></details>`).join('');
+    ${m.outside ? `<div class="warn">Runs outside the sandbox: ${esc(m.outside)}</div>` : ''}
+    ${m.note ? `<div class="k">${esc(m.note)}</div>` : ''}`;
 }
-
-// Plugins: what's added (and how it runs), what ships with Clearsky, and adding one after a look.
-const runLabel = (p) => (p.run === 'inside' ? (p.kind === 'bundled' ? 'ships with Clearsky' : 'runs inside Clearsky, as you') : 'sandboxed');
+// The one-line version, for a plugin you're about to add.
 function reach(m) {
   if (!m) return '';
   const code = (xs) => xs.map((x) => `<code>${esc(x)}</code>`).join(', ');
   return [m.hosts?.length ? `reaches ${code(m.hosts)}` : 'reaches no hosts', m.clis?.length && `runs ${code(m.clis)}`, m.files?.length && `keeps ${code(m.files)}`].filter(Boolean).join(' · ');
 }
+// In use first, then what you could add; by name within each.
+const plugOrder = (a, b) => (b.added - a.added) || a.label.localeCompare(b.label);
 function renderPlugins(r) {
-  const added = r.added.map((p) => `<div class="plug"><div><b>${esc(p.label)}</b> <span class="k">${esc(p.version || '')} · ${esc(runLabel(p))}${p.kind === 'bundled' ? '' : ` · from <code>${esc(p.from)}</code>${p.commit ? ` @ ${esc(p.commit.slice(0, 10))}` : ''}`}</span>
-      <div class="sum">${p.problem ? `<span class="bad">${esc(p.problem)}</span>` : reach(p.manifest)}${p.loaded ? '' : ' · <b>restart to load</b>'}${p.run === 'sandbox' && !r.sandbox ? ' · <span class="bad">needs the sandbox (srt), not installed</span>' : ''}</div></div>
-      <div class="acts">${p.kind === 'bundled' ? '' : `<button class="secondary" data-plug-update="${esc(p.name)}">Update</button>`}<button class="secondary" data-plug-remove="${esc(p.name)}">Remove</button></div></div>`);
-  const shipped = r.available.map((p) => `<div class="plug"><div><b>${esc(p.label)}</b> <span class="k">ships with Clearsky, not added</span><div class="sum">${esc(p.description)}</div></div>
-      <div class="acts"><button data-plug-add="${esc(p.name)}">Add</button></div></div>`);
-  $('#plugs').innerHTML = [...added, ...shipped].join('') || '<p class="k">None added yet.</p>';
-  $('#plug-restart').hidden = r.added.every((p) => p.loaded) && !renderPlugins.changed;
+  S.plugins = r;
+  drawPlugins();
 }
+// A plugin's logins under its settings: one button, or a row per environment.
+function loginHtml(l) {
+  const head = (state) => `<p class="login-head"><b>Login</b> ${state}</p>`;
+  return l.many ? `${head(`<span class="state ${l.many.length && l.many.every((x) => x.loggedIn) ? 'on' : 'bad'}">${
+    l.many.filter((x) => x.loggedIn).length} of ${l.many.length} logged in</span>`)}${l.many.map((x) => `<div class="row"><span><b>${esc(x.label)}</b> <small>${esc(x.detail)}</small></span>
+    <button data-many="${esc(l.name)}" data-id="${esc(x.id)}" class="${x.loggedIn ? 'secondary' : ''}">${x.loggedIn ? 'Log in again' : 'Log in'}</button>${x.canLogOut ? `<button class="secondary" data-many="${esc(l.name)}" data-id="${esc(x.id)}" data-stop>Log out</button>` : ''}<span class="msg"></span></div>`).join('')}`
+  : `${head(`<span class="state ${l.running ? 'off' : l.loggedIn ? 'on' : 'bad'}">${l.running ? 'logging in…' : l.loggedIn ? 'logged in' : 'not logged in'}</span>`)}
+  <div class="row"><button data-login="${esc(l.name)}" class="${l.loggedIn ? 'secondary' : ''}"${l.running ? ' disabled' : ''}>${esc(l.loggedIn ? 'Log in again' : l.button)}</button>
+    <span class="msg${l.error ? ' bad' : ''}">${esc(l.running ? 'A browser window is open. Log in there; it closes by itself when you are in.' : l.error || l.detail)}</span></div>`;
+}
+// Its setup: Clearsky's own have theirs in the page; a plugin's comes from its manifest.
+function setupHtml(p, fields) {
+  if (!p.added) return `<div class="row"><button data-plug-add="${esc(p.name)}">Add ${esc(p.label)}</button><span class="msg"></span></div><div class="pp-preview"></div>`;
+  if (!p.loaded) return `<div class="row"><button data-restart>Restart to load</button><span class="msg">Clearsky loads plugins when it starts.</span></div>`;
+  return `${fields.map((f) => `<label for="${esc(f.key)}">${esc(f.label)}</label>
+    <input id="${esc(f.key)}" data-key="${esc(f.key)}"${f.secret ? ' type="password" autocomplete="off"' : ''}>
+    ${f.link ? `<p class="hint"><a href="${esc(f.link.url)}" target="_blank" rel="noopener">${esc(f.link.label)}</a></p>` : ''}
+    ${f.hint ? `<p class="hint">${esc(f.hint)}</p>` : ''}`).join('')}
+    ${fields.length ? `<div class="row"><button class="save" data-keys="${esc(fields.map((f) => f.key).join(','))}">Save</button><span class="msg"></span></div>` : ''}
+    <div class="login-slot"></div>
+    ${fields.length ? '' : '<p class="k pp-none" hidden>Nothing to set up.</p>'}`;
+}
+function drawPlugins() {
+  if (!S.plugins?.all) return;
+  const list = [...S.plugins.all].sort(plugOrder), s = S.settings || {};
+  const extra = s.extra || [], logins = s.logins || [];
+  $('#plugs').innerHTML = list.map((p) => `<a class="pl" href="#plugins/${esc(p.name)}"><b>${esc(p.label)}</b><span class="sum">${esc(p.description)}</span>
+    <span class="k">${esc(p.area === 'work' ? 'Work' : 'Personal')}</span>${pill(plugStatus(p))}</a>`).join('');
+  const bad = list.filter((p) => plugStatus(p).on === 'bad').length;
+  state($('#plug-state'), bad ? 'bad' : null, bad ? `${bad} need${bad === 1 ? 's' : ''} you` : '');
+  $('#plug-restart').hidden = list.every((p) => !p.added || p.loaded) && !renderPlugins.changed;
+  const pages = $('#plug-pages');
+  for (const p of list) {
+    let pg = pages.querySelector(`.pp[data-plugin="${CSS.escape(p.name)}"]`);
+    if (!pg) {
+      pg = document.createElement('div');
+      pg.className = 'pp'; pg.dataset.plugin = p.name; pg.hidden = true;
+      pg.innerHTML = `<a class="pp-back" href="#plugins">‹ All plugins</a><div class="pp-head"></div><div class="pp-setup"></div>
+        <h3>What it holds and reaches</h3><div class="reach pp-reach"></div>`;
+      pages.append(pg);
+    }
+    const st = plugStatus(p);
+    const acts = p.added && p.kind !== 'core' && p.kind !== 'local'
+      ? `${p.kind === 'bundled' ? '' : `<button class="secondary" data-plug-update="${esc(p.name)}">Update</button>`}<button class="secondary" data-plug-remove="${esc(p.name)}">Remove</button>` : '';
+    pg.querySelector('.pp-head').innerHTML = `<div class="pp-top"><h3 class="pp-title">${esc(p.label)} ${pill(st)}</h3><div class="acts">${acts}<span class="msg"></span></div></div>
+      <p class="k">${[kindLabel(p), p.version, runLabel(p), `${p.area === 'work' ? 'Work' : 'Personal'} tab`].filter(Boolean).map(esc).join(' · ')}</p>
+      ${p.description ? `<p>${esc(p.description)}</p>` : ''}
+      ${p.problem ? `<p class="bad">${esc(p.problem)}</p>` : ''}
+      ${p.run === 'sandbox' && !S.plugins.sandbox ? '<p class="bad">It runs in the sandbox (srt), which isn\'t installed here.</p>' : ''}`;
+    // The setup is drawn again only when what it can be changes (added, loaded), so typing isn't lost.
+    const setup = pg.querySelector('.pp-setup'), fields = extra.filter((f) => f.plugin === p.name);
+    const shape = p.kind === 'core' ? 'core' : `${p.added}/${p.loaded}/${S.settings ? fields.map((f) => f.key).join(',') : '?'}`;
+    if (setup.dataset.shape !== shape) {
+      setup.dataset.shape = shape;
+      if (p.kind === 'core') { const own = document.querySelector(`#core-setup [data-setup="${CSS.escape(p.name)}"]`); if (own) setup.append(own); }
+      else {
+        setup.innerHTML = setupHtml(p, fields);
+        for (const f of fields) if (!f.secret) setup.querySelector(`#${CSS.escape(f.key)}`).value = f.value || '';
+      }
+    }
+    for (const f of fields) {
+      const el = setup.querySelector(`#${CSS.escape(f.key)}`);
+      if (el && f.secret) { SECRET.add(f.key); el.placeholder = f.value ? `${f.value}; paste a new one to replace` : ''; }
+    }
+    const slot = setup.querySelector('.login-slot'), mine = logins.filter((l) => l.name === p.name);
+    if (slot) slot.innerHTML = mine.map(loginHtml).join('');
+    const none = setup.querySelector('.pp-none');
+    if (none) none.hidden = !!mine.length;
+    pg.querySelector('.pp-reach').innerHTML = reachHtml(p.reach);
+  }
+  showPlugin();
+}
+// #plugins/<name> opens that plugin's page; #plugins the list.
+function showPlugin() {
+  const want = location.hash.startsWith('#plugins/') ? decodeURIComponent(location.hash.slice(9)) : '';
+  let found = false;
+  for (const pg of document.querySelectorAll('#plug-pages .pp')) { const on = pg.dataset.plugin === want; pg.hidden = !on; found ||= on; }
+  $('#plug-list').hidden = found;
+}
+addEventListener('hashchange', showPlugin);
 const loadPlugins = () => fetch('/api/plugins').then((x) => x.json()).then(renderPlugins).catch(() => {});
-async function lookAt(from) {
-  const msg = $('#plug-msg');
-  msg.textContent = 'Fetching…'; msg.className = 'msg'; $('#plug-preview').innerHTML = '';
+// A look at a plugin before it's added: in its own page, or under "Add a plugin".
+async function lookAt(from, where = $('#plug-preview')) {
+  const msg = where === $('#plug-preview') ? $('#plug-msg') : where.previousElementSibling.querySelector('.msg');
+  msg.textContent = 'Fetching…'; msg.className = 'msg'; where.innerHTML = '';
   try {
     const p = await post('/api/plugins/preview', { from });
     msg.textContent = '';
     const sandboxed = p.kind !== 'bundled' && !p.outside;
-    $('#plug-preview').innerHTML = `<div class="plug-look"><div><b>${esc(p.label)}</b> ${esc(p.version)}${p.commit ? ` <span class="k">@ ${esc(p.commit.slice(0, 10))}</span>` : ''}${p.replaces ? ` <span class="k">(replaces ${esc(p.replaces.version)})</span>` : ''}</div>
+    where.innerHTML = `<div class="plug-look"><div><b>${esc(p.label)}</b> ${esc(p.version)}${p.commit ? ` <span class="k">@ ${esc(p.commit.slice(0, 10))}</span>` : ''}${p.replaces ? ` <span class="k">(replaces ${esc(p.replaces.version)})</span>` : ''}</div>
       ${p.description ? `<div class="k">${esc(p.description)}</div>` : ''}
       <div>${reach(p)}</div>
       ${p.settings.length ? `<div class="k">Settings: ${p.settings.map((x) => `<code>${esc(x)}</code>`).join(', ')}</div>` : ''}
@@ -498,28 +564,29 @@ async function lookAt(from) {
   } catch (e) { msg.textContent = e.message; msg.className = 'msg bad'; }
 }
 document.addEventListener('click', async (e) => {
-  const b = e.target.closest('#plug-look,[data-plug-add],#plug-add,#plug-cancel,[data-plug-remove],[data-plug-update],#plug-restart-btn');
+  const b = e.target.closest('#plug-look,[data-plug-add],#plug-add,#plug-cancel,[data-plug-remove],[data-plug-update],#plug-restart-btn,[data-restart]');
   if (!b) return;
   if (b.id === 'plug-look') return lookAt($('#plug-from').value.trim());
-  if (b.dataset.plugAdd) return lookAt(b.dataset.plugAdd);
-  if (b.id === 'plug-cancel') { $('#plug-preview').innerHTML = ''; return; }
+  if (b.dataset.plugAdd) return lookAt(b.dataset.plugAdd, b.closest('.pp')?.querySelector('.pp-preview'));
+  if (b.id === 'plug-cancel') { b.closest('.plug-look').remove(); return; }
   const msg = b.parentElement.querySelector('.msg') || $('#plug-msg');
   b.disabled = true;
   try {
-    if (b.id === 'plug-restart-btn') { await post('/api/restart', { force: false }); msg.textContent = 'Restarting when no chat is busy…'; return; }
+    if (b.id === 'plug-restart-btn' || 'restart' in b.dataset) { await post('/api/restart', { force: false }); msg.textContent = 'Restarting when no chat is busy…'; return; }
     if (b.dataset.plugRemove && !confirm(`Remove ${b.dataset.plugRemove}? What it kept stays, in case you add it again.`)) { b.disabled = false; return; }
     const r = b.id === 'plug-add' ? await post('/api/plugins/add', { token: b.dataset.token, trust: !!$('#plug-trust')?.checked })
       : await post(b.dataset.plugRemove ? '/api/plugins/remove' : '/api/plugins/update', { name: b.dataset.plugRemove || b.dataset.plugUpdate });
     renderPlugins.changed = true;
-    if (b.id === 'plug-add') { $('#plug-preview').innerHTML = ''; $('#plug-from').value = ''; }
+    if (b.id === 'plug-add') { b.closest('.plug-look').remove(); $('#plug-from').value = ''; }
+    if (b.dataset.plugRemove) location.hash = '#plugins';
     renderPlugins(r);
   } catch (err) { msg.textContent = err.message; msg.className = 'msg bad'; b.disabled = false; }
 });
 
 async function load() {
-  render(await (await fetch('/api/settings')).json());
-  fetch('/api/modules').then((r) => r.json()).then((r) => renderModules(r.modules || [])).catch(() => {});
   loadPlugins();
+  render(await (await fetch('/api/settings')).json());
+  fetch('/api/modules').then((r) => r.json()).then((r) => { $('#copilot-reach').innerHTML = reachHtml((r.modules || []).find((m) => m.name === 'copilot')); }).catch(() => {});
 }
 
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

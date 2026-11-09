@@ -20,13 +20,13 @@ export default (lends) => {
   const use = (e) => { env = e || {}; };
 
   return {
-    // What's set up, for Settings → Modules; Grafana itself is only called through the door.
+    // What's set up, for Settings → Plugins; Grafana itself is only called through the door.
     async fetch(ctx) {
       use(ctx.env);
       return { instances: instances().map((i) => i.name) };
     },
 
-    // One browser login per environment (Settings → Other sources).
+    // One browser login per environment (Settings → Plugins → Grafana).
     logins: {
       list(e) {
         use(e);

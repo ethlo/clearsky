@@ -155,7 +155,7 @@ const plugins = await loadSources([process.env.CLEARSKY_SOURCES_DIR || join(home
 }
 for (const e of plugins.errors) console.error(`clearsky: ${e}`);
 globalThis.clearskyPlugins = plugins;
-for (const p of plugins.sources.values()) settings.addFields(p.settings, p.label);
+for (const p of plugins.sources.values()) settings.addFields(p.settings, p.label, p.name);
 
 // ---------------------------------------------------------------- helpers
 
@@ -326,7 +326,7 @@ for (const p of plugins.sources.values()) {
     return { ...data, ...(items && { items: items.hookError ? [] : asList(items), ...(items.hookError && { error: items.hookError }) }) };
   };
 }
-// What each module holds and reaches, for Settings → Modules. Secret values never leave here:
+// What each module holds and reaches, for Settings → Plugins. Secret values never leave here:
 // `set` only says whether one is saved.
 const BUILTIN_MANIFESTS = [
   githubManifest,
@@ -335,7 +335,7 @@ const BUILTIN_MANIFESTS = [
   { name: 'copilot', label: 'Copilot', area: 'work', secrets: [{ kind: 'cli-login', note: 'none from Clearsky (its tokens are removed from Copilot\'s environment); Copilot keeps its own login in ~/.copilot or the keyring' }],
     hosts: ['*.githubcopilot.com', 'github.com'], clis: ['copilot'], files: ['~/.copilot', 'your Copilot folders'],
     note: 'Settings → Copilot → Sandbox limits it to your folders and listed hosts.' },
-  { name: 'links', label: 'Links', area: 'work', secrets: [], files: ['~/.config/clearsky/links.json'],
+  { name: 'links', label: 'Links', area: 'work', description: 'Your favourite links, in the menu. Edit them in Clearsky.', secrets: [], files: ['~/.config/clearsky/links.json'],
     note: 'Your favourites, edited in Clearsky. Only http(s) links; Clearsky never opens them itself.' },
 ];
 const linksFile = () => join(dirname(userEnvFile), 'links.json');
@@ -674,7 +674,7 @@ export async function standup(work, since = previousStandup()) {
     today,
     blockers,
   };
-  // Other sources add their own lines, such as what's on at school today.
+  // Plugins add their own lines, such as what's on at school today.
   const extra = w.sources || await pluginData(false);
   s.extra = [...plugins.sources.values()].map((p) => {
     const r = extra[p.name]?.error || extra[p.name]?.disabled ? null : hook(p, 'standup', extra[p.name], since);
@@ -1531,7 +1531,7 @@ async function doorRun({ p, door }, { key, name, argv }) {
   if (!c) return { code: 1, stdout: '', stderr: 'Clearsky: this chat is closed.\n' };
   const line = [name, ...argv].map((a) => (/^[\w@%+=:,./-]+$/.test(a) ? a : `'${a.replace(/'/g, `'\\''`)}'`)).join(' ');
   const log = (decided, extra = {}) => logWrite(agentLogFile, { where: name, door: p.name, what: line, chats: [chatRef(c)], decided, ...extra });
-  if (p.enabled && !p.enabled(process.env)) { log('not set up'); return { code: 1, stdout: '', stderr: `Clearsky: ${p.label} isn't set up yet (Settings → Other sources).\n` }; }
+  if (p.enabled && !p.enabled(process.env)) { log('not set up'); return { code: 1, stdout: '', stderr: `Clearsky: ${p.label} isn't set up yet (Settings → Plugins → ${p.label}).\n` }; }
   const ctx = {
     env: makeContext(p).env, chat: { mode: c.mode },
     ask: ({ title, detail = line, advice } = {}) => askInChat(c, { title: String(title || `${name} as you`), detail, ...(advice && { advice }) }),
@@ -2372,12 +2372,36 @@ function keepLoginsAlive() {
 
 // ---------------------------------------------------------------- plugins
 
-// What's added (and loaded by this run), and what ships with Clearsky, for Settings → Plugins.
+// Every plugin for Settings → Plugins, all in one list and described the same way: Clearsky's
+// own (GitHub, Jira, Calendar, Links), the ones you added, your own files in
+// ~/.config/clearsky/sources, and what ships with Clearsky but isn't added. `reach` is what it
+// holds and talks to; `ready` is false until its required settings are filled in.
 function pluginList() {
   const { added, available } = listPlugins({ paths: pluginDirs });
   const strip = ({ manifest, ...p }) => ({ ...p, manifest: manifest && { hosts: manifest.hosts, clis: manifest.clis, files: manifest.files, secrets: manifest.secrets, outside: manifest.outside || null, area: manifest.area } });
+  const reach = new Map(moduleManifests().map((m) => [m.name, m]));
+  const shape = (m) => m && { hosts: m.hosts || [], clis: m.clis || [], files: m.files || [], secrets: m.secrets || [], dbus: !!m.dbus, note: m.note || '', outside: m.outside || null };
+  const loaded = (p) => plugins.sources.get(p.name)?.plugin?.from === p.from;
+  const all = [
+    ...BUILTIN_MANIFESTS.filter((m) => m.name !== 'copilot').map((m) => ({ name: m.name, label: m.label, description: m.description || '', area: m.area,
+      kind: 'core', added: true, loaded: true, ready: true, reach: shape(reach.get(m.name)) })),
+    ...[...plugins.sources.values()].map((p) => {
+      const a = added.find((x) => x.name === p.name);
+      let ready = true;
+      try { ready = !p.enabled || !!p.enabled(process.env); } catch { ready = false; }
+      return { name: p.name, label: p.label, description: a?.description || p.manifest?.description || '', area: p.area || 'personal',
+        kind: a ? a.kind : 'local', from: a?.from || '~/.config/clearsky/sources', version: a?.version || '', commit: a?.commit || null, run: a?.run || 'inside',
+        added: true, loaded: a ? loaded(a) : true, ready, problem: a?.problem || null, reach: shape(reach.get(p.name)) };
+    }),
+    // Added but not running in this Clearsky: new since it started, or it failed to load.
+    ...added.filter((p) => !plugins.sources.has(p.name)).map((p) => ({
+      name: p.name, label: p.label, description: p.description, area: p.manifest?.area || 'personal', kind: p.kind, from: p.from, version: p.version || '', commit: p.commit || null,
+      run: p.run, added: true, loaded: false, ready: true, problem: p.problem, reach: shape(p.manifest) })),
+    ...available.map((p) => ({ name: p.name, label: p.label, description: p.description, area: p.manifest?.area || 'personal', kind: 'bundled', from: p.name,
+      version: p.manifest?.version || '', added: false, loaded: false, ready: false, reach: shape(p.manifest) })),
+  ];
   return {
-    added: added.map((p) => ({ ...strip(p), loaded: plugins.sources.get(p.name)?.plugin?.from === p.from })),
+    all, added: added.map((p) => ({ ...strip(p), loaded: loaded(p) })),
     available: available.map(strip), errors: plugins.errors, sandbox: !!srtCli(),
   };
 }

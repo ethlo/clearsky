@@ -140,7 +140,7 @@ If your children's school uses Visma Flyt Skole (Min Skole / Flyt Foresatt), Cle
 
 School is a plugin: add it under **Settings → Plugins** (or `clearsky add flyt`) and restart. If you had it set up before it became a plugin, it was added for you.
 
-1. In Settings, under **Other sources**, set **School portal key**: the last part of `https://foresatt.visma.no/<key>`.
+1. In Settings, under **Plugins → Visma Flyt Skole**, set **School portal key**: the last part of `https://foresatt.visma.no/<key>`.
 2. Click **Log in with BankID**. A Chrome or Chromium window opens. Log in with BankID or MinID, and the window closes by itself once you're in. Set `CLEARSKY_BROWSER` if your browser isn't found.
 
 **Weekly plans in the calendar.** The weekly plans the school sends as PDF or Word files become events on a calendar of their own, **School**, inside Clearsky: trips and theme days at the times the plan gives, when school ends each day, homework on the day it's due, and SFO activities. What's the same every day (frilek, lunsj, storefri) is left out. It's read by script, no AI: a plan laid out as a table with the weekdays as columns works; a plan written as prose gives nothing. Each file is read once and what came out of it is kept in `~/.config/clearsky/school-events.json` (mode 600). The events show in the day schedule without taking your time, and each opens the message it came from. Turn it off, or rename the calendar, in Settings (**Weekly plans in the calendar**, **Calendar for weekly plans**). PDFs need `pdftotext` (poppler-utils).

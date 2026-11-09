@@ -304,9 +304,9 @@ function renderExtra() {
     if (!d) { card(el, x.panel.title, null, skeleton(3)); continue; }
     // The school week sits above the messages; drawn after card(), which replaces the panel.
     const week = d.planEvents?.length ? `<div id="wk-${esc(x.name)}"></div>` : '';
-    card(el, x.panel.title, d.error ? null : count, week + (d.error ? `<div class="err">${esc(d.error)}${d.needsLogin ? ' <a href="/settings#extra">Log in again in Settings</a>' : ''}</div>`
+    card(el, x.panel.title, d.error ? null : count, week + (d.error ? `<div class="err">${esc(d.error)}${d.needsLogin ? ` <a href="/settings#plugins/${esc(x.name)}">Log in again in Settings</a>` : ''}</div>`
       // Logged out but with what came in before: shown, with a note that it isn't updating.
-      : d.notUpdating ? `<div class="note-stale">${esc(d.notUpdating)} <a href="/settings#extra">Log in again in Settings</a></div>` : '') +
+      : d.notUpdating ? `<div class="note-stale">${esc(d.notUpdating)} <a href="/settings#plugins/${esc(x.name)}">Log in again in Settings</a></div>` : '') +
       (list.length ? (table ? tableView(x, list, 40) : rows(`x-${x.name}`, list, (i) => row(i), 30))
         : d.error ? '' : '<div class="empty">Nothing here.</div>'));
     if (week) drawWeek(x.name, d.planEvents);
