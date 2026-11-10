@@ -38,6 +38,7 @@ test('a team pack from your settings: team settings only, no secrets, pinned plu
   assert.match(files['README.md'], /clearsky join https:\/\/github\.com\/acme\/clearsky-team/);
   assert.match(files['README.md'], /acme\.atlassian\.net/);
   assert.match(files['README.md'], /No secrets/);
+  assert.match(files['README.md'], /Plugin settings, filled in once you add the plugin: DEPLOYS_URL, GRAFANA_INSTANCES|Plugin settings, filled in once you add the plugin: GRAFANA_INSTANCES, DEPLOYS_URL/);
   assert.ok(files['skills/README.md'] && files['plugins/README.md'] && files['.gitignore'].includes('.env'));
   // What it writes is a pack Clearsky reads back the same.
   const back = parsePack(files['clearsky-team.json']);

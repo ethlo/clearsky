@@ -89,7 +89,7 @@ The Settings page (`/settings`) runs `gh auth login --web` and `acli jira auth l
 
 ### Team packs
 
-If your team shares a setup, join it: `clearsky join <git repo, https link or file>` (or paste it on the welcome page, or in Settings → General). It fills in the organizations, stand-up time, Copilot defaults, links and skills the team agreed on, and keeps anything you set yourself. Tokens and the sandbox's doors are never part of a pack. A pack can also list the team's plugins, pinned to versions, and kinds of change the team suggests letting through without asking; you look at both and take them yourself.
+If your team shares a setup, join it: `clearsky join <git repo, https link or file>` (or paste it on the welcome page, or in Settings → General). It fills in the organizations, stand-up time, Copilot defaults, links and skills the team agreed on, and plugin settings such as the Slack app or the Grafana addresses (once you add the plugin), and keeps anything you set yourself. Tokens and the sandbox's doors are never part of a pack. A pack can also list the team's plugins, pinned to versions, and kinds of change the team suggests letting through without asking; you look at both and take them yourself.
 
 To start one for your company, `clearsky team init ~/dev/clearsky-team` (or Settings → General → **Make a team pack**) writes a ready repo from your own settings: `clearsky-team.json`, a README for your colleagues, and folders for skills and work-only plugins, with no secrets in it. Push it to a private repo in your company's GitHub and share the link. See [docs/team-pack.md](docs/team-pack.md).
 
