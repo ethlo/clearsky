@@ -23,6 +23,7 @@ import { sessionEvents, sessionUsage } from '../lib/copilot-events.mjs';
 import { branchesFor } from '../lib/branches.mjs';
 import { sandboxedCommand, sandboxEnded, stopSandbox, sandboxProxy, sandboxProxyLogin, sandboxNetwork, githubLogin, DEFAULT_DOMAINS, READ_DEFAULT, parseDomains } from '../lib/sandbox.mjs';
 import { HostDoor, ruleMatches } from '../lib/host-door.mjs';
+import { closeCards } from '../lib/chat-cards.mjs';
 import { VmImage, ChatVm, vmSupport, VM_DOMAINS, reapOrphans, vmsLoad } from '../lib/vm.mjs';
 import { VmQueue } from '../lib/vm-queue.mjs';
 import { TreeLoad } from '../lib/proc-load.mjs';
@@ -1237,6 +1238,8 @@ function hostAsk(card, chats, { rule, write = false }) {
     for (const c of chats) {
       c.waiting.set(id, (answer) => {
         for (const o of chats) { o.waiting.delete(id); o.pending.delete(id); o.shared.delete(id); o.emit({ type: 'permission-done', id }); }
+        // Not answered before the turn ended (lib/chat-cards.mjs): taken down, not denied.
+        if (answer.expired) { log('expired'); return done(write ? 'deny' : 'expired'); }
         const choice = answer.optionId || 'deny';
         const name = card.options.find((o) => o.id === choice)?.name || 'Deny';
         log(choice === 'deny' ? 'declined' : choice);
@@ -1275,18 +1278,18 @@ async function githubAsk(what, { repo, nodes = [], why = null } = {}) {
     const title = /\/actions\/(workflows\/[^/]+\/dispatches|runs\/\d+\/rerun)/.test(what) ? 'Start a CI run as you' : 'Change GitHub as you';
     const ev = { type: 'permission', id, title, kind: 'execute', detail: what, advice,
       options: [{ id: 'allow', name: 'Allow', kind: 'allow_once' }, ...ruleOption(advice), { id: 'deny', name: 'Deny', kind: 'reject_once' }] };
-    const finish = (ok, rule = false) => {
+    const finish = (ok, rule = false, expired = false) => {
       if (ok && rule && advice?.rule) addGateRule(advice.rule);
       for (const c of chats) { c.waiting.delete(id); c.pending.delete(id); c.shared.delete(id); c.emit({ type: 'permission-done', id }); }
       const target = repo || (what.match(/^git push to (\S+)/) || [])[1] || null;
       // Allowed in the one chat it came from: that repo is part of this chat's work from now on.
       if (ok && !shared && target && why?.startsWith('goes to ')) chats[0].repos.add(target.toLowerCase());
-      logWrite(agentLogFile, { where: 'github', what, target, chats: chats.map(chatRef), decided: ok ? 'allowed' : 'declined' });
+      logWrite(agentLogFile, { where: 'github', what, target, chats: chats.map(chatRef), decided: ok ? 'allowed' : expired ? 'expired' : 'declined' });
       done(ok);
     };
     for (const c of chats) {
       if (c.mode === 'full') return finish(true); // Full: you allowed everything (logged as allowed)
-      c.waiting.set(id, (answer) => finish(answer.optionId === 'allow' || answer.optionId === 'rule', answer.optionId === 'rule'));
+      c.waiting.set(id, (answer) => finish(answer.optionId === 'allow' || answer.optionId === 'rule', answer.optionId === 'rule', !!answer.expired));
       if (shared) c.shared.add(id); // may not be this chat's: it doesn't mark the chat as needing you
       c.pending.set(id, ev);
       c.emit(ev);
@@ -2448,7 +2451,7 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, s
   const compact = /^\s*\/compact\b/.test(prompt) ? watchCompaction(c, chat) : null;
   let r = null, error = null;
   try { r = await (compact ? Promise.race([agent.prompt(prompt), compact]) : agent.prompt(prompt)); } catch (e) { error = e; }
-  finally { compact?.turnOver(); c.busy = false; c.approved.clear(); c.running.clear(); hostDoor.turnEnded(c.id); turnOver(); }
+  finally { compact?.turnOver(); c.busy = false; c.approved.clear(); c.running.clear(); closeCards(c); hostDoor.turnEnded(c.id); turnOver(); }
   afterTurn(c, { stopReason: r?.stopReason, error, command: /^\s*\//.test(typedPart(prompt)) });
   if (error) throw error;
   c.emit({ type: 'done', stopReason: r?.stopReason });

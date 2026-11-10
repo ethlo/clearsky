@@ -120,3 +120,18 @@ test('the card says when Clearsky can\'t keep a host read only', async () => {
   assert.match(asked[0].card.detail, /^example\.org:8443\n/);
   assert.match(asked[0].card.detail, /sending as well as reading/);
 });
+
+test('a card taken down at the end of the turn is not a Deny: the next turn asks again', async () => {
+  const { d, asked } = door({ answers: ['expired', 'allow'] });
+  assert.equal(await d.decide({ host: 'ref.example.org', port: 443 }), false);
+  assert.equal(await d.decide({ host: 'ref.example.org', port: 443 }), true, 'asked again, not blocked as denied');
+  assert.equal(asked.length, 2);
+});
+
+test('Copilot\'s fetch gives up after about 10 s: an Allow after 8 s tells the chat to try again', async () => {
+  let t = 0;
+  const told = [];
+  const { d } = door({ now: () => t, answers: [() => { t = 9000; return 'allow'; }], late: (cs, rule) => told.push(rule) });
+  assert.equal(await d.decide({ host: 'ref.example.org', port: 443 }), true);
+  assert.deepEqual(told, ['ref.example.org']);
+});

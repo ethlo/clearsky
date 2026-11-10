@@ -1055,7 +1055,7 @@ async function send(text) {
     else if (e.type === 'tool') toolEvent(segs, e);
     else if (e.type === 'permission' || e.type === 'error') segs.push(e);
     // Answered in another chat (a GitHub change asks in every sandboxed chat that's working).
-    else if (e.type === 'permission-done') { const g = segs.find((x) => x.type === 'permission' && x.id === e.id); if (g && !g.answered) g.answered = 'Answered'; }
+    else if (e.type === 'permission-done') { const g = segs.find((x) => x.type === 'permission' && x.id === e.id); if (g && !g.answered) g.answered = e.expired ? 'Not answered before the turn ended' : 'Answered'; }
     else if (e.type === 'session') { if (here()) { chat.session = e.id; rememberChat(); } rememberMode(e.id, mine.mode); mine.id = e.id; remember(e.id, chat.cwd, mine.title); drawTabs(); }
     else if (e.type === 'commands' && chat.info) chat.info.commands = e.commands;
     // A new chat about a PR or ticket is named after it, not after the skill or first words.
@@ -1153,7 +1153,7 @@ async function attachLive(id) {
         if (e.type === 'text') { if (last?.type === 'text') last.text += e.text; else segs.push({ type: 'text', text: e.text, at: e.at }); }
         else if (e.type === 'tool') toolEvent(segs, e);
         else if (e.type === 'permission' || e.type === 'error') segs.push(e);
-        else if (e.type === 'permission-done') { const g = segs.find((x) => x.type === 'permission' && x.id === e.id); if (g && !g.answered) g.answered = 'Answered'; }
+        else if (e.type === 'permission-done') { const g = segs.find((x) => x.type === 'permission' && x.id === e.id); if (g && !g.answered) g.answered = e.expired ? 'Not answered before the turn ended' : 'Answered'; }
         else if (e.type === 'note') { segs.push({ type: 'note', text: e.text, at: e.at }); if (/^(GitHub|Jira):/.test(e.text)) setTimeout(drawChanges, 300); }
         else if (e.type === 'done') done = true;
       }
