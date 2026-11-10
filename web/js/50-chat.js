@@ -226,12 +226,24 @@ let vmData = null, vmFor = null;
 // slower and loses track; one picked up after hours idle is read in full (its cache has expired).
 // So: Compact (Copilot's own /compact) once it's over 60% full and not working, and Start fresh
 // for a big chat you come back to after a day. Never a clear: that throws away what it knows.
-const TRIM = { compact: 0.6, cold: 0.3, coldMs: 24 * 3600e3 };
+// After Compact or ✕ the banner stays away until the chat grows by `grow` of its limit past where
+// it was then. A compact that worked shrinks it, and then it comes back on crossing the line again.
+const TRIM = { compact: 0.6, cold: 0.3, coldMs: 24 * 3600e3, grow: 0.1 };
+const TRIM_KEY = 'clearsky.copilot.trimQuiet';
+let trimQuiet = {};
+try { trimQuiet = JSON.parse(localStorage.getItem(TRIM_KEY) || '{}') || {}; } catch {}
+function quietTrim(id, context) {
+  if (context == null) delete trimQuiet[id]; else trimQuiet[id] = context;
+  try { localStorage.setItem(TRIM_KEY, JSON.stringify(trimQuiet)); } catch {}
+}
 function drawTrim() {
   const el = $('#cp-trim'), d = infoData || {}, u = d.usage;
   const full = u?.context != null && u.limit ? u.context / u.limit : 0;
   const cold = d.lastAt && Date.now() - d.lastAt > TRIM.coldMs && full >= TRIM.cold;
-  const show = chat.turns && !chat.stop && !d.busy && (full >= TRIM.compact || cold);
+  const id = chat.session, since = id != null ? trimQuiet[id] : undefined;
+  if (since != null && u?.context != null && u.context < since * 0.9) quietTrim(id, null); // it shrank (compacted): back to the usual line
+  const quiet = since != null && u?.limit && u.context < since + TRIM.grow * u.limit;
+  const show = chat.turns && !chat.stop && !d.busy && !quiet && (full >= TRIM.compact || cold);
   el.hidden = !show;
   if (!show) return;
   const pct = `${Math.round(100 * full)}% full`;
@@ -245,6 +257,8 @@ $('#cp-trim').addEventListener('click', (e) => {
   const b = e.target.closest('[data-trim]');
   if (!b) return;
   $('#cp-trim').hidden = true;
+  const u = infoData?.usage;
+  if (chat.session && u?.context != null && b.dataset.trim !== 'fresh') quietTrim(chat.session, u.context);
   if (b.dataset.trim === 'compact') send('/compact');
   if (b.dataset.trim === 'fresh') freshStart();
 });

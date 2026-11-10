@@ -2403,7 +2403,10 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, s
     c.lastEvent = Date.now();
     if (u.sessionUpdate === 'tool_call') c.turnText = '';
     else if (u.sessionUpdate === 'agent_message_chunk' && u.content?.type === 'text') c.turnText += u.content.text;
-    const e = chatEvent(u); if (e && (e.type !== 'text' || e.text)) c.emit(e);
+    const e = chatEvent(u);
+    // A /compact turn's own words wait for its end: "Nothing to compact" isn't shown as said.
+    if (e?.type === 'text' && c.heldText) { c.heldText.push(e.text); return; }
+    if (e && (e.type !== 'text' || e.text)) c.emit(e);
   };
   const autoAllow = copilot.PERMISSIONS[options.permission]?.autoAllow || [];
   agent.onPermission = (p) => new Promise((done) => {
@@ -2440,9 +2443,24 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, s
   // /compact: Copilot's answer to it isn't a reliable end (sometimes it never comes), so the
   // compaction's own record in the session's log ends the turn.
   const compact = /^\s*\/compact\b/.test(prompt) ? watchCompaction(c, chat) : null;
+  c.heldText = compact ? [] : null;
   let r = null, error = null;
   try { r = await (compact ? Promise.race([agent.prompt(prompt), compact]) : agent.prompt(prompt)); } catch (e) { error = e; }
-  finally { compact?.turnOver(); c.busy = false; c.approved.clear(); c.running.clear(); closeCards(c); hostDoor.turnEnded(c.id); turnOver(); }
+  finally {
+    compact?.turnOver();
+    // Copilot's "Failed to run /compact: Error: Nothing to compact." (as an error or as its
+    // answer) isn't a failure: the chat is already as short as it gets. A quiet note instead.
+    if (compact) {
+      const said = c.heldText.join('');
+      c.heldText = null;
+      if (NOTHING_TO_COMPACT.test(error?.message || '') || NOTHING_TO_COMPACT.test(said)) {
+        error = null;
+        compact.stop();
+        c.emit({ type: 'note', text: 'Nothing to compact: this chat is already as short as Copilot can make it.' });
+      } else if (said) c.emit({ type: 'text', text: said });
+    }
+    c.busy = false; c.approved.clear(); c.running.clear(); closeCards(c); hostDoor.turnEnded(c.id); turnOver();
+  }
   afterTurn(c, { stopReason: r?.stopReason, error, command: /^\s*\//.test(typedPart(prompt)) });
   if (error) throw error;
   c.emit({ type: 'done', stopReason: r?.stopReason });
@@ -2452,6 +2470,7 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, s
 // Waits for Copilot's session.compaction_complete (after this point in its log) and says how much it
 // removed. If Copilot is still "answering" the /compact turn then, that turn is ended: the
 // compaction is done. Gives up after three minutes. `turnOver()` says the turn ended by itself.
+const NOTHING_TO_COMPACT = /nothing to compact/i;
 function watchCompaction(c, id) {
   const file = join(copilotHome(), 'session-state', c.agent.sessionId || id, 'events.jsonl');
   let from = 0, over = false;
@@ -2469,13 +2488,16 @@ function watchCompaction(c, id) {
       let d = {};
       try { d = JSON.parse(line).data || {}; } catch {}
       // After a turn that ended by itself, the note goes to the chat's next turn or nowhere.
-      c.emit({ type: 'note', text: !line ? 'Compact: no word from Copilot after 3 minutes' : d.success === false ? `Compact didn't work${d.error ? `: ${d.error}` : ''}`
+      c.emit({ type: 'note', text: !line ? 'Compact: no word from Copilot after 3 minutes'
+        : NOTHING_TO_COMPACT.test(d.error || '') ? 'Nothing to compact: this chat is already as short as Copilot can make it.'
+        : d.success === false ? `Compact didn't work${d.error ? `: ${d.error}` : ''}`
         : `Compacted: ${k(d.preCompactionTokens)} → ${k(d.postCompactionTokens)} tokens` });
       if (over) return;
       setTimeout(() => { if (!over) { c.agent.cancel(); done({ stopReason: 'end_turn' }); } }, 2000);
     }, 1000);
   });
   p.turnOver = () => { over = true; };
+  p.stop = () => { over = true; clearInterval(timer); };
   return p;
 }
 

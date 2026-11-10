@@ -41,6 +41,9 @@ if (args[0] === 'skill' && args[1] === 'list') {
     }
     else if (m.method === 'session/prompt') {
       const say = (text) => out({ method: 'session/update', params: { sessionId: sid, update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text } } } });
+      // Copilot's /compact on a chat that's already short: as an error, or ("/compact again") as its answer.
+      if (m.params.prompt[0].text === '/compact') { out({ id: m.id, error: { code: -32603, message: 'Failed to run /compact: Error: Nothing to compact.' } }); return; }
+      if (m.params.prompt[0].text === '/compact again') { say('Failed to run /compact: '); say('Error: Nothing to compact.'); out({ id: m.id, result: { stopReason: 'end_turn' } }); return; }
       const flags = args.filter((a, i) => a.startsWith('--') || ['shell', 'write', 'plan'].includes(a) && args[i - 1]?.startsWith('--'));
       say(`flags=${args.filter((a) => a.startsWith('--')).join(' ')} `);
       say(`info=${JSON.stringify({ prompt: m.params.prompt[0].text, flags, session: sid, model: args.includes('--model') ? args[args.indexOf('--model') + 1] : null, hasToken: !!process.env.GITHUB_TOKEN })}\n`);
