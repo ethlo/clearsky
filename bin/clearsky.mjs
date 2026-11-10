@@ -3337,7 +3337,7 @@ function serve() {
           return json(res, e.auth ? 401 : 502, { error: e.message, ...(e.auth && { needsLogin: true }) });
         }
       }
-      const src = url.pathname.match(/^\/api\/source\/(\w+)$/)?.[1];
+      const src = url.pathname.match(/^\/api\/source\/([a-zA-Z][\w-]*)$/)?.[1];
       if (src) {
         if (!SOURCES[src]) return json(res, 404, { error: 'unknown source' });
         // ?wait: the new data once the fetch behind a stale answer lands.

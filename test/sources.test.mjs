@@ -35,9 +35,12 @@ test('an extra source shows up in the page, notifications, Now / Next, stand-up 
   const port = 7700 + Math.floor(Math.random() * 40);
   const base = `http://127.0.0.1:${port}`;
   const home = mkdtempSync(join(tmpdir(), 'clearsky-src-home-'));
+  const dir = sourcesDir();
+  // A name with a hyphen, like the slack-mcp plugin's.
+  writeFileSync(join(dir, 'team-notes.mjs'), 'export default { name: "team-notes", fetch: () => ({ notes: 2 }) };', { mode: 0o644 });
   const server = spawn(process.execPath, [fileURLToPath(new URL('../bin/clearsky.mjs', import.meta.url)), 'serve', '--port', String(port)], {
     cwd: home, stdio: 'ignore',
-    env: { PATH: process.env.PATH, HOME: home, CLEARSKY_POLL_MINUTES: '0', CLEARSKY_SOURCES_DIR: sourcesDir(), SCHOOL_CHILD: 'Ada',
+    env: { PATH: process.env.PATH, HOME: home, CLEARSKY_POLL_MINUTES: '0', CLEARSKY_SOURCES_DIR: dir, SCHOOL_CHILD: 'Ada',
       GITHUB_TOKEN: 'x', GITHUB_API_URL: 'http://127.0.0.1:9', ACLI_BIN: '/nonexistent/acli', COPILOT_BIN: '/nonexistent/copilot' },
   });
   t.after(() => server.kill());
@@ -47,6 +50,7 @@ test('an extra source shows up in the page, notifications, Now / Next, stand-up 
   // Plugins load too; this test is about the one from CLEARSKY_SOURCES_DIR.
   assert.deepEqual((await get('/api/sources')).sources.filter((s) => s.name === 'school'), [{ name: 'school', label: 'School', area: 'personal', panel: { zone: 'track', title: 'School' } }]);
   const school = await get('/api/source/school');
+  assert.equal((await get('/api/source/team-notes')).notes, 2, 'a source with a hyphen in its name has its data');
   assert.deepEqual(school.items.map((i) => i.title), ['Teacher: Trip on Friday']);
   const att = await get('/api/attention');
   assert.ok(att.items.some((i) => i.key === 'school:m1' && i.kind === 'school'));
