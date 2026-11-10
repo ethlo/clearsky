@@ -55,3 +55,17 @@ test('either form, by what it looks like', () => {
   assert.equal(jiraHtml('plain *text*'), '<p>plain <b>text</b></p>');
   assert.equal(jiraHtml({ type: 'doc', content: [p(t('b'))] }), '<p>b</p>');
 });
+
+test('wiki markup Jira kept as plain text shows with its formatting', () => {
+  const doc = { type: 'doc', version: 1, content: [
+    { type: 'paragraph', content: [{ type: 'text', text: 'h3. Goal' }, { type: 'hardBreak' }, { type: 'text', text: 'Make {{report}} return 200.' }] },
+    { type: 'paragraph', content: [{ type: 'text', text: '* one' }, { type: 'hardBreak' }, { type: 'text', text: '* two' }] },
+  ] };
+  const h = jiraHtml(doc);
+  assert.match(h, /<h5>Goal<\/h5>/);
+  assert.match(h, /<code>report<\/code>/);
+  assert.match(h, /<ul><li><p>one<\/p><\/li><li><p>two<\/p><\/li><\/ul>/);
+  // ordinary text stays as it was
+  const plain = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Just words - nothing more.' }] }] };
+  assert.equal(jiraHtml(plain), '<p>Just words - nothing more.</p>');
+});

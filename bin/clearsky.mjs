@@ -1076,7 +1076,11 @@ function copilotEnv() {
   for (const p of plugins.sources.values()) for (const [k, f] of Object.entries(p.settings || {})) if (f.secret) delete env[k];
   const bin = copilot.findCopilot(process.env.COPILOT_BIN);
   const dirs = [bin?.includes('/') && dirname(bin), dirname(process.execPath)].filter(Boolean);
-  env.PATH = [...new Set([...dirs, ...(env.PATH || '').split(delimiter).filter(Boolean)])].join(delimiter);
+  // acli that sends Jira text as ADF, so a description in wiki markup or Markdown shows formatted
+  // (scripts/acli-bin; in the sandbox, the broker does it).
+  const acliBin = join(here, '..', 'scripts', 'acli-bin');
+  env.CLEARSKY_ACLI = config.jira.acli;
+  env.PATH = [...new Set([acliBin, ...dirs, ...(env.PATH || '').split(delimiter).filter(Boolean)])].join(delimiter);
   return env;
 }
 
@@ -1991,6 +1995,12 @@ const PR_HINT = 'When you open a PR or finish a round of work on one, write (or 
   + 'or the run for the latest commit, follow it to the end with `gh run watch`, fix and rerun if it fails, and link the run); '
   + '"## For the reviewer" (anything still open, decisions worth a second look, where the risk is; "Nothing open" if so). '
   + 'Facts only, no filler; keep any PR template\'s headings and fill them the same way.';
+// Jira Cloud shows wiki markup sent as text literally ("h3. Goal"); Clearsky's acli turns the
+// text into ADF (lib/to-adf.mjs), so Copilot writes plain Markdown and leaves the format to it.
+export const JIRA_HINT = 'When you write a Jira description or comment with `acli`, write it in Markdown (`## Heading`, `- item`, `1. step`, '
+  + '`**bold**`, `` `code` ``, ``` fences, `[text](url)`), not Jira wiki markup (`h3.`, `{{code}}`) and not ADF JSON. Pass it with `--description` or '
+  + '`--body`; for longer text, write it to a file in this folder and use `--description-file` or `--body-file`. Clearsky hands it to Jira as rich text, '
+  + 'so the headings and lists show as such.';
 const CHOICES_HINT = 'When you need me to choose (an approach, a next step, yes or no), ask once, at the end of your answer, as a block I can click:\n'
   + '```choices\nThe question, in one line\n- First option (recommended) | what happens if I pick it\n- Second option | what happens\n```\n'
   + 'Two to four options, the one you recommend first. Then stop and wait for my pick.';
@@ -3110,7 +3120,7 @@ function serve() {
           const note = !command && folderNotes.get(body.session);
           if (note) folderNotes.delete(body.session);
           const update = !command && (owed || note) && `${UPDATE_INTRO}${owed ? sandboxHint : ''}${note ? `\n\n${note}` : ''}`;
-          const prefix = command ? '' : [update, !body.resume && `${CONTEXT_INTRO}\n\n${copilotContext()}\n\n${CHOICES_HINT}\n\n${NEW_TASK_HINT}\n\n${memoryHint()}\n\n${PR_HINT}${folders && `\n\n${folders}`}${sandboxHint}`, refText].filter(Boolean).join('\n\n---\n\n');
+          const prefix = command ? '' : [update, !body.resume && `${CONTEXT_INTRO}\n\n${copilotContext()}\n\n${CHOICES_HINT}\n\n${NEW_TASK_HINT}\n\n${memoryHint()}\n\n${PR_HINT}\n\n${JIRA_HINT}${folders && `\n\n${folders}`}${sandboxHint}`, refText].filter(Boolean).join('\n\n---\n\n');
           const prompt = prefix ? `${prefix}${MSG_MARK}${message}` : message;
           // Answers stream back as one JSON event per line: text, tool, permission, done, error.
           res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });

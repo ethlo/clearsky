@@ -1,0 +1,40 @@
+#!/usr/bin/env node
+// acli for Copilot outside the sandbox (Ask, Full access): the real acli, with a description or
+// comment written in wiki markup or Markdown given to it as ADF, so Jira shows the formatting
+// instead of "h3. Goal" (lib/to-adf.mjs). In the sandbox, Clearsky does the same (lib/broker.mjs).
+const { spawnSync } = require('node:child_process');
+const { existsSync, mkdtempSync, writeFileSync, readFileSync, rmSync } = require('node:fs');
+const { join, delimiter, resolve } = require('node:path');
+const { tmpdir } = require('node:os');
+const { acliWrites } = require('../sandbox-bin/rules.js');
+
+// The real acli: Clearsky's setting, else the next one on PATH after this folder.
+function realAcli() {
+  const set = process.env.CLEARSKY_ACLI;
+  if (set && set.includes('/')) return set;
+  const name = set || 'acli';
+  for (const dir of (process.env.PATH || '').split(delimiter)) {
+    if (!dir || resolve(dir) === __dirname) continue;
+    for (const f of process.platform === 'win32' ? [`${name}.exe`, name] : [name]) if (existsSync(join(dir, f))) return join(dir, f);
+  }
+  return null;
+}
+
+(async () => {
+  const bin = realAcli();
+  if (!bin) { process.stderr.write('acli: not found on PATH (Settings → Jira names it)\n'); process.exit(127); }
+  let argv = process.argv.slice(2), tmp = null;
+  if (acliWrites(argv)) {
+    try {
+      const { adfArgs } = await import('../../lib/to-adf.mjs');
+      argv = adfArgs(argv, (f) => readFileSync(f, 'utf8'), process.cwd(), (name, text) => {
+        tmp ||= mkdtempSync(join(tmpdir(), 'clearsky-acli-'));
+        writeFileSync(join(tmp, name), text, { mode: 0o600 });
+        return join(tmp, name);
+      });
+    } catch (e) { process.stderr.write(`acli (Clearsky): text left as it is: ${e.message}\n`); }
+  }
+  const r = spawnSync(bin, argv, { stdio: 'inherit' });
+  if (tmp) rmSync(tmp, { recursive: true, force: true });
+  process.exit(r.status ?? 1);
+})();

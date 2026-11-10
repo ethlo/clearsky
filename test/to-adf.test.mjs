@@ -40,3 +40,38 @@ test('acli arguments: description and body go as ADF, short plain text stays', (
   assert.deepEqual(adfArgs(['--body', adf], () => ''), ['--body', adf]);
   assert.deepEqual(adfArgs(['--description-file', '/etc/x'], () => { throw new Error('outside'); }), ['--description-file', '/etc/x']);
 });
+
+test('acli arguments: short flags, comment update and --from-json', () => {
+  const files = {};
+  const write = (name, text) => { files[name] = text; return `/tmp/x/${name}`; };
+  const d = adfArgs(['jira', 'workitem', 'create', '-d', 'h3. Goal\nFix it'], () => '', null, write);
+  assert.equal(d[3], '--description');
+  assert.equal(JSON.parse(d[4]).content[0].type, 'heading');
+  const b = adfArgs(['jira', 'workitem', 'comment', 'create', '--key', 'ABC-1', '-b', '## Done\n- one\n- two'], () => '', null, write);
+  assert.equal(b[6], '--body');
+  assert.equal(JSON.parse(b[7]).content[1].type, 'bulletList');
+  const F = adfArgs(['jira', 'workitem', 'comment', 'create', '-F', 'c.md'], () => 'h3. Note\ntext', '/w', write);
+  assert.equal(F[4], '--body');
+  // comment update takes ADF only from a file
+  const u = adfArgs(['jira', 'workitem', 'comment', 'update', '--key', 'ABC-1', '--id', '9', '--body', 'h3. Fixed\nIn abc123'], () => '', null, write);
+  assert.deepEqual(u.slice(-2), ['--body-adf', '/tmp/x/body.json']);
+  assert.equal(JSON.parse(files['body.json']).content[0].type, 'heading');
+  assert.deepEqual(adfArgs(['jira', 'workitem', 'comment', 'update', '--body', 'ok'], () => '', null, write), ['jira', 'workitem', 'comment', 'update', '--body', 'ok']);
+  // --from-json: its description becomes ADF in a copy
+  const j = adfArgs(['jira', 'workitem', 'create', '--from-json', 'w.json'], () => JSON.stringify({ summary: 'S', projectKey: 'ABC', description: 'h3. Goal\nX' }), '/w', write);
+  assert.deepEqual(j.slice(-2), ['--from-json', '/tmp/x/workitem.json']);
+  const def = JSON.parse(files['workitem.json']);
+  assert.equal(def.summary, 'S');
+  assert.equal(def.description.content[0].type, 'heading');
+  // without a place for files, those stay as they are
+  assert.deepEqual(adfArgs(['--from-json', 'w.json'], () => '{}', '/w'), ['--from-json', 'w.json']);
+});
+
+test('plain ADF holding wiki text is found again', async () => {
+  const { plainAdfText, hasLiteralMarkup } = await import('../lib/to-adf.mjs');
+  const doc = { type: 'doc', version: 1, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'h3. Goal' }, { type: 'hardBreak' }, { type: 'text', text: 'Fix {{x}}' }] }] };
+  assert.equal(plainAdfText(doc), 'h3. Goal\nFix {{x}}');
+  assert.equal(hasLiteralMarkup('h3. Goal\nFix'), true);
+  assert.equal(hasLiteralMarkup('Just a sentence. And another - with a dash.'), false);
+  assert.equal(plainAdfText(toAdf('## Real\n\ntext')), null);
+});
