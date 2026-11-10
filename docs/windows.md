@@ -62,11 +62,34 @@ Open **http://127.0.0.1:7777** in your Windows browser. The first time it's the 
 The welcome page has a button each for GitHub and Jira. In a terminal it's the same:
 
 ```sh
-gh auth login --web
-acli jira auth login --web
+clearsky login github
+clearsky login jira
 ```
 
-With `wslview` installed, both open the login in your Windows browser (Clearsky sets `BROWSER=wslview` for them when you haven't set `BROWSER` yourself). Without it, open the address they print. acli's login calls back to a port on 127.0.0.1, which WSL2 forwards, so it finishes on its own.
+Both open the login in your Windows browser. They run `gh auth login --web` and `acli jira auth login --web`, with a little help for WSL: gh gets `BROWSER=wslview`, and acli gets its own `xdg-open` that hands the link to Windows (wslview, else `rundll32.exe`). acli's login calls back to a port on 127.0.0.1, which WSL2 forwards, so it finishes on its own.
+
+### Jira login fails at once
+
+If `acli jira auth login --web` says `✗ Error: authentication failed` straight away and no browser opens, acli couldn't open one. On Linux acli only opens a browser when it sees a desktop (`DISPLAY` or `WAYLAND_DISPLAY`) and finds `xdg-open`, and WSL often has neither (Windows 10 has no WSLg; Ubuntu on WSL may have no `xdg-open`). It doesn't look at `BROWSER`.
+
+1. Log in from Clearsky's welcome page or Settings, or with `clearsky login jira`, not with `acli` directly. Those give acli what it's missing.
+2. Still failing? Clear acli's old login first, then try again:
+   ```sh
+   acli jira auth logout
+   clearsky login jira
+   ```
+3. Run `acli --version` and update acli if it's old (Atlassian's install page has the current one).
+4. Doing it by hand in a plain terminal works too:
+   ```sh
+   sudo apt install wslu xdg-utils
+   DISPLAY=:0 BROWSER=wslview acli jira auth login --web
+   ```
+   and if no browser opens, check that `wslview https://example.com` opens one.
+5. If the browser does open but the Atlassian page says you have no access, pick the work site there and log in with your work account. If it asks for an admin to approve the app, your Atlassian admin has to allow the Atlassian CLI for the site.
+
+As a last resort, acli can log in with an Atlassian API token instead of the browser, if your workplace lets you make one: `acli jira auth login --site <your-site>.atlassian.net --email <you> --token < token.txt`. Clearsky works the same either way; it only uses acli's login.
+
+Don't mix the Windows `acli.exe` and the Linux `acli`: each keeps its own login, and Clearsky in Ubuntu only sees the Linux one.
 
 ## 5. Its own window
 
