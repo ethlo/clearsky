@@ -178,12 +178,16 @@ test('stand-up: yesterday from GitHub and Jira, today from the queue', async () 
   assert.deepEqual(s.yesterday.github.reviewed.map((p) => [p.number, p.verdict]), [[8, 'APPROVED']]);
   assert.deepEqual(s.yesterday.github.commits, [{ repo: 'acme/api', count: 3 }], 'my recent commits on my PRs');
   assert.deepEqual(s.yesterday.jira.touched.map((i) => i.key), ['OPS-9']);
-  assert.match(s.text, /\*Merged and in review\*\n- Merged, ready to test: acme\/api#5 Shipped thing/);
-  assert.match(s.text, /Reviewed acme\/web#8 by anna \(approved\)/);
-  assert.match(s.text, /Worked on OPS-9: Pager rotation \(In Review\)/);
-  assert.match(s.text, /\*Today\*\n- Continue OPS-1: Rotate certs/);
-  // Recent Copilot sessions count as work too; older ones don't.
-  assert.match(s.text, /With Copilot: OPS-9 Check the repo \(api, feature\/ops-9-pager\)/);
+  assert.match(s.text, /\*Yesterday\* \(since [^)]+\)\n- Merged, ready to test: acme\/api#5 Shipped thing\n/);
+  assert.match(s.text, /Reviewed acme\/web#8 \(anna, approved\)/);
+  // OPS-9 shows once: its Jira status and its Copilot chat are one line.
+  assert.match(s.text, /- In review: OPS-9: Pager rotation\n/);
+  assert.equal(s.text.match(/OPS-9/g).length, 1);
+  assert.ok(!/With Copilot|Commits:/.test(s.text), 'chats and commit counts are details, not stand-up lines');
+  assert.match(s.text, /\*Today\*\n- Changes requested: acme\/api#1 A PR\n/);
+  assert.match(s.text, /- Continue OPS-1: Rotate certs/);
+  assert.match(s.summary.details.join('\n'), /OPS-9: Pager rotation · Jira: In Review · 1 Copilot chat/);
+  assert.match(s.summary.details.join('\n'), /Commits: 3 in api/);
   assert.ok(!/From the terminal|Personal hack/.test(s.text), 'old and personal sessions are left out');
 });
 

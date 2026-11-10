@@ -7,6 +7,11 @@ export const CHAT = { id: 'demo-pay412-refunds', cwd: join(HOME, 'dev', 'acme', 
 export const SESSIONS = [
   { sessionId: CHAT.id, cwd: CHAT.cwd, title: 'PAY-412: Partial refunds for split payments', branch: 'PAY-412-partial-refunds', updatedAt: ago(0.2) },
   { sessionId: 'demo-review-482', cwd: CHAT.cwd, title: 'Review acme/payments-api#482', branch: 'PAY-415-webhook-retries', updatedAt: ago(3) },
+  // Self-reviews of a branch, as Copilot names them: several per ticket on a busy day.
+  { sessionId: 'demo-review-pay412-a', cwd: CHAT.cwd, title: 'Review: PAY-412 against main', branch: 'PAY-412-partial-refunds', updatedAt: ago(5) },
+  { sessionId: 'demo-review-pay412-b', cwd: CHAT.cwd, title: 'Review: PAY-412 against main', branch: 'PAY-412-partial-refunds', updatedAt: ago(7) },
+  { sessionId: 'demo-review-pay420', cwd: CHAT.cwd, title: 'Review: PAY-420-ledger-csv against main', branch: 'PAY-420-ledger-csv', updatedAt: ago(9) },
+  { sessionId: 'demo-problem-details', cwd: CHAT.cwd, title: 'Error responses as RFC-9457 problem details', branch: 'main', updatedAt: ago(11) },
   { sessionId: 'demo-standup', cwd: join(HOME, 'dev'), title: 'Stand-up notes', updatedAt: ago(23) },
   { sessionId: 'demo-flaky-it', cwd: CHAT.cwd, title: 'Flaky RefundServiceIT', branch: 'main', updatedAt: ago(30) },
 ];

@@ -509,12 +509,18 @@ function renderToday() {
 
 // ---------------------------------------------------------------- Stand-up
 
-let standupData = null;
+let standupData = null, suMoreOpen = false;
 
-// Turn "ABC-1234" and "org/repo#12" in plain text into links with hover cards.
-function linkify(text, jiraBase) {
-  return esc(text).replace(/\b([\w.-]+\/[\w.-]+)#(\d+)\b|\b([A-Z][A-Z0-9_]+-\d+)\b/g, (m, repo, num, key) => {
-    if (repo) return `<a class="ref" href="https://github.com/${repo}/pull/${num}" target="_blank" rel="noopener" data-pr="${repo}#${num}">${m}</a>`;
+// Turn "ABC-1234" and "org/repo#12" in plain text into links with hover cards. A Jira key only
+// counts on its own (not inside a branch name like ABC-12-fix or a path), and only for the
+// projects given; without a list, anything but standards like RFC-9457 or ISO-8601.
+const NOT_JIRA = new Set(['RFC', 'ISO', 'IEC', 'IEEE', 'CVE', 'CWE', 'UTF', 'SHA', 'TLS', 'SSL', 'HTTP', 'AES', 'RSA', 'ECMA', 'UTC', 'GMT', 'JSR', 'PEP', 'W3C', 'EN', 'DIN', 'NIST', 'OWASP']);
+function linkify(text, jiraBase, { projects, shortRepo } = {}) {
+  const known = projects?.length ? new Set(projects) : null;
+  return esc(text).replace(/\b([\w.-]+\/[\w.-]+)#(\d+)\b|(?<![\w/.-])([A-Z][A-Z0-9_]+-\d+)(?![\w-])/g, (m, repo, num, key) => {
+    if (repo) return `<a class="ref" href="https://github.com/${repo}/pull/${num}" target="_blank" rel="noopener" data-pr="${repo}#${num}" title="${repo}#${num}">${shortRepo ? `${repo.split('/')[1]}#${num}` : m}</a>`;
+    const p = key.split('-')[0];
+    if (known ? !known.has(p) : NOT_JIRA.has(p)) return m;
     return `<a class="ref" href="${jiraBase ? `${esc(jiraBase)}/browse/${key}` : '#'}" target="_blank" rel="noopener" data-issue="${key}">${key}</a>`;
   });
 }
@@ -529,23 +535,25 @@ function renderStandup() {
   const at = new Date(s.nextStandup).toLocaleString([], { weekday: 'long', hour: '2-digit', minute: '2-digit', hourCycle: hourCycle() });
   const errs = [s.yesterday.github.error && `GitHub: ${s.yesterday.github.error}`, s.yesterday.jira.error && `Jira: ${s.yesterday.jira.error}`].filter(Boolean);
   $('#su-sub').textContent = `For ${at} · since ${s.sinceLabel}`;
-  // The text is "*Heading*" lines followed by "- item" lines.
-  const sections = [];
-  for (const line of s.text.split('\n')) {
-    const h = line.match(/^\*(.+?)\*/);
-    if (h) sections.push({ title: h[1], items: [] });
-    else if (line.startsWith('- ') && sections.length) sections.at(-1).items.push(line.slice(2));
-  }
+  const g = s.summary || { yesterday: [], today: [], blockers: [], details: [] };
+  const opts = { projects: s.jiraProjects, shortRepo: true };
+  const list = (items) => `<ul>${items.map((i) => `<li>${linkify(i, s.jiraBase, opts)}</li>`).join('')}</ul>`;
+  const card = (title, items, none) => `<section class="card su-card"><h2>${esc(title)}</h2>${items.length ? list(items) : `<p class="su-none">${esc(none)}</p>`}</section>`;
   // What to say, in a few sentences (Copilot writes it from the lists below; Generate asks it).
   const say = `<section class="card su-card su-say"><h2>Say this</h2>
     <div id="su-say">${sayData?.text ? sayHtml(sayData.text) : sayData?.error ? `<div class="err">${esc(sayData.error)}</div>` : sayData?.loading ? skeleton(3) : ''}</div>
     <div class="acts-row"><button class="icon-btn${sayData?.text ? '' : ' primary'}" data-say="${sayData?.text ? 'refresh' : 'go'}" ${sayData?.loading ? 'disabled' : ''} title="Copilot writes a few sentences from the lists below, grouped by what the work is for">${icon('spark', 14)} ${sayData?.text ? 'Write it again' : 'Write it with Copilot'}</button>${sayData?.text ? '<button class="icon-btn" data-say="copy">Copy</button>' : ''}</div></section>`;
-  $('#su-body').innerHTML = say + (errs.length ? `<div class="err">${esc(errs.join(' · '))}</div>` : '') + sections.map((sec) =>
-    `<section class="card su-card"><h2>${esc(sec.title)}</h2><ul>${sec.items.map((i) => `<li>${linkify(i, s.jiraBase)}</li>`).join('')}</ul></section>`).join('');
+  // Every PR, Copilot chat and commit count, for when someone asks; folded away by default.
+  const more = g.details.length ? `<details class="su-more"${suMoreOpen ? ' open' : ''}><summary>All activity (${g.details.length})</summary>${list(g.details)}</details>` : '';
+  $('#su-body').innerHTML = say + (errs.length ? `<div class="err">${esc(errs.join(' · '))}</div>` : '') +
+    card('Yesterday', g.yesterday, 'Nothing recorded on GitHub, Jira or Copilot.') +
+    card('Today', g.today, 'Pick up the next item from the queue.') +
+    card('Blockers', g.blockers, 'None') + more;
+  $('#su-body .su-more')?.addEventListener('toggle', (e) => { suMoreOpen = e.target.open; });
 }
 
 let sayData = null;
-const sayHtml = (t) => t.split(/\n{2,}/).map((p) => `<p>${linkify(p.trim(), standupData?.jiraBase)}</p>`).join('');
+const sayHtml = (t) => t.split(/\n{2,}/).map((p) => `<p>${linkify(p.trim(), standupData?.jiraBase, { projects: standupData?.jiraProjects })}</p>`).join('');
 async function loadSay(force) {
   sayData = { ...sayData, loading: true, error: null };
   renderStandup();
