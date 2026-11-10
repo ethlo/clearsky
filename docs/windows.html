@@ -65,9 +65,14 @@ clearsky serve      # the real thing</code></pre>
 <p>Open <strong>http://127.0.0.1:7777</strong> in your Windows browser. The first time it's the welcome page.</p>
 <h2 id="4-log-in">4. Log in</h2>
 <p>The welcome page has a button each for GitHub and Jira. In a terminal it's the same:</p>
-<pre class="lang-sh"><code>gh auth login --web
-acli jira auth login --web</code></pre>
-<p>With <code>wslview</code> installed, both open the login in your Windows browser (Clearsky sets <code>BROWSER=wslview</code> for them when you haven't set <code>BROWSER</code> yourself). Without it, open the address they print. acli's login calls back to a port on 127.0.0.1, which WSL2 forwards, so it finishes on its own.</p>
+<pre class="lang-sh"><code>clearsky login github
+clearsky login jira</code></pre>
+<p>Both open the login in your Windows browser. They run <code>gh auth login --web</code> and <code>acli jira auth login --web</code>, with a little help for WSL: gh gets <code>BROWSER=wslview</code>, and acli gets its own <code>xdg-open</code> that hands the link to Windows (wslview, else <code>rundll32.exe</code>). acli's login calls back to a port on 127.0.0.1, which WSL2 forwards, so it finishes on its own.</p>
+<h3 id="jira-login-fails-at-once">Jira login fails at once</h3>
+<p>If <code>acli jira auth login --web</code> says <code>✗ Error: authentication failed</code> straight away and no browser opens, acli couldn't open one. On Linux acli only opens a browser when it sees a desktop (<code>DISPLAY</code> or <code>WAYLAND_DISPLAY</code>) and finds <code>xdg-open</code>, and WSL often has neither (Windows 10 has no WSLg; Ubuntu on WSL may have no <code>xdg-open</code>). It doesn't look at <code>BROWSER</code>.</p>
+<ol><li>Log in from Clearsky's welcome page or Settings, or with <code>clearsky login jira</code>, not with <code>acli</code> directly. Those give acli what it's missing.</li><li>Still failing? Clear acli's old login first, then try again: ``<code>sh acli jira auth logout clearsky login jira </code>``</li><li>Run <code>acli --version</code> and update acli if it's old (Atlassian's install page has the current one).</li><li>Doing it by hand in a plain terminal works too: ``<code>sh sudo apt install wslu xdg-utils DISPLAY=:0 BROWSER=wslview acli jira auth login --web </code>`<code> and if no browser opens, check that </code>wslview https://example.com` opens one.</li><li>If the browser does open but the Atlassian page says you have no access, pick the work site there and log in with your work account. If it asks for an admin to approve the app, your Atlassian admin has to allow the Atlassian CLI for the site.</li></ol>
+<p>As a last resort, acli can log in with an Atlassian API token instead of the browser, if your workplace lets you make one: <code>acli jira auth login --site &lt;your-site&gt;.atlassian.net --email &lt;you&gt; --token &lt; token.txt</code>. Clearsky works the same either way; it only uses acli's login.</p>
+<p>Don't mix the Windows <code>acli.exe</code> and the Linux <code>acli</code>: each keeps its own login, and Clearsky in Ubuntu only sees the Linux one.</p>
 <h2 id="5-its-own-window">5. Its own window</h2>
 <pre class="lang-sh"><code>clearsky app</code></pre>
 <p>This opens Clearsky in Edge (or Chrome) on Windows as an app window: no tabs or address bar, its own taskbar icon. It starts the server first if it isn't running. Its browser profile is kept on Windows, in <code>%LOCALAPPDATA%\Clearsky\app-window</code>. <code>CLEARSKY_BROWSER</code> picks another browser.</p>

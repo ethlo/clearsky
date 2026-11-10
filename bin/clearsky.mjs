@@ -52,7 +52,7 @@ import { loadPlugins, migrateBundled, pluginPaths, listPlugins, preparePlugin, r
 import { sandboxedSource, srtCli } from '../lib/plugin-sandbox.mjs';
 import { pluginItems } from '../lib/items.mjs';
 import { findBrowser, BROWSERS, openCommand } from '../lib/browser.mjs';
-import { wslInfo, isWindowsExe, windowsProfileDir } from '../lib/wsl.mjs';
+import { wslInfo, isWindowsExe, windowsProfileDir, loginEnv } from '../lib/wsl.mjs';
 import { manifest as calendarManifest, createCalendar } from '../lib/modules/calendar.mjs';
 import { readLinks, saveLinks, parseBookmarks, mergeLinks } from '../lib/links.mjs';
 import { logEvent } from '../lib/event-log.mjs';
@@ -3830,7 +3830,7 @@ async function dockerCommand([sub = 'up', ...rest]) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
   const args = process.argv.slice(2);
   if (args.includes('-h') || args.includes('--help')) {
-    console.log('usage: clearsky [--json] | clearsky try [--port N] [--no-open] | clearsky doctor [--json] | clearsky join [<team pack>] | clearsky team init <folder> [--name N] [--repo URL] [--links] | clearsky team export [--name N] [--links] | clearsky add <plugin> [--trust] [--yes] | clearsky remove <plugin> [--data] | clearsky plugins | clearsky update [<plugin>] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky app [--port N] | clearsky docker [up|start|down|logs|login|mounts] [--port N] | clearsky school-handover | clearsky jira-debug');
+    console.log('usage: clearsky [--json] | clearsky try [--port N] [--no-open] | clearsky doctor [--json] | clearsky join [<team pack>] | clearsky team init <folder> [--name N] [--repo URL] [--links] | clearsky team export [--name N] [--links] | clearsky add <plugin> [--trust] [--yes] | clearsky remove <plugin> [--data] | clearsky plugins | clearsky update [<plugin>] | clearsky standup [--json] | clearsky serve [--port N] | clearsky restart [--now] [--wait MIN] [--port N] | clearsky app [--port N] | clearsky login jira|github | clearsky docker [up|start|down|logs|login|mounts] [--port N] | clearsky school-handover | clearsky jira-debug');
   } else if (args[0] === 'try') {
     // Clearsky with made-up data, in this terminal: Ctrl+C stops it.
     const p = args.indexOf('--port');
@@ -3884,6 +3884,12 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.a
     const p = args.indexOf('--port');
     if (p > -1) config.port = Number(args[p + 1]);
     await appCommand();
+  } else if (args[0] === 'login' && ['jira', 'github'].includes(args[1])) {
+    // The Settings logins, in this terminal: same browser handling (Windows browser under WSL).
+    const [bin, argv] = args[1] === 'jira' ? [config.jira.acli || 'acli', ['jira', 'auth', 'login', '--web']] : ['gh', ['auth', 'login', '--web', '--hostname', 'github.com', '--git-protocol', 'https']];
+    const code = await new Promise((done) => spawn(bin, argv, { stdio: 'inherit', env: loginEnv() }).on('exit', done).on('error', (e) => { console.error(`clearsky: ${e.code === 'ENOENT' ? `${bin} is not installed` : e.message}`); done(1); }));
+    if (code && args[1] === 'jira') console.error('\nIf acli said "authentication failed" before any browser opened: run `acli jira auth logout` and try again; `clearsky doctor` says what this machine is missing for the browser.');
+    process.exitCode = code || 0;
   } else if (args[0] === 'docker') {
     const p = args.indexOf('--port');
     if (p > -1) { config.port = Number(args[p + 1]); args.splice(p, 2); }

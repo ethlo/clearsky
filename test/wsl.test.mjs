@@ -2,7 +2,11 @@
 // the doctor's hints there. WSL is faked: the kernel strings, env and files are passed in.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { wslInfo, wslOpenCommand, windowsBrowser, windowsProfileDir, onWindowsDrive, wslVmWhy, loginEnv } from '../lib/wsl.mjs';
+import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { wslInfo, wslOpenCommand, windowsBrowser, windowsProfileDir, onWindowsDrive, wslVmWhy, loginEnv, loginShim, loginOpenerScript, acliLoginHint, LOGIN_OPENERS } from '../lib/wsl.mjs';
 import { findBrowser, openCommand } from '../lib/browser.mjs';
 import { vmSupport } from '../lib/vm.mjs';
 import { checks, ready, doctorText } from '../lib/doctor.mjs';
@@ -41,10 +45,42 @@ test('the app window uses Edge on C:, with its profile on Windows; the school lo
 });
 
 test('gh and acli logins get BROWSER=wslview under WSL, unless BROWSER is set', () => {
-  assert.equal(loginEnv({ PATH: '' }, { wsl: { version: 2 }, has: () => true }).BROWSER, 'wslview');
-  assert.equal(loginEnv({ BROWSER: 'firefox' }, { wsl: { version: 2 }, has: () => true }).BROWSER, 'firefox');
-  assert.equal(loginEnv({}, { wsl: null, has: () => true }).BROWSER, undefined);
-  assert.equal(loginEnv({}, { wsl: { version: 2 }, has: () => false }).BROWSER, undefined);
+  const opts = { wsl: { version: 2 }, has: () => true, shim: () => null };
+  assert.equal(loginEnv({ PATH: '' }, opts).BROWSER, 'wslview');
+  assert.equal(loginEnv({ BROWSER: 'firefox' }, opts).BROWSER, 'firefox');
+  assert.equal(loginEnv({}, { ...opts, wsl: null }).BROWSER, undefined);
+  assert.equal(loginEnv({}, { ...opts, has: () => false }).BROWSER, undefined);
+});
+
+// acli ignores BROWSER: it runs xdg-open (or x-www-browser, www-browser), and only with a display.
+// Without them it says "authentication failed" at once and opens nothing.
+test('under WSL the acli login gets an xdg-open that opens Windows, first on PATH, and a DISPLAY', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cs-shim-'));
+  try {
+    const env = loginEnv({ PATH: '/usr/bin', HOME: '/home/alex' }, { wsl: { version: 2 }, has: () => false, shimDir: dir });
+    assert.equal(env.PATH, `${dir}:/usr/bin`);
+    assert.equal(env.DISPLAY, ':0');
+    assert.equal(env.BROWSER, join(dir, 'xdg-open'));
+    for (const n of LOGIN_OPENERS) {
+      assert.match(readFileSync(join(dir, n), 'utf8'), /exec 'rundll32\.exe' 'url\.dll,FileProtocolHandler' "\$1"/);
+      assert.ok(statSync(join(dir, n)).mode & 0o100, `${n} is executable`);
+    }
+    // A display that's there stays; so does the PATH order when the folder can't be written.
+    const kept = loginEnv({ PATH: '/usr/bin', WAYLAND_DISPLAY: 'wayland-0' }, { wsl: { version: 2 }, has: () => true, shim: () => null });
+    assert.equal(kept.DISPLAY, undefined);
+    assert.equal(kept.PATH, '/usr/bin');
+    // Plain Linux and macOS are left alone.
+    const plain = { PATH: '/usr/bin' };
+    assert.equal(loginEnv(plain, { wsl: null, shim: () => { throw new Error('no shim off WSL'); } }), plain);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+  assert.match(loginOpenerScript({ has: (b) => b === 'wslview' }), /exec 'wslview' "\$1"/);
+  assert.equal(loginShim(join(fileURLToPath(import.meta.url), 'not-a-folder'), { has: () => true }), null);
+});
+
+test('acli\'s instant "authentication failed" comes with what to do', () => {
+  assert.match(acliLoginHint('✗ Error: authentication failed', { wsl: { version: 2 } }), /acli jira auth logout.*docs\/windows\.md/);
+  assert.match(acliLoginHint('✗ Error: authentication failed', { wsl: null }), /DISPLAY.*xdg-open/);
+  assert.equal(acliLoginHint('✗ Error: site not found', { wsl: null }), '');
 });
 
 test('the VM under WSL says how to get KVM, or that WSL1 never will', () => {
