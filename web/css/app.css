@@ -602,6 +602,11 @@ a.ref:hover { border-bottom-style: solid; }
 .remember-b .r-save { background: var(--text); border-color: var(--text); color: var(--bg); }
 .remember-b button:disabled { opacity: .55; cursor: default; }
 .remember-done { color: var(--muted); font-size: 12.5px; }
+.newtask .newtask-title { font-weight: 500; }
+.newtask-repo { color: var(--muted); font-size: 12px; margin: 2px 0 0 19px; }
+.newtask-h { margin-top: 8px; padding: 6px 10px; border-left: 2px solid var(--line-strong); font-size: 13px; color: var(--text-2); max-height: 180px; overflow: auto; }
+.newtask-hl { font-size: 11.5px; color: var(--muted); margin-bottom: 2px; }
+.newtask-h p, .newtask-h ul, .newtask-h ol { margin: 2px 0; }
 .remember-err { color: var(--red); font-size: 12.5px; margin-top: 6px; }
 .nudge { display: inline-flex; align-items: center; gap: 5px; margin-top: 8px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--text-2);
   border-radius: 7px; height: 26px; padding: 0 10px; font-size: 12.5px; }

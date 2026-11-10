@@ -88,6 +88,21 @@ After Copilot's review rounds, a person's review should be quick but still real.
 
 Facts only, short. If the repo has a PR template, keep its headings and fill them this way.
 
+## New work gets its own chat
+
+When the work turns up a new task (a follow-up ticket you created or I asked for, a separate bug, work that belongs to another ticket), don't start on it in this chat. Finish or pause this item first, then end your answer with a `new-task` block:
+
+```new-task
+ticket: ABC-124
+title: What the new task is, in one line
+repo: owner/name
+A few lines for a chat that has seen nothing of this one: what we decided and why, where to look, what is already done, what to avoid.
+```
+
+Clearsky shows it as a card that asks me to start it in a new chat (the default) or to continue here. Then stop and wait. If I pick "Continue here", carry on with it in this chat. Leave out the ticket line when there is none yet, and only create a ticket when I asked for one.
+
+When you are the new chat, the first message names the other chat and gives its hand-off. Another chat may still work in the same clone: if the folder has changes of its own or is on another task's branch, make a git worktree next to it for your branch instead of switching it.
+
 ## Never without asking me
 
 - Merge, approve, close, or force-push.

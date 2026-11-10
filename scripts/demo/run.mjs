@@ -202,7 +202,7 @@ ${fix ? `        BigDecimal left = refund;
 `;
 const git = (...a) => execFileSync('git', ['-C', CHAT.cwd, ...a], { stdio: 'ignore', env: { ...process.env, GIT_AUTHOR_NAME: 'Alex', GIT_AUTHOR_EMAIL: 'alex@example.com', GIT_COMMITTER_NAME: 'Alex', GIT_COMMITTER_EMAIL: 'alex@example.com' } });
 writeFileSync(join(src, 'RefundSplitter.java'), SPLITTER(false));
-try { git('init', '-q', '-b', 'main'); git('add', '-A'); git('commit', '-q', '-m', 'Refunds'); git('checkout', '-q', '-b', 'PAY-412-partial-refunds'); } catch { /* no git: no diff */ }
+try { git('init', '-q', '-b', 'main'); git('add', '-A'); git('commit', '-q', '-m', 'Refunds'); git('remote', 'add', 'origin', 'https://github.com/acme/payments-api.git'); git('checkout', '-q', '-b', 'PAY-412-partial-refunds'); } catch { /* no git: no diff */ }
 writeFileSync(join(src, 'RefundSplitter.java'), SPLITTER(true));
 writeFileSync(join(test, 'RefundSplitterTest.java'), 'package com.acme.pay.refund;\n\nclass RefundSplitterTest {}\n');
 writeFileSync(join(conf, 'agent-files.jsonl'), [

@@ -560,12 +560,12 @@ function md(text) {
   // Fenced blocks: an opening ```lang line, then everything up to a closing ``` line. One still
   // open (Copilot is mid-answer) shows as code so far.
   const re = /^```([\w-]*)[ \t]*\n([\s\S]*?)^```[ \t]*$/gm;
-  const block = (lang, body) => (lang === 'choices' ? choicesCard(body) : lang === 'remember' ? rememberCard(body) : `<div class="cblock"><button type="button" class="b-copy" data-copy-block title="Copy" aria-label="Copy">${icon('copy', 13)}</button><pre><code>${esc(body.replace(/\n$/, ''))}</code></pre></div>`);
+  const block = (lang, body) => (lang === 'choices' ? choicesCard(body) : lang === 'remember' ? rememberCard(body) : lang === 'new-task' ? newTaskCard(body) : `<div class="cblock"><button type="button" class="b-copy" data-copy-block title="Copy" aria-label="Copy">${icon('copy', 13)}</button><pre><code>${esc(body.replace(/\n$/, ''))}</code></pre></div>`);
   let out = '', last = 0, m;
   while ((m = re.exec(text))) { out += mdText(text.slice(last, m.index), last > 0); out += block(m[1], m[2]); last = re.lastIndex; }
   const rest = text.slice(last), open = rest.match(/^```([\w-]*)[ \t]*\n/m);
   if (!open) return out + mdText(rest, last > 0);
-  return out + mdText(rest.slice(0, open.index), last > 0) + (open[1] === 'choices' || open[1] === 'remember' ? '' : block('', rest.slice(open.index + open[0].length)));
+  return out + mdText(rest.slice(0, open.index), last > 0) + (['choices', 'remember', 'new-task'].includes(open[1]) ? '' : block('', rest.slice(open.index + open[0].length)));
 }
 function mdText(part, afterBlock) {
   // "> " lines (a draft comment, a quote from a thread) as one quote, with a Copy button that
@@ -725,6 +725,72 @@ async function rememberClick(b) {
     if (!m) { m = document.createElement('div'); m.className = 'remember-err'; card.append(m); }
     m.textContent = err.message;
   }
+}
+
+// New work gets its own chat (lib/new-task.mjs). A ```new-task block is a task this chat decided
+// on: "ticket:", "title:" and "repo:" lines, then a short hand-off. The card asks where to do it:
+// a new chat (the default) that starts with the ticket and the hand-off, or this one.
+const TASK_KEY = 'clearsky.copilot.newTasks';
+const taskMarks = () => { try { return JSON.parse(localStorage.getItem(TASK_KEY) || '{}'); } catch { return {}; } };
+function markTask(key, mark) {
+  try { const m = taskMarks(); m[key] = mark; const ks = Object.keys(m); for (const k of ks.slice(0, Math.max(0, ks.length - 200))) delete m[k]; localStorage.setItem(TASK_KEY, JSON.stringify(m)); } catch {}
+}
+function parseNewTask(body) {
+  const out = { ref: null, title: '', repo: null, handoff: '' };
+  const rest = [];
+  let head = true;
+  for (const raw of body.replace(/\r\n/g, '\n').split('\n')) {
+    const m = head && raw.match(/^\s*(ticket|title|repo)\s*:\s*(.*?)\s*$/i);
+    if (m) {
+      const k = m[1].toLowerCase();
+      if (k === 'ticket') { const v = m[2].trim(), hash = v.match(/^([\w-][\w.-]*\/[\w-][\w.-]*)#(\d+)$/); out.ref = hash ? { kind: 'gh', repo: hash[1], number: Number(hash[2]) } : parseRef(v); }
+      else if (k === 'title') out.title = m[2].replace(/\s+/g, ' ').slice(0, 200);
+      else if (/^[\w-][\w.-]*\/[\w-][\w.-]*$/.test(m[2])) out.repo = m[2];
+      continue;
+    }
+    if (raw.trim()) head = false;
+    if (!head) rest.push(raw.trimEnd());
+  }
+  out.handoff = rest.join('\n').trim().slice(0, 4000);
+  if (!out.repo && out.ref?.repo) out.repo = out.ref.repo;
+  if (!out.title) out.title = (out.ref && refLabel(out.ref)) || out.handoff.split('\n')[0].slice(0, 120);
+  return out;
+}
+const taskKey = (t) => `${t.ref ? refLabel(t.ref) : ''}|${t.title}|${t.handoff.slice(0, 200)}`;
+function newTaskCard(body) {
+  const t = parseNewTask(body);
+  if (!t.title && !t.ref) return '';
+  const mark = taskMarks()[taskKey(t)];
+  const label = t.ref ? refLabel(t.ref) : '';
+  const done = !mark ? ''
+    : mark.where === 'here' ? '<span class="remember-done">Continued in this chat</span>'
+      : `<span class="remember-done">Started in a new chat</span>${mark.id ? `<button type="button" data-task="open" data-task-id="${esc(mark.id)}">Open it</button>` : ''}`;
+  return `<div class="remember newtask" data-task-body="${esc(body)}"><div class="remember-t">${icon('plus', 13)}<span>New task${label ? `: ${esc(label)}` : ''}${t.title && t.title !== label ? ` · <span class="newtask-title">${esc(t.title)}</span>` : ''}</span></div>
+    ${t.repo ? `<div class="newtask-repo">${esc(t.repo)}</div>` : ''}
+    ${t.handoff ? `<div class="newtask-h"><div class="newtask-hl">Hand-off for the new chat</div>${mdBlocks(t.handoff)}</div>` : ''}
+    <div class="remember-b">${done || `<button type="button" class="r-save" data-task="new" title="Start it in a new chat with the ticket and this hand-off; this chat stays about its own work">Start in a new chat</button><button type="button" data-task="here" title="Do it in this chat instead">Continue here</button>`}</div></div>`;
+}
+function newTaskClick(b) {
+  const card = b.closest('.newtask');
+  const act = b.dataset.task;
+  if (act === 'open') { const id = b.dataset.taskId, r = recentChats.find((x) => x.id === id); openChat(true, true); openSession(id, r?.cwd); return; }
+  const t = parseNewTask(card.dataset.taskBody), key = taskKey(t), label = t.ref ? refLabel(t.ref) : t.title;
+  if (act === 'here') {
+    if (chat.stop) { $('#chat-sub').textContent = 'Wait for this answer to end, then pick.'; return; }
+    markTask(key, { where: 'here' });
+    card.outerHTML = newTaskCard(card.dataset.taskBody);
+    send(`Continue here: start on ${label} in this chat.`);
+    return;
+  }
+  // A new chat: it gets the ticket, the hand-off, and this chat's title, and you go there.
+  const from = chat.title || '';
+  markTask(key, { where: 'new' });
+  card.outerHTML = newTaskCard(card.dataset.taskBody);
+  newChat();
+  if (t.ref) addRef({ ...t.ref, title: t.title });
+  chat.title = t.title || label;
+  openChat(true, true);
+  send(t.handoff || `Start on ${label}.`, { newTask: { ref: t.ref, title: t.title, repo: t.repo, from }, taskKey: key });
 }
 
 document.addEventListener('click', async (e) => {
@@ -1031,7 +1097,7 @@ function openRefPick() {
   input.focus();
 }
 
-async function send(text) {
+async function send(text, extra = {}) {
   if (!text.trim() || chat.stop) return;
   if (chat.files.some((f) => !f.path)) { $('#chat-sub').textContent = 'Still uploading your files…'; return; }
   const refs = chat.refs.map(({ kind, key, repo, number }) => ({ kind, key, repo, number }));
@@ -1056,7 +1122,7 @@ async function send(text) {
     else if (e.type === 'permission' || e.type === 'error') segs.push(e);
     // Answered in another chat (a GitHub change asks in every sandboxed chat that's working).
     else if (e.type === 'permission-done') { const g = segs.find((x) => x.type === 'permission' && x.id === e.id); if (g && !g.answered) g.answered = e.expired ? 'Not answered before the turn ended' : 'Answered'; }
-    else if (e.type === 'session') { if (here()) { chat.session = e.id; rememberChat(); } rememberMode(e.id, mine.mode); mine.id = e.id; remember(e.id, chat.cwd, mine.title); drawTabs(); }
+    else if (e.type === 'session') { if (here()) { chat.session = e.id; rememberChat(); } rememberMode(e.id, mine.mode); mine.id = e.id; remember(e.id, chat.cwd, mine.title); if (extra.taskKey) markTask(extra.taskKey, { where: 'new', id: e.id }); drawTabs(); }
     else if (e.type === 'commands' && chat.info) chat.info.commands = e.commands;
     // A new chat about a PR or ticket is named after it, not after the skill or first words.
     else if (e.type === 'title') { mine.title = e.title; if (here()) { chat.title = e.title; drawCtx(); } }
@@ -1078,7 +1144,7 @@ async function send(text) {
   drawCtx();
   try {
     const res = await fetchWithToken('/api/copilot', { method: 'POST', signal: ctrl.signal,
-      body: JSON.stringify({ message: skillPrompt(text), attachments, files, session: chat.session, resume: chat.turns > 0, cwd: chat.cwd, refs, model: cpPrefs.model, effort: cpPrefs.effort, permission: $('#cp-perm').value }) });
+      body: JSON.stringify({ message: extra.newTask ? text : skillPrompt(text), newTask: extra.newTask, attachments, files, session: chat.session, resume: chat.turns > 0, cwd: chat.cwd, refs, model: cpPrefs.model, effort: cpPrefs.effort, permission: $('#cp-perm').value }) });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
     const reader = res.body.getReader(), dec = new TextDecoder();
     let buf = '';
@@ -1175,6 +1241,8 @@ async function attachLive(id) {
 $('#chat-log').addEventListener('click', async (e) => {
   const rb = e.target.closest('[data-remember]');
   if (rb) { rememberClick(rb); return; }
+  const tb = e.target.closest('[data-task]');
+  if (tb) { newTaskClick(tb); return; }
   const ch = e.target.closest('[data-choice]');
   if (ch && !chat.stop) {
     ch.closest('.choices').querySelectorAll('button').forEach((x) => { x.disabled = true; x.classList.toggle('picked', x === ch); });
