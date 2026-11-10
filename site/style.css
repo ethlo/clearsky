@@ -1,3 +1,7 @@
+/* Self-hosted, Latin subset, variable weight. Licences: fonts/OFL-*.txt */
+@font-face { font-family: "Inter Tight"; src: url("fonts/InterTight-latin.woff") format("woff"); font-weight: 100 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "JetBrains Mono"; src: url("fonts/JetBrainsMono-latin.woff") format("woff"); font-weight: 100 800; font-style: normal; font-display: swap; }
+
 /* Clearsky website. Plain CSS, no build step, light and dark from the system setting. */
 :root {
   color-scheme: light dark;
@@ -46,11 +50,11 @@
 html { scroll-padding-top: 76px; -webkit-text-size-adjust: 100%; }
 body {
   margin: 0; background: var(--bg); color: var(--text);
-  font: 16px/1.65 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 16px/1.65 "Inter Tight", Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
 img { max-width: 100%; height: auto; }
-code, pre, kbd { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+code, pre, kbd { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 :not(pre) > code { font-size: .88em; background: var(--inline-code); padding: .12em .4em; border-radius: 5px; word-break: break-word; }
 pre {
   background: var(--code); color: var(--code-text); border-radius: 10px; padding: 16px 18px;
@@ -98,7 +102,7 @@ kbd { font-size: .82em; border: 1px solid var(--line); border-bottom-width: 2px;
 .hero h1 em { font-style: normal; background: linear-gradient(90deg, var(--accent), var(--accent-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .hero p.lead { font-size: clamp(17px, 2.2vw, 20px); color: var(--text-2); max-width: 680px; margin: 0 auto 28px; }
 .hero .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 20px; }
-.hero .cmd { display: inline-block; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; color: var(--muted); margin-bottom: 48px; }
+.hero .cmd { display: inline-block; font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 14px; color: var(--muted); margin-bottom: 48px; }
 .hero .cmd b { color: var(--text); font-weight: 500; }
 .shot { display: block; margin: 0 auto; max-width: var(--wide); border-radius: 12px 12px 0 0; border: 1px solid var(--line); border-bottom: 0; box-shadow: var(--shadow); background: var(--surface); }
 .shot img { display: block; width: 100%; border-radius: 12px 12px 0 0; }
