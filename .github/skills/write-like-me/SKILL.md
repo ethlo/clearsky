@@ -39,6 +39,8 @@ comment, a Slack message) should read as if I wrote it.
    description follows its own format (the repo's template, or my standard sections) but in
    my voice. A Jira description is three short parts: the problem, what we'll do, and what's
    still open. No "Today / Change / To consider" scaffolding unless the ticket needs it.
+   Write Jira text in Markdown (`## Heading`, `- item`, `` `code` ``), never wiki markup
+   (`h3.`, `{{code}}`): Clearsky's `acli` sends it to Jira as rich text.
    Leave out "out of scope" lines for things nobody would expect in it; name only what a
    reader could reasonably think is included.
 5. **Before showing a draft,** cut it once more: every sentence I wouldn't miss goes. Then
