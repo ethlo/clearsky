@@ -64,7 +64,7 @@ function header(page) {
 
 function footer(page) {
   return `<footer class="footer"><div class="in">
-<span>Clearsky · MIT licence · runs on your machine, keeps nothing anywhere else</span>
+<span>Clearsky · MIT licence · runs on your machine, keeps nothing anywhere else · an <a class="by" href="https://ethlo.com">ethlo</a> project</span>
 <span><a href="${rel(page, 'getting-started.html')}">Get started</a><a href="${rel(page, 'guide.html')}">Guide</a><a href="${REPO}">GitHub</a></span>
 </div></footer>
 </body>
