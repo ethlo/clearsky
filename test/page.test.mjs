@@ -49,6 +49,8 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
   for (let i = 0; i < 50; i++) { try { await fetch(base); break; } catch { await new Promise((r) => setTimeout(r, 100)); } }
 
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  // Talking: a stand-in for the browser's speech recognition that hears one sentence.
+  await page.addInitScript(() => { window.SpeechRecognition = class { start() { this.t = setTimeout(() => this.onresult?.({ results: [[{ transcript: 'only the backend part' }]] }), 50); } stop() { clearTimeout(this.t); setTimeout(() => this.onend?.(), 10); } }; });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto(base);
@@ -234,7 +236,11 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
   await page.waitForSelector('#start-dlg[open] #sd-text');
   assert.equal(await page.locator('#sd-skill').inputValue(), 'standup');
   assert.match(await page.locator('#start-dlg').innerText(), /Start Copilot on api#1/);
-  await page.fill('#sd-text', 'only the backend part');
+  // 🎤 in the box: what you say lands in it.
+  await page.click('#start-dlg .talk-mic');
+  await page.waitForFunction(() => document.querySelector('#sd-text').value === 'only the backend part');
+  await page.click('#start-dlg .talk-mic');
+  await page.waitForFunction(() => document.querySelector('#start-dlg .talk-mic').getAttribute('aria-pressed') === 'false');
   if (process.env.SHOT) await page.screenshot({ path: `${process.env.SHOT}/start-box.png` });
   await page.press('#sd-text', 'Enter');
   await page.waitForFunction(() => !document.querySelector('#start-dlg[open]'));

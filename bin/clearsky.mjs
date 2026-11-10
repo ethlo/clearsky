@@ -2858,7 +2858,8 @@ function serve() {
   const welcomePage = demoMark(readFileSync(join(here, '..', 'web', 'welcome.html'), 'utf8')).replaceAll('__CSRF__', csrf)
     .replace('/*__CSS__*/', () => readFileSync(join(here, '..', 'web', 'css', 'app.css'), 'utf8'));
   const settingsPage = demoMark(readFileSync(join(here, '..', 'web', 'settings.html'), 'utf8')).replace('__CSRF__', csrf)
-    .replace('/*__CSS__*/', () => readFileSync(join(here, '..', 'web', 'css', 'app.css'), 'utf8'));
+    .replace('/*__CSS__*/', () => readFileSync(join(here, '..', 'web', 'css', 'app.css'), 'utf8'))
+    .replace('/*__TALK__*/', () => readFileSync(join(here, '..', 'web', 'js', '12-talk.js'), 'utf8')); // 🎤 on its text boxes
   // A container publishes its port to another one on the host (CLEARSKY_PUBLIC_PORT), and the
   // browser then names that port.
   const ports = [...new Set([config.port, Number(process.env.CLEARSKY_PUBLIC_PORT) || config.port])];

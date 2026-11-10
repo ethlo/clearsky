@@ -703,7 +703,7 @@ async function rememberClick(b) {
   const mark = (k) => { try { localStorage.setItem(MEM_SKIP_KEY, JSON.stringify([...memSkipped(), k].slice(-200))); } catch {} };
   if (act === 'skip') { mark(memKey(note)); return done('Skipped'); }
   if (act === 'edit') {
-    card.querySelector('ul').outerHTML = `<textarea class="remember-edit" spellcheck="true" rows="${Math.min(8, note.lines.length + 1)}" aria-label="Notes to remember, one per line">${esc(note.lines.join('\n'))}</textarea>`;
+    card.querySelector('ul').outerHTML = `<textarea class="remember-edit" data-talk spellcheck="true" rows="${Math.min(8, note.lines.length + 1)}" aria-label="Notes to remember, one per line">${esc(note.lines.join('\n'))}</textarea>`;
     card.querySelector('.remember-b').innerHTML = '<button type="button" class="r-save" data-remember="save">Save</button><button type="button" data-remember="cancel">Cancel</button>';
     card.querySelector('textarea').focus();
     return;
@@ -1297,25 +1297,10 @@ setTheme(document.documentElement.dataset.theme || 'auto');
 
 // ---------------------------------------------------------------- talk
 
-// Click to talk, with the browser's own speech recognition (Chrome sends the audio to Google
-// to turn it into text). What you say lands in the message box; you still press Send.
-const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
-let rec = null;
+// Click to talk (web/js/12-talk.js): what you say lands in the message box; you still press Send.
 if (Speech) {
   $('#chat-mic').hidden = false;
-  $('#chat-mic').onclick = () => {
-    if (rec) { rec.stop(); return; }
-    const box = $('#chat-text'), before = box.value ? `${box.value.replace(/\s*$/, '')} ` : '';
-    rec = new Speech();
-    rec.lang = navigator.language || 'en-US';
-    rec.interimResults = true;
-    rec.continuous = true;
-    rec.onresult = (e) => { box.value = before + [...e.results].map((r) => r[0].transcript).join('').trim(); };
-    rec.onerror = (e) => { if (e.error !== 'aborted' && e.error !== 'no-speech') addMsg('cp', `<div class="err">Talk: ${esc(e.error === 'not-allowed' ? 'the browser blocked the microphone' : e.error)}</div>`); };
-    rec.onend = () => { rec = null; $('#chat-mic').classList.remove('on'); $('#chat-mic').setAttribute('aria-pressed', 'false'); box.focus(); };
-    rec.start();
-    $('#chat-mic').classList.add('on'); $('#chat-mic').setAttribute('aria-pressed', 'true');
-  };
+  $('#chat-mic').onclick = () => talkInto($('#chat-text'), $('#chat-mic'), (why) => addMsg('cp', `<div class="err">Talk: ${esc(why)}</div>`));
 }
 $('#chat-new').onclick = newChat;
 $('#chat-hist-btn').onclick = () => showHistory();

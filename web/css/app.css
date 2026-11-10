@@ -1233,3 +1233,13 @@ a.u-row:hover { background: var(--accent-soft); }
 .sd-b button:hover { border-color: var(--text-2); }
 .sd-b .r-save { background: var(--text); border-color: var(--text); color: var(--bg); }
 @media (max-width: 560px) { .sd-k { display: none; } .sd-b { justify-content: flex-end; } }
+
+/* 🎤 in the corner of a text box (web/js/12-talk.js); the chat box has its own in its bar. */
+.talk-wrap { position: relative; display: block; }
+.talk-wrap > textarea { padding-right: 36px; }
+.talk-mic { position: absolute; right: 14px; bottom: 6px; display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 7px;
+  background: none; color: var(--muted); cursor: pointer; }
+.talk-mic svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.talk-mic:hover { background: var(--surface); color: var(--text); }
+.talk-mic.on { color: var(--red); background: var(--red-soft); animation: pulse 1.2s ease-in-out infinite; }
+.talk-mic.err { color: var(--amber); }

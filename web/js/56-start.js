@@ -19,7 +19,7 @@ async function askStart({ label = '', title = '', skill = '', handoff = '', plac
     ${title && title !== label ? `<div class="sd-title">${esc(title)}</div>` : ''}
     ${handoff ? `<div class="sd-note">The hand-off from the other chat goes in too.</div>` : ''}
     <label class="sd-l" for="sd-text">Anything to add <span>(optional)</span></label>
-    <textarea id="sd-text" rows="4" placeholder="${esc(placeholder || 'e.g. Only the backend part. Keep the old endpoint for now. Ask before changing the schema.')}"></textarea>
+    <textarea id="sd-text" data-talk rows="4" placeholder="${esc(placeholder || 'e.g. Only the backend part. Keep the old endpoint for now. Ask before changing the schema.')}"></textarea>
     <label class="sd-l" for="sd-skill">Skill</label>
     <select id="sd-skill">
       <option value="">None</option>

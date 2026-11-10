@@ -202,7 +202,7 @@ While `clearsky serve` runs, it checks GitHub, Jira mentions and Slack every 3 m
 
 Type **/** in the message box for skills and every slash command your Copilot offers (`/review`, `/plan`, `/compact`…), plus `/new`, `/history` and `/ref` for the chat.
 
-A chat uses the whole work area, with what it's about (linked PRs and tickets, folder, status), your skills and its settings on the right. The menu has Settings and a Light / Dark / Auto theme switch (saved per device); on a phone it folds away behind ☰. In Chrome, 🎤 next to Send lets you talk instead of typing; the browser sends the audio to Google to turn it into text, and nothing is sent to Copilot until you press Send.
+A chat uses the whole work area, with what it's about (linked PRs and tickets, folder, status), your skills and its settings on the right. The menu has Settings and a Light / Dark / Auto theme switch (saved per device); on a phone it folds away behind ☰. In Chrome, 🎤 next to Send lets you talk instead of typing (so does the 🎤 in the corner of the start box, a Remember card you edit, and the memory editor in Settings); the browser sends the audio to Google to turn it into text, and nothing is sent to Copilot until you press Send.
 
 **Copilot** in the menu lists the chats that are working or waiting on you, plus the ones you used lately here, each with a status dot. Click one, or press Alt+1…9, to switch; Alt+N starts a new chat. Switching (or reloading the page) doesn't stop a chat: it carries on in the background, and when you come back you see any question it's waiting on and follow it to the end. **Stop** ends a turn on purpose.
 
