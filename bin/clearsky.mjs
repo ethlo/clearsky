@@ -61,6 +61,7 @@ import { checks as doctorChecks, suggestions as doctorSuggestions, doctorText, r
 import { edsCalendars } from '../lib/eds.mjs';
 import { joinPack, joinSummary, readTeam, exportPack, TEAM_KEYS, applyWaiting, pluginOffers } from '../lib/team.mjs';
 import { scaffoldPack, writeScaffold, nextSteps } from '../lib/team-scaffold.mjs';
+import { NEW_TASK_HINT, cleanNewTask, newTaskPrompt } from '../lib/new-task.mjs';
 import { readHandoffs, saveHandoffs, addHandoff, nextHandoff, settleAfterRestart, handoffPrompt, handoffResult, updateHandoff } from '../lib/handoff.mjs';
 import { srtInstalled } from '../lib/doctor.mjs';
 import { ownRead, chatPushes } from '../lib/own-read.mjs';
@@ -3050,7 +3051,10 @@ function serve() {
             if (!pointed.some((x) => x.path === r.path)) pointed.push(r);
           }
           const tail = [attached.length && `Files I attached: ${attached.join(', ')}`, fileRefLine(pointed, homedir())].filter(Boolean).join('\n');
-          const message = `${String(body.message || '').slice(0, 20_000)}${tail ? `\n\n${tail}` : ''}`;
+          // A new task from another chat's card (lib/new-task.mjs): its hand-off, and how to start.
+          const task = !body.resume && cleanNewTask(body.newTask);
+          const typed = String(body.message || '').slice(0, 20_000);
+          const message = `${task ? newTaskPrompt(task, typed, { skills: (info.skills || []).map((x) => x.name) }) : typed}${tail ? `\n\n${tail}` : ''}`;
           if (!message.trim()) return json(res, 400, { error: 'empty message' });
           if (!copilot.validModel(body.model)) return json(res, 400, { error: 'bad model name' });
           if (!body.session || !/^[\w-]{8,64}$/.test(body.session)) return json(res, 400, { error: 'bad session' });
@@ -3068,6 +3072,8 @@ function serve() {
             const b = found.find((x) => x.local) || found[0];
             if (b) checkout = worktreeFor(b.clone, b.branch) || b.clone;
           }
+          // A new task names its repository: its clone, when the ticket gave none.
+          if (!checkout && task?.repo && !body.cwd) checkout = findCheckout(task.repo);
           // A PR or ticket chat with no clone found starts in your first folder (Settings → Copilot).
           const cwd = checkout || (body.cwd && isDir(body.cwd) ? body.cwd : (refs.length && !body.resume && copilotFolders().map((d) => d.replace(/^~(?=\/|$)/, homedir())).find(isDir)) || copilotCwd());
           let refText = '';
@@ -3091,7 +3097,7 @@ function serve() {
           const note = !command && folderNotes.get(body.session);
           if (note) folderNotes.delete(body.session);
           const update = !command && (owed || note) && `${UPDATE_INTRO}${owed ? sandboxHint : ''}${note ? `\n\n${note}` : ''}`;
-          const prefix = command ? '' : [update, !body.resume && `${CONTEXT_INTRO}\n\n${copilotContext()}\n\n${CHOICES_HINT}\n\n${memoryHint()}\n\n${PR_HINT}${folders && `\n\n${folders}`}${sandboxHint}`, refText].filter(Boolean).join('\n\n---\n\n');
+          const prefix = command ? '' : [update, !body.resume && `${CONTEXT_INTRO}\n\n${copilotContext()}\n\n${CHOICES_HINT}\n\n${NEW_TASK_HINT}\n\n${memoryHint()}\n\n${PR_HINT}${folders && `\n\n${folders}`}${sandboxHint}`, refText].filter(Boolean).join('\n\n---\n\n');
           const prompt = prefix ? `${prefix}${MSG_MARK}${message}` : message;
           // Answers stream back as one JSON event per line: text, tool, permission, done, error.
           res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
@@ -3102,7 +3108,9 @@ function serve() {
             if (!res.writableEnded && !res.destroyed) res.write(`${JSON.stringify(e)}\n`);
           };
           // A new chat about one item is named after it. (Copilot 1.0.105 ignores /rename over ACP, so the name lives here.)
-          const itemName = !body.resume && refs.length === 1 ? itemSessionName(refs[0]) : null;
+          const named1 = !body.resume && refs.length === 1 ? itemSessionName(refs[0]) : null;
+          // A new task is named after its card when Jira doesn't know the ticket yet (or it has none).
+          const itemName = task?.title && !named1?.includes(' · ') ? [named1, task.title !== named1 && task.title].filter(Boolean).join(' · ').slice(0, 100) : named1;
           // Remember which PRs and tickets this session is about, for the links on the page.
           const kept = new Set();
           const linkRefs = () => {

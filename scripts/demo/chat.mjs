@@ -35,4 +35,7 @@ CHAT.updates = [
   ...tool('git push', 'execute'),
   ...tool('gh pr comment 479 (replies to both threads)', 'execute'),
   say('Pushed to `PAY-412-partial-refunds` and answered Dev\'s two threads. CI is green. My reply on the rounding thread:\n\n> Good catch. The last part now gets whatever is left after the others, so the parts always add up. `RefundSplitterTest` covers 3 × 33.33 and 7 × 14.29.\n>\n> Fixed in a1b2c3d.\n\nI\'ve also moved PAY-412 to **In Review**.\n\nOne thing for you: the CSV ledger export (PAY-420) has the same rounding pattern. Want me to open a ticket for it?'),
+  me('Yes, open it.'),
+  ...tool('acli jira workitem create --project PAY --type Bug', 'execute'),
+  say('Opened **PAY-450**. It is its own piece of work, so I\'ll leave it out of this chat:\n\n```new-task\nticket: PAY-450\ntitle: Ledger CSV export loses cents when it splits amounts\nrepo: acme/payments-api\n`LedgerCsvWriter.splitLines` rounds each line on its own, the same bug Dev found in `RefundSplitter` on PAY-412.\n- Fix it the same way: the last line gets whatever is left after the others (see `RefundSplitter.split` on `PAY-412-partial-refunds`).\n- Add a test for 3 × 33.33, like `RefundSplitterTest`.\n- Nothing is done on it yet. Keep it out of PR #479.\n```'),
 ];

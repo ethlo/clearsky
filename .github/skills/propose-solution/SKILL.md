@@ -44,4 +44,6 @@ Then stop and wait.
 
 Carry on with the usual workflow for the choice: a personal delivery skill if I have one (for example a feature-delivery skill for "ticket, branch, PR"), otherwise `continue-work`. Say which one you're using. A new branch starts from the fix version's release branch (`1.2.4` → `v1.2`); when that isn't clear, ask me which branch to start from, as continue-work describes.
 
+If the pick is a new task of its own (a separate ticket, or work on something other than the subject here), don't start it in this chat: offer it as a `new-task` block, as continue-work describes, so I can start it in a new chat.
+
 When drafting anything posted as me (comments, replies, PR descriptions), follow the write-like-me skill.
