@@ -1058,7 +1058,7 @@ a.u-row:hover { background: var(--accent-soft); }
 @media (max-width: 640px) { .ho-r { flex-direction: column; align-items: stretch; } .ho-a { flex-wrap: wrap; } }
 
 /* VMs view (web/js/49-vms.js) */
-.vms-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+.vms-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 18px; }
 .vms-tile { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
 .vms-tile b { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); }
 .vms-tile b small { font-size: 13px; font-weight: 500; color: var(--muted); }

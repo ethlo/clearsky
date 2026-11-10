@@ -1,6 +1,7 @@
 // VMs: every chat's VM for Docker builds (GET /api/vms, lib/vm-queue.mjs, lib/vm.mjs). How many
 // may run at once and how many chats wait in line for one; per running VM its CPU and memory and
-// the containers in it. The menu shows how many wait, and its icon turns green, orange or red with
+// the containers in it; and what chats run in their sandboxes on this machine itself (a build
+// there takes this machine's CPU, not a VM's). The menu shows how many wait, and its icon turns green, orange or red with
 // the busiest VM's load (none while no VM runs). Open, it looks again every 3 seconds; closed,
 // every 15 seconds, for the menu.
 
@@ -42,12 +43,14 @@ function renderVms(quick) {
   const run = d.vms.filter((v) => v.place !== 'waiting'), wait = d.vms.filter((v) => v.place === 'waiting');
   const cpuUsed = run.reduce((a, v) => a + (v.system?.cpuPct != null ? (v.system.cpuPct / 100) * v.vcpus : 0), 0);
   const memUsed = run.reduce((a, v) => a + (v.system?.memUsedMb || 0), 0);
+  const sb = d.sandboxes || [], sbCores = sb.reduce((a, x) => a + (x.cpuPct || 0) / 100, 0);
   const memGiven = run.reduce((a, v) => a + (v.system?.memTotalMb || v.memMb || 0), 0);
   const tiles = `<div class="vms-tiles">
     <div class="vms-tile"><b>${d.running}<small> / ${d.limit}</small></b><span>running</span></div>
     <div class="vms-tile${d.waiting ? ' warn' : ''}"><b>${d.waiting}</b><span>waiting in line</span></div>
     <div class="vms-tile" title="CPU the running VMs use now, in cores, of this machine's ${d.host?.cpus ?? '?'}"><b>${cpuUsed.toFixed(1)}<small> / ${d.host?.cpus ?? '?'} cores</small></b><span>CPU in VMs</span></div>
-    <div class="vms-tile" title="Memory used in the running VMs; they were given ${gbOf(memGiven)} of this machine's ${d.host ? gbOf(d.host.memMb) : '?'}"><b>${gbOf(memUsed)}<small> / ${d.host ? gbOf(d.host.memMb) : '?'}</small></b><span>memory in VMs</span></div></div>`;
+    <div class="vms-tile" title="Memory used in the running VMs; they were given ${gbOf(memGiven)} of this machine's ${d.host ? gbOf(d.host.memMb) : '?'}"><b>${gbOf(memUsed)}<small> / ${d.host ? gbOf(d.host.memMb) : '?'}</small></b><span>memory in VMs</span></div>
+    <div class="vms-tile${sbCores >= 2 ? ' warn' : ''}" title="CPU chats' sandboxes use on this machine itself, in cores: builds and tests run there instead of in a VM"><b>${sbCores.toFixed(1)}<small> / ${d.host?.cpus ?? '?'} cores</small></b><span>CPU in sandboxes</span></div></div>`;
   const ctrRow = (c) => {
     const on = c.state === 'running';
     const ports = (c.ports || '').replace(/0\.0\.0\.0:|\[::\]:/g, '').split(', ').filter((x, i, a) => x && a.indexOf(x) === i).join(', ');
@@ -74,11 +77,19 @@ function renderVms(quick) {
   const waitRow = (v) => `<li><span class="vms-pos">${v.position}</span><a href="#copilot" class="vms-chat" data-chat="${esc(v.chat)}" title="Open this chat">${esc(v.title || 'Untitled chat')}</a>
     <span class="vms-where">${esc(v.cwd)}</span><span class="muted">waiting ${mins(v.since)}</span>
     <button class="chip" data-vm-stop="${esc(v.chat)}" type="button" title="Take it out of the line: its waiting vm command stops">Leave line</button></li>`;
+  // Chats' sandboxes on this machine: the busy ones (a quarter of a core or more) by name.
+  const busy = sb.filter((x) => (x.cpuPct || 0) >= 25);
+  const sbRow = (x) => `<li><span class="vms-pos" title="Cores in use">${((x.cpuPct || 0) / 100).toFixed(1)}</span><a href="#copilot" class="vms-chat" data-chat="${esc(x.chat)}" title="Open this chat">${esc(x.title || 'Untitled chat')}</a>
+    <span class="vms-where">${x.top ? `${esc(x.top.name)} ${x.top.cpuPct}%` : ''}${x.jobs ? ` · ${x.jobs} background job${x.jobs === 1 ? '' : 's'}` : ''}</span><span class="muted">${gbOf(x.memMb)}</span></li>`;
+  const sbPart = sb.length ? `<h2 class="vms-h" style="margin-top:24px">On this machine, in chats' sandboxes <span class="muted">${busy.length ? `${busy.length} busy` : 'all quiet'}</span></h2>
+    ${busy.length ? `<ol class="vms-line">${busy.map(sbRow).join('')}</ol>` : ''}
+    <div class="b-foot">${d.builds === 'vm' ? 'Chats are told to run builds and tests in their VM; a busy sandbox here is one that didn\'t.' : 'Chats run builds and tests in their sandbox, on this machine at low priority, and use a VM only for Docker.'} Change it in <a href="/settings#copilot">Settings → Copilot → Run builds in</a>.</div>` : '';
   el.innerHTML = `${tiles}
     ${wait.length ? `<h2 class="vms-h">Waiting in line <span class="muted">${wait.length}</span></h2><ol class="vms-line">${wait.map(waitRow).join('')}</ol>` : ''}
     <h2 class="vms-h">Running <span class="muted">${run.length}</span></h2>
     ${run.length ? run.map(card).join('') : `<div class="empty">${d.support?.ok === false ? `VMs can't run on this machine: ${esc(d.support.why || 'unknown reason')}` : 'No VM runs now. A chat starts one with its first vm command.'}</div>`}
-    <div class="b-foot">${d.limit} VM${d.limit === 1 ? '' : 's'} at the same time: <a href="/settings#copilot">Settings → Copilot</a></div>`;
+    <div class="b-foot">${d.limit} VM${d.limit === 1 ? '' : 's'} at the same time: <a href="/settings#copilot">Settings → Copilot</a></div>
+    ${sbPart}`;
 }
 
 $('#vms-refresh').onclick = () => loadVms();

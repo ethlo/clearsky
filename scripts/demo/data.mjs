@@ -192,6 +192,12 @@ export function vms(now = Date.now()) {
       { chat: 'demo-review-482', title: 'Review acme/payments-api#482', state: 'off', place: 'waiting', position: 1, since: new Date(now - 3 * 6e4).toISOString(), cwd: `${home}/payments-api`, commands: 0, vcpus: 6, memMb: 8192, system: null, containers: [] },
       { chat: 'demo-webshop-build', title: 'web-shop: checkout tests', state: 'off', place: 'waiting', position: 2, since: new Date(now - 50e3).toISOString(), cwd: `${home}/web-shop`, commands: 0, vcpus: 6, memMb: 8192, system: null, containers: [] },
     ],
+    // Chats' sandboxes on this machine: one ran its build there instead of in a VM.
+    sandboxes: [
+      { chat: 'demo-ledger-export', title: 'LED-77: CSV export of ledger entries', cpuPct: wob(470, 30), memMb: 2140, procs: 38, top: { pid: 41210, name: 'java (Maven)', cpuPct: wob(455, 30) }, jobs: 0 },
+      { chat: 'demo-pay412-refunds', title: 'PAY-412: Partial refunds for split payments', cpuPct: 3, memMb: 310, procs: 9, top: { pid: 40112, name: 'node', cpuPct: 2 }, jobs: 1 },
+    ],
+    builds: 'vm',
     host: { cpus: 12, memMb: 31744 },
   };
 }
