@@ -25,6 +25,7 @@ import { sandboxedCommand, sandboxEnded, stopSandbox, sandboxProxy, sandboxProxy
 import { HostDoor, ruleMatches } from '../lib/host-door.mjs';
 import { VmImage, ChatVm, vmSupport, VM_DOMAINS, reapOrphans, vmsLoad } from '../lib/vm.mjs';
 import { VmQueue } from '../lib/vm-queue.mjs';
+import { TreeLoad } from '../lib/proc-load.mjs';
 import { Jobs, jobReport, jobView, shellLine, tailOf } from '../lib/jobs.mjs';
 import { Watchdog, watchdogSettings, nudgeText, REASONS as NUDGE_REASONS, AUTO_MARK } from '../lib/watchdog.mjs';
 import { logWrite, readWrites } from '../lib/agent-log.mjs';
@@ -1523,10 +1524,10 @@ const tildeHome = (p) => (p && p.startsWith(homedir()) ? `~${p.slice(homedir().l
 const jobGroups = new Set(); // process groups of jobs running here, ended with Clearsky
 process.on('exit', () => { for (const pid of jobGroups) { try { process.kill(-pid, 'SIGTERM'); } catch {} } });
 // Run a command in its own process group, its output to out/err, until it ends or `signal` stops it.
-function spawnJob(bin, args, { cwd, env, signal, hours = 4 }, out, err) {
+function spawnJob(bin, args, { cwd, env, signal, hours = 4, onPid = null }, out, err) {
   return new Promise((done) => {
     const child = spawn(bin, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
-    if (child.pid) jobGroups.add(child.pid);
+    if (child.pid) { jobGroups.add(child.pid); onPid?.(child.pid); }
     const kill = () => { try { if (process.platform !== 'win32') process.kill(-child.pid, 'SIGTERM'); else child.kill('SIGTERM'); } catch {} };
     const timer = setTimeout(() => { err(`\nClearsky: stopped after ${hours} hours.\n`); kill(); }, hours * 36e5);
     signal?.addEventListener('abort', () => { err('\nClearsky: stopped.\n'); kill(); }, { once: true });
@@ -1536,6 +1537,8 @@ function spawnJob(bin, args, { cwd, env, signal, hours = 4 }, out, err) {
     child.on('close', (code) => { clearTimeout(timer); jobGroups.delete(child.pid); done(code ?? 1); });
   });
 }
+// Background jobs running in a chat's sandbox: pid → chat, for the VMs view's sandbox load.
+const sandboxJobs = new Map();
 // Where a job runs is the fence of the chat that started it.
 async function runJob(job, out, err, signal) {
   const c = acpChats.get(job.chat);
@@ -1543,7 +1546,8 @@ async function runJob(job, out, err, signal) {
   if (job.where === 'outside') return spawnJob(job.argv[0], job.argv.slice(1), { cwd: job.cwd, env: copilotEnv(), signal }, out, err);
   if (!c?.agent.inSandbox) throw new Error('this chat\'s sandbox has stopped');
   const s = await c.agent.inSandbox(job.argv, job.cwd);
-  try { return await spawnJob(s.bin, s.args, { cwd: job.cwd, env: s.env, signal }, out, err); } finally { sandboxEnded(); }
+  let pid = null;
+  try { return await spawnJob(s.bin, s.args, { cwd: job.cwd, env: s.env, signal, onPid: (p) => { pid = p; sandboxJobs.set(p, job.chat); } }, out, err); } finally { sandboxJobs.delete(pid); sandboxEnded(); }
 }
 const jobs = new Jobs({ file: join(dirname(stateFile), 'jobs.json'), logDir: () => join(copilotTmp(), 'jobs'), run: runJob, onEnd: jobEnded });
 function jobEnded(job) {
@@ -1657,7 +1661,27 @@ async function vmsOverview({ look = true } = {}) {
       position: w?.position ?? null, busy: !!h?.active, since: new Date(w?.since ?? h?.since ?? (Date.parse(v.startedAt) || Date.now())).toISOString(),
       startedAt: v.startedAt, cwd: tilde(v.cwd), commands: v.commands, vcpus: v.vcpus, memMb: v.memMb, diskBytes: v.diskBytes, system: v.system, containers: v.containers };
   }).sort((a, b) => (a.place === 'waiting') - (b.place === 'waiting') || (a.position ?? 0) - (b.position ?? 0) || Date.parse(a.since) - Date.parse(b.since));
-  return { limit: snap.limit, running: snap.holders.length, waiting: snap.line.length, vms, host: { cpus: availableParallelism(), memMb: Math.floor(totalmem() / 1048576) } };
+  return { limit: snap.limit, running: snap.holders.length, waiting: snap.line.length, vms, sandboxes: sandboxesLoad(names, titles), builds: buildsWhere(),
+    host: { cpus: availableParallelism(), memMb: Math.floor(totalmem() / 1048576) } };
+}
+// What chats' sandboxes run on this machine itself (Linux): the sandbox fences files and network,
+// not CPU, so a build run there instead of in the VM shows here, with its busiest process.
+const treeLoad = new TreeLoad();
+function sandboxesLoad(names, titles) {
+  if (process.platform !== 'linux') return [];
+  const roots = new Map();
+  for (const [id, c] of acpChats) if (c.agent?.sandboxed && !c.agent.closed && c.agent.child?.pid) roots.set(`${id}\t${c.agent.child.pid}`, c.agent.child.pid);
+  for (const [pid, id] of sandboxJobs) roots.set(`${id}\t${pid}`, pid);
+  const per = new Map();
+  for (const [key, l] of treeLoad.sample(roots)) {
+    const id = key.split('\t')[0], a = per.get(id) || { chat: id, title: names[id] || titles.get(id) || null, cpuPct: null, memMb: 0, procs: 0, top: null, jobs: 0 };
+    if (l.cpuPct != null) a.cpuPct = (a.cpuPct || 0) + l.cpuPct;
+    a.memMb += l.memMb; a.procs += l.procs;
+    if (l.top && (!a.top || l.top.cpuPct > a.top.cpuPct)) a.top = l.top;
+    if (sandboxJobs.has(Number(key.split('\t')[1]))) a.jobs++;
+    per.set(id, a);
+  }
+  return [...per.values()].sort((a, b) => (b.cpuPct || 0) - (a.cpuPct || 0));
 }
 const ordinal = (n) => `${n}${[, 'st', 'nd', 'rd'][n % 100 >> 3 ^ 1 && n % 10] || 'th'}`;
 // VM events show in the chat as they happen (commands and containers; the rest is in its view).
@@ -1988,17 +2012,34 @@ function foldersHint() {
     + 'If you need something outside these folders, say what and why first. '
     + `For temporary files use $TMPDIR (${tilde(copilotTmp())}), not /tmp.`;
 }
+// Where a sandboxed chat runs builds and tests (Settings → Copilot → Run builds in): the chat's
+// VM when this machine has one, so a full build doesn't take your laptop's CPU; or the sandbox,
+// with the VM only for tests that need Docker. The sandbox fences files and network, not CPU: a
+// build in it runs on this machine, as you, and the VMs view only sees it as sandbox load.
+export const buildsWhere = (setting = process.env.COPILOT_BUILDS, vmOk = vmSupport().ok) => (vmOk && setting !== 'sandbox' ? 'vm' : 'sandbox');
+const VM_ABOUT = 'It runs in this chat\'s own VM, in the same folder, with Docker and without asking me; the first one starts the VM, and it '
+  + 'stays up for the next ones. If other chats use the VMs, it waits in line for one and says so: let it wait. Images named in Settings (my private ones) are copied in from my own Docker before each `vm` command; if a test needs a private image the VM can\'t pull, tell me which instead of working around it. It sees only this repo (read-write), my JDKs, and my Maven repository and wrapper downloads (read only: the repository at /host/m2, already Maven\'s fallback repository, and ~/.m2/wrapper; don\'t copy them). If a `vm` run fails for another reason, tell me what failed instead of working around the VM. ';
+export function buildsHint(where = buildsWhere()) {
+  if (where === 'vm') {
+    return 'Run every build and test in this chat\'s VM, never directly in the sandbox: `vm <command>` (for example `vm ./mvnw verify -pl core`), '
+      + 'or `bg vm <command>` when it takes more than a few minutes. That covers compiling, `mvn`/`./mvnw`, Gradle, `npm test`/`npm run build`, '
+      + '`make` and the like. The sandbox runs on my laptop and shares its CPU, so a build there slows down everything I do; the VM has its own cores, and Docker, so Testcontainers work there too. '
+      + VM_ABOUT
+      + 'Only if `vm` says there is no VM, run the build in the sandbox instead. Never use `outside` for builds or for failures (fix those, or ask me), and don\'t quote arguments you don\'t need to. ';
+  }
+  return 'There is no Docker in the sandbox. Tests that need it (Testcontainers) fail with errors like "Ryuk is unreachable" or '
+    + '"Could not find a valid Docker environment": run that test command as `vm <command>` (for example `vm ./mvnw verify -pl core`). '
+    + VM_ABOUT
+    + 'If `vm` says there is no VM, use `outside <command>` instead, which runs it on my machine after '
+    + 'I OK it. Builds and tests run fine in the sandbox (Maven, its repository and your JDKs are there): always run them normally '
+    + 'first, and use `vm` only after a run in the sandbox failed with one of those Docker errors. Never use `outside` for other '
+    + 'failures (fix those, or ask me), and don\'t quote arguments you don\'t need to. ';
+}
 // How the sandbox works for Copilot, and its doors out (lib/broker.mjs).
 const SANDBOX_HINT = 'You run in a sandbox: everything inside it runs without asking me. git and gh work as usual; reading GitHub '
   + 'goes through, while a push or any GitHub change (a PR, a comment, a review) waits at the sandbox\'s network until I click Allow, '
   + 'and fails with "declined" if I don\'t. Jira changes with `acli` ask me the same way. Your built-in GitHub tools are off here. '
-  + 'There is no Docker in the sandbox. Tests that need it (Testcontainers) fail with errors like "Ryuk is unreachable" or '
-  + '"Could not find a valid Docker environment": run that test command as `vm <command>` (for example `vm ./mvnw verify -pl core`). '
-  + 'It runs in this chat\'s own VM, in the same folder, with Docker and without asking me; the first one starts the VM, and it '
-  + 'stays up for the next ones. Images named in Settings (my private ones) are copied in from my own Docker before each `vm` command; if a test needs a private image the VM can\'t pull, tell me which instead of working around it. It sees only this repo (read-write), my JDKs, and my Maven repository and wrapper downloads (read only: the repository at /host/m2, already Maven\'s fallback repository, and ~/.m2/wrapper; don\'t copy them). If a `vm` run fails for another reason, tell me what failed instead of working around the VM. If `vm` says there is no VM, use `outside <command>` instead, which runs it on my machine after '
-  + 'I OK it. Builds and tests run fine in the sandbox (Maven, its repository and your JDKs are there): always run them normally '
-  + 'first, and use `vm` only after a run in the sandbox failed with one of those Docker errors. Never use `outside` for other '
-  + 'failures (fix those, or ask me), and don\'t quote arguments you don\'t need to. '
+  + '{{builds}}'
   + 'Before you open a pull request, run `review --ticket <KEY>` (or `review --goal "<what it is for>"` without a ticket; `--base <branch>` '
   + 'when it doesn\'t go to the default branch): a fresh reviewer that sees only the goal and the code reviews your change. Give it the goal only, '
   + 'never your reasoning. Fix what holds up, say why you skip the rest, and run it again until it says "VERDICT: ready" (three rounds at most). '
@@ -2014,7 +2055,7 @@ const SANDBOX_HINT = 'You run in a sandbox: everything inside it runs without as
   + 'A 407 from the proxy means a tool skipped the proxy\'s login: say so and which host, don\'t work around it. '
   + 'If you stop before the task is done, Clearsky nudges you to go on; when you are done, or need me, say so plainly.';
 const sandboxHintFor = (permission) => (process.env.COPILOT_SANDBOX === 'srt' || permission === 'sandboxed'
-  ? `\n\n${SANDBOX_HINT}${doorHints()}${process.env.COPILOT_DISCLOSE === 'on' ? ` ${DISCLOSE_HINT}` : ''}` : '');
+  ? `\n\n${SANDBOX_HINT.replace('{{builds}}', buildsHint())}${doorHints()}${process.env.COPILOT_DISCLOSE === 'on' ? ` ${DISCLOSE_HINT}` : ''}` : '');
 // What you typed, without the dashboard and references Clearsky added in front.
 const MSG_MARK = '\n\n---\nMy message:\n';
 export function typedPart(text) {
