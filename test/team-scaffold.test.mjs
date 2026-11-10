@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { scaffoldPack, writeScaffold, nextSteps, packPluginList } from '../lib/team-scaffold.mjs';
-import { parsePack, joinPack, joinSummary, readTeam } from '../lib/team.mjs';
+import { parsePack, joinPack, joinSummary, readTeam, TEAM_KEYS } from '../lib/team.mjs';
 
 const tmp = (p) => mkdtempSync(join(tmpdir(), `clearsky-${p}-`));
 const env = {
@@ -23,7 +23,7 @@ const registry = {
 
 test('a team pack from your settings: team settings only, no secrets, pinned plugins, your rules as suggestions', () => {
   const { pack, files, warnings } = scaffoldPack({ name: 'Payments team', repo: 'https://github.com/acme/clearsky-team', jiraSite: 'https://acme.atlassian.net/', env,
-    teamKeys: ['DEPLOYS_URL'], registry, catalogFrom: (n) => (n === 'slack' ? 'github:ethlo/clearsky-slack-mcp#v1.0.0' : null) });
+    teamKeys: ['DEPLOYS_URL', 'GRAFANA_INSTANCES'], registry, catalogFrom: (n) => (n === 'slack' ? 'github:ethlo/clearsky-slack-mcp#v1.0.0' : null) });
   assert.deepEqual(Object.keys(pack.settings).sort(), ['CLEARSKY_STANDUP_TIME', 'COPILOT_DOMAINS', 'DEPLOYS_URL', 'GITHUB_ORGS', 'GRAFANA_INSTANCES']);
   const all = Object.values(files).join('\n');
   for (const secret of ['ghp_', 'xoxp-', 'me@acme.example', 'hunter2']) assert.ok(!all.includes(secret), `${secret} stays out`);
@@ -87,4 +87,14 @@ test('clearsky team init writes the pack from your settings file', () => {
   const pack = JSON.parse(readFileSync(join(dir, 'clearsky-team.json'), 'utf8'));
   assert.deepEqual(pack.settings, { GITHUB_ORGS: 'acme' });
   assert.ok(existsSync(join(dir, 'README.md')));
+});
+
+test('plugin settings a team shares are marked in their manifests, not listed in core', () => {
+  const team = (dir) => Object.entries(JSON.parse(readFileSync(new URL(`../plugins/${dir}/clearsky-plugin.json`, import.meta.url), 'utf8')).settings)
+    .filter(([, f]) => f.team).map(([k, f]) => (assert.ok(!f.secret, `${k} is a secret`), k));
+  assert.deepEqual(team('clearsky-slack-mcp'), ['SLACK_MCP_CLIENT_ID', 'SLACK_MCP_REDIRECT_URI', 'SLACK_MCP_SCOPES', 'SLACK_MCP_URL', 'SLACK_MCP_QUERY']);
+  assert.deepEqual(team('clearsky-confluence'), ['CONFLUENCE_SITE', 'CONFLUENCE_MCP_URL', 'CONFLUENCE_MCP_SCOPES']);
+  assert.deepEqual(team('clearsky-grafana'), ['GRAFANA_INSTANCES', 'GRAFANA_ASK']);
+  assert.ok(TEAM_KEYS.includes('JIRA_STARRED_PROJECTS'));
+  assert.ok(!TEAM_KEYS.some((k) => /^(GRAFANA|SLACK|CONFLUENCE)_/.test(k)), 'a plugin\'s settings live in its manifest');
 });

@@ -18,7 +18,7 @@ Slack's MCP server only takes registered Slack apps, so you need the client ID o
 
 Then `clearsky add slack-mcp` (or Add under Settings → Plugins), fill in **Slack app client ID**, and Log in.
 
-The client ID is your workspace's: it lives in your settings file only, never in a repo.
+The client ID is your workspace's, not a secret: it lives in your settings file, never in Clearsky's repo. A team pack can set it for everyone (`SLACK_MCP_CLIENT_ID`, and the redirect URL, scopes, server and mentions search), so colleagues only press Log in.
 
 ## The old Slack plugin
 

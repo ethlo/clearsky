@@ -12,12 +12,12 @@
     {
       "name": "grafana",
       "folder": "clearsky-grafana",
-      "from": "github:ethlo/clearsky-grafana#v1.0.0"
+      "from": "github:ethlo/clearsky-grafana#v1.1.0"
     },
     {
       "name": "slack-mcp",
       "folder": "clearsky-slack-mcp",
-      "from": "github:ethlo/clearsky-slack-mcp#v1.0.0",
+      "from": "github:ethlo/clearsky-slack-mcp#v1.1.0",
       "aka": [
         "slack"
       ]
@@ -25,7 +25,7 @@
     {
       "name": "confluence",
       "folder": "clearsky-confluence",
-      "from": "github:ethlo/clearsky-confluence#v1.0.0"
+      "from": "github:ethlo/clearsky-confluence#v1.1.0"
     }
   ],
   "retired": [
