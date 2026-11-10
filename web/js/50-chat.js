@@ -703,7 +703,7 @@ async function rememberClick(b) {
   const mark = (k) => { try { localStorage.setItem(MEM_SKIP_KEY, JSON.stringify([...memSkipped(), k].slice(-200))); } catch {} };
   if (act === 'skip') { mark(memKey(note)); return done('Skipped'); }
   if (act === 'edit') {
-    card.querySelector('ul').outerHTML = `<textarea class="remember-edit" spellcheck="true" rows="${Math.min(8, note.lines.length + 1)}" aria-label="Notes to remember, one per line">${esc(note.lines.join('\n'))}</textarea>`;
+    card.querySelector('ul').outerHTML = `<textarea class="remember-edit" data-talk spellcheck="true" rows="${Math.min(8, note.lines.length + 1)}" aria-label="Notes to remember, one per line">${esc(note.lines.join('\n'))}</textarea>`;
     card.querySelector('.remember-b').innerHTML = '<button type="button" class="r-save" data-remember="save">Save</button><button type="button" data-remember="cancel">Cancel</button>';
     card.querySelector('textarea').focus();
     return;
@@ -768,9 +768,9 @@ function newTaskCard(body) {
   return `<div class="remember newtask" data-task-body="${esc(body)}"><div class="remember-t">${icon('plus', 13)}<span>New task${label ? `: ${esc(label)}` : ''}${t.title && t.title !== label ? ` · <span class="newtask-title">${esc(t.title)}</span>` : ''}</span></div>
     ${t.repo ? `<div class="newtask-repo">${esc(t.repo)}</div>` : ''}
     ${t.handoff ? `<div class="newtask-h"><div class="newtask-hl">Hand-off for the new chat</div>${mdBlocks(t.handoff)}</div>` : ''}
-    <div class="remember-b">${done || `<button type="button" class="r-save" data-task="new" title="Start it in a new chat with the ticket and this hand-off; this chat stays about its own work">Start in a new chat</button><button type="button" data-task="here" title="Do it in this chat instead">Continue here</button>`}</div></div>`;
+    <div class="remember-b">${done || `<button type="button" class="r-save" data-task="new" title="Start it in a new chat with the ticket and this hand-off; you can add instructions and pick a skill first (Shift+click starts right away). This chat stays about its own work">Start in a new chat…</button><button type="button" data-task="here" title="Do it in this chat instead">Continue here</button>`}</div></div>`;
 }
-function newTaskClick(b) {
+async function newTaskClick(b, quick = false) {
   const card = b.closest('.newtask');
   const act = b.dataset.task;
   if (act === 'open') { const id = b.dataset.taskId, r = recentChats.find((x) => x.id === id); openChat(true, true); openSession(id, r?.cwd); return; }
@@ -783,14 +783,18 @@ function newTaskClick(b) {
     return;
   }
   // A new chat: it gets the ticket, the hand-off, and this chat's title, and you go there.
+  // The start box asks first for anything to add and which skill (Shift+click skips it).
   const from = chat.title || '';
+  const usual = hasSkill('feature-delivery') ? 'feature-delivery' : hasSkill('continue-work') ? 'continue-work' : '';
+  const pick = quick ? null : await askStart({ label, title: t.title, skill: usual, handoff: t.handoff });
+  if (!quick && !pick) return;
   markTask(key, { where: 'new' });
   card.outerHTML = newTaskCard(card.dataset.taskBody);
   newChat();
   if (t.ref) addRef({ ...t.ref, title: t.title });
   chat.title = t.title || label;
   openChat(true, true);
-  send(t.handoff || `Start on ${label}.`, { newTask: { ref: t.ref, title: t.title, repo: t.repo, from }, taskKey: key });
+  send(t.handoff || `Start on ${label}.`, { newTask: { ref: t.ref, title: t.title, repo: t.repo, from, ...(pick && { skill: pick.skill, note: pick.extra }) }, taskKey: key });
 }
 
 document.addEventListener('click', async (e) => {
@@ -1242,7 +1246,7 @@ $('#chat-log').addEventListener('click', async (e) => {
   const rb = e.target.closest('[data-remember]');
   if (rb) { rememberClick(rb); return; }
   const tb = e.target.closest('[data-task]');
-  if (tb) { newTaskClick(tb); return; }
+  if (tb) { newTaskClick(tb, e.shiftKey); return; }
   const ch = e.target.closest('[data-choice]');
   if (ch && !chat.stop) {
     ch.closest('.choices').querySelectorAll('button').forEach((x) => { x.disabled = true; x.classList.toggle('picked', x === ch); });
@@ -1293,25 +1297,10 @@ setTheme(document.documentElement.dataset.theme || 'auto');
 
 // ---------------------------------------------------------------- talk
 
-// Click to talk, with the browser's own speech recognition (Chrome sends the audio to Google
-// to turn it into text). What you say lands in the message box; you still press Send.
-const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
-let rec = null;
+// Click to talk (web/js/12-talk.js): what you say lands in the message box; you still press Send.
 if (Speech) {
   $('#chat-mic').hidden = false;
-  $('#chat-mic').onclick = () => {
-    if (rec) { rec.stop(); return; }
-    const box = $('#chat-text'), before = box.value ? `${box.value.replace(/\s*$/, '')} ` : '';
-    rec = new Speech();
-    rec.lang = navigator.language || 'en-US';
-    rec.interimResults = true;
-    rec.continuous = true;
-    rec.onresult = (e) => { box.value = before + [...e.results].map((r) => r[0].transcript).join('').trim(); };
-    rec.onerror = (e) => { if (e.error !== 'aborted' && e.error !== 'no-speech') addMsg('cp', `<div class="err">Talk: ${esc(e.error === 'not-allowed' ? 'the browser blocked the microphone' : e.error)}</div>`); };
-    rec.onend = () => { rec = null; $('#chat-mic').classList.remove('on'); $('#chat-mic').setAttribute('aria-pressed', 'false'); box.focus(); };
-    rec.start();
-    $('#chat-mic').classList.add('on'); $('#chat-mic').setAttribute('aria-pressed', 'true');
-  };
+  $('#chat-mic').onclick = () => talkInto($('#chat-text'), $('#chat-mic'), (why) => addMsg('cp', `<div class="err">Talk: ${esc(why)}</div>`));
 }
 $('#chat-new').onclick = newChat;
 $('#chat-hist-btn').onclick = () => showHistory();

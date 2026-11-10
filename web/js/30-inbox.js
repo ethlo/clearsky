@@ -148,7 +148,7 @@ function nextStep(it, rel = relatedItems(it, xrefAll.length ? xrefAll : inboxIte
   const feature = hasSkill('feature-delivery') ? 'feature-delivery' : cont;
   if (chats.some((c) => c.status === 'working')) return { label: 'Copilot is working on it', wait: true };
   if (chats.length) return { label: `Continue the Copilot chat${did ? `: it ${did}` : ''}`, run: 'copilot', skill: cont || feature, prompt: '' };
-  return { label: it.glyph === 'prog' ? 'Pick it up in Copilot' : 'Start it in Copilot', tip: 'Copilot makes the branch, writes the code and opens the PR', run: 'copilot', skill: feature, prompt: '' };
+  return { label: it.glyph === 'prog' ? 'Pick it up in Copilot' : 'Start it in Copilot', tip: 'Copilot makes the branch, writes the code and opens the PR. You can add instructions and pick a skill first; Shift+click starts right away', run: 'copilot', skill: feature, prompt: '' };
 }
 function nextHtml(it, n = nextStep(it)) {
   if (!n) return '';
@@ -174,7 +174,9 @@ async function mergePr(n, btn) {
   }
 }
 // Doing the next step: the reviewer picker in place, Copilot in its chat, or GitHub/Jira.
-function runNext(it, btn) {
+async function runNext(it, btn, quick = false) {
+  // Which skill a Copilot start picks depends on the skills you have: know them first.
+  if (!chat.info && nextStep(it)?.run === 'copilot') await loadCopilotInfo();
   const n = nextStep(it);
   if (!n || n.wait) return;
   if (n.run === 'url') return window.open(n.url, '_blank', 'noopener');
@@ -202,11 +204,16 @@ function runNext(it, btn) {
       return;
     }
     if (!ref) return;
-    if (!chat.session || chat.turns || chat.stop) newChat();
-    chat.refs = [];
-    addRef(ref);
-    openChat(true, true);
-    send([n.skill && `/${n.skill}`, n.prompt].filter(Boolean).join(' ') || 'What is the next step on this?');
+    // A new chat: the start box asks for anything to add and which skill (Shift+click skips it).
+    const go = (pick) => {
+      if (!chat.session || chat.turns || chat.stop) newChat();
+      chat.refs = [];
+      addRef(ref);
+      openChat(true, true);
+      send(startMessage({ skill: pick.skill, extra: [n.prompt, pick.extra].filter(Boolean).join(' ') }));
+    };
+    if (quick) return go({ skill: n.skill, extra: '' });
+    askStart({ label: refLabel(ref), title: it.title, skill: n.skill }).then((pick) => pick && go(pick));
   }
 }
 document.addEventListener('click', (e) => {
@@ -216,7 +223,7 @@ document.addEventListener('click', (e) => {
   const k = b.dataset.next;
   const it = (xrefAll.length ? xrefAll : inboxItems()).find((y) => y.k === k) || (curItem?.k === k ? curItem : null)
     || (k.startsWith('linked:') ? itemForKey(k.slice(7)) : null);
-  if (it) runNext(it, b);
+  if (it) runNext(it, b, e.shiftKey);
 }, true);
 
 // A link to a related item: opens it here, or on its own site when it isn't listed.

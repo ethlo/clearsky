@@ -77,6 +77,7 @@ document.addEventListener('click', (e) => { if (e.target.closest('[data-back]'))
 // is open: a menu, a popover, a picker. Those close first.
 window.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape' || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (document.querySelector('#start-dlg[open]')) return; // the start box closes itself
   if (!menu.hidden || evPop?.isConnected || hc.classList.contains('on') || document.querySelector('#cp-refs .ref-pick')) return;
   if ($('#side').classList.contains('open')) { menu_(false); return; }
   if (!$('#chat-hist').hidden) { showHistory(false); e.preventDefault(); return; }

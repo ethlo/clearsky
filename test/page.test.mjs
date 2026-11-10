@@ -49,6 +49,8 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
   for (let i = 0; i < 50; i++) { try { await fetch(base); break; } catch { await new Promise((r) => setTimeout(r, 100)); } }
 
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  // Talking: a stand-in for the browser's speech recognition that hears one sentence.
+  await page.addInitScript(() => { window.SpeechRecognition = class { start() { this.t = setTimeout(() => this.onresult?.({ results: [[{ transcript: 'only the backend part' }]] }), 50); } stop() { clearTimeout(this.t); setTimeout(() => this.onend?.(), 10); } }; });
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto(base);
@@ -222,6 +224,38 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
   await page.waitForFunction(() => document.querySelector('#chat-send').dataset.state === 'send', null, { timeout: 10_000 });
   await page.goto(`${base}/#inbox`);
   await page.waitForSelector('#side-cp .ni', { timeout: 15_000 });
+
+  // Starting Copilot on a PR with a skill: the start box asks for anything to add, with that
+  // skill picked; Enter starts it, and the chat gets the skill and your words.
+  await page.goto(`${base}/#inbox`);
+  await page.waitForSelector('#list li.r');
+  await page.locator('#list li.r', { hasText: 'ABC-5' }).first().hover();
+  await page.locator('#list li.r', { hasText: 'ABC-5' }).first().locator('button.ask').click();
+  await page.waitForSelector('.menu [data-run="standup"]');
+  await page.click('.menu [data-run="standup"]');
+  await page.waitForSelector('#start-dlg[open] #sd-text');
+  assert.equal(await page.locator('#sd-skill').inputValue(), 'standup');
+  assert.match(await page.locator('#start-dlg').innerText(), /Start Copilot on api#1/);
+  // 🎤 in the box: what you say lands in it.
+  await page.click('#start-dlg .talk-mic');
+  await page.waitForFunction(() => document.querySelector('#sd-text').value === 'only the backend part');
+  await page.click('#start-dlg .talk-mic');
+  await page.waitForFunction(() => document.querySelector('#start-dlg .talk-mic').getAttribute('aria-pressed') === 'false');
+  if (process.env.SHOT) await page.screenshot({ path: `${process.env.SHOT}/start-box.png` });
+  await page.press('#sd-text', 'Enter');
+  await page.waitForFunction(() => !document.querySelector('#start-dlg[open]'));
+  await page.waitForFunction(() => /only the backend part/.test(document.querySelector('#chat-log').innerText), null, { timeout: 10_000 });
+  assert.match(await page.locator('#chat-log .msg.me').last().innerText(), /\/standup only the backend part/);
+  // Esc cancels: no chat starts.
+  await page.goto(`${base}/#inbox`);
+  await page.waitForSelector('#list li.r');
+  await page.locator('#list li.r', { hasText: 'ABC-5' }).first().hover();
+  await page.locator('#list li.r', { hasText: 'ABC-5' }).first().locator('button.ask').click();
+  await page.click('.menu [data-run="standup"]');
+  await page.waitForSelector('#start-dlg[open]');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('#start-dlg[open]'));
+  assert.ok(await page.locator('#chat').isHidden(), 'no chat opens');
 
   // Copilot suggests a note for its memory: a card, saved only when you press Save, then in Settings.
   await page.goto(`${base}/#copilot`);

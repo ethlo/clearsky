@@ -7,7 +7,7 @@ import { CHAT, SESSIONS } from './chat.mjs';
 const args = process.argv.slice(2);
 const out = (o) => process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', ...o })}\n`);
 if (args[0] === 'skill' && args[1] === 'list') {
-  process.stdout.write('Personal skills:\n  continue-work - Check status and continue\n  propose-solution - Find the best fix\n  review-my-queue - Draft my reviews\n  standup - Write my stand-up\n  triage-my-work - Plan my day\n');
+  process.stdout.write('Personal skills:\n  continue-work - Check status and continue\n  feature-delivery - Build a ticket from branch to PR\n  propose-solution - Find the best fix\n  review-my-queue - Draft my reviews\n  standup - Write my stand-up\n  triage-my-work - Plan my day\n');
 } else if (args.includes('--acp')) {
   let sid = 'demo-new';
   createInterface({ input: process.stdin }).on('line', (line) => {
