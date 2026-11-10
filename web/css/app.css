@@ -457,6 +457,12 @@ ul.rows .row:first-child { border-top: 0; }
 .su-say p { margin: 0 0 8px; font-size: 15px; line-height: 1.55; max-width: 70ch; }
 .su-say .acts-row { margin-top: 6px; }
 .su-card li { padding: 4px 0; }
+.su-none { margin: 4px 0 0; color: var(--muted); }
+.su-more { margin: 14px 0 4px; font-size: 13px; color: var(--muted); }
+.su-more summary { cursor: pointer; width: max-content; padding: 4px 0; }
+.su-more summary:hover { color: var(--text); }
+.su-more ul { margin: 4px 0 0; padding-left: 18px; }
+.su-more li { padding: 2px 0; }
 a.ref { color: var(--accent); font-weight: 550; border-bottom: 1px dashed color-mix(in srgb, var(--accent) 45%, transparent); }
 a.ref:hover { border-bottom-style: solid; }
 

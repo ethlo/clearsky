@@ -65,6 +65,7 @@ import { NEW_TASK_HINT, cleanNewTask, newTaskPrompt } from '../lib/new-task.mjs'
 import { readHandoffs, saveHandoffs, addHandoff, nextHandoff, settleAfterRestart, handoffPrompt, handoffResult, updateHandoff } from '../lib/handoff.mjs';
 import { srtInstalled } from '../lib/doctor.mjs';
 import { ownRead, chatPushes } from '../lib/own-read.mjs';
+import { groupStandup } from '../lib/standup.mjs';
 import { manifest as githubManifest, createGitHub, workItems as githubItems, PR_FIELDS, ITEM_FIELDS, ciState, isBot, latestReviewsByUser, openThreads, humanReviewers, myPrStatus, reviewerName } from '../lib/modules/github.mjs';
 import { manifest as jiraManifest, createJira, workItems as jiraItems, mentionItems as jiraMentionItems, listOf, fieldsOf, nameOf, commentInfo, excerpt, userId, mapLimit, JIRA_WAITING, jiraMentionsByTicket, mergeJira, PROJECT_KEY, starredProjects, versionSummary } from '../lib/modules/jira.mjs';
 
@@ -507,7 +508,7 @@ async function standupGitHub(since) {
   const data = await gql(
     `query($mine: String!, $reviewed: String!, $me: String!) {
       mine: search(query: $mine, type: ISSUE, first: 50) { nodes { ... on PullRequest {
-        number title url state isDraft createdAt mergedAt repository { nameWithOwner }
+        number title url state isDraft createdAt mergedAt headRefName repository { nameWithOwner }
         commits(last: 100) { nodes { commit { committedDate authors(first: 5) { nodes { email user { login } } } } } } } } }
       reviewed: search(query: $reviewed, type: ISSUE, first: 50) { nodes { ... on PullRequest {
         number title url repository { nameWithOwner } author { login }
@@ -521,10 +522,11 @@ async function standupGitHub(since) {
   );
   const after = (iso) => iso && Date.parse(iso) >= since.getTime();
   const pr = (p) => ({ repo: p.repository.nameWithOwner, number: p.number, title: p.title, url: p.url });
+  const minePr = (p) => ({ ...pr(p), branch: p.headRefName || null, commits: commitsByPr.get(p.url) || 0 });
   const mine = data.mine.nodes.filter((p) => p?.number);
   // Commits are counted from my PRs: GitHub's contribution counts hide private org work
   // ("restricted contributions"), so contributionsCollection reports 0 there.
-  const commitsByRepo = new Map();
+  const commitsByRepo = new Map(), commitsByPr = new Map();
   for (const p of mine) {
     // On my own PRs, a commit is mine if GitHub links it to me, or if it isn't linked to any
     // account (an email not added to GitHub) and isn't a GitHub noreply address of someone else.
@@ -532,10 +534,11 @@ async function standupGitHub(since) {
     const n = (p.commits?.nodes || []).filter((c) => after(c.commit.committedDate) &&
       c.commit.authors.nodes.some(mineCommit)).length;
     if (n) commitsByRepo.set(p.repository.nameWithOwner, (commitsByRepo.get(p.repository.nameWithOwner) || 0) + n);
+    if (n) commitsByPr.set(p.url, n);
   }
   return {
-    merged: mine.filter((p) => after(p.mergedAt)).map(pr),
-    opened: mine.filter((p) => after(p.createdAt) && !after(p.mergedAt)).map((p) => ({ ...pr(p), draft: p.isDraft })),
+    merged: mine.filter((p) => after(p.mergedAt)).map(minePr),
+    opened: mine.filter((p) => after(p.createdAt) && !after(p.mergedAt)).map((p) => ({ ...minePr(p), draft: p.isDraft })),
     reviewed: data.reviewed.nodes.filter((p) => p?.number).map((p) => {
       const mineNow = p.reviews.nodes.filter((r) => after(r.submittedAt) && r.state !== 'PENDING');
       return mineNow.length ? { ...pr(p), author: p.author?.login, verdict: mineNow.at(-1).state } : null;
@@ -562,40 +565,20 @@ async function standupJira(since) {
   return { done: shaped.filter((i) => i.done), touched: shaped.filter((i) => !i.done) };
 }
 
-const verdictText = { APPROVED: 'approved', CHANGES_REQUESTED: 'requested changes', COMMENTED: 'commented', DISMISSED: 'dismissed' };
-
-export function standupText(s) {
+// The stand-up as text, for Slack and for Copilot's "Say this": Yesterday / Today / Blockers,
+// one line per ticket or PR (lib/standup.mjs). `details: true` adds the folded-away detail list.
+export function standupText(s, { details = false } = {}) {
+  const g = s.summary || groupStandup(s, { clock });
   const out = [];
-  const y = s.yesterday, t = s.today;
-  const line = (x) => out.push(`- ${x}`);
-  out.push(`*Yesterday* (since ${s.sinceLabel})`);
-  y.jira.done?.forEach((i) => line(`Finished ${i.key}: ${i.summary}`));
-  y.github.opened?.forEach((p) => line(`Opened ${p.draft ? 'draft ' : ''}${p.repo}#${p.number}: ${p.title}`));
-  y.github.reviewed?.forEach((p) => line(`Reviewed ${p.repo}#${p.number} by ${p.author} (${verdictText[p.verdict] || p.verdict})`));
-  y.jira.touched?.forEach((i) => line(`Worked on ${i.key}: ${i.summary} (${i.status})`));
-  const commits = (y.github.commits || []).filter((c) => c.count);
-  if (commits.length) line(`Commits: ${commits.map((c) => `${c.count} in ${c.repo.split('/')[1]}`).join(', ')}`);
-  s.extra?.forEach((x) => x.yesterday.forEach((t) => line(`${x.label}: ${t}`)));
-  y.copilot?.sessions?.forEach((x) => line(`With Copilot: ${x.ticket && !String(x.title || '').includes(x.ticket) ? `${x.ticket} ` : ''}${x.title} (${x.repo.split('/')[1]}${x.branch && !/^(main|master)$/.test(x.branch) ? `, ${x.branch}` : ''})`));
-  if (out.length === 1) line('Nothing recorded on GitHub, Jira or Copilot.');
-  // What testers can pick up (merged since the last stand-up) and what's still in review.
-  const merged = y.github.merged || [], inReview = t.inReview || [];
-  if (merged.length || inReview.length) {
-    out.push('', '*Merged and in review*');
-    merged.forEach((p) => line(`Merged, ready to test: ${p.repo}#${p.number} ${p.title}`));
-    inReview.forEach((p) => line(`In review: ${p.repo}#${p.number} ${p.title} (${p.approvals?.length ? 'approved, not merged yet' : p.pendingReviewers?.length ? `waiting for ${p.pendingReviewers.join(', ')}` : String(p.status?.label || 'waiting').toLowerCase()})`));
-  }
-  out.push('', '*Today*');
-  const before = out.length;
-  t.inProgress.forEach((i) => line(`Continue ${i.key}: ${i.summary}`));
-  if (t.reviews.length) line(`Review ${t.reviews.map((p) => `${p.repo}#${p.number}`).join(', ')}`);
-  t.myPrs.forEach((p) => line(`${p.status.label}: ${p.repo}#${p.number} ${p.title}`));
-  s.extra?.forEach((x) => x.today.forEach((t) => line(`${x.label}: ${t}`)));
-  if (t.meetings.length) line(`Meetings: ${t.meetings.map((e) => `${clock(e.start)} ${e.title}`).join(', ')}`);
-  if (out.length === before) line('Pick up the next item from the queue.');
-  out.push('', '*Blockers*');
-  if (s.blockers.length) s.blockers.forEach((b) => line(b.text));
-  else line('None');
+  const section = (title, lines, none) => {
+    if (out.length) out.push('');
+    out.push(title);
+    (lines.length ? lines : none ? [none] : []).forEach((l) => out.push(`- ${l}`));
+  };
+  section(`*Yesterday* (since ${s.sinceLabel})`, g.yesterday, 'Nothing recorded on GitHub, Jira or Copilot.');
+  section('*Today*', g.today, 'Pick up the next item from the queue.');
+  section('*Blockers*', g.blockers, 'None');
+  if (details && g.details.length) section('*Details*', g.details);
   return out.join('\n');
 }
 
@@ -607,19 +590,21 @@ first person, spoken and plain, 4 to 7 short sentences in three short paragraphs
 Group the work by what it's for (the feature or problem), not ticket by ticket; name a ticket key only when it helps
 people find it, and leave out repo names, PR numbers and statuses unless they matter (say "it's in review" rather
 than a status). Say plainly what is merged and ready to test, and what is still in review, since testers listen for that.
+Each line is one piece of work with its PRs and status; the Details at the end are background, not a list to read out.
 Don't invent anything that isn't in the list. If there are no blockers, say so in a few words.
 Answer with the text only, no headings or bullets.
 
 `;
 let sayCache = { key: null, text: null, at: null };
 async function standupSay(s, force) {
+  const input = standupText(s, { details: true });
   const key = `${s.sinceLabel}|${s.text}`;
   if (!force && sayCache.key === key) return sayCache;
   const info = await copilotInfo();
   if (!info.available) throw new Error('Copilot CLI not found');
   const text = await new Promise((done, fail) => {
     let out = '';
-    copilot.runCopilot(info.bin, copilot.copilotArgs({ prompt: SAY_PROMPT + s.text, permission: 'read', model: process.env.COPILOT_MODEL || undefined, cwd: copilotCwd() }), {
+    copilot.runCopilot(info.bin, copilot.copilotArgs({ prompt: SAY_PROMPT + input, permission: 'read', model: process.env.COPILOT_MODEL || undefined, cwd: copilotCwd() }), {
       env: copilotEnv(), timeoutMs: 120_000, onData: (d) => { out += d; },
       onEnd: ({ code, stderr }) => (code === 0 && out.trim() ? done(out.trim()) : fail(new Error(stderr.trim().split('\n').pop() || `Copilot exited with ${code}`))),
     });
@@ -674,7 +659,8 @@ export async function standup(work, since = previousStandup()) {
   const days = (iso) => (Date.now() - Date.parse(iso)) / 864e5;
   const blockers = (w.github.myPrs || [])
     .filter((p) => p.status.owner === 'others' && p.status.label === 'Waiting for review' && days(p.updatedAt) >= 1)
-    .map((p) => ({ url: p.url, text: `${p.repo}#${p.number} has waited ${Math.floor(days(p.updatedAt))}d for review` +
+    .map((p) => ({ url: p.url, repo: p.repo, number: p.number, title: p.title, branch: p.branch || null, days: Math.floor(days(p.updatedAt)),
+      pendingReviewers: p.pendingReviewers, text: `${p.repo}#${p.number} has waited ${Math.floor(days(p.updatedAt))}d for review` +
       (p.pendingReviewers.length ? ` (${p.pendingReviewers.join(', ')})` : '') }));
   const s = {
     generatedAt: new Date().toISOString(),
@@ -682,6 +668,9 @@ export async function standup(work, since = previousStandup()) {
     sinceLabel: `${since.toLocaleDateString([], { weekday: 'long' })} ${clock(since)}`,
     nextStandup: next.toISOString(),
     jiraBase: jiraModule.site,
+    // Which "ABC-123" are Jira keys: starred projects and the projects of tickets seen here.
+    jiraProjects: [...new Set([...starredProjects(process.env.JIRA_STARRED_PROJECTS),
+      ...[...(jira.done || []), ...(jira.touched || []), ...(w.jira?.assigned || [])].map((i) => String(i.key || '').split('-')[0]).filter(Boolean)])],
     yesterday: { github, jira, copilot: copilotWork },
     today,
     blockers,
@@ -692,6 +681,7 @@ export async function standup(work, since = previousStandup()) {
     const r = extra[p.name]?.error || extra[p.name]?.disabled ? null : hook(p, 'standup', extra[p.name], since);
     return r && !r.hookError && { label: p.label, yesterday: asList(r.yesterday).map(String), today: asList(r.today).map(String) };
   }).filter(Boolean);
+  s.summary = groupStandup(s, { clock });
   s.text = standupText(s);
   return s;
 }

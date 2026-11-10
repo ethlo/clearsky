@@ -149,6 +149,10 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
   await page.waitForSelector('#su-say p', { timeout: 15_000 });
   assert.match(await page.locator('#su-say').innerText(), /stand-up/i);
   assert.ok(await page.locator('[data-say="copy"]').isVisible());
+  // Only real ticket keys become Jira links: not standards, not branch names.
+  const refs = await page.evaluate(() => [...new DOMParser().parseFromString(linkify('ABC-1 RFC-9457 ABC-2-fix x/ABC-3 OPS-4 acme/api#5', 'https://j', { projects: ['ABC'], shortRepo: true }), 'text/html').querySelectorAll('a')].map((a) => a.textContent));
+  assert.deepEqual(refs, ['ABC-1', 'api#5']);
+  assert.ok(await page.locator('#su-body details.su-more').count() <= 1);
 
   // School week: Monday to Friday, each class labelled and in its own colour; › moves a week.
   const wk = await page.evaluate(() => {
