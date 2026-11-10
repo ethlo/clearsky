@@ -33,6 +33,16 @@ test('parseUsage sums model calls once and keeps the latest checkpoint and conte
   assert.equal(parseUsage(''), null);
 });
 
+test('parseUsage takes the context from a compaction that came after the last tool step', () => {
+  const rec = JSON.stringify({ type: 'session.usage_record', data: { usage: { inputTokens: 10, outputTokens: 1, accounting: { usageId: 'a' } } } });
+  const tool = (n) => JSON.stringify({ type: 'tool.execution_complete', data: { toolTelemetry: { metrics: { context_current_tokens: n, context_token_limit: 100000 } } } });
+  const done = (d) => JSON.stringify({ type: 'session.compaction_complete', data: d });
+  assert.equal(parseUsage([rec, tool(70000), done({ success: true, preCompactionTokens: 70000, postCompactionTokens: 12000 })].join('\n')).context, 12000);
+  assert.equal(parseUsage([rec, tool(70000), done({ success: true, postCompactionTokens: 12000 }), tool(15000)].join('\n')).context, 15000, 'a later step wins');
+  assert.equal(parseUsage([rec, tool(70000), done({ success: false, error: 'Nothing to compact' })].join('\n')).context, 70000, 'a failed one changes nothing');
+  assert.equal(parseUsage([rec, tool(70000), done({ success: true, postCompactionTokens: 12000 })].join('\n')).limit, 100000);
+});
+
 test('parseUsage counts only cache reads as cached input', () => {
   const rec = (id, usage) => JSON.stringify({ type: 'session.usage_record', data: { usage: { outputTokens: 1, accounting: { usageId: id }, ...usage } } });
   // First call writes the cache, the second reads it back: half the input was cached, not all.

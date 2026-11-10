@@ -39,6 +39,15 @@ test('the chat panel talks to the local Copilot CLI with the chosen options', as
   assert.equal(r.hasToken, false, "Clearsky's tokens aren't passed to Copilot");
   assert.ok(r.flags.includes('--deny-tool') && r.flags.includes('--allow-tool'));
 
+  // "Nothing to compact" from Copilot (an error, or its answer) is a quiet note, not a failure.
+  for (const message of ['/compact', '/compact again']) {
+    const evs = await events(await ask({ message, session: 'sess-1234', resume: true, permission: 'read' }));
+    assert.ok(!evs.some((e) => e.type === 'error'), JSON.stringify(evs));
+    assert.equal(textOf(evs), '', 'its words aren\'t shown');
+    assert.ok(evs.some((e) => e.type === 'note' && /^Nothing to compact/.test(e.text)), JSON.stringify(evs));
+    assert.equal(evs.at(-1).type, 'done');
+  }
+
   // A dropped file: uploaded, named in the message, kept in the chat's own folder, and listed
   // (and readable) in its outputs. A path that wasn't uploaded here isn't named.
   const up = await (await fetch(`${base}/api/copilot/attach?name=${encodeURIComponent('../notes 1.txt')}`, { method: 'POST', headers: { 'X-Clearsky-Token': csrf }, body: 'hello' })).json();
