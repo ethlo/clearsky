@@ -768,9 +768,9 @@ function newTaskCard(body) {
   return `<div class="remember newtask" data-task-body="${esc(body)}"><div class="remember-t">${icon('plus', 13)}<span>New task${label ? `: ${esc(label)}` : ''}${t.title && t.title !== label ? ` · <span class="newtask-title">${esc(t.title)}</span>` : ''}</span></div>
     ${t.repo ? `<div class="newtask-repo">${esc(t.repo)}</div>` : ''}
     ${t.handoff ? `<div class="newtask-h"><div class="newtask-hl">Hand-off for the new chat</div>${mdBlocks(t.handoff)}</div>` : ''}
-    <div class="remember-b">${done || `<button type="button" class="r-save" data-task="new" title="Start it in a new chat with the ticket and this hand-off; this chat stays about its own work">Start in a new chat</button><button type="button" data-task="here" title="Do it in this chat instead">Continue here</button>`}</div></div>`;
+    <div class="remember-b">${done || `<button type="button" class="r-save" data-task="new" title="Start it in a new chat with the ticket and this hand-off; you can add instructions and pick a skill first (Shift+click starts right away). This chat stays about its own work">Start in a new chat…</button><button type="button" data-task="here" title="Do it in this chat instead">Continue here</button>`}</div></div>`;
 }
-function newTaskClick(b) {
+async function newTaskClick(b, quick = false) {
   const card = b.closest('.newtask');
   const act = b.dataset.task;
   if (act === 'open') { const id = b.dataset.taskId, r = recentChats.find((x) => x.id === id); openChat(true, true); openSession(id, r?.cwd); return; }
@@ -783,14 +783,18 @@ function newTaskClick(b) {
     return;
   }
   // A new chat: it gets the ticket, the hand-off, and this chat's title, and you go there.
+  // The start box asks first for anything to add and which skill (Shift+click skips it).
   const from = chat.title || '';
+  const usual = hasSkill('feature-delivery') ? 'feature-delivery' : hasSkill('continue-work') ? 'continue-work' : '';
+  const pick = quick ? null : await askStart({ label, title: t.title, skill: usual, handoff: t.handoff });
+  if (!quick && !pick) return;
   markTask(key, { where: 'new' });
   card.outerHTML = newTaskCard(card.dataset.taskBody);
   newChat();
   if (t.ref) addRef({ ...t.ref, title: t.title });
   chat.title = t.title || label;
   openChat(true, true);
-  send(t.handoff || `Start on ${label}.`, { newTask: { ref: t.ref, title: t.title, repo: t.repo, from }, taskKey: key });
+  send(t.handoff || `Start on ${label}.`, { newTask: { ref: t.ref, title: t.title, repo: t.repo, from, ...(pick && { skill: pick.skill, note: pick.extra }) }, taskKey: key });
 }
 
 document.addEventListener('click', async (e) => {
@@ -1242,7 +1246,7 @@ $('#chat-log').addEventListener('click', async (e) => {
   const rb = e.target.closest('[data-remember]');
   if (rb) { rememberClick(rb); return; }
   const tb = e.target.closest('[data-task]');
-  if (tb) { newTaskClick(tb); return; }
+  if (tb) { newTaskClick(tb, e.shiftKey); return; }
   const ch = e.target.closest('[data-choice]');
   if (ch && !chat.stop) {
     ch.closest('.choices').querySelectorAll('button').forEach((x) => { x.disabled = true; x.classList.toggle('picked', x === ch); });

@@ -1210,3 +1210,26 @@ a.u-row:hover { background: var(--accent-soft); }
 .ni.load-hot .ico, .ni.load-hot:hover .ico, .ni.load-hot.on .ico { color: var(--red); }
 .ni.load-warm .lab { color: var(--amber); }
 .ni.load-hot .lab { color: var(--red); font-weight: 600; }
+
+/* The start box: anything to add, and which skill, before Copilot starts on a PR or ticket. */
+.start-dlg { border: 1px solid var(--line-strong); border-radius: var(--radius); background: var(--surface); color: var(--text); padding: 0;
+  width: min(520px, calc(100vw - 32px)); box-shadow: var(--shadow-lg); }
+.start-dlg::backdrop { background: rgba(12, 14, 18, .35); }
+.start-dlg form { padding: 16px 18px 14px; display: flex; flex-direction: column; }
+.sd-h { display: flex; align-items: center; gap: 7px; font-weight: 600; font-size: 15px; }
+.sd-h svg { color: var(--accent); }
+.sd-title { color: var(--text-2); font-size: 13px; margin: 2px 0 0 22px; }
+.sd-note { color: var(--muted); font-size: 12.5px; margin: 6px 0 0; }
+.sd-l { font-size: 12.5px; font-weight: 600; color: var(--text-2); margin: 14px 0 5px; }
+.sd-l span { font-weight: 400; color: var(--muted); }
+.start-dlg textarea, .start-dlg select { font: inherit; font-size: 13.5px; color: var(--text); background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: 8px; padding: 7px 9px; width: 100%; }
+.start-dlg textarea { resize: vertical; min-height: 76px; }
+.start-dlg textarea:focus, .start-dlg select:focus { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 0; border-color: var(--accent); }
+.sd-desc { color: var(--muted); font-size: 12.5px; margin-top: 5px; min-height: 1.5em; }
+.sd-b { display: flex; align-items: center; gap: 6px; margin-top: 14px; }
+.sd-k { color: var(--muted); font-size: 12px; margin-right: auto; }
+.sd-b button { border: 1px solid var(--line-strong); background: var(--surface); color: var(--text); border-radius: 7px; height: 30px; padding: 0 14px; font-size: 13px; }
+.sd-b button:hover { border-color: var(--text-2); }
+.sd-b .r-save { background: var(--text); border-color: var(--text); color: var(--bg); }
+@media (max-width: 560px) { .sd-k { display: none; } .sd-b { justify-content: flex-end; } }

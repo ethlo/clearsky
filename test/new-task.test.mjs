@@ -49,3 +49,20 @@ test('chats are told to offer new tasks as a card, not start them in place', () 
   assert.match(NEW_TASK_HINT, /```new-task\n/);
   assert.match(NEW_TASK_HINT, /don't start on it in this chat/);
 });
+
+test('new task: the skill and words from the start box', () => {
+  const t = cleanNewTask({ ref: { kind: 'issue', key: 'PAY-431' }, title: 'CSV rounding', skill: 'propose-solution', note: '  Only the export. ' });
+  assert.equal(t.skill, 'propose-solution');
+  assert.equal(t.note, 'Only the export.');
+  assert.equal(cleanNewTask({ title: 'T', skill: '../x; rm' }).skill, '');
+  const skills = ['feature-delivery', 'propose-solution'];
+  const p = newTaskPrompt(t, 'Hand-off.', { skills });
+  assert.match(p, /Use the propose-solution skill/);
+  assert.match(p, /My extra instructions: Only the export\./);
+  // "None": no skill, even when the usual one is there; a skill you don't have isn't named.
+  assert.doesNotMatch(newTaskPrompt({ ...t, skill: '' }, 'x', { skills }), /skill to start/);
+  assert.doesNotMatch(newTaskPrompt({ ...t, skill: 'gone' }, 'x', { skills }), /gone/);
+  // Without the box (Shift+click): the usual skill, as before.
+  assert.match(newTaskPrompt({ ...t, skill: undefined, note: undefined }, 'x', { skills }), /feature-delivery skill/);
+});
+

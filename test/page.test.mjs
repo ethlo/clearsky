@@ -223,6 +223,34 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
   await page.goto(`${base}/#inbox`);
   await page.waitForSelector('#side-cp .ni', { timeout: 15_000 });
 
+  // Starting Copilot on a PR with a skill: the start box asks for anything to add, with that
+  // skill picked; Enter starts it, and the chat gets the skill and your words.
+  await page.goto(`${base}/#inbox`);
+  await page.waitForSelector('#list li.r');
+  await page.locator('#list li.r', { hasText: 'ABC-5' }).first().hover();
+  await page.locator('#list li.r', { hasText: 'ABC-5' }).first().locator('button.ask').click();
+  await page.waitForSelector('.menu [data-run="standup"]');
+  await page.click('.menu [data-run="standup"]');
+  await page.waitForSelector('#start-dlg[open] #sd-text');
+  assert.equal(await page.locator('#sd-skill').inputValue(), 'standup');
+  assert.match(await page.locator('#start-dlg').innerText(), /Start Copilot on api#1/);
+  await page.fill('#sd-text', 'only the backend part');
+  if (process.env.SHOT) await page.screenshot({ path: `${process.env.SHOT}/start-box.png` });
+  await page.press('#sd-text', 'Enter');
+  await page.waitForFunction(() => !document.querySelector('#start-dlg[open]'));
+  await page.waitForFunction(() => /only the backend part/.test(document.querySelector('#chat-log').innerText), null, { timeout: 10_000 });
+  assert.match(await page.locator('#chat-log .msg.me').last().innerText(), /\/standup only the backend part/);
+  // Esc cancels: no chat starts.
+  await page.goto(`${base}/#inbox`);
+  await page.waitForSelector('#list li.r');
+  await page.locator('#list li.r', { hasText: 'ABC-5' }).first().hover();
+  await page.locator('#list li.r', { hasText: 'ABC-5' }).first().locator('button.ask').click();
+  await page.click('.menu [data-run="standup"]');
+  await page.waitForSelector('#start-dlg[open]');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !document.querySelector('#start-dlg[open]'));
+  assert.ok(await page.locator('#chat').isHidden(), 'no chat opens');
+
   // Copilot suggests a note for its memory: a card, saved only when you press Save, then in Settings.
   await page.goto(`${base}/#copilot`);
   await page.selectOption('#cp-perm', 'full');
