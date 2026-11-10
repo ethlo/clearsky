@@ -6,7 +6,8 @@
 // For each plugin in plugins/catalog.json (or the ones named): copies plugins/<folder> to
 // <out>/<folder> (default: next to this checkout), makes it a git repo with one commit, tags it
 // v<version> (the tag the catalog pins), and prints the commands that create the repo on GitHub
-// and push it. It never pushes or creates anything online itself; it uses your own git name.
+// and push it. A plugin whose repo is cloned there already gets a new release instead: the
+// folder's code as a commit on top, tagged, with the push command. It never pushes or creates anything online itself; it uses your own git name.
 import { cpSync, existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -32,9 +33,23 @@ for (const c of catalog) {
   const pkg = JSON.parse(readFileSync(join(src, 'package.json'), 'utf8'));
   if (pkg.version !== m.version) console.log(`${c.name}: careful, package.json says ${pkg.version} and clearsky-plugin.json ${m.version}`);
   const dest = join(out, c.folder || `clearsky-${c.name}`);
-  if (existsSync(dest)) { console.log(`${c.name}: ${dest} is already there, skipped`); continue; }
-  cpSync(src, dest, { recursive: true, filter: (p) => !/(^|[\\/])(node_modules|\.clearsky)$/.test(p) });
+  const copy = () => cpSync(src, dest, { recursive: true, filter: (p) => !/(^|[\\/])(node_modules|\.clearsky)$/.test(p) });
   const git = (...a) => execFileSync('git', ['-C', dest, ...a], { stdio: ['ignore', 'pipe', 'inherit'] }).toString().trim();
+  // Its repo, cloned here already: a new release of it, the folder's code as one commit and the tag.
+  if (existsSync(join(dest, '.git'))) {
+    if (git('tag', '-l', tag)) { console.log(`${c.name}: ${dest} already has ${tag}, skipped`); continue; }
+    if (git('status', '--porcelain')) { console.log(`${c.name}: ${dest} has changes of its own, skipped`); continue; }
+    git('rm', '-rq', '--ignore-unmatch', '.');
+    copy();
+    git('add', '-A');
+    if (git('status', '--porcelain')) git('commit', '-q', '-m', `${m.label} ${m.version}`);
+    git('tag', tag);
+    console.log(`${c.name}: ${dest} (${tag}, on top of its repo)`);
+    next.push(`cd ${dest} && git push origin HEAD ${tag}`);
+    continue;
+  }
+  if (existsSync(dest)) { console.log(`${c.name}: ${dest} is already there and isn't a git repo, skipped`); continue; }
+  copy();
   git('init', '-q', '-b', 'main');
   git('add', '-A');
   git('commit', '-q', '-m', `${m.label} ${m.version}`);

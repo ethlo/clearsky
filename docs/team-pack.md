@@ -67,7 +67,7 @@ The plugins you added are listed with where they come from and their pins (one t
 
 ## What joining does
 
-- **Settings:** a pack value fills a setting you haven't set, or one the pack set before. A setting you changed yourself is kept, and joining says so. Only team-wide settings are taken (organizations, stand-up, workdays, Copilot defaults and folders, the sandbox's extra hosts, Grafana, VPN check). Tokens, your calendar, and the sandbox's doors (**Never ask before**, the "always" rules) are never taken from a pack: those stay your own decisions.
+- **Settings:** a pack value fills a setting you haven't set, or one the pack set before. A setting you changed yourself is kept, and joining says so. Only team-wide settings are taken (organizations, stand-up, workdays, starred Jira projects, Copilot defaults and folders, the sandbox's extra hosts, VPN check), plus the settings plugins let a team set (below). Tokens, your calendar, and the sandbox's doors (**Never ask before**, the "always" rules) are never taken from a pack: those stay your own decisions.
 - **The sandbox:** extra hosts in `COPILOT_DOMAINS` or `COPILOT_VM_IMAGES` are named when you join, so you know the sandbox may reach them.
 - **Links** are added to your work links. Links you already have aren't added twice.
 - **Skills** are copied to `~/.copilot/skills`, so Copilot has them in every repo. A skill you already have with the same name is left alone.
@@ -85,7 +85,7 @@ Each entry is anything `clearsky add` takes, or `./folder` for a plugin kept in 
 
 The pin in the pack is the team's version. Pin with a tag (`#v1.2.0`); when the team moves it to `#v1.3.0` and you update the pack, the plugin shows "you have another version" with **Look at the team's version**. A plugin without a pin follows its default branch for everyone.
 
-A plugin can let a team set some of its settings by marking them `"team": true` in its manifest (never a secret). Put the values in the pack's `settings` like any other. If you haven't added the plugin yet, they wait in `team.json` and are filled in at the first start after you add it. Your own values win, as with every team setting.
+A plugin can let a team set some of its settings by marking them `"team": true` in its manifest (never a secret). Clearsky's own plugins do: Slack (MCP) its app client ID, redirect URL, scopes, server and mentions search; Confluence its site, server and scopes; Grafana its environments and which ask every time (from v1.1.0 of each). Put the values in the pack's `settings` like any other. If you haven't added the plugin yet, they wait in `team.json` and are filled in at the first start after you add it. Your own values win, as with every team setting.
 
 ## Using Clearsky at work
 
