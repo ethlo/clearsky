@@ -39,6 +39,7 @@
   button:disabled { opacity: .6; cursor: default; }
   label { display: block; font-size: 12.5px; color: var(--text-2); font-weight: 500; margin: 12px 0 4px; }
   .wrow input[type=text] { flex: 1; min-width: 200px; width: auto; }
+  select { width: 100%; font: inherit; font-size: 13.5px; padding: 6px 9px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); color: var(--text); }
   input[type=text] { width: 100%; font: inherit; font-size: 13.5px; padding: 6px 9px; border: 1px solid var(--line-strong); border-radius: 7px; background: var(--surface); color: var(--text); }
   .orgs { display: flex; flex-wrap: wrap; gap: 6px 14px; }
   .orgs label { display: flex; gap: 6px; align-items: center; margin: 0; font-size: 13.5px; color: var(--text); font-weight: 400; }
@@ -66,9 +67,15 @@
 
   <section class="step">
     <h2><span class="n">2</span>Log in</h2>
-    <p>With the GitHub CLI and the Atlassian CLI, in your browser. Clearsky keeps no passwords.</p>
+    <label for="tracker" style="margin-top:0">Your tickets live in</label>
+    <select id="tracker">
+      <option value="jira">Jira (through the Atlassian CLI)</option>
+      <option value="github">GitHub Issues (through your GitHub login)</option>
+      <option value="none">Nowhere: I don't use an issue tracker</option>
+    </select>
+    <p id="login-intro">With the GitHub CLI and the Atlassian CLI, in your browser. Clearsky keeps no passwords.</p>
     <div class="wrow"><button type="button" id="gh-login">Log in to GitHub</button><span class="msg" id="gh-msg"></span></div>
-    <div class="wrow"><button type="button" id="jira-login">Log in to Atlassian (Jira)</button><span class="msg" id="jira-msg"></span></div>
+    <div class="wrow" id="jira-row"><button type="button" id="jira-login">Log in to Atlassian (Jira)</button><span class="msg" id="jira-msg"></span></div>
   </section>
 
   <section class="step">
@@ -122,10 +129,20 @@ function drawChecks(d) {
   $('#orgs').innerHTML = orgs.map((o) => `<label><input type="checkbox" value="${esc(o)}"${picked.has(o) ? ' checked' : ''}> ${esc(o)}</label>`).join('');
   $('#orgs-text').hidden = orgs.length > 0;
   if (!orgs.length) $('#orgs-text').value ||= saved.join(', ');
+  if (!$('#tracker').dataset.set) { $('#tracker').value = d.values.TRACKER || d.tracker || 'jira'; $('#tracker').dataset.set = '1'; }
+  drawTracker();
   $('#jira-site').textContent = d.suggestions.jiraSite ? `Jira: ${d.suggestions.jiraSite}, from your Atlassian login.` : 'Jira: log in under step 2 and the site is found by itself.';
   $('#standup').value ||= d.values.CLEARSKY_STANDUP_TIME || '';
   $('#workdays').value ||= d.values.CLEARSKY_WORKDAYS || '';
 }
+// Jira's login and site only matter when Jira is where your tickets are.
+function drawTracker() {
+  const jira = $('#tracker').value === 'jira';
+  $('#jira-row').hidden = !jira;
+  $('#jira-site').hidden = !jira;
+  $('#login-intro').textContent = jira ? 'With the GitHub CLI and the Atlassian CLI, in your browser. Clearsky keeps no passwords.' : 'With the GitHub CLI, in your browser. Clearsky keeps no passwords.';
+}
+$('#tracker').onchange = drawTracker;
 async function check() {
   $('#recheck').disabled = true;
   try { drawChecks(await (await fetch('/api/doctor')).json()); } catch (e) { $('#checks').innerHTML = `<p>${esc(e.message)}</p>`; }
@@ -168,7 +185,7 @@ $('#team-join').onclick = async () => {
 };
 $('#save').onclick = async () => {
   const orgs = $('#orgs-text').hidden ? [...picked] : $('#orgs-text').value.split(',').map((x) => x.trim()).filter(Boolean);
-  const values = { GITHUB_ORGS: orgs.join(',') };
+  const values = { GITHUB_ORGS: orgs.join(','), TRACKER: $('#tracker').value };
   if ($('#standup').value.trim()) values.CLEARSKY_STANDUP_TIME = $('#standup').value.trim();
   if ($('#workdays').value.trim()) values.CLEARSKY_WORKDAYS = $('#workdays').value.trim();
   $('#save-msg').textContent = '';

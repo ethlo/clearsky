@@ -62,11 +62,13 @@ import { edsCalendars } from '../lib/eds.mjs';
 import { joinPack, joinSummary, readTeam, exportPack, TEAM_KEYS, applyWaiting, pluginOffers } from '../lib/team.mjs';
 import { scaffoldPack, writeScaffold, nextSteps } from '../lib/team-scaffold.mjs';
 import { NEW_TASK_HINT, cleanNewTask, newTaskPrompt } from '../lib/new-task.mjs';
+import { trackerName, TRACKERS, trackerHint, ghIssue } from '../lib/tracker.mjs';
 import { readHandoffs, saveHandoffs, addHandoff, nextHandoff, settleAfterRestart, handoffPrompt, handoffResult, updateHandoff } from '../lib/handoff.mjs';
 import { srtInstalled } from '../lib/doctor.mjs';
 import { ownRead, chatPushes } from '../lib/own-read.mjs';
 import { groupStandup } from '../lib/standup.mjs';
 import { manifest as githubManifest, createGitHub, workItems as githubItems, PR_FIELDS, ITEM_FIELDS, ciState, isBot, latestReviewsByUser, openThreads, humanReviewers, myPrStatus, reviewerName } from '../lib/modules/github.mjs';
+import { sortVersions } from '../lib/modules/jira.mjs';
 import { manifest as jiraManifest, createJira, workItems as jiraItems, mentionItems as jiraMentionItems, listOf, fieldsOf, nameOf, commentInfo, excerpt, userId, mapLimit, JIRA_WAITING, jiraMentionsByTicket, mergeJira, PROJECT_KEY, starredProjects, versionSummary } from '../lib/modules/jira.mjs';
 
 // ---------------------------------------------------------------- config
@@ -148,6 +150,10 @@ const buildConfig = (env = process.env) => ({
   workdays: parseWorkdays(env.CLEARSKY_WORKDAYS || 'Mon-Fri'),
 });
 const config = buildConfig();
+// Where your tickets live (lib/tracker.mjs): 'jira', 'github' or 'none'. Worked out again when
+// settings are saved.
+let trackerMemo = null;
+export const tracker = () => (trackerMemo ||= trackerName(process.env));
 
 // Extra sources: the plugins you added (lib/plugins.mjs; `clearsky add`, or Settings → Plugins),
 // and your own single-file ones in ~/.config/clearsky/sources/*.mjs.
@@ -203,6 +209,9 @@ export { isBot, openThreads, myPrStatus };
 
 const jiraModule = createJira({ config, execFileP, settle });
 let jiraProjectsCache = { at: 0, data: null }; // every Jira project you can see, for starring (Versions page)
+let ghReposCache = { at: 0, data: null }; // the same with GitHub Issues: repos you can star
+const REPO_NAME = /^[\w-][\w.-]*\/[\w-][\w.-]*$/;
+const starredRepos = () => [...new Set(list(process.env.GITHUB_STARRED_REPOS).filter((r) => REPO_NAME.test(r)))];
 const { acli, jiraSearch, jiraComments, jiraSite, browseUrl, jiraDebug } = jiraModule;
 const fetchJiraWork = jiraModule.fetchWork, fetchJiraMentions = jiraModule.fetchMentions;
 export const issuePreview = (key) => jiraModule.issuePreview(key);
@@ -329,7 +338,9 @@ export function planNow(d, now = Date.now(), dismissedItems = localState.dismiss
 
 
 // Each source is fetched and cached on its own, so the page can show whatever is ready.
-const SOURCES = { github: fetchGitHub, jira: fetchJiraWork, jiraMentions: fetchJiraMentions, calendar: fetchCalendar };
+// Jira's two sources only run when Jira is the tracker; otherwise they say so and stay empty.
+const jiraOnly = (fetch) => () => (tracker() === 'jira' ? fetch() : Promise.resolve({ disabled: true, tracker: tracker() }));
+const SOURCES = { github: fetchGitHub, jira: jiraOnly(fetchJiraWork), jiraMentions: jiraOnly(fetchJiraMentions), calendar: fetchCalendar };
 for (const p of plugins.sources.values()) {
   SOURCES[p.name] = async () => {
     if (p.enabled && !p.enabled(process.env)) return { disabled: true };
@@ -410,6 +421,7 @@ function loadSourceCache(file) {
   try {
     for (const [name, e] of Object.entries(JSON.parse(readFileSync(file, 'utf8')))) {
       if (!e?.data || e.data.error) continue;
+      if ((name === 'jira' || name === 'jiraMentions') && tracker() !== 'jira') continue; // Jira was the tracker before
       lastGood.set(name, { at: e.at, data: e.data });
       if (Date.now() - e.at < STALE_MAX) sourceCache.set(name, { at: e.at, data: e.data });
     }
@@ -509,6 +521,7 @@ async function standupGitHub(since) {
     `query($mine: String!, $reviewed: String!, $me: String!) {
       mine: search(query: $mine, type: ISSUE, first: 50) { nodes { ... on PullRequest {
         number title url state isDraft createdAt mergedAt headRefName repository { nameWithOwner }
+        closingIssuesReferences(first: 3) { nodes { number title repository { nameWithOwner } } }
         commits(last: 100) { nodes { commit { committedDate authors(first: 5) { nodes { email user { login } } } } } } } } }
       reviewed: search(query: $reviewed, type: ISSUE, first: 50) { nodes { ... on PullRequest {
         number title url repository { nameWithOwner } author { login }
@@ -522,7 +535,8 @@ async function standupGitHub(since) {
   );
   const after = (iso) => iso && Date.parse(iso) >= since.getTime();
   const pr = (p) => ({ repo: p.repository.nameWithOwner, number: p.number, title: p.title, url: p.url });
-  const minePr = (p) => ({ ...pr(p), branch: p.headRefName || null, commits: commitsByPr.get(p.url) || 0 });
+  const closes = (p) => (p.closingIssuesReferences?.nodes || []).map((i) => ({ ref: `${i.repository.nameWithOwner}#${i.number}`, title: i.title }));
+  const minePr = (p) => ({ ...pr(p), branch: p.headRefName || null, commits: commitsByPr.get(p.url) || 0, issues: closes(p).map((i) => i.ref) });
   const mine = data.mine.nodes.filter((p) => p?.number);
   // Commits are counted from my PRs: GitHub's contribution counts hide private org work
   // ("restricted contributions"), so contributionsCollection reports 0 there.
@@ -545,6 +559,28 @@ async function standupGitHub(since) {
     }).filter(Boolean),
     commits: [...commitsByRepo].map(([repo, count]) => ({ repo, count })),
   };
+}
+
+// GitHub issues for the stand-up, when they are the tracker: the ones of yours closed since the
+// last stand-up, and the open ones you opened or commented on.
+async function standupIssues(since) {
+  config.github.token ||= await ghCliToken();
+  if (!config.github.token) return { error: 'GITHUB_TOKEN is not set and `gh auth token` gave nothing' };
+  const { viewer } = await gql('query { viewer { login } }');
+  const me = viewer.login, day = since.toISOString().slice(0, 10);
+  const scope = `${config.github.orgs.map((o) => `org:${o}`).join(' ')} archived:false`;
+  const fields = '... on Issue { number title url state updatedAt closedAt repository { nameWithOwner } }';
+  const d = await gql(`query($closed: String!, $touched: String!) {
+      closed: search(query: $closed, type: ISSUE, first: 30) { nodes { ${fields} } }
+      touched: search(query: $touched, type: ISSUE, first: 30) { nodes { ${fields} } }
+    }`, {
+    closed: `is:issue is:closed assignee:${me} closed:>=${day} ${scope}`,
+    touched: `is:issue is:open involves:${me} updated:>=${day} ${scope}`,
+  });
+  const shape = (i, status) => ({ key: `${i.repository.nameWithOwner}#${i.number}`, summary: i.title, url: i.url, status });
+  const done = (d.closed?.nodes || []).filter((i) => i?.number && Date.parse(i.closedAt) >= +since).map((i) => shape(i, 'Closed'));
+  const seen = new Set(done.map((i) => i.key));
+  return { done, touched: (d.touched?.nodes || []).filter((i) => i?.number && !seen.has(`${i.repository.nameWithOwner}#${i.number}`)).map((i) => shape(i, 'Open')) };
 }
 
 async function standupJira(since) {
@@ -575,7 +611,7 @@ export function standupText(s, { details = false } = {}) {
     out.push(title);
     (lines.length ? lines : none ? [none] : []).forEach((l) => out.push(`- ${l}`));
   };
-  section(`*Yesterday* (since ${s.sinceLabel})`, g.yesterday, 'Nothing recorded on GitHub, Jira or Copilot.');
+  section(`*Yesterday* (since ${s.sinceLabel})`, g.yesterday, `Nothing recorded on GitHub${s.tracker === 'jira' || !s.tracker ? ', Jira' : ''} or Copilot.`);
   section('*Today*', g.today, 'Pick up the next item from the queue.');
   section('*Blockers*', g.blockers, 'None');
   if (details && g.details.length) section('*Details*', g.details);
@@ -585,7 +621,7 @@ export function standupText(s, { details = false } = {}) {
 // What to say at stand-up, in your words rather than a list of tickets: Copilot turns the
 // stand-up above into a few spoken sentences, grouped by what the work is for. It gets the text
 // only, no tools; the answer is kept until the next stand-up or a new one is asked for.
-const SAY_PROMPT = `This is my stand-up, as a list from my GitHub, Jira and Copilot work. Write what I'll say in the meeting:
+const SAY_PROMPT = `This is my stand-up, as a list from my GitHub, ticket and Copilot work. Write what I'll say in the meeting:
 first person, spoken and plain, 4 to 7 short sentences in three short paragraphs (yesterday, today, blockers).
 Group the work by what it's for (the feature or problem), not ticket by ticket; name a ticket key only when it helps
 people find it, and leave out repo names, PR numbers and statuses unless they matter (say "it's in review" rather
@@ -646,10 +682,18 @@ function workspaceInfo(id) {
 // `since` overrides the start of the window (used by tests).
 export async function standup(work, since = previousStandup()) {
   const next = nextStandup();
-  const [github, jira, copilotWork] = await Promise.all([settle(standupGitHub(since)), settle(standupJira(since)), settle(standupCopilot(since))]);
+  const t = tracker();
+  const ticketsSince = t === 'jira' ? standupJira(since) : t === 'github' ? standupIssues(since) : Promise.resolve({ done: [], touched: [] });
+  const [github, tickets, copilotWork] = await Promise.all([settle(standupGitHub(since)), settle(ticketsSince), settle(standupCopilot(since))]);
   const w = work || await collect();
+  // GitHub issue titles, for the issues a PR closes.
+  const issueTitles = {};
+  if (t === 'github') {
+    for (const i of w.github?.assigned || []) issueTitles[`${i.repo}#${i.number}`] = i.title;
+    for (const i of [...(tickets.done || []), ...(tickets.touched || [])]) issueTitles[i.key] = i.summary;
+  }
   const today = {
-    inProgress: (w.jira.assigned || []).filter((i) => i.statusCategory === 'indeterminate').slice(0, 5),
+    inProgress: t === 'jira' ? (w.jira?.assigned || []).filter((i) => i.statusCategory === 'indeterminate').slice(0, 5) : [],
     reviews: w.github.reviewRequested || [],
     myPrs: (w.github.myPrs || []).filter((p) => p.status.owner === 'me' && !p.draft),
     // Out for review, waiting on others: not merged, so not ready to test yet.
@@ -667,11 +711,14 @@ export async function standup(work, since = previousStandup()) {
     since: since.toISOString(),
     sinceLabel: `${since.toLocaleDateString([], { weekday: 'long' })} ${clock(since)}`,
     nextStandup: next.toISOString(),
-    jiraBase: jiraModule.site,
+    tracker: t,
+    jiraBase: t === 'jira' ? jiraModule.site : null,
     // Which "ABC-123" are Jira keys: starred projects and the projects of tickets seen here.
-    jiraProjects: [...new Set([...starredProjects(process.env.JIRA_STARRED_PROJECTS),
-      ...[...(jira.done || []), ...(jira.touched || []), ...(w.jira?.assigned || [])].map((i) => String(i.key || '').split('-')[0]).filter(Boolean)])],
-    yesterday: { github, jira, copilot: copilotWork },
+    jiraProjects: t !== 'jira' ? [] : [...new Set([...starredProjects(process.env.JIRA_STARRED_PROJECTS),
+      ...[...(tickets.done || []), ...(tickets.touched || []), ...(w.jira?.assigned || [])].map((i) => String(i.key || '').split('-')[0]).filter(Boolean)])],
+    issueTitles,
+    // `jira` stays for skills and scripts that read it; `tickets` is the same, for any tracker.
+    yesterday: { github, tickets, ...(t === 'jira' && { jira: tickets }), copilot: copilotWork },
     today,
     blockers,
   };
@@ -684,6 +731,22 @@ export async function standup(work, since = previousStandup()) {
   s.summary = groupStandup(s, { clock });
   s.text = standupText(s);
   return s;
+}
+
+// A ticket's goal for `review --ticket`: its title and whole description, nothing else. A Jira
+// key, or a GitHub issue (owner/name#12).
+async function ticketGoal(ref) {
+  const gi = ghIssue(ref);
+  if (!gi) return jiraModule.ticketGoal(ref);
+  config.github.token ||= await ghCliToken();
+  const [owner, name] = gi.repo.split('/');
+  const { repository } = await gql(`query($owner: String!, $name: String!, $number: Int!) {
+    repository(owner: $owner, name: $name) { issue(number: $number) { title body issueType { name } } } }`, { owner, name, number: gi.number })
+    .catch(() => gql(`query($owner: String!, $name: String!, $number: Int!) {
+      repository(owner: $owner, name: $name) { issue(number: $number) { title body } } }`, { owner, name, number: gi.number }));
+  const i = repository?.issue;
+  if (!i) throw new Error(`${ref} not found`);
+  return { key: ref, type: i.issueType?.name || 'Issue', summary: i.title || '', description: String(i.body || '').slice(0, 12_000) };
 }
 
 // ---------------------------------------------------------------- Markdown
@@ -726,7 +789,8 @@ export function toMarkdown(d) {
     `${p.pendingReviewers.length ? `, waiting on ${p.pendingReviewers.join(', ')}` : ''}`, g.error);
   section('GitHub mentions', g.mentions, (m) =>
     `[${m.repo}#${m.number}](${m.url}) ${m.kind}: ${m.title}, updated ${ago(m.updatedAt)}`, g.error);
-  section('Jira mentions', j.mentions, (m) =>
+  const jiraOn = !j.disabled;
+  if (jiraOn) section('Jira mentions', j.mentions || [], (m) =>
     `[${m.key}](${m.url}) ${m.summary}: ${m.by}, ${ago(m.at)}: "${m.excerpt}"`, j.error);
   // Work plugins, each with its own section (their markdown() hook).
   for (const p of plugins.sources.values()) {
@@ -736,7 +800,7 @@ export function toMarkdown(d) {
     if (sd.error) section(p.label, null, null, sd.error);
     else if (m && !m.hookError && Array.isArray(m.lines)) section(String(m.title || p.label), m.lines, (l) => String(l), null);
   }
-  section('My Jira issues', j.assigned, (i) =>
+  if (jiraOn) section('My Jira issues', j.assigned || [], (i) =>
     `[${i.key}](${i.url}) ${i.summary} [${i.status}${i.priority ? `, ${i.priority}` : ''}${i.due ? `, due ${i.due}` : ''}]`, j.error);
   if (g.assigned?.length) section('GitHub issues assigned to me', g.assigned, (i) =>
     `[${i.repo}#${i.number}](${i.url}) ${i.title}`, null);
@@ -982,13 +1046,16 @@ function makeTeamPack({ dir, name, repo, jiraSite, links = false, force = false 
 const teamPlugins = () => { const t = readTeam(dirname(userEnvFile)); return t?.plugins?.length ? { name: t.name, plugins: pluginOffers(t.plugins, readRegistry(pluginDirs.registry).plugins) } : null; };
 
 // `clearsky doctor` and the welcome page: what this machine has for Clearsky.
-const machineChecks = () => doctorChecks({ acliBin: config.jira.acli, copilotBin: copilot.findCopilot(process.env.COPILOT_BIN),
+const machineChecks = () => doctorChecks({ acliBin: config.jira.acli, tracker: tracker(), copilotBin: copilot.findCopilot(process.env.COPILOT_BIN),
   calendars: () => (process.platform === 'linux' && !wslInfo() ? edsCalendars() : []), browser: () => { try { return findBrowser(process.env, { windows: true }); } catch { return null; } },
   vm: () => vmSupport(), folders: [join(here, '..'), ...copilotFolders()] });
 // Nothing set up yet: no settings file of your own and no organizations from anywhere else.
 const firstRun = () => !existsSync(userEnvFile) && !process.env.GITHUB_ORGS && !isDemo();
 
-const settingsStatus = async () => ({ ...await settings.status(config, { path: userEnvFile }), logins: await loginStatus() });
+const settingsStatus = async () => {
+  const st = await settings.status(config, { path: userEnvFile });
+  return { ...st, tracker: { ...st.tracker, now: TRACKERS[tracker()] }, logins: await loginStatus() };
+};
 
 function startSourceLogin(p) {
   if (sourceLogins.get(p.name)?.state === 'running') return;
@@ -1012,6 +1079,7 @@ function applySettings(values) {
     else delete process.env[k];
   }
   Object.assign(config, buildConfig());
+  trackerMemo = null;
   sourceCache.clear();
   detailCache.clear();
   copilotInfoCache = null;
@@ -1080,7 +1148,9 @@ function copilotEnv() {
   // (scripts/acli-bin; in the sandbox, the broker does it).
   const acliBin = join(here, '..', 'scripts', 'acli-bin');
   env.CLEARSKY_ACLI = config.jira.acli;
-  env.PATH = [...new Set([acliBin, ...dirs, ...(env.PATH || '').split(delimiter).filter(Boolean)])].join(delimiter);
+  // `ticket …` for any tracker (scripts/ticket-bin, lib/tracker.mjs).
+  env.CLEARSKY_TRACKER = tracker();
+  env.PATH = [...new Set([acliBin, join(here, '..', 'scripts', 'ticket-bin'), ...dirs, ...(env.PATH || '').split(delimiter).filter(Boolean)])].join(delimiter);
   return env;
 }
 
@@ -1833,7 +1903,7 @@ async function reviewRun({ key, argv, cwd, signal }, out, err) {
   let change, ticket = null;
   try { change = await changeOf(root, o.base); } catch (e) { err(`review: ${e.message}\n`); return 1; }
   if (o.ticket) {
-    try { ticket = await jiraModule.ticketGoal(o.ticket); } catch (e) { err(`review: couldn't read ${o.ticket} (${e.message}); use --goal instead\n`); return 1; }
+    try { ticket = await ticketGoal(o.ticket); } catch (e) { err(`review: couldn't read ${o.ticket} (${e.message}); use --goal instead\n`); return 1; }
   }
   const info = await copilotInfo();
   if (!info.available) { err('review: the Copilot CLI isn\'t found\n'); return 1; }
@@ -2001,6 +2071,8 @@ export const JIRA_HINT = 'When you write a Jira description or comment with `acl
   + '`**bold**`, `` `code` ``, ``` fences, `[text](url)`), not Jira wiki markup (`h3.`, `{{code}}`) and not ADF JSON. Pass it with `--description` or '
   + '`--body`; for longer text, write it to a file in this folder and use `--description-file` or `--body-file`. Clearsky hands it to Jira as rich text, '
   + 'so the headings and lists show as such.';
+// Where tickets live, for every chat, and for Jira how to write to it.
+const trackerHints = (t = tracker()) => (t === 'jira' ? `${trackerHint('jira')} ${JIRA_HINT}` : trackerHint(t));
 const CHOICES_HINT = 'When you need me to choose (an approach, a next step, yes or no), ask once, at the end of your answer, as a block I can click:\n'
   + '```choices\nThe question, in one line\n- First option (recommended) | what happens if I pick it\n- Second option | what happens\n```\n'
   + 'Two to four options, the one you recommend first. Then stop and wait for my pick.';
@@ -2042,9 +2114,9 @@ export function buildsHint(where = buildsWhere()) {
 // How the sandbox works for Copilot, and its doors out (lib/broker.mjs).
 const SANDBOX_HINT = 'You run in a sandbox: everything inside it runs without asking me. git and gh work as usual; reading GitHub '
   + 'goes through, while a push or any GitHub change (a PR, a comment, a review) waits at the sandbox\'s network until I click Allow, '
-  + 'and fails with "declined" if I don\'t. Jira changes with `acli` ask me the same way. Your built-in GitHub tools are off here. '
+  + 'and fails with "declined" if I don\'t.{{trackerDoor}} Your built-in GitHub tools are off here. '
   + '{{builds}}'
-  + 'Before you open a pull request, run `review --ticket <KEY>` (or `review --goal "<what it is for>"` without a ticket; `--base <branch>` '
+  + 'Before you open a pull request, run `review --ticket <ticket>` (or `review --goal "<what it is for>"` without a ticket; `--base <branch>` '
   + 'when it doesn\'t go to the default branch): a fresh reviewer that sees only the goal and the code reviews your change. Give it the goal only, '
   + 'never your reasoning. Fix what holds up, say why you skip the rest, and run it again until it says "VERDICT: ready" (three rounds at most). '
   + 'Anything that takes more than a few minutes (a full build, a `vm` test run, waiting for CI with `gh run watch <id> --exit-status`) '
@@ -2059,7 +2131,7 @@ const SANDBOX_HINT = 'You run in a sandbox: everything inside it runs without as
   + 'A 407 from the proxy means a tool skipped the proxy\'s login: say so and which host, don\'t work around it. '
   + 'If you stop before the task is done, Clearsky nudges you to go on; when you are done, or need me, say so plainly.';
 const sandboxHintFor = (permission) => (process.env.COPILOT_SANDBOX === 'srt' || permission === 'sandboxed'
-  ? `\n\n${SANDBOX_HINT.replace('{{builds}}', buildsHint())}${doorHints()}${process.env.COPILOT_DISCLOSE === 'on' ? ` ${DISCLOSE_HINT}` : ''}` : '');
+  ? `\n\n${SANDBOX_HINT.replace('{{builds}}', buildsHint()).replace('{{trackerDoor}}', tracker() === 'jira' ? ' Jira changes with `acli` (or `ticket`) ask me the same way.' : '')}${doorHints()}${process.env.COPILOT_DISCLOSE === 'on' ? ` ${DISCLOSE_HINT}` : ''}` : '');
 // What you typed, without the dashboard and references Clearsky added in front.
 const MSG_MARK = '\n\n---\nMy message:\n';
 export function typedPart(text) {
@@ -3120,7 +3192,7 @@ function serve() {
           const note = !command && folderNotes.get(body.session);
           if (note) folderNotes.delete(body.session);
           const update = !command && (owed || note) && `${UPDATE_INTRO}${owed ? sandboxHint : ''}${note ? `\n\n${note}` : ''}`;
-          const prefix = command ? '' : [update, !body.resume && `${CONTEXT_INTRO}\n\n${copilotContext()}\n\n${CHOICES_HINT}\n\n${NEW_TASK_HINT}\n\n${memoryHint()}\n\n${PR_HINT}\n\n${JIRA_HINT}${folders && `\n\n${folders}`}${sandboxHint}`, refText].filter(Boolean).join('\n\n---\n\n');
+          const prefix = command ? '' : [update, !body.resume && `${CONTEXT_INTRO}\n\n${copilotContext()}\n\n${CHOICES_HINT}\n\n${NEW_TASK_HINT}\n\n${memoryHint()}\n\n${PR_HINT}\n\n${trackerHints()}${folders && `\n\n${folders}`}${sandboxHint}`, refText].filter(Boolean).join('\n\n---\n\n');
           const prompt = prefix ? `${prefix}${MSG_MARK}${message}` : message;
           // Answers stream back as one JSON event per line: text, tool, permission, done, error.
           res.writeHead(200, { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
@@ -3208,6 +3280,16 @@ function serve() {
           return json(res, 200, await settingsStatus());
         }
         // Star or unstar a Jira project for the Versions page; saved like a setting.
+        if (url.pathname === '/api/jira/star' && tracker() === 'github') {
+          const { key, starred } = await readJson(req);
+          if (!REPO_NAME.test(key || '')) return json(res, 400, { error: 'bad repo (owner/name)' });
+          const now = starredRepos().filter((k) => k !== key);
+          if (starred) now.push(key);
+          const values = settings.validate({ GITHUB_STARRED_REPOS: now.join(',') });
+          settings.writeEnvFile(userEnvFile, values);
+          if (values.GITHUB_STARRED_REPOS) process.env.GITHUB_STARRED_REPOS = values.GITHUB_STARRED_REPOS; else delete process.env.GITHUB_STARRED_REPOS;
+          return json(res, 200, { starred: starredRepos() });
+        }
         if (url.pathname === '/api/jira/star') {
           const { key, starred } = await readJson(req);
           if (!PROJECT_KEY.test(key || '')) return json(res, 400, { error: 'bad project key' });
@@ -3307,7 +3389,7 @@ function serve() {
       if (url.pathname === '/api/doctor') {
         const [list, hints] = await Promise.all([machineChecks(), doctorSuggestions({ acliBin: config.jira.acli })]);
         return json(res, 200, { checks: list, ready: doctorReady(list), suggestions: hints, platform: process.platform, wsl: wslInfo(),
-          values: { GITHUB_ORGS: process.env.GITHUB_ORGS || '', CLEARSKY_STANDUP_TIME: process.env.CLEARSKY_STANDUP_TIME || '', CLEARSKY_WORKDAYS: process.env.CLEARSKY_WORKDAYS || '' } });
+          tracker: tracker(), values: { TRACKER: process.env.TRACKER || '', GITHUB_ORGS: process.env.GITHUB_ORGS || '', CLEARSKY_STANDUP_TIME: process.env.CLEARSKY_STANDUP_TIME || '', CLEARSKY_WORKDAYS: process.env.CLEARSKY_WORKDAYS || '' } });
       }
       if (url.pathname === '/api/standup/say') {
         if (!standupCache.data) standupCache = { at: Date.now(), data: await standup(await collect(false)) };
@@ -3357,7 +3439,7 @@ function serve() {
       if (url.pathname === '/api/modules') return json(res, 200, { modules: moduleManifests() });
       if (url.pathname === '/api/plugins') return json(res, 200, pluginList());
       if (url.pathname === '/api/sources') {
-        return json(res, 200, { sources: [...plugins.sources.values()].map((p) => ({ name: p.name, label: p.label, area: p.area, panel: p.panel || null })), errors: plugins.errors });
+        return json(res, 200, { tracker: TRACKERS[tracker()], sources: [...plugins.sources.values()].map((p) => ({ name: p.name, label: p.label, area: p.area, panel: p.panel || null })), errors: plugins.errors });
       }
       // What needs you, with when each first showed up, so the page can mark what's new.
       // What was notified lately, to find out why something came twice.
@@ -3518,6 +3600,25 @@ function serve() {
       const issueKey = url.pathname.match(/^\/api\/issue\/([A-Z][A-Z0-9_]+-\d+)$/)?.[1];
       if (issueKey) return json(res, 200, await issuePreview(issueKey));
       // The Versions page: starred Jira projects, their fix versions, and one version's tickets.
+      // With GitHub Issues: starred repos, their milestones, and one milestone's issues and PRs.
+      if (url.pathname.startsWith('/api/jira/') && tracker() === 'none') return json(res, 404, { error: 'no issue tracker is set up' });
+      if (url.pathname.startsWith('/api/jira/') && tracker() === 'github') {
+        const p = url.pathname.slice('/api/jira/'.length), force = url.searchParams.has('refresh');
+        if (p === 'starred') return json(res, 200, { tracker: 'github', starred: starredRepos().map((key) => ({ key, name: key })), site: 'https://github.com' });
+        if (p === 'projects') {
+          if (!ghReposCache.data || Date.now() - ghReposCache.at > 30 * 6e4 || force) ghReposCache = { at: Date.now(), data: await ghModule.repoChoices() };
+          return json(res, 200, { projects: ghReposCache.data, starred: starredRepos() });
+        }
+        const key = url.searchParams.get('project') || '';
+        if (['versions', 'version'].includes(p) && !REPO_NAME.test(key)) return json(res, 400, { error: 'bad repo (owner/name)' });
+        if (p === 'versions') return json(res, 200, { project: key, versions: sortVersions(await ghModule.milestones(key, force)) });
+        if (p === 'version') {
+          const version = url.searchParams.get('version') || '';
+          if (!version || version.length > 200 || /[\r\n]/.test(version)) return json(res, 400, { error: 'bad version' });
+          const d = await ghModule.milestoneIssues(key, version, force);
+          return json(res, 200, { ...d, summary: versionSummary(d.issues) });
+        }
+      }
       if (url.pathname === '/api/jira/starred') {
         const names = new Map((jiraProjectsCache.data || []).map((p) => [p.key, p.name]));
         return json(res, 200, { starred: starredProjects(process.env.JIRA_STARRED_PROJECTS).map((key) => ({ key, name: names.get(key) || null })), site: jiraModule.site });

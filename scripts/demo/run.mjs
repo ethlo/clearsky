@@ -13,6 +13,11 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { github, standup, slack, calendar, ago, ME, standupAt, hhmm, READ_MARKS } from './data.mjs';
 import { CHAT, SESSIONS } from './chat.mjs';
+import { useGitHubIssues, milestones, milestoneRows, standupIssues } from './github-issues.mjs';
+
+// CLEARSKY_DEMO_TRACKER=github: GitHub Issues as the tracker instead of Jira (lib/tracker.mjs).
+const ghIssues = process.env.CLEARSKY_DEMO_TRACKER === 'github';
+if (ghIssues) useGitHubIssues();
 
 process.env.TZ ||= 'Europe/Oslo'; // the demo's clock, for Clearsky and the made-up meetings alike
 const here = dirname(fileURLToPath(import.meta.url));
@@ -38,6 +43,14 @@ const fake = createServer(async (req, res) => {
           refs: { nodes: tag ? [{ name: tag }] : [{ name: 'v0.9.2' }] } }];
       })) });
     }
+    if (q.includes('closed: search')) { const d = standupIssues(); return send({ data: { closed: { nodes: d.closed }, touched: { nodes: d.touched } } }); }
+    if (q.includes('milestones(first')) { const v = JSON.parse(body).variables || {}; return send({ data: { repository: { milestones: { nodes: milestones[`${v.o}/${v.n}`] || [] } } } }); }
+    if (q.includes('issueCount')) {
+      const m = (JSON.parse(body).variables?.q || '').match(/^repo:(\S+) milestone:"(.*)"$/);
+      const nodes = m ? milestoneRows(m[1], m[2]) : [];
+      return send({ data: { search: { issueCount: nodes.length, nodes } } });
+    }
+    if (q.includes('viewer { repositories(')) return send({ data: { viewer: { repositories: { nodes: ['payments-api', 'web-shop', 'infra', 'docs'].map((n) => ({ nameWithOwner: `acme/${n}`, isArchived: false })) } } } });
     if (q.includes('reviewed: search')) return send({ data: { mine: { nodes: standup.mine }, reviewed: { nodes: standup.reviewed } } });
     if (q.includes('nodes(ids:')) { const ids = JSON.parse(body).variables.ids; return send({ data: { nodes: ids.map((id) => github.myPrs.find((x) => x.id === id) || null) } }); }
     if (q.includes('reviewRequested: search')) return send({ data: { reviewRequested: { nodes: github.reviewRequested }, myPrs: { nodes: github.myPrs }, mentions: { nodes: github.mentions }, assigned: { nodes: github.assigned } } });
@@ -115,6 +128,7 @@ writeFileSync(join(conf, '.env'), [
   `SLACK_API_URL=${base}/slack`, `GOOGLE_CALENDAR_ICS=${base}/calendar.ics`, 'CLEARSKY_POLL_MINUTES=0', `CLEARSKY_STANDUP_TIME=${hhmm(standupAt())}`, 'CLEARSKY_NOTIFY=off',
   `COPILOT_BIN=${join(here, 'copilot.mjs')}`, 'GRAFANA_INSTANCES=test=https://grafana.test.example.com,prod=https://grafana.example.com',
   'CLEARSKY_CURRENCY=EUR', 'CLEARSKY_FX_RATE=0.92', // made-up costs on the Usage page
+  ...(ghIssues ? ['TRACKER=github', 'GITHUB_STARRED_REPOS=acme/payments-api, acme/web-shop'] : []),
   `VPN_CHECK=127.0.0.1:${fake.address().port}`, // the made-up VPN is always on
 ].join('\n'), { mode: 0o600 });
 const copilotHome = join(home, '.copilot');

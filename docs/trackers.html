@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Where your tickets live</title>
+<!-- Generated from trackers.md by scripts/render-docs.mjs. Edit the Markdown, then run npm run docs. -->
+<style>
+  :root { color-scheme: light dark; --bg: #f7f8fa; --surface: #fff; --text: #111827; --text-2: #4b5563; --muted: #6b7280; --line: #e5e7eb; --accent: #2563eb; --code: #f2f4f7; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0c0e12; --surface: #14171c; --text: #f2f4f7; --text-2: #c5cad3; --muted: #8a93a3; --line: #252a33; --accent: #6b9bff; --code: #1b1f26; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 32px 20px 64px; }
+  .crumb { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+  a { color: var(--accent); }
+  h1 { font-size: 28px; line-height: 1.25; margin: 0 0 12px; letter-spacing: -.01em; }
+  h2 { font-size: 20px; margin: 36px 0 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+  h3 { font-size: 16px; margin: 24px 0 8px; }
+  p, li { color: var(--text-2); }
+  strong { color: var(--text); }
+  code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--code); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.5; }
+  .table { overflow-x: auto; margin: 12px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; background: var(--surface); }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border: 1px solid var(--line); }
+  th { color: var(--text); font-weight: 600; }
+  td { color: var(--text-2); }
+  img { max-width: 100%; height: auto; display: block; margin: 16px auto; }
+  nav.toc { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 16px; margin: 20px 0; font-size: 14px; }
+  nav.toc ol { margin: 4px 0; padding-left: 20px; }
+  @media (max-width: 560px) { .wrap { padding: 20px 16px 48px; } h1 { font-size: 23px; } }
+</style>
+</head>
+<body><div class="wrap">
+<div class="crumb"><a href="index.html">Clearsky design docs</a></div>
+<h1>Where your tickets live</h1>
+<nav class="toc"><b>Contents</b><ol><li><a href="#ticket-one-command-for-chats-and-skills"><code>ticket</code>: one command for chats and skills</a></li><li><a href="#github-issues-details">GitHub Issues details</a></li><li><a href="#using-something-else">Using something else</a></li></ol></nav>
+<p>Clearsky works with <strong>Jira</strong>, with <strong>GitHub Issues</strong>, or with <strong>no issue tracker</strong> at all. Pick one in <strong>Settings → General → Tickets live in</strong>, on the welcome page, or in a team pack (<code>TRACKER</code>). Every choice uses a login you already have, so there's no token to make.</p>
+<div class="table"><table><thead><tr><th></th><th>Jira</th><th>GitHub Issues</th><th>No tracker</th></tr></thead><tbody><tr><td>Login</td><td>the Atlassian CLI (<code>acli jira auth login --web</code>)</td><td>the GitHub CLI login Clearsky already uses</td><td>none</td></tr><tr><td>Your tickets</td><td>assigned to you, by status</td><td>assigned to you, in your organizations</td><td>none</td></tr><tr><td>A PR's ticket</td><td>the key in its title or branch (<code>ABC-123</code>)</td><td>the issues it closes (<code>Fixes #12</code>)</td><td>none: the PR stands alone</td></tr><tr><td>Mentions</td><td>in Jira comments</td><td>in GitHub (as before)</td><td>GitHub only</td></tr><tr><td>Stand-up</td><td>tickets done and touched, with their PRs</td><td>issues closed and worked on, with their PRs</td><td>PRs and chats</td></tr><tr><td>Versions page</td><td>fix versions of starred projects</td><td>milestones of starred repos</td><td>hidden</td></tr><tr><td><code>review --ticket</code></td><td><code>ABC-123</code></td><td><code>owner/name#12</code></td><td>use <code>--goal</code></td></tr></tbody></table></div>
+<p>Left on <strong>Automatic</strong>, Clearsky picks Jira when Jira is set up on this machine (any Jira setting, or <code>acli</code> installed) and GitHub Issues otherwise, so nothing changes if you already used Jira.</p>
+<h2 id="ticket-one-command-for-chats-and-skills"><code>ticket</code>: one command for chats and skills</h2>
+<p>Copilot chats, and the skills that come with Clearsky, use one small command for tickets, whatever the tracker:</p>
+<pre><code>ticket view &lt;ref&gt;                          read a ticket and its description
+ticket comment &lt;ref&gt; --body &quot;…&quot;            add a comment (--body-file &lt;file&gt; for longer text)
+ticket move &lt;ref&gt; &lt;status&gt;                 change its status (&quot;In Progress&quot;, &quot;Done&quot;; GitHub: open or closed)
+ticket new --title &quot;…&quot; [--body &quot;…&quot;]        create one (Jira: --project KEY [--type Task]; GitHub: [--repo owner/name])
+ticket mine                                your open tickets</code></pre>
+<p><code>&lt;ref&gt;</code> is <code>ABC-123</code> in Jira, and <code>owner/name#12</code> (or <code>#12</code> inside the repo's folder) on GitHub. <code>ticket</code> only translates: it runs <code>acli jira workitem …</code> or <code>gh issue …</code>, so in the sandbox each change goes through the same door as before and asks you the same way. Text is Markdown; for Jira, Clearsky turns it into rich text.</p>
+<h2 id="github-issues-details">GitHub Issues details</h2>
+<ul><li>Your issues are the open ones assigned to you in your work organizations (Settings → Plugins → GitHub).</li><li>GitHub issues are open or closed. On the Versions page, an open issue with someone assigned counts as in progress.</li><li>Star repos for the Versions page there with <strong>☆ Repos</strong>, or in Settings → Plugins → GitHub.</li></ul>
+<h2 id="using-something-else">Using something else</h2>
+<p>Linear, GitLab and others aren't built in yet. A plugin can still show tickets from anywhere in its own panel (see <a href="plugins.html">Plugins</a>); choose <strong>No tracker</strong> so Jira stays out of the way.</p>
+</div></body>
+</html>

@@ -122,6 +122,10 @@
 <main>
   <section>
     <h2>General</h2>
+    <label for="TRACKER">Tickets live in<span class="more">Where your tickets are. <b>Jira</b> goes through the Atlassian CLI and its web login. <b>GitHub Issues</b> uses the GitHub login Clearsky already has: a PR belongs to the issues it closes ("Fixes #12"), and milestones are the versions. <b>Nowhere</b> leaves tickets out: the stand-up goes by PR and chat. Chats reach any of them with <code>ticket view|comment|move|new</code>. Left on automatic, it's Jira when Jira is set up on this machine, else GitHub Issues.</span></label>
+    <select id="TRACKER" data-key="TRACKER"><option value="">Automatic</option><option value="jira">Jira</option><option value="github">GitHub Issues</option><option value="none">Nowhere: no issue tracker</option></select>
+    <p class="hint" id="tracker-now"></p>
+    <div class="row"><button class="save" data-keys="TRACKER">Save</button><span class="msg"></span></div>
     <label for="CLEARSKY_STANDUP_TIME">Daily stand-up at</label>
     <input id="CLEARSKY_STANDUP_TIME" data-key="CLEARSKY_STANDUP_TIME" placeholder="09:45">
     <label for="CLEARSKY_WORKDAYS">Workdays (no stand-up on other days)</label>
@@ -132,7 +136,7 @@
     <input id="CLEARSKY_MENTION_DAYS" data-key="CLEARSKY_MENTION_DAYS" inputmode="numeric" placeholder="14">
     <label for="CLEARSKY_TIME_FORMAT">Clock</label>
     <select id="CLEARSKY_TIME_FORMAT" data-key="CLEARSKY_TIME_FORMAT"><option value="24">24-hour (14:30)</option><option value="12">12-hour (2:30 PM)</option></select>
-    <label for="CLEARSKY_POLL_MINUTES">Check GitHub, Jira mentions and plugins every … minutes</label>
+    <label for="CLEARSKY_POLL_MINUTES">Check GitHub, mentions and plugins every … minutes</label>
     <input id="CLEARSKY_POLL_MINUTES" data-key="CLEARSKY_POLL_MINUTES" inputmode="numeric" placeholder="3">
     <div class="row"><button class="save" data-keys="CLEARSKY_STANDUP_TIME,CLEARSKY_WORKDAYS,CLEARSKY_WORKDAY_END,CLEARSKY_MENTION_DAYS,CLEARSKY_TIME_FORMAT,CLEARSKY_POLL_MINUTES">Save</button><span class="msg"></span></div>
     <h3>Team pack<span class="more">Your team's shared setup: organizations, stand-up time, links and Copilot skills, from a git repo, an https link or a file the team keeps. Settings you changed yourself are kept. <code>clearsky team export</code> makes one from your settings.</span></h3>
@@ -187,9 +191,12 @@
       <input id="GITHUB_BUILD_REPOS" data-key="GITHUB_BUILD_REPOS" data-list data-words data-item="acme/api" placeholder="the ones your PRs and reviews are in" spellcheck="false" title="Each shows how its main branch builds and its newest artifact and release.">
       <label for="GITHUB_TOKEN">Or a personal access token instead of the gh login (optional)</label>
       <input id="GITHUB_TOKEN" data-key="GITHUB_TOKEN" type="password" autocomplete="off" placeholder="leave empty to keep">
-      <div class="row"><button class="save" data-keys="GITHUB_ORGS,GITHUB_MY_PRS,GITHUB_BUILD_REPOS,GITHUB_TOKEN">Save</button><span class="msg"></span></div>
+      <label for="GITHUB_STARRED_REPOS">Repos on the Versions page<span class="more">With GitHub Issues as your tracker, the <a href="/#versions">Versions</a> page shows these repos' milestones and their issues and PRs by status. You can also star them there with <b>☆ Repos</b>.</span></label>
+      <input id="GITHUB_STARRED_REPOS" data-key="GITHUB_STARRED_REPOS" data-list data-words data-item="acme/api" placeholder="none yet" spellcheck="false">
+      <div class="row"><button class="save" data-keys="GITHUB_ORGS,GITHUB_MY_PRS,GITHUB_BUILD_REPOS,GITHUB_STARRED_REPOS,GITHUB_TOKEN">Save</button><span class="msg"></span></div>
     </div>
     <div data-setup="jira">
+      <p class="hint" id="jira-unused" hidden>Not in use: your tickets live in <span id="jira-unused-where"></span> (Settings → <a href="/settings#general">General</a> → Tickets live in).</p>
       <p id="jira-detail"></p>
       <div class="row">
         <button id="jira-login">Log in to Atlassian</button>
@@ -465,6 +472,12 @@ function render(s) {
   syncCalPick();
 
 
+  const tr = s.tracker || {};
+  $('#TRACKER').value = tr.set || '';
+  $('#tracker-now').textContent = tr.now ? `${tr.set ? 'In use' : 'Automatic picks'}: ${tr.now.label}.` : '';
+  $('#GITHUB_STARRED_REPOS').value = tr.starredRepos || '';
+  $('#jira-unused').hidden = !tr.now || tr.now.name === 'jira';
+  $('#jira-unused-where').textContent = tr.now?.name === 'github' ? 'GitHub Issues' : 'no tracker';
   $('#CLEARSKY_WORKDAY_END').value = s.workdayEnd || '';
   $('#CLEARSKY_STANDUP_TIME').value = s.standupTime || '';
   $('#CLEARSKY_WORKDAYS').value = s.workdays || '';
