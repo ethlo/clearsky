@@ -15,7 +15,7 @@ if (args[0] === 'skill' && args[1] === 'list') {
     const m = JSON.parse(line);
     const upd = (sessionId, update) => out({ method: 'session/update', params: { sessionId, update } });
     if (m.method === 'initialize') out({ id: m.id, result: { protocolVersion: 1, agentCapabilities: { loadSession: true, sessionCapabilities: { list: {} } } } });
-    else if (m.method === 'session/list') out({ id: m.id, result: { sessions: SESSIONS } });
+    else if (m.method === 'session/list') out({ id: m.id, result: { sessions: args.length ? SESSIONS : [] } }); // as Claude Code: no past sessions
     else if (m.method === 'session/load') {
       sid = m.params.sessionId;
       if (sid === CHAT.id) for (const u of CHAT.updates) upd(sid, u);

@@ -63,7 +63,7 @@ import { joinPack, joinSummary, readTeam, exportPack, TEAM_KEYS, applyWaiting, p
 import { scaffoldPack, writeScaffold, nextSteps } from '../lib/team-scaffold.mjs';
 import { NEW_TASK_HINT, cleanNewTask, newTaskPrompt } from '../lib/new-task.mjs';
 import { trackerName, TRACKERS, trackerHint, ghIssue } from '../lib/tracker.mjs';
-import { agentName, AGENTS } from '../lib/agents.mjs';
+import { agentName, agentFor, AGENTS, AGENT_NAMES } from '../lib/agents.mjs';
 import { readHandoffs, saveHandoffs, addHandoff, nextHandoff, settleAfterRestart, handoffPrompt, handoffResult, updateHandoff } from '../lib/handoff.mjs';
 import { srtInstalled } from '../lib/doctor.mjs';
 import { ownRead, chatPushes } from '../lib/own-read.mjs';
@@ -155,9 +155,15 @@ const config = buildConfig();
 // settings are saved.
 let trackerMemo = null;
 export const tracker = () => (trackerMemo ||= trackerName(process.env));
-// The coding agent behind chats: Copilot or Claude Code (lib/agents.mjs).
+// The coding agent behind chats: Copilot or Claude Code (lib/agents.mjs). `backend()` is the
+// default one; `backend(name)` a chat's own (Settings → Copilot → Use … for).
 let agentMemo = null;
-export const backend = () => AGENTS[agentMemo ||= agentName(process.env)];
+export const backend = (name) => AGENTS[name] || AGENTS[agentMemo ||= agentName(process.env)];
+// The agents installed here (the default one even when it isn't, so its error shows).
+const installedAgents = () => AGENT_NAMES.filter((n) => n === backend().name || AGENTS[n].find());
+// The agent a chat runs in: the one it started in, else the one its rule picks.
+const sessionAgent = (id) => localState.sessionAgents(stateFile)[id] || sessionsCache?.data.find((x) => x.id === id)?.agent || null;
+const chatAgent = (id, { cwd, repos = [] } = {}) => sessionAgent(id) || agentFor({ cwd, repos: [...repos, ...(cwd ? gitRepos(cwd) || [] : [])] }, process.env);
 
 // Extra sources: the plugins you added (lib/plugins.mjs; `clearsky add`, or Settings → Plugins),
 // and your own single-file ones in ~/.config/clearsky/sources/*.mjs.
@@ -675,7 +681,7 @@ async function standupCopilot(since) {
 // Where a session works: Copilot's own session folder says; for Claude Code, the session's folder.
 function workspaceInfo(id, cwd) {
   const out = {};
-  if (backend().name !== 'copilot') {
+  if (sessionAgent(id) && sessionAgent(id) !== 'copilot') {
     if (!cwd) return out;
     const repo = gitRepos(cwd)?.[0];
     let branch = null;
@@ -1119,10 +1125,17 @@ async function copilotInfo(force) {
       skills = copilot.parseSkillList(stdout);
     } catch { /* fall back to the files below */ }
   }
-  if (!skills.length) skills = copilot.listSkills(b.skillsDirs(copilotCwd()));
+  // Copilot lists its own; the other agents' come from their folders, as a chat may run in any.
+  const listed = skills.length ? ['copilot'] : [];
+  for (const x of copilot.listSkills(installedAgents().filter((n) => !listed.includes(n)).flatMap((n) => AGENTS[n].skillsDirs(copilotCwd())))) if (!skills.some((y) => y.name === x.name)) skills.push(x);
+  const about = (a) => ({ name: a.name, label: a.label, product: a.product, install: a.install, usage: a.usage, available: !!a.find(), models: a.models(), efforts: a.efforts });
   const data = {
-    available: !!bin, bin, cwd: copilotCwd(), skills,
-    agent: { name: b.name, label: b.label, product: b.product, install: b.install, usage: b.usage },
+    // Any agent will do: a chat goes to the one installed when its rule names that one.
+    available: AGENT_NAMES.some((n) => AGENTS[n].find()), bin, cwd: copilotCwd(), skills,
+    agent: about(b),
+    // Every agent, for the chat's agent picker; `rules`: whether Settings sends some chats to another.
+    agents: AGENT_NAMES.map((n) => about(AGENTS[n])),
+    rules: AGENT_NAMES.some((n) => process.env[`AGENT_${n.toUpperCase()}_FOR`]),
     models: b.models(),
     efforts: b.efforts,
     permissions: Object.fromEntries(Object.entries(copilot.PERMISSIONS).map(([k, v]) => [k, v.label])),
@@ -1150,14 +1163,14 @@ function copilotTmp() {
   return scratch;
 }
 
-function copilotEnv() {
+function copilotEnv(b = backend()) {
   const env = { ...process.env };
   env.TMPDIR = env.TMP = env.TEMP = copilotTmp();
   // Java ignores TMPDIR (Maven, Gradle, tests)
   env.JAVA_TOOL_OPTIONS = `${env.JAVA_TOOL_OPTIONS ? `${env.JAVA_TOOL_OPTIONS} ` : ''}-Djava.io.tmpdir=${copilotTmp()}`;
   for (const k of ['GITHUB_TOKEN', 'GH_TOKEN', 'SLACK_TOKEN', 'GOOGLE_CALENDAR_ICS', 'CALENDAR_ICS_URL']) delete env[k];
   for (const p of plugins.sources.values()) for (const [k, f] of Object.entries(p.settings || {})) if (f.secret) delete env[k];
-  const bin = backend().find();
+  const bin = b.find();
   const dirs = [bin?.includes('/') && dirname(bin), dirname(process.execPath)].filter(Boolean);
   // acli that sends Jira text as ADF, so a description in wiki markup or Markdown shows formatted
   // (scripts/acli-bin; in the sandbox, the broker does it).
@@ -1218,10 +1231,13 @@ function ghToken() {
 // Copilot says so.
 // `permission` and `model` are the chat's (Claude Code takes them as a session mode and an
 // environment variable); `dirs`, the folders it may use besides its own (Copilot takes flags).
-async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBOX === 'srt', folders = [], permission = 'ask', model = null, dirs = [] } = {}) {
-  const b = backend();
+// `agent`: which one ("copilot", "claude"; the default one if left out). `bin` null: its own.
+async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBOX === 'srt', folders = [], permission = 'ask', model = null, dirs = [], agent: name = null } = {}) {
+  const b = backend(name);
+  bin ||= b.find();
+  if (!bin) throw new Error(`${b.product} isn't installed here (${b.install.command})`);
   const how = { label: b.label, mode: b.sessionMode(permission), dirs, acp: false };
-  const own = () => ({ ...copilotEnv(), ...b.env({ model }) });
+  const own = () => ({ ...copilotEnv(b), ...b.env({ model }) });
   if (!sandbox) return new AcpAgent(bin, b.acp(args), { env: own(), ...how });
   // In Clearsky's container, the container is the sandbox: Copilot sees only what's mounted
   // (git already goes over https there). The network isn't limited to COPILOT_DOMAINS, though.
@@ -1926,16 +1942,17 @@ async function reviewRun({ key, argv, cwd, signal }, out, err) {
   if (o.ticket) {
     try { ticket = await ticketGoal(o.ticket); } catch (e) { err(`review: couldn't read ${o.ticket} (${e.message}); use --goal instead\n`); return 1; }
   }
-  const info = await copilotInfo();
-  if (!info.available) { err(`review: ${backend().product} isn't found\n`); return 1; }
+  // The reviewer runs in the same agent as the chat that asks.
+  const rb = backend(c?.agentName);
+  if (!rb.find()) { err(`review: ${rb.product} isn't found\n`); return 1; }
   err(`Clearsky: a fresh reviewer is reading ${change.branch || 'the change'} against ${change.base}${ticket ? ` for ${ticket.key}` : ''} (it sees only the goal and the code). This takes a few minutes.\n`);
   const model = process.env.COPILOT_REVIEW_MODEL || process.env.COPILOT_MODEL || undefined;
-  const args = backend().args({ permission: 'read', model, deny: ['url'] });
+  const args = rb.args({ permission: 'read', model, deny: ['url'] });
   // The changed files as they were before, in a folder the reviewer's sandbox can read.
   const baseDir = join(copilotTmp(), 'review', randomBytes(6).toString('hex'));
   const baseFiles = await writeBaseFiles(root, change, baseDir).catch(() => []);
   const roots = [root, ...(baseFiles.length ? [baseDir] : [])];
-  const agent = await startAgent(info.bin, args, root, { sandbox: true, permission: 'read', model });
+  const agent = await startAgent(null, args, root, { sandbox: true, permission: 'read', model, agent: rb.name });
   const tally = { allowed: 0, denied: 0 };
   const refused = [];
   // Copilot ends its whole turn ("Operation cancelled by user") when a tool call is refused, so
@@ -2019,7 +2036,7 @@ function chatCredits(id, model = null) {
 function usageRun({ key, argv = [] }) {
   const c = chatByKey(key);
   if (!c) return { code: 1, stdout: '', stderr: 'Clearsky: this chat is closed.\n' };
-  if (backend().name !== 'copilot') return { code: 1, stdout: '', stderr: `Clearsky: usage is only counted for Copilot chats so far, not ${backend().label}; leave the line out.\n` };
+  if (c.agentName !== 'copilot') return { code: 1, stdout: '', stderr: `Clearsky: usage is only counted for Copilot chats so far, not ${backend(c.agentName).label}; leave the line out.\n` };
   if (process.env.COPILOT_DISCLOSE !== 'on') return { code: 1, stdout: '', stderr: 'Clearsky: saying what did the work is off (Settings → Copilot); leave the line out.\n' };
   const split = chatCredits(c.id, c.model);
   return { code: 0, stdout: `${argv.includes('--fields') ? disclosureFields(split) : disclosureLine(split)}\n`, stderr: '' };
@@ -2046,7 +2063,7 @@ const doorHints = () => [...doorsByName().values()].map(({ p, door }) => {
 // has `-p` for that).
 async function oneShot(bin, prompt, { model, timeoutMs = 120_000 } = {}) {
   const b = backend();
-  const agent = await startAgent(bin, b.args({ permission: 'read', model }), copilotCwd(), { permission: 'read', model });
+  const agent = await startAgent(bin, b.args({ permission: 'read', model }), copilotCwd(), { permission: 'read', model, agent: b.name });
   let text = '';
   agent.onUpdate = (u) => { if (u.sessionUpdate === 'agent_message_chunk' && u.content?.type === 'text') text += u.content.text; };
   const timer = setTimeout(() => agent.close(), timeoutMs);
@@ -2055,9 +2072,9 @@ async function oneShot(bin, prompt, { model, timeoutMs = 120_000 } = {}) {
   return text.trim();
 }
 
-// A short-lived Copilot process, for listing or reading sessions.
-async function withAgent(bin, fn) {
-  const agent = await startAgent(bin, [], copilotCwd());
+// A short-lived agent process (`name`, the default one if null), for listing or reading sessions.
+async function withAgent(name, fn) {
+  const agent = await startAgent(null, [], copilotCwd(), { agent: name });
   const timer = setTimeout(() => agent.close(), 30_000);
   try { return await fn(agent); } finally { clearTimeout(timer); agent.close(); }
 }
@@ -2073,7 +2090,6 @@ function isCopilot(pid) {
   try { return /copilot/i.test(readFileSync(`/proc/${pid}/cmdline`, 'utf8')); } catch { return false; }
 }
 function openCopilotSessions() {
-  if (backend().name !== 'copilot') return {}; // Copilot's own hold files
   const dir = join(copilotHome(), 'session-state');
   let state = {};
   try { state = JSON.parse(readFileSync(join(copilotHome(), 'open-sessions-state.json'), 'utf8')) || {}; } catch {}
@@ -2186,11 +2202,16 @@ export function sessionTitle(title, typed) {
   return own.trim().split('\n')[0].slice(0, 120) || 'Chat from Clearsky';
 }
 
-async function copilotSessions(bin, force) {
+// Sessions of every agent installed here, each with the agent it belongs to. One agent that
+// can't list them doesn't hide the other's (unless it's the only one).
+async function copilotSessions(_bin, force) {
   if (!force && sessionsCache && Date.now() - sessionsCache.at < 30_000) return withStatus(sessionsCache.data);
-  const list = await withAgent(bin, (a) => a.listSessions());
+  const names_ = installedAgents();
+  const lists = await Promise.allSettled(names_.map((n) => withAgent(n, (a) => a.listSessions()).then((l) => l.map((x) => ({ ...x, agent: n })))));
+  if (lists.every((x) => x.status === 'rejected')) throw lists[0].reason;
+  const list = lists.flatMap((x) => (x.status === 'fulfilled' ? x.value : []));
   const titles = localState.sessionTitles(stateFile), names = localState.sessionNames(stateFile);
-  const data = list.map((x) => ({ id: x.sessionId, title: names[x.sessionId] || sessionTitle(x.title, titles[x.sessionId]), cwd: x.cwd || null, updatedAt: x.updatedAt || null }))
+  const data = list.map((x) => ({ id: x.sessionId, agent: x.agent, title: names[x.sessionId] || sessionTitle(x.title, titles[x.sessionId]), cwd: x.cwd || null, updatedAt: x.updatedAt || null }))
     .sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0));
   sessionsCache = { at: Date.now(), data };
   return withStatus(data);
@@ -2286,8 +2307,8 @@ async function copilotLinks(bin) {
   const gh = sourceCache.get('github')?.data || {};
   // Copilot's own log: every branch a session worked on (workspace.yaml only has the one it
   // started or last resumed on), and the steps it took, for sessions from the last two weeks.
-  const log = backend().name === 'copilot'; // Copilot's session log (lib/copilot-events.mjs)
-  const events = new Map(recent.filter((x) => log && Date.now() - (Date.parse(x.updatedAt) || 0) < 14 * 864e5).map((x) => [x.id, sessionEvents(copilotHome(), x.id)]));
+  // Copilot's session log (lib/copilot-events.mjs).
+  const events = new Map(recent.filter((x) => x.agent === 'copilot' && Date.now() - (Date.parse(x.updatedAt) || 0) < 14 * 864e5).map((x) => [x.id, sessionEvents(copilotHome(), x.id)]));
   const cwdOf = new Map(recent.map((x) => [x.id, x.cwd]));
   const workspace = (id) => { const ws = workspaceInfo(id, cwdOf.get(id)); return { ...ws, branches: [...new Set([...(events.get(id)?.branches || []), ws.branch].filter(Boolean))] }; };
   const links = linkSessions(recent, { prs: [...(gh.myPrs || []), ...(gh.reviewRequested || [])], refs: localState.sessionRefs(stateFile), workspace });
@@ -2312,11 +2333,11 @@ async function copilotLinks(bin) {
 
 const refKey = (r) => (r.kind === 'issue' ? `issue:${r.key}` : `${r.kind}:${r.repo}#${r.number}`);
 
-async function copilotHistory(bin, id, cwd) {
-  const messages = await withAgent(bin, (a) => a.history(id, cwd));
+async function copilotHistory(_bin, id, cwd) {
+  const messages = await withAgent(sessionAgent(id), (a) => a.history(id, cwd));
   for (const m of messages) if (m.role === 'me') m.text = typedPart(m.text);
   // Copilot replays steps without times; its log has them.
-  const { times = {} } = backend().name === 'copilot' ? sessionEvents(copilotHome(), id) : {};
+  const { times = {} } = (sessionAgent(id) || backend().name) === 'copilot' ? sessionEvents(copilotHome(), id) : {};
   for (const m of messages) for (const g of m.segs || []) if (g.type === 'tool' && times[g.id]) Object.assign(g, times[g.id]);
   return messages;
 }
@@ -2466,7 +2487,7 @@ function noteBuild(c, u) {
 }
 
 const startingChats = new Map(); // chat → while its Copilot starts
-async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, scope = [], auto = false }) {
+async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, scope = [], auto = false, agent: agentPick = null }) {
   // One turn at a time in a chat: a message that comes while Clearsky's own turn runs (a job's
   // result, a nudge), or while the chat's Copilot starts, waits for it.
   for (;;) {
@@ -2479,10 +2500,14 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, s
   // Changing a chat's own folders (its side panel) does the same.
   const extra = chatFolders(chat);
   const dirs = [...copilotFolders(), ...extra, copilotTmp(), memory.memoryDir()].map((f) => f.replace(/^~(?=\/|$)/, homedir())).filter(isDir);
-  const args = backend().args({ ...options, folders: dirs });
+  // The chat's agent: the one it runs in already, else your pick for a new chat, else the rules.
+  const name = acpChats.get(chat)?.agentName || (resumeId && sessionAgent(resumeId)) || (AGENTS[agentPick] ? agentPick : null)
+    || chatAgent(chat, { cwd, repos: scope.filter((x) => x.repo).map((x) => x.repo) });
+  const b = backend(name);
+  const args = b.args({ ...options, folders: dirs });
   // Sandboxed mode always runs in srt; the others when Settings → Copilot → Sandbox says so.
   const sandbox = !!copilot.PERMISSIONS[options.permission]?.sandbox || process.env.COPILOT_SANDBOX === 'srt';
-  const sig = JSON.stringify([backend().name, args, dirs, options.permission, options.model, sandbox, process.env.COPILOT_DOMAINS, process.env.COPILOT_FOLDERS]);
+  const sig = JSON.stringify([b.name, args, dirs, options.permission, options.model, sandbox, process.env.COPILOT_DOMAINS, process.env.COPILOT_FOLDERS]);
   let c = acpChats.get(chat);
   // A new Copilot for the same chat keeps its VM, and the repos and Jira projects it works on.
   let keep = {};
@@ -2490,14 +2515,16 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, s
   let started = null;
   if (!c) startingChats.set(chat, new Promise((d) => { started = d; }));
   try { if (!c) {
-    const agent = await startAgent(bin, args, cwd, { sandbox, folders: extra, permission: options.permission, model: options.model, dirs });
-    c = { agent, sig, cwd, vm: keep.vm || null, repos: keep.repos || new Set(), jira: keep.jira || new Set(), tickets: keep.tickets || new Set(), waiting: new Map(), pending: new Map(), approved: new Set(), running: new Set(), shared: new Set(), emit: () => {}, lastUsed: Date.now() };
+    const agent = await startAgent(b.name === backend().name ? bin : null, args, cwd, { sandbox, folders: extra, permission: options.permission, model: options.model, dirs, agent: b.name });
+    c = { agent, agentName: b.name, sig, cwd, vm: keep.vm || null, repos: keep.repos || new Set(), jira: keep.jira || new Set(), tickets: keep.tickets || new Set(), waiting: new Map(), pending: new Map(), approved: new Set(), running: new Set(), shared: new Set(), emit: () => {}, lastUsed: Date.now() };
     bindVm(c);
     const id = await agent.start(cwd, resumeId);
     c.id = id;
     acpChats.set(id, c);
+    localState.setSessionAgent(stateFile, id, b.name);
     // A new chat gets Copilot's own session id; the panel keeps using that from now on.
     if (id !== chat) emit({ type: 'session', id });
+    emit({ type: 'agent', name: b.name });
   } } finally { if (started) { startingChats.delete(chat); started(); } }
   c.lastUsed = Date.now();
   c.mode = options.permission;
@@ -3261,7 +3288,7 @@ function serve() {
           try {
             const named = [...String(message).matchAll(/\b([A-Z][A-Z0-9_]+)-\d+\b/g)].map((m) => ({ kind: 'issue', key: m[0] }));
             watchdog.userMessage(body.session); // a message from you: a new task, so a fresh count of nudges
-            await acpTurn({ chat: body.session, options, prompt, resumeId: body.resume ? body.session : null, cwd, emit, res, bin: info.bin, scope: [...refs, ...named] });
+            await acpTurn({ chat: body.session, options, prompt, resumeId: body.resume ? body.session : null, cwd, emit, res, bin: info.bin, scope: [...refs, ...named], agent: AGENTS[body.agent] ? body.agent : null });
           } catch (e) { emit({ type: 'error', message: e.message }); }
           return res.end();
         }
@@ -3626,7 +3653,7 @@ function serve() {
         const busy = !!c?.busy;
         // A chat that only exists in this server so far may not be readable from disk yet.
         const messages = await copilotHistory(info.bin, histId, cwd).catch((e) => { if (c || busy) return []; throw e; });
-        return json(res, 200, { id: histId, cwd, home: homedir(), here: !!c, busy, messages, title: localState.sessionNames(stateFile)[histId] || null });
+        return json(res, 200, { id: histId, agent: c?.agentName || sessionAgent(histId) || backend().name, cwd, home: homedir(), here: !!c, busy, messages, title: localState.sessionNames(stateFile)[histId] || null });
       }
       const attach = url.pathname.match(/^\/api\/copilot\/sessions\/([\w-]{8,64})\/live$/)?.[1];
       if (attach) return attachCopilot(attach, req, res);

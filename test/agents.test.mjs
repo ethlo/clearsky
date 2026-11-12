@@ -122,3 +122,26 @@ test('a chat with Copilot sends no mode, and no folders it does not take', async
     assert.ok(!calls.some((c) => c.method === 'session/set_mode'));
   } finally { a.close(); }
 });
+
+test('a chat goes to the agent its folder or repo is set up for', async () => {
+  const { agentFor, agentRules } = await import('../lib/agents.mjs');
+  const env = { AGENT_CLAUDE_FOR: '~/private, me', AGENT_COPILOT_FOR: '~/private/work, acme/api, nope!' };
+  const o = { home: '/h', has: () => true };
+  assert.equal(agentRules(env, '/h').length, 4, 'a bad entry is left out');
+  assert.equal(agentFor({ cwd: '/h/private/notes' }, env, o), 'claude');
+  assert.equal(agentFor({ cwd: '/h/private/work/api' }, env, o), 'copilot', 'the deeper folder wins');
+  assert.equal(agentFor({ cwd: '/h/privateer' }, env, o), 'copilot', 'a folder only covers what is in it; else the default');
+  assert.equal(agentFor({ repos: ['Me/site'] }, env, o), 'claude', 'by owner');
+  assert.equal(agentFor({ cwd: '/h/private', repos: ['acme/api'] }, env, o), 'copilot', 'a repo wins over a folder');
+  assert.equal(agentFor({ cwd: '/tmp' }, { ...env, CLEARSKY_AGENT: 'claude' }, o), 'claude', 'nothing fits: the default');
+  assert.deepEqual(validate({ AGENT_CLAUDE_FOR: '~/private, me ,me' }), { AGENT_CLAUDE_FOR: '~/private, me' });
+  assert.throws(() => validate({ AGENT_COPILOT_FOR: 'not a thing!' }), /not a folder/);
+});
+
+test('each chat remembers its agent', async () => {
+  const { sessionAgents, setSessionAgent } = await import('../lib/state.mjs');
+  const file = join(mkdtempSync(join(tmpdir(), 'cs-state-')), 'state.json');
+  setSessionAgent(file, 'chat-1', 'claude');
+  setSessionAgent(file, 'chat-2', 'copilot');
+  assert.deepEqual(sessionAgents(file), { 'chat-1': 'claude', 'chat-2': 'copilot' });
+});

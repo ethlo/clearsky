@@ -848,7 +848,9 @@ function newChat() {
   chat.session = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   chat.cwd = null;
   chat.turns = 0;
+  chat.agent = null;
   chat.title = null; chat.items = [];
+  drawAgent();
   if (chat.info?.permissions) { pickDefaults(); saveCp(); }
   rememberChat();
   showHistory(false);
@@ -867,13 +869,37 @@ function pickDefaults() {
   $('#cp-perm').value = perm && i.permissions?.[perm] ? perm : 'ask';
 }
 
+// The chat's agent (lib/agents.mjs): a new chat may pick one (Auto: the rules in Settings →
+// Copilot); a chat that started keeps its own, shown but not changeable.
+function agentShown() {
+  const i = chat.info || {};
+  const name = chat.agent || $('#cp-agent').value;
+  return (i.agents || []).find((a) => a.name === name) || i.agent || {};
+}
+function drawAgent() {
+  const i = chat.info || {}, sel = $('#cp-agent');
+  const usable = (i.agents || []).filter((a) => a.available);
+  sel.hidden = usable.length < 2 && !i.rules;
+  if (!sel.hidden) {
+    const started = chat.agent;
+    sel.innerHTML = (started ? '' : `<option value="">Auto (${esc(i.rules ? 'by folder and repo' : i.agent?.label || '')})</option>`)
+      + (i.agents || []).filter((a) => a.available || a.name === chat.agent).map((a) => `<option value="${esc(a.name)}">${esc(a.label)}</option>`).join('');
+    sel.value = started ? chat.agent : (sel.dataset.pick || '');
+    sel.disabled = !!started;
+    sel.title = started ? `This chat runs in ${(i.agents || []).find((a) => a.name === chat.agent)?.label || chat.agent}` : 'The agent for this chat (Auto: Settings → Copilot decides by its folder and repo)';
+  }
+  const a = agentShown();
+  $('#cp-models').innerHTML = (a.models || i.models || []).map((m) => `<option value="${esc(m)}">`).join('');
+  $('#cp-effort').innerHTML = `<option value="">Balanced</option>${(a.efforts || []).map((e) => `<option>${esc(e)}</option>`).join('')}`;
+  $('#cp-effort').value = cpPrefs.effort || '';
+  // Claude Code has no effort picker here.
+  $('#cp-effort').hidden = !!a.name && !(a.efforts || []).length;
+}
+
 async function loadCopilotInfo() {
   try { chat.info = await getJson('/api/copilot'); } catch (e) { chat.info = { available: false, error: e.message }; }
   const i = chat.info;
-  $('#cp-models').innerHTML = (i.models || []).map((m) => `<option value="${esc(m)}">`).join('');
-  $('#cp-effort').innerHTML = `<option value="">Balanced</option>${(i.efforts || []).map((e) => `<option>${esc(e)}</option>`).join('')}`;
-  // Claude Code has no effort picker here (lib/agents.mjs).
-  $('#cp-effort').hidden = !!i.agent && !(i.efforts || []).length;
+  drawAgent();
   $('#cp-perm').innerHTML = Object.entries(i.permissions || {}).map(([k, l]) => `<option value="${k}" title="${esc(i.permissionHints?.[k] || '')}">${esc(l)}</option>`).join('');
   pickDefaults();
   $('#cp-skills').innerHTML = (i.skills || []).map((sk) =>
@@ -962,6 +988,8 @@ async function openSession(id, cwd) {
     const h = await getJson(`/api/copilot/sessions/${encodeURIComponent(id)}${q}`);
     if (chat.view !== view) return; // you picked another chat meanwhile
     chat.session = h.id; chat.cwd = h.cwd; chat.home = h.home; chat.turns = h.messages.filter((m) => m.role === 'me').length || 1;
+    chat.agent = h.agent || null;
+    drawAgent();
     restoreMode(h.id);
     chat.items = [];
     chat.title = h.title || h.messages.find((m) => m.role === 'me')?.text.trim().split('\n')[0].slice(0, 120) || null;
@@ -995,7 +1023,7 @@ function drawSessions() {
   const list = sessions.sessions.filter((x) => (!here || x.cwd === sessions.cwd) && (!q || `${x.title} ${x.cwd}`.toLowerCase().includes(q)));
   const folder = (d) => (d || '').split('/').filter(Boolean).pop() || d || '';
   $('#hist-list').innerHTML = list.map((x) => `<button class="hs${x.id === chat.session ? ' cur' : ''}" data-sid="${esc(x.id)}" data-cwd="${esc(x.cwd || '')}">
-      <b>${esc(x.title || 'Untitled session')}</b>
+      <b>${esc(x.title || 'Untitled session')}</b>${x.agent && (chat.info?.agents || []).filter((a) => a.available).length > 1 ? `<span class="hbadge agent" title="Runs in ${esc((chat.info.agents.find((a) => a.name === x.agent) || {}).label || x.agent)}">${esc(x.agent === 'claude' ? 'Claude' : 'Copilot')}</span>` : ''}
       <small>${x.updatedAt ? esc(ago(x.updatedAt)) : ''}${x.cwd ? ` · ${esc(folder(x.cwd))}` : ''}${x.limit ? ` · <span class="${x.context / x.limit >= TRIM.compact ? 'full' : ''}" title="How full its context is: ${Math.round(x.context / 1000)}k of ${Math.round(x.limit / 1000)}k tokens">${Math.round(100 * x.context / x.limit)}% full</span>` : ''}</small>${x.working ? '<span class="hbadge work">working</span>' : x.open ? '<span class="hbadge" title="Open in a terminal or editor">open</span>' : ''}${x.here ? '<span class="hbadge">live here</span>' : ''}
     </button>`).join('') || '<div class="chat-empty">No sessions match.</div>';
 }
@@ -1145,6 +1173,7 @@ async function send(text, extra = {}) {
     else if (e.type === 'permission' || e.type === 'error') segs.push(e);
     // Answered in another chat (a GitHub change asks in every sandboxed chat that's working).
     else if (e.type === 'permission-done') { const g = segs.find((x) => x.type === 'permission' && x.id === e.id); if (g && !g.answered) g.answered = e.expired ? 'Not answered before the turn ended' : 'Answered'; }
+    else if (e.type === 'agent') { if (here()) { chat.agent = e.name; drawAgent(); } }
     else if (e.type === 'session') { if (here()) { chat.session = e.id; rememberChat(); } rememberMode(e.id, mine.mode); mine.id = e.id; remember(e.id, chat.cwd, mine.title); if (extra.taskKey) markTask(extra.taskKey, { where: 'new', id: e.id }); drawTabs(); }
     else if (e.type === 'commands' && chat.info) chat.info.commands = e.commands;
     // A new chat about a PR or ticket is named after it, not after the skill or first words.
@@ -1167,7 +1196,7 @@ async function send(text, extra = {}) {
   drawCtx();
   try {
     const res = await fetchWithToken('/api/copilot', { method: 'POST', signal: ctrl.signal,
-      body: JSON.stringify({ message: extra.newTask ? text : skillPrompt(text), newTask: extra.newTask, attachments, files, session: chat.session, resume: chat.turns > 0, cwd: chat.cwd, refs, model: cpPrefs.model, effort: cpPrefs.effort, permission: $('#cp-perm').value }) });
+      body: JSON.stringify({ message: extra.newTask ? text : skillPrompt(text), newTask: extra.newTask, attachments, files, session: chat.session, resume: chat.turns > 0, cwd: chat.cwd, refs, model: cpPrefs.model, effort: cpPrefs.effort, permission: $('#cp-perm').value, agent: chat.agent ? undefined : $('#cp-agent').value || undefined }) });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
     const reader = res.body.getReader(), dec = new TextDecoder();
     let buf = '';
@@ -1331,6 +1360,8 @@ $('#cp-ref-add').onclick = openRefPick;
 $('#cp-refs').addEventListener('click', (e) => { const i = e.target.closest('[data-unref]')?.dataset.unref; if (i != null) { chat.refs.splice(+i, 1); drawRefs(); } });
 document.addEventListener('mousedown', (e) => { if (!e.target.closest('.ref-pick, #cp-ref-add')) closeRefPick(); });
 for (const id of ['#cp-model', '#cp-effort', '#cp-perm']) $(id).addEventListener('change', saveCp);
+// A new chat's agent: kept for the next new chat too, and its models and efforts shown.
+$('#cp-agent').addEventListener('change', () => { $('#cp-agent').dataset.pick = $('#cp-agent').value; drawAgent(); });
 $('#chat-form').onsubmit = (e) => {
   e.preventDefault();
   autoFixLast($('#chat-text'));

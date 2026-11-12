@@ -18,8 +18,8 @@ import { useGitHubIssues, milestones, milestoneRows, standupIssues } from './git
 // CLEARSKY_DEMO_TRACKER=github: GitHub Issues as the tracker instead of Jira (lib/tracker.mjs).
 const ghIssues = process.env.CLEARSKY_DEMO_TRACKER === 'github';
 // CLEARSKY_DEMO_AGENT=claude: chats in Claude Code instead of Copilot (lib/agents.mjs), with the
-// same stand-in.
-const claude = process.env.CLEARSKY_DEMO_AGENT === 'claude';
+// same stand-in; =both: both installed, Copilot by default and Claude Code for ~/dev/private.
+const claude = process.env.CLEARSKY_DEMO_AGENT === 'claude', both = process.env.CLEARSKY_DEMO_AGENT === 'both';
 if (ghIssues) useGitHubIssues();
 
 process.env.TZ ||= 'Europe/Oslo'; // the demo's clock, for Clearsky and the made-up meetings alike
@@ -132,6 +132,7 @@ writeFileSync(join(conf, '.env'), [
   `COPILOT_BIN=${join(here, 'copilot.mjs')}`, 'GRAFANA_INSTANCES=test=https://grafana.test.example.com,prod=https://grafana.example.com',
   'CLEARSKY_CURRENCY=EUR', 'CLEARSKY_FX_RATE=0.92', // made-up costs on the Usage page
   ...(claude ? ['CLEARSKY_AGENT=claude', `CLAUDE_ACP_BIN=${join(here, 'copilot.mjs')}`] : []),
+  ...(both ? [`CLAUDE_ACP_BIN=${join(here, 'copilot.mjs')}`, 'AGENT_CLAUDE_FOR=~/dev/private'] : []),
   ...(ghIssues ? ['TRACKER=github', 'GITHUB_STARRED_REPOS=acme/payments-api, acme/web-shop'] : []),
   `VPN_CHECK=127.0.0.1:${fake.address().port}`, // the made-up VPN is always on
 ].join('\n'), { mode: 0o600 });
