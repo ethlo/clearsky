@@ -115,6 +115,8 @@ for (const b of document.querySelectorAll('#refresh, [data-refresh="plan"]')) b.
 try { localStorage.removeItem('clearsky.hidden'); } catch {} // from the browser-only version
 renderToday();
 getJson('/api/sources').then((r) => {
+  applyTracker(r.tracker);
+  if (location.hash === '#versions') renderVersions();
   addSourcePanels(r.sources || []);
   for (const x of r.sources || []) { SOURCES.push(x.name); loadSource(x.name, false); }
 }).catch(() => {});

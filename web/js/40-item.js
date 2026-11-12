@@ -515,12 +515,12 @@ let standupData = null, suMoreOpen = false;
 // counts on its own (not inside a branch name like ABC-12-fix or a path), and only for the
 // projects given; without a list, anything but standards like RFC-9457 or ISO-8601.
 const NOT_JIRA = new Set(['RFC', 'ISO', 'IEC', 'IEEE', 'CVE', 'CWE', 'UTF', 'SHA', 'TLS', 'SSL', 'HTTP', 'AES', 'RSA', 'ECMA', 'UTC', 'GMT', 'JSR', 'PEP', 'W3C', 'EN', 'DIN', 'NIST', 'OWASP']);
-function linkify(text, jiraBase, { projects, shortRepo } = {}) {
+function linkify(text, jiraBase, { projects, shortRepo, jira = true } = {}) {
   const known = projects?.length ? new Set(projects) : null;
   return esc(text).replace(/\b([\w.-]+\/[\w.-]+)#(\d+)\b|(?<![\w/.-])([A-Z][A-Z0-9_]+-\d+)(?![\w-])/g, (m, repo, num, key) => {
     if (repo) return `<a class="ref" href="https://github.com/${repo}/pull/${num}" target="_blank" rel="noopener" data-pr="${repo}#${num}" title="${repo}#${num}">${shortRepo ? `${repo.split('/')[1]}#${num}` : m}</a>`;
     const p = key.split('-')[0];
-    if (known ? !known.has(p) : NOT_JIRA.has(p)) return m;
+    if (!jira || (known ? !known.has(p) : NOT_JIRA.has(p))) return m;
     return `<a class="ref" href="${jiraBase ? `${esc(jiraBase)}/browse/${key}` : '#'}" target="_blank" rel="noopener" data-issue="${key}">${key}</a>`;
   });
 }
@@ -533,10 +533,10 @@ function renderStandup() {
   }
   if (s.error) { $('#su-body').innerHTML = `<div class="err">${esc(s.error)}</div>`; return; }
   const at = new Date(s.nextStandup).toLocaleString([], { weekday: 'long', hour: '2-digit', minute: '2-digit', hourCycle: hourCycle() });
-  const errs = [s.yesterday.github.error && `GitHub: ${s.yesterday.github.error}`, s.yesterday.jira.error && `Jira: ${s.yesterday.jira.error}`].filter(Boolean);
+  const errs = [s.yesterday.github.error && `GitHub: ${s.yesterday.github.error}`, (s.yesterday.tickets || s.yesterday.jira)?.error && `${s.tracker === 'github' ? 'GitHub issues' : 'Jira'}: ${(s.yesterday.tickets || s.yesterday.jira).error}`].filter(Boolean);
   $('#su-sub').textContent = `For ${at} · since ${s.sinceLabel}`;
   const g = s.summary || { yesterday: [], today: [], blockers: [], details: [] };
-  const opts = { projects: s.jiraProjects, shortRepo: true };
+  const opts = { projects: s.jiraProjects, shortRepo: true, jira: !s.tracker || s.tracker === 'jira' };
   const list = (items) => `<ul>${items.map((i) => `<li>${linkify(i, s.jiraBase, opts)}</li>`).join('')}</ul>`;
   const card = (title, items, none) => `<section class="card su-card"><h2>${esc(title)}</h2>${items.length ? list(items) : `<p class="su-none">${esc(none)}</p>`}</section>`;
   // What to say, in a few sentences (Copilot writes it from the lists below; Generate asks it).
@@ -553,7 +553,7 @@ function renderStandup() {
 }
 
 let sayData = null;
-const sayHtml = (t) => t.split(/\n{2,}/).map((p) => `<p>${linkify(p.trim(), standupData?.jiraBase, { projects: standupData?.jiraProjects })}</p>`).join('');
+const sayHtml = (t) => t.split(/\n{2,}/).map((p) => `<p>${linkify(p.trim(), standupData?.jiraBase, { projects: standupData?.jiraProjects, jira: !standupData?.tracker || standupData.tracker === 'jira' })}</p>`).join('');
 async function loadSay(force) {
   sayData = { ...sayData, loading: true, error: null };
   renderStandup();

@@ -3,6 +3,23 @@
 
 const REFRESH_MS = 5 * 60 * 1000;
 let SOURCES = ['github', 'jira', 'jiraMentions', 'calendar'];
+// Where tickets live (lib/tracker.mjs), from /api/sources: { name: 'jira' | 'github' | 'none', label }.
+let TRACKER = { name: 'jira', label: 'Jira' };
+function applyTracker(t) {
+  if (t?.name) TRACKER = t;
+  const nav = document.querySelector('[data-nav="versions"]');
+  if (nav) {
+    nav.hidden = TRACKER.name === 'none';
+    nav.title = TRACKER.name === 'github' ? 'How far a milestone of your starred repos is' : 'How far a fix version of your starred Jira projects is';
+  }
+  const h = document.querySelector('#v-versions h1');
+  if (h) h.title = TRACKER.name === 'github' ? 'A milestone of a starred repo: its issues and PRs by status, with filters. Star repos here.' : 'A fix version of a starred Jira project: its tickets by status, with filters. Star projects here or in Settings → Plugins → Jira.';
+  const pick = document.querySelector('#ver-projects');
+  if (pick) {
+    pick.textContent = TRACKER.name === 'github' ? '☆ Repos' : '☆ Projects';
+    pick.title = TRACKER.name === 'github' ? 'Star the repos whose milestones you follow' : 'Star the Jira projects you follow';
+  }
+}
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 

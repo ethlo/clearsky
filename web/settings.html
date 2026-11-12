@@ -122,6 +122,10 @@
 <main>
   <section>
     <h2>General</h2>
+    <label for="TRACKER">Tickets live in<span class="more">Where your tickets are. <b>Jira</b> goes through the Atlassian CLI and its web login. <b>GitHub Issues</b> uses the GitHub login Clearsky already has: a PR belongs to the issues it closes ("Fixes #12"), and milestones are the versions. <b>Nowhere</b> leaves tickets out: the stand-up goes by PR and chat. Chats reach any of them with <code>ticket view|comment|move|new</code>. Left on automatic, it's Jira when Jira is set up on this machine, else GitHub Issues.</span></label>
+    <select id="TRACKER" data-key="TRACKER"><option value="">Automatic</option><option value="jira">Jira</option><option value="github">GitHub Issues</option><option value="none">Nowhere: no issue tracker</option></select>
+    <p class="hint" id="tracker-now"></p>
+    <div class="row"><button class="save" data-keys="TRACKER">Save</button><span class="msg"></span></div>
     <label for="CLEARSKY_STANDUP_TIME">Daily stand-up at</label>
     <input id="CLEARSKY_STANDUP_TIME" data-key="CLEARSKY_STANDUP_TIME" placeholder="09:45">
     <label for="CLEARSKY_WORKDAYS">Workdays (no stand-up on other days)</label>
@@ -132,7 +136,7 @@
     <input id="CLEARSKY_MENTION_DAYS" data-key="CLEARSKY_MENTION_DAYS" inputmode="numeric" placeholder="14">
     <label for="CLEARSKY_TIME_FORMAT">Clock</label>
     <select id="CLEARSKY_TIME_FORMAT" data-key="CLEARSKY_TIME_FORMAT"><option value="24">24-hour (14:30)</option><option value="12">12-hour (2:30 PM)</option></select>
-    <label for="CLEARSKY_POLL_MINUTES">Check GitHub, Jira mentions and plugins every … minutes</label>
+    <label for="CLEARSKY_POLL_MINUTES">Check GitHub, mentions and plugins every … minutes</label>
     <input id="CLEARSKY_POLL_MINUTES" data-key="CLEARSKY_POLL_MINUTES" inputmode="numeric" placeholder="3">
     <div class="row"><button class="save" data-keys="CLEARSKY_STANDUP_TIME,CLEARSKY_WORKDAYS,CLEARSKY_WORKDAY_END,CLEARSKY_MENTION_DAYS,CLEARSKY_TIME_FORMAT,CLEARSKY_POLL_MINUTES">Save</button><span class="msg"></span></div>
     <h3>Team pack<span class="more">Your team's shared setup: organizations, stand-up time, links and Copilot skills, from a git repo, an https link or a file the team keeps. Settings you changed yourself are kept. <code>clearsky team export</code> makes one from your settings.</span></h3>
@@ -187,9 +191,12 @@
       <input id="GITHUB_BUILD_REPOS" data-key="GITHUB_BUILD_REPOS" data-list data-words data-item="acme/api" placeholder="the ones your PRs and reviews are in" spellcheck="false" title="Each shows how its main branch builds and its newest artifact and release.">
       <label for="GITHUB_TOKEN">Or a personal access token instead of the gh login (optional)</label>
       <input id="GITHUB_TOKEN" data-key="GITHUB_TOKEN" type="password" autocomplete="off" placeholder="leave empty to keep">
-      <div class="row"><button class="save" data-keys="GITHUB_ORGS,GITHUB_MY_PRS,GITHUB_BUILD_REPOS,GITHUB_TOKEN">Save</button><span class="msg"></span></div>
+      <label for="GITHUB_STARRED_REPOS">Repos on the Versions page<span class="more">With GitHub Issues as your tracker, the <a href="/#versions">Versions</a> page shows these repos' milestones and their issues and PRs by status. You can also star them there with <b>☆ Repos</b>.</span></label>
+      <input id="GITHUB_STARRED_REPOS" data-key="GITHUB_STARRED_REPOS" data-list data-words data-item="acme/api" placeholder="none yet" spellcheck="false">
+      <div class="row"><button class="save" data-keys="GITHUB_ORGS,GITHUB_MY_PRS,GITHUB_BUILD_REPOS,GITHUB_STARRED_REPOS,GITHUB_TOKEN">Save</button><span class="msg"></span></div>
     </div>
     <div data-setup="jira">
+      <p class="hint" id="jira-unused" hidden>Not in use: your tickets live in <span id="jira-unused-where"></span> (Settings → <a href="/settings#general">General</a> → Tickets live in).</p>
       <p id="jira-detail"></p>
       <div class="row">
         <button id="jira-login">Log in to Atlassian</button>
@@ -228,6 +235,13 @@
 
   <section>
     <h2>Copilot</h2>
+    <label for="CLEARSKY_AGENT">Agent<span class="more">The coding agent behind your chats. <b>GitHub Copilot CLI</b> uses your Copilot login. <b>Claude Code</b> runs through its ACP adapter (<code>npm install -g @agentclientprotocol/claude-agent-acp</code>) with your Claude Code login (run <code>claude</code> once and <code>/login</code>). Modes, the sandbox and its doors, Allow/Deny cards and history work the same with both; Usage counts Copilot's credits only. Left on automatic, it's Copilot when it's installed, else Claude Code. New chats use the new agent; an open chat starts over in it on its next message.</span></label>
+    <select id="CLEARSKY_AGENT" data-key="CLEARSKY_AGENT"><option value="">Automatic</option><option value="copilot">GitHub Copilot CLI</option><option value="claude">Claude Code</option></select>
+    <p class="hint" id="agent-now"></p>
+    <label for="AGENT_COPILOT_FOR">Use Copilot for<span class="more">Chats here run in GitHub Copilot CLI whatever the agent above says: folders (<code>~/dev/work</code>), GitHub owners (<code>acme</code>) or repos (<code>acme/api</code>). A chat goes by its folder and the PR or issue it's about; a repo wins over a folder, a folder over an owner, and the deeper folder wins. A chat keeps the agent it started in, and the chat box lets you pick another for a new chat.</span></label>
+    <input id="AGENT_COPILOT_FOR" data-key="AGENT_COPILOT_FOR" data-list data-item="~/dev/work" placeholder="nothing set" spellcheck="false">
+    <label for="AGENT_CLAUDE_FOR">Use Claude Code for<span class="more">The same for Claude Code: say <code>~/dev/private</code> or your own GitHub user, and those chats run in Claude Code while work stays in Copilot.</span></label>
+    <input id="AGENT_CLAUDE_FOR" data-key="AGENT_CLAUDE_FOR" data-list data-item="~/dev/private" placeholder="nothing set" spellcheck="false">
     <p class="hint" style="margin:0 0 4px">Defaults for a new chat. A chat's own pickers still change that chat.</p>
     <label for="COPILOT_MODEL">Model</label>
     <input id="COPILOT_MODEL" data-key="COPILOT_MODEL" list="cp-models" placeholder="Copilot's default" spellcheck="false">
@@ -273,7 +287,7 @@
     <input id="COPILOT_NUDGES" data-key="COPILOT_NUDGES" inputmode="numeric" spellcheck="false" placeholder="3" style="max-width:8em">
     <label for="COPILOT_NUDGE_MINUTES">Nudge after (minutes) and stuck after (minutes)<span class="more">How long a chat stays quiet after its turn before the nudge, so you can answer first (1 to 60, empty is 2); and how long a turn may go with no word and nothing running before it counts as stuck (5 to 120, empty is 15). A build or test that's running never counts as stuck.</span></label>
     <div class="row"><input id="COPILOT_NUDGE_MINUTES" data-key="COPILOT_NUDGE_MINUTES" inputmode="numeric" spellcheck="false" placeholder="2" style="max-width:8em"> <input id="COPILOT_STUCK_MINUTES" data-key="COPILOT_STUCK_MINUTES" aria-label="Stuck after, in minutes" inputmode="numeric" spellcheck="false" placeholder="15" style="max-width:8em"></div>
-    <div class="row"><button class="save" data-keys="COPILOT_MODEL,COPILOT_EFFORT,COPILOT_PERMISSION,COPILOT_CWD,COPILOT_FOLDERS,COPILOT_ASSISTED_ALLOW,COPILOT_SANDBOX,COPILOT_SANDBOX_TOKEN,COPILOT_DISCLOSE,COPILOT_READ,COPILOT_DOMAINS,COPILOT_READ_HOSTS,COPILOT_VM_IMAGES,COPILOT_GATE_RULES,COPILOT_VM_CPUS,COPILOT_VM_MEMORY_GB,COPILOT_BUILDS,COPILOT_VM_MAX,COPILOT_NUDGES,COPILOT_NUDGE_MINUTES,COPILOT_STUCK_MINUTES">Save</button><span class="msg"></span></div>
+    <div class="row"><button class="save" data-keys="COPILOT_MODEL,COPILOT_EFFORT,COPILOT_PERMISSION,COPILOT_CWD,COPILOT_FOLDERS,COPILOT_ASSISTED_ALLOW,COPILOT_SANDBOX,COPILOT_SANDBOX_TOKEN,COPILOT_DISCLOSE,COPILOT_READ,COPILOT_DOMAINS,COPILOT_READ_HOSTS,COPILOT_VM_IMAGES,COPILOT_GATE_RULES,COPILOT_VM_CPUS,COPILOT_VM_MEMORY_GB,COPILOT_BUILDS,COPILOT_VM_MAX,COPILOT_NUDGES,COPILOT_NUDGE_MINUTES,COPILOT_STUCK_MINUTES,CLEARSKY_AGENT,AGENT_COPILOT_FOR,AGENT_CLAUDE_FOR">Save</button><span class="msg"></span></div>
     <h3 id="cost" style="margin-top:28px">Credits and cost<span class="more">The <a href="/#usage">Usage</a> page adds up the AI credits every chat used, from Copilot's own session logs, and shows what they cost. Credits become dollars at the price below (check your Copilot plan), and dollars become your currency at your rate. With the live rate on, Clearsky looks the rate up once a day from the European Central Bank's public rates (frankfurter.dev, no account or token); if that fails it uses your rate.</span></h3>
     <label for="COPILOT_CREDIT_USD">Dollars per credit</label>
     <input id="COPILOT_CREDIT_USD" data-key="COPILOT_CREDIT_USD" inputmode="decimal" spellcheck="false" placeholder="0.01" style="max-width:8em">
@@ -465,6 +479,12 @@ function render(s) {
   syncCalPick();
 
 
+  const tr = s.tracker || {};
+  $('#TRACKER').value = tr.set || '';
+  $('#tracker-now').textContent = tr.now ? `${tr.set ? 'In use' : 'Automatic picks'}: ${tr.now.label}.` : '';
+  $('#GITHUB_STARRED_REPOS').value = tr.starredRepos || '';
+  $('#jira-unused').hidden = !tr.now || tr.now.name === 'jira';
+  $('#jira-unused-where').textContent = tr.now?.name === 'github' ? 'GitHub Issues' : 'no tracker';
   $('#CLEARSKY_WORKDAY_END').value = s.workdayEnd || '';
   $('#CLEARSKY_STANDUP_TIME').value = s.standupTime || '';
   $('#CLEARSKY_WORKDAYS').value = s.workdays || '';
@@ -483,6 +503,9 @@ function render(s) {
   um.innerHTML = cp.unmounted?.length ? `Not in Clearsky's container: ${cp.unmounted.map((f) => `<code>${esc(f)}</code>`).join(', ')}. Save, then run <code>clearsky docker up</code> on your machine: it mounts the folders set here (Clearsky restarts).` : '';
   $('#COPILOT_CWD').value = cp.cwd || '';
   $('#COPILOT_MODEL').value = cp.model || '';
+  $('#CLEARSKY_AGENT').value = cp.agent || '';
+  $('#AGENT_COPILOT_FOR').value = cp.copilotFor || '';
+  $('#AGENT_CLAUDE_FOR').value = cp.claudeFor || '';
   $('#COPILOT_ASSISTED_ALLOW').value = cp.assistedAllow || '';
   $('#COPILOT_SANDBOX_TOKEN').placeholder = cp.sandboxToken ? `${cp.sandboxToken}; paste a new one to replace` : 'leave empty to use your gh login';
   $('#COPILOT_SANDBOX').value = cp.sandbox || 'off';
@@ -512,6 +535,10 @@ function render(s) {
   // The choices come from Copilot itself (models you've used, its access modes).
   fetch('/api/copilot').then((r) => r.json()).then((i) => {
     $('#cp-models').innerHTML = (i.models || []).map((m) => `<option value="${esc(m)}">`).join('');
+    if (i.agent) $('#agent-now').innerHTML = `Chats run in <b>${esc(i.agent.product)}</b>${i.agent.available ? '' : `, which isn't installed: <code>${esc(i.agent.install?.command || '')}</code>`}${i.rules ? ', unless a list below says otherwise' : ''}.`;
+    $('#COPILOT_MODEL').placeholder = i.agent?.name === 'claude' ? "Claude Code's default" : "Copilot's default";
+    // Claude Code has no effort setting here.
+    $('#COPILOT_EFFORT').hidden = $('label[for="COPILOT_EFFORT"]').hidden = !(i.efforts || []).length;
     $('#COPILOT_EFFORT').innerHTML = `<option value="">Copilot's default</option>${(i.efforts || []).map((e) => `<option>${esc(e)}</option>`).join('')}`;
     $('#COPILOT_PERMISSION').innerHTML = Object.entries(i.permissions || {}).map(([k, l]) => `<option value="${k === 'ask' ? '' : esc(k)}">${esc(l)}${i.permissionHints?.[k] ? ` · ${esc(i.permissionHints[k])}` : ''}</option>`).join('');
     $('#COPILOT_EFFORT').value = cp.effort || '';
