@@ -2124,8 +2124,8 @@ const PR_HINT = 'When you open a PR or finish a round of work on one, write (or 
 // text into ADF (lib/to-adf.mjs), so Copilot writes plain Markdown and leaves the format to it.
 export const JIRA_HINT = 'When you write a Jira description or comment with `acli`, write it in Markdown (`## Heading`, `- item`, `1. step`, '
   + '`**bold**`, `` `code` ``, ``` fences, `[text](url)`), not Jira wiki markup (`h3.`, `{{code}}`), and don\'t build ADF JSON yourself. Pass it with `--description` or '
-  + '`--body`; for longer text, write it to a file in this folder or in $TMPDIR (not /tmp) and use `--description-file` or `--body-file` (`comment update` too: '
-  + 'give it `--body-file`). Clearsky turns the text into ADF and hands acli the file and flag it needs, with the path made absolute, so the headings and lists '
+  + '`--body`; for longer text, write it to a file in this folder or in $TMPDIR (not /tmp) and use `--description-file` or `--body-file` (`comment update` too; acli has no `--body-adf`).'
+  + ' Clearsky turns the text into ADF and hands acli the file and flag it needs, with the path made absolute, so the headings and lists '
   + 'show as such. If a ticket still shows raw Markdown, say so instead of working around it.';
 // Where tickets live, for every chat, and for Jira how to write to it.
 const trackerHints = (t = tracker()) => (t === 'jira' ? `${trackerHint('jira')} ${JIRA_HINT}` : trackerHint(t));
