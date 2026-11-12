@@ -63,6 +63,7 @@ import { joinPack, joinSummary, readTeam, exportPack, TEAM_KEYS, applyWaiting, p
 import { scaffoldPack, writeScaffold, nextSteps } from '../lib/team-scaffold.mjs';
 import { NEW_TASK_HINT, cleanNewTask, newTaskPrompt } from '../lib/new-task.mjs';
 import { trackerName, TRACKERS, trackerHint, ghIssue } from '../lib/tracker.mjs';
+import { reviewGate } from '../lib/review-gate.mjs';
 import { agentName, agentFor, AGENTS, AGENT_NAMES } from '../lib/agents.mjs';
 import { readHandoffs, saveHandoffs, addHandoff, nextHandoff, settleAfterRestart, handoffPrompt, handoffResult, updateHandoff } from '../lib/handoff.mjs';
 import { srtInstalled } from '../lib/doctor.mjs';
@@ -1176,6 +1177,8 @@ function copilotEnv(b = backend()) {
   // (scripts/acli-bin; in the sandbox, the broker does it).
   const acliBin = join(here, '..', 'scripts', 'acli-bin');
   env.CLEARSKY_ACLI = config.jira.acli;
+  // Where the wrapper asks whether a ticket's PR has a reviewer before it goes to review (lib/review-gate.mjs).
+  env.CLEARSKY_URL = `http://127.0.0.1:${config.port}`;
   // `ticket …` for any tracker (scripts/ticket-bin, lib/tracker.mjs).
   env.CLEARSKY_TRACKER = tracker();
   env.PATH = [...new Set([acliBin, join(here, '..', 'scripts', 'ticket-bin'), ...dirs, ...(env.PATH || '').split(delimiter).filter(Boolean)])].join(delimiter);
@@ -1276,7 +1279,7 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   // asks you in this chat. The key tells Clearsky which chat a request comes from.
   const key = randomBytes(16).toString('hex');
   if (process.platform === 'linux') {
-    broker ||= serveBroker({ bins: { acli: config.jira.acli }, allow: assistedAllow, ask: brokerAsk, where: brokerWhere, vm: vmSupport().ok ? vmRun : null, doors: pluginDoor, review: reviewRun, usage: usageRun, jobs: jobsDoor, reads: () => [copilotTmp()], log: console.log });
+    broker ||= serveBroker({ bins: { acli: config.jira.acli }, gate: ({ argv }) => reviewGate(argv, (k) => ghModule.ticketPrs(k, { fresh: true })), allow: assistedAllow, ask: brokerAsk, where: brokerWhere, vm: vmSupport().ok ? vmRun : null, doors: pluginDoor, review: reviewRun, usage: usageRun, jobs: jobsDoor, reads: () => [copilotTmp()], log: console.log });
     Object.assign(env, { CLEARSKY_BROKER_SOCKET: brokerSocket(), CLEARSKY_BROKER_KEY: key });
     env.PATH = `${join(here, '..', 'scripts', 'sandbox-bin')}${delimiter}${env.PATH}`;
   }
@@ -3709,7 +3712,7 @@ function serve() {
         return json(res, 200, { ...d, summary: versionSummary(d.issues) });
       }
       const prsFor = url.pathname.match(/^\/api\/issue\/([A-Z][A-Z0-9_]+-\d+)\/prs$/)?.[1];
-      if (prsFor) return json(res, 200, await ghModule.ticketPrs(prsFor));
+      if (prsFor) return json(res, 200, await ghModule.ticketPrs(prsFor, { fresh: url.searchParams.has('fresh') }));
       // Builds: each repo's main branch, its checks and its newest artifact and release.
       if (url.pathname === '/api/servers') {
         const file = join(homedir(), '.ssh', 'config');

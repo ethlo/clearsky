@@ -24,6 +24,19 @@ function realAcli() {
   const bin = realAcli();
   if (!bin) { process.stderr.write('acli: not found on PATH (Settings → Jira names it)\n'); process.exit(127); }
   let argv = process.argv.slice(2), tmp = null;
+  // A ticket goes to review only once a person is asked to review its PR (lib/review-gate.mjs);
+  // Clearsky's own API says who is on it. If Clearsky doesn't answer, acli runs as usual.
+  if (acliWrites(argv) && process.env.CLEARSKY_URL) {
+    try {
+      const { reviewGate } = await import('../../lib/review-gate.mjs');
+      const held = await reviewGate(argv, async (key) => {
+        const r = await fetch(`${process.env.CLEARSKY_URL}/api/issue/${encodeURIComponent(key)}/prs?fresh`, { signal: AbortSignal.timeout(20_000) });
+        if (!r.ok) throw new Error(`${r.status}`);
+        return r.json();
+      });
+      if (held) { process.stderr.write(held); process.exit(1); }
+    } catch (e) { process.stderr.write(`acli (Clearsky): couldn't check for a reviewer: ${e.message}\n`); }
+  }
   if (acliWrites(argv)) {
     try {
       const { adfArgs } = await import('../../lib/to-adf.mjs');

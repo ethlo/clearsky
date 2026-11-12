@@ -40,6 +40,7 @@ Things may already be done, by me or by an earlier session. Before each step, ch
 
 - **Reviewers:** list who is already requested (`gh pr view --json reviewRequests,reviews`). Don't request someone again who is still requested, or who reviewed after the last commit, unless I ask.
 - **Ticket status:** read it first. Don't move a ticket that is already in the target status or further on.
+- **Code review:** a ticket goes to Code review (or In Review) only once a person is asked to review its PR (`gh pr view --json reviewRequests,reviews`). Opening the PR isn't enough, and Copilot's reviewer doesn't count: until a person is on it, the ticket stays In Progress. Clearsky holds a move to review before that.
 - **Pushes:** compare the local branch with the remote (`git status -sb`). Don't push or commit again when there's nothing new.
 - **Review threads:** skip threads I or you already answered, resolved threads, and outdated ones. Copilot's reviewer bot (`copilot-pull-request-reviewer`) leaves suggestions after every push; treat them as optional unless I say otherwise.
 
