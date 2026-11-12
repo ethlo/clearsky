@@ -18,6 +18,8 @@ const SITE = `https://${readFileSync(join(root, 'site', 'CNAME'), 'utf8').trim()
 // Markdown that becomes a page: source (from the repo root) → page (in the site).
 const PAGES = [
   { src: 'README.md', out: 'guide.html', title: 'Guide', lead: 'Everything Clearsky does, and how to set each part up.' },
+  { src: 'docs/trackers.md', out: 'docs/trackers.html' },
+  { src: 'docs/agents.md', out: 'docs/agents.html' },
   { src: 'docs/architecture.md', out: 'docs/architecture.html' },
   { src: 'docs/plugins.md', out: 'docs/plugins.html' },
   { src: 'docs/team-pack.md', out: 'docs/team-pack.html' },
@@ -27,6 +29,7 @@ const FILES = ['docs/architecture.svg']; // copied as they are, for the pages ab
 
 const MENU = [
   ['Start', [['Getting started', 'getting-started.html'], ['On Windows', 'docs/windows.html'], ['Guide', 'guide.html']]],
+  ['Your tools', [['Where your tickets live', 'docs/trackers.html'], ['The agent behind your chats', 'docs/agents.html']]],
   ['Design docs', [['How Clearsky works', 'docs/architecture.html'], ['Plugins', 'docs/plugins.html'], ['Team packs', 'docs/team-pack.html']]],
 ];
 

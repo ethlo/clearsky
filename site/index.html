@@ -1,8 +1,8 @@
-<!-- title: Clearsky: what needs you at work, on one local page | One local page for reviews, your PRs, Jira tickets, mentions, meetings and stand-up, with a sandboxed GitHub Copilot chat next to it. Runs on your machine with your own logins. -->
+<!-- title: Clearsky: what needs you at work, on one local page | One local page for reviews, your PRs, tickets, mentions, meetings and stand-up, with a sandboxed coding agent next to it. Use Jira, GitHub Issues or no tracker, and GitHub Copilot or Claude Code. Runs on your machine with your own logins. -->
 <section class="hero">
   <span class="eyebrow">Free and open source · Linux, macOS, Windows</span>
   <h1>What needs you at work, <em>on one local page</em></h1>
-  <p class="lead">Reviews, your PRs, Jira tickets, mentions, today's meetings and a stand-up summary, with a GitHub Copilot chat next to it that runs in a sandbox. On your own machine, with your own logins, and no tokens.</p>
+  <p class="lead">Reviews, your PRs, your tickets, mentions, today's meetings and a stand-up summary, with a coding agent next to it that runs in a sandbox. Bring the tools you already use: Jira, GitHub Issues or no tracker at all, and GitHub Copilot or Claude Code. On your own machine, with your own logins, and no tokens.</p>
   <div class="cta">
     <a class="btn primary" href="getting-started.html">Get started</a>
     <a class="btn ghost" href="#try">Try it with demo data</a>
@@ -11,7 +11,7 @@
   <div class="shot">
     <picture>
       <source srcset="img/work-dark.webp" media="(prefers-color-scheme: dark)">
-      <img src="img/work.webp" width="1600" height="1000" alt="Clearsky's Work list: review requests, your PRs, mentions from GitHub, Jira and Slack, and your tickets, grouped by whose move it is">
+      <img src="img/work.webp" width="1600" height="1000" alt="Clearsky's Work list: review requests, your PRs, mentions and your tickets, grouped by whose move it is">
     </picture>
   </div>
 </section>
@@ -22,7 +22,7 @@
       <div class="card">
         <div class="icon"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></div>
         <h3>Yours, on your machine</h3>
-        <p>It runs on 127.0.0.1 with the logins you already have (<code>gh</code>, <code>acli</code>). No tokens to make, no server, no account. Nothing is kept anywhere else.</p>
+        <p>It runs on 127.0.0.1 with the logins you already have, such as <code>gh</code>. No tokens to make, no server, no account. Nothing is kept anywhere else.</p>
       </div>
       <div class="card">
         <div class="icon"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/><circle cx="19" cy="16" r="2.5"/></svg></div>
@@ -31,33 +31,60 @@
       </div>
       <div class="card">
         <div class="icon"><svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg></div>
-        <h3>Copilot in a sandbox</h3>
-        <p>Copilot works in your clone, fenced to your folders. A push, a Jira change or a new host waits until you click Allow.</p>
+        <h3>Your agent, in a sandbox</h3>
+        <p>Copilot or Claude Code works in your clone, fenced to your folders. A push, a ticket change or a new host waits until you click Allow.</p>
       </div>
     </div>
   </div>
 </section>
 
-<section class="section">
+<section class="section" id="tools">
+  <div class="in">
+    <h2>Works with what you already use</h2>
+    <p class="sub">Clearsky doesn't pick your tools for you. Choose on the welcome page or in Settings, change your mind any time, and let a team pack set it for everyone.</p>
+    <div class="choices">
+      <div class="card">
+        <h3>Where your tickets live</h3>
+        <p>Your tickets, the tickets behind a PR, the stand-up and the Versions page come from the tracker you pick. Chats use one <code>ticket</code> command for all of them.</p>
+        <div class="opts"><span>Jira</span><span>GitHub Issues</span><span>No tracker</span></div>
+        <p class="more"><a href="docs/trackers.html">Compare the trackers →</a></p>
+      </div>
+      <div class="card">
+        <h3>The agent behind your chats</h3>
+        <p>The chat panel, its Allow and Deny cards, skills, background jobs and the sandbox work the same with either. Use both: one for work repos, the other for the rest.</p>
+        <div class="opts"><span>GitHub Copilot CLI</span><span>Claude Code</span><span>Both, by folder or repo</span></div>
+        <p class="more"><a href="docs/agents.html">Compare the agents →</a></p>
+      </div>
+      <div class="card">
+        <h3>Everything else is a plugin</h3>
+        <p>GitHub and your calendar are built in. Slack, Confluence, Grafana and more are plugins you add if you use them, each in a sandbox of its own.</p>
+        <div class="opts"><span>Slack</span><span>Confluence</span><span>Grafana</span><span>Your own</span></div>
+        <p class="more"><a href="docs/plugins.html">About plugins →</a></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section alt">
   <div class="in">
     <div class="feature">
       <div class="text">
         <div class="tag">Work</div>
         <h3>Every review, PR, ticket and mention in one list</h3>
-        <p>GitHub, Jira and Slack in one place, grouped by what each one needs from you. Each row says the next step: review it, read the new commits, fix the failing checks, reply.</p>
+        <p>GitHub, your tracker and plugins such as Slack in one place, grouped by what each one needs from you. Each row says the next step: review it, read the new commits, fix the failing checks, reply.</p>
         <ul>
           <li>Bots don't count as reviewers, and threads you answered last aren't yours</li>
           <li>Knows which code in your PRs you haven't read yourself</li>
           <li><kbd>J</kbd> <kbd>K</kbd> to move, <kbd>E</kbd> done, <kbd>H</kbd> snooze, <kbd>Ctrl</kbd> <kbd>K</kbd> to find anything</li>
         </ul>
       </div>
-      <div class="frame"><img src="img/item.webp" width="1200" height="692" loading="lazy" alt="A pull request opened in Clearsky with its details, checks and Copilot chats"></div>
+      <div class="frame"><img src="img/item.webp" width="1200" height="692" loading="lazy" alt="A pull request opened in Clearsky with its details, checks and agent chats"></div>
     </div>
 
     <div class="feature flip">
       <div class="text">
-        <div class="tag">Copilot</div>
-        <h3>A Copilot chat on any PR or ticket</h3>
+        <div class="tag">Agent chat</div>
+        <h3>A coding agent on any PR or ticket</h3>
         <p>Start a chat from any row and it opens in the right clone or worktree, with the PR or ticket attached. It can run long builds in the background, have a fresh reviewer look at its change before it opens a PR, and keep notes you approve.</p>
         <ul>
           <li>Background jobs that wake the chat when they're done</li>
@@ -65,14 +92,14 @@
           <li>Writes comments and PR descriptions the way you do</li>
         </ul>
       </div>
-      <div class="frame"><img src="img/copilot.webp" width="1200" height="920" loading="lazy" alt="A Copilot chat fixing review feedback: it ran tests in a VM, reviewed its own change and pushed"></div>
+      <div class="frame"><img src="img/copilot.webp" width="1200" height="920" loading="lazy" alt="An agent chat fixing review feedback: it ran tests in a VM, reviewed its own change and pushed"></div>
     </div>
 
     <div class="feature">
       <div class="text">
         <div class="tag">Stand-up</div>
         <h3>Your stand-up, already written</h3>
-        <p>Yesterday, today and blockers from what you actually did: PRs opened and reviewed, tickets moved, what Copilot did for you. Copy it into Slack, or let Copilot tidy it up.</p>
+        <p>Yesterday, today and blockers from what you actually did: PRs opened and reviewed, tickets moved, what your agent did for you. Copy it wherever your team posts it, or let the agent tidy it up.</p>
         <p>Next to it, <strong>Now / Next</strong> shows your next meeting, how long you're free, and work that fits the gap.</p>
       </div>
       <div class="frame"><img src="img/standup.webp" width="1200" height="938" loading="lazy" alt="The stand-up page with Yesterday, Today and Blockers filled in"></div>
@@ -80,21 +107,21 @@
   </div>
 </section>
 
-<section class="section alt">
+<section class="section">
   <div class="in">
     <h2>A sandbox that asks before anything leaves</h2>
-    <p class="sub">Clearsky doesn't try to judge shell commands. Copilot runs inside a sandbox that keeps it to your folders and allowed hosts, and a few doors lead out. Your GitHub login never enters the sandbox.</p>
+    <p class="sub">Clearsky doesn't try to judge shell commands. Your agent runs inside a sandbox that keeps it to your folders and allowed hosts, and a few doors lead out. Your GitHub login never enters the sandbox.</p>
     <div class="doors">
       <div class="door"><span class="k go">reads</span><div><b>Reading goes through</b><span>Fetching, browsing PRs and tickets, reading code and logs.</span></div></div>
       <div class="door"><span class="k ask">asks</span><div><b>A push or a GitHub write waits</b><span>However the command was written: the proxy sees the request, and you click Allow.</span></div></div>
-      <div class="door"><span class="k ask">asks</span><div><b>Jira changes and new hosts</b><span>Reads run at once. A transition, a comment or an unknown host asks first.</span></div></div>
+      <div class="door"><span class="k ask">asks</span><div><b>Ticket changes and new hosts</b><span>Reads run at once. Moving a ticket, a comment or an unknown host asks first, in Jira and GitHub alike.</span></div></div>
       <div class="door"><span class="k ask">asks</span><div><b>Anything outside</b><span><code>outside &lt;cmd&gt;</code> for what can't run in the sandbox, such as tests that start Docker.</span></div></div>
     </div>
     <p style="margin-top:24px"><a href="docs/architecture.html">How Clearsky works →</a></p>
   </div>
 </section>
 
-<section class="section">
+<section class="section alt">
   <div class="in">
     <div class="feature">
       <div class="text">
@@ -109,7 +136,7 @@
   </div>
 </section>
 
-<section class="section alt" id="try">
+<section class="section" id="try">
   <div class="in start">
     <div>
       <h2>Up in a minute</h2>

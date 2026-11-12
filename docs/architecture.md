@@ -6,11 +6,11 @@ Written 2026-10-29. This covers the shape of the system. The README covers setup
 
 Clearsky is one local page that shows what needs your attention at work, and next to it a few personal things:
 
-- **Work:** GitHub reviews and PRs, Jira tickets and mentions, Slack mentions.
+- **Work:** GitHub reviews and PRs, tickets and mentions from Jira or GitHub Issues (or none, see [Where your tickets live](trackers.md)), and plugins such as Slack.
 - **Personal:** school messages.
 - **Both:** the calendar, shown as today's schedule.
 
-It runs on the laptop, uses the logins already there, has no dependencies beyond Node 22, and sends nothing anywhere except to the services it reads.
+The chat next to it runs in GitHub Copilot CLI or Claude Code ([The agent behind your chats](agents.md)). Below, "Copilot" stands for either. It runs on the laptop, uses the logins already there, has no dependencies beyond Node 22, and sends nothing anywhere except to the services it reads.
 
 ![Browser, local server, sources, and Copilot, all on the laptop](architecture.svg)
 

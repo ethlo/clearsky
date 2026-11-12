@@ -1,4 +1,4 @@
-<!-- title: Getting started | Install Clearsky, try it with demo data, log in to GitHub and Jira, and make it yours. -->
+<!-- title: Getting started | Install Clearsky, try it with demo data, pick your tracker and coding agent, log in, and make it yours. -->
 <!--side-->
 <h1>Getting started</h1>
 <p class="lead">From nothing to your own work list in a few minutes. Clearsky runs on your machine with the logins you already have, and asks for no tokens.</p>
@@ -6,7 +6,12 @@
 <ol class="steps">
 <li>
 <h2 id="what-you-need">What you need</h2>
-<p><a href="https://nodejs.org">Node 22</a> or newer, and git. For real data you also want the <a href="https://cli.github.com">GitHub CLI</a> and, if you use Jira, the <a href="https://developer.atlassian.com/cloud/acli/guides/install-acli/">Atlassian CLI</a>. For the Copilot chat, the GitHub Copilot CLI. The welcome page tells you what's missing, with the command for your system.</p>
+<p><a href="https://nodejs.org">Node 22</a> or newer, and git. For real data you also want the <a href="https://cli.github.com">GitHub CLI</a>. The rest depends on what you use, and you only need what you pick:</p>
+<ul>
+  <li><strong>Tickets:</strong> nothing more for GitHub Issues or no tracker. For Jira, the <a href="https://developer.atlassian.com/cloud/acli/guides/install-acli/">Atlassian CLI</a>.</li>
+  <li><strong>Agent chats:</strong> the GitHub Copilot CLI, Claude Code's ACP adapter, or both. Without either, everything but the chats still works.</li>
+</ul>
+<p>The welcome page tells you what's missing, with the command for your system.</p>
 <div class="os">
   <div><b>Linux</b>Everything, including the sandbox (bubblewrap, socat, ripgrep).</div>
   <div><b>macOS</b>Everything; the sandbox uses the system's own.</div>
@@ -19,24 +24,25 @@
 <pre><code>git clone https://github.com/ethlo/clearsky
 cd clearsky
 sh scripts/install.sh</code></pre>
-<p>This puts <code>clearsky</code> on your PATH, adds the sandbox runtime for Copilot, and makes <code>~/.config/clearsky</code>, readable only by you. It never uses sudo: anything that needs a system package is listed with the command to install it. Run it again any time to update.</p>
+<p>This puts <code>clearsky</code> on your PATH, adds the sandbox runtime for agent chats, and makes <code>~/.config/clearsky</code>, readable only by you. It never uses sudo: anything that needs a system package is listed with the command to install it. Run it again any time to update.</p>
 <div class="note"><b>Options:</b> <code>--service</code> starts Clearsky at login, <code>--no-sandbox</code> leaves the sandbox out. Without the installer, <code>node bin/clearsky.mjs serve</code> works straight from the checkout.</div>
 </li>
 
 <li>
 <h2 id="try-it">Try it with demo data</h2>
 <pre><code>clearsky try</code></pre>
-<p>This opens Clearsky on <a href="http://127.0.0.1:7790">127.0.0.1:7790</a> with a made-up company, Acme: its PRs, tickets, meetings, a stand-up and a Copilot chat. It needs no logins and reads nothing of yours, so it's also the way to show Clearsky to someone else. <strong>Leave demo</strong> in the menu, or Ctrl+C, stops it and removes its data.</p>
+<p>This opens Clearsky on <a href="http://127.0.0.1:7790">127.0.0.1:7790</a> with a made-up company, Acme: its PRs, tickets, meetings, a stand-up and an agent chat. It needs no logins and reads nothing of yours, so it's also the way to show Clearsky to someone else. <strong>Leave demo</strong> in the menu, or Ctrl+C, stops it and removes its data.</p>
 </li>
 
 <li>
 <h2 id="start">Start it for real</h2>
 <pre><code>clearsky serve      # http://127.0.0.1:7777
 clearsky app        # or in a window of its own</code></pre>
-<p>The first time, a <strong>welcome page</strong> checks what this machine has (Node, git, gh, acli, Copilot, the sandbox, a calendar) and logs you in with a button each:</p>
+<p>The first time, a <strong>welcome page</strong> checks what this machine has (Node, git, gh, your tracker's and agent's CLIs, the sandbox, a calendar), asks where your tickets live, and logs you in with a button each:</p>
 <ul>
-  <li><strong>GitHub</strong> through <code>gh auth login</code>. Your work organizations are picked from that login.</li>
-  <li><strong>Jira</strong> through <code>acli jira auth login --web</code>. Every Jira call goes through acli, so there's no Jira token in Clearsky.</li>
+  <li><strong>GitHub</strong> through <code>gh auth login</code>. Your organizations are picked from that login.</li>
+  <li><strong>Tickets:</strong> Jira, GitHub Issues or no tracker. GitHub Issues uses the GitHub login above. Jira goes through <code>acli jira auth login --web</code>, so there's no Jira token in Clearsky. <a href="docs/trackers.html">Compare them</a>.</li>
+  <li><strong>Agent:</strong> GitHub Copilot CLI or Claude Code, each with its own login. With both installed, you can say which folders, owners or repos go to which. <a href="docs/agents.html">Compare them</a>.</li>
   <li><strong>Calendar</strong> (optional) from GNOME Online Accounts or an iCal link, for Now / Next and the day's schedule.</li>
 </ul>
 <p>That's all the setup there is. Everything else is under <strong>Settings</strong>, and saved in <code>~/.config/clearsky/</code>.</p>
@@ -44,7 +50,7 @@ clearsky app        # or in a window of its own</code></pre>
 
 <li>
 <h2 id="team">Join your team's setup</h2>
-<p>If your team shares a setup, join it. It fills in the organizations, stand-up time, Copilot defaults, links and skills your team agreed on, and plugin settings such as the Slack app or the Grafana addresses, and keeps anything you set yourself. Logins and the sandbox's doors are never part of a pack.</p>
+<p>If your team shares a setup, join it. It fills in the organizations, tracker, agent, stand-up time, chat defaults, links and skills your team agreed on, and plugin settings such as the Slack app or the Grafana addresses, and keeps anything you set yourself. Logins and the sandbox's doors are never part of a pack.</p>
 <pre><code>clearsky join &lt;the team's repo&gt;</code></pre>
 <p>No pack yet? <code>clearsky team init ~/dev/clearsky-team</code>, or <strong>Settings → General → Make a team pack</strong>, writes one from your own settings, ready to push to a private repo. <a href="docs/team-pack.html">More about team packs</a>.</p>
 </li>
@@ -52,33 +58,33 @@ clearsky app        # or in a window of its own</code></pre>
 <li>
 <h2 id="plugins">Add what else you use</h2>
 <pre><code>clearsky add slack-mcp --trust     # Slack mentions, no token
-clearsky add confluence            # Confluence for Copilot chats
+clearsky add confluence            # Confluence for agent chats
 clearsky add grafana --trust       # logs and metrics, read only
 clearsky plugins                   # what's added, and what's available</code></pre>
 <p>Or under <strong>Settings → Plugins</strong>. You see what a plugin reaches (hosts, programs, files) before any of its code runs, and each one runs in a sandbox of its own. <a href="guide.html#plugins">All plugins</a> · <a href="docs/plugins.html">write your own</a>.</p>
 </li>
 
 <li>
-<h2 id="voice">Make Copilot write like you</h2>
-<p>Comments, PR descriptions and Jira replies that Copilot drafts for you are checked against a voice profile, <code>~/.copilot/voice.md</code>. It stays on your machine and never goes into a repo or team pack. To make one:</p>
+<h2 id="voice">Make your agent write like you</h2>
+<p>Comments, PR descriptions and ticket replies that your agent drafts for you are checked against a voice profile, <code>~/.copilot/voice.md</code>. It stays on your machine and never goes into a repo or team pack. To make one:</p>
 <ol>
   <li>Copy 10 to 20 things you wrote yourself into a scratch file: review comments, PR descriptions, tickets, messages. Mix a pushback, a question, an approval and a bug report. Leave out anything you're not allowed to put through an AI tool.</li>
-  <li>Ask Copilot to turn it into <code>voice.md</code>: 5 to 10 rules on how you write, a checklist for every draft, and 15 short samples with names and keys replaced.</li>
+  <li>Ask your agent to turn it into <code>voice.md</code>: 5 to 10 rules on how you write, a checklist for every draft, and 15 short samples with names and keys replaced.</li>
   <li>Delete the scratch file, read the profile, and fix whatever doesn't sound like you.</li>
 </ol>
-<p><a href="guide.html#make-copilot-write-like-you">The full guide, with the prompt and an example</a>.</p>
+<p><a href="guide.html#make-your-agent-write-like-you">The full guide, with the prompt and an example</a>.</p>
 </li>
 
 <li>
 <h2 id="doctor">If something looks off</h2>
 <pre><code>clearsky doctor     # the welcome page's checks, in a terminal
-clearsky restart    # restart once no Copilot chat is busy</code></pre>
+clearsky restart    # restart once no chat is busy</code></pre>
 <p>Starts, restarts and errors are logged to <code>~/.cache/clearsky/clearsky.log</code>.</p>
 </li>
 </ol>
 
 <h2 id="next">Next</h2>
 <div class="next">
-  <a href="guide.html"><b>The guide</b><span>Every page, key and setting, from the Work list to Copilot's background jobs.</span></a>
-  <a href="docs/architecture.html"><b>How Clearsky works</b><span>The parts, the sources, Copilot and the sandbox, and security.</span></a>
+  <a href="guide.html"><b>The guide</b><span>Every page, key and setting, from the Work list to background jobs in agent chats.</span></a>
+  <a href="docs/architecture.html"><b>How Clearsky works</b><span>The parts, the sources, the agent and the sandbox, and security.</span></a>
 </div>

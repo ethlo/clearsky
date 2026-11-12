@@ -26,25 +26,27 @@ Everything you set is in `~/.config/clearsky/` and can be changed under **Settin
 
 ## What you get
 
-- **Work:** one list grouped by whose move it is: Copilot chats that need you, review requests, your PRs on your move, mentions (GitHub, Jira, Slack), your tickets, and what you're waiting on.
+- **Work:** one list grouped by whose move it is: agent chats that need you, review requests, your PRs on your move, mentions (GitHub, plus Jira or Slack if you use them), your tickets, and what you're waiting on.
 - **Now / Next:** your current or next meeting, how long you're free, and tasks that fit that gap.
 - **Stand-up:** a ready-to-paste Yesterday / Today / Blockers for your daily stand-up.
-- **Copilot:** a chat with the GitHub Copilot CLI, or Claude Code (Settings → Copilot → Agent; see [The agent behind your chats](docs/agents.md)), on any PR or ticket, in your clone of the repo, inside a sandbox that asks before anything leaves your machine (a push, a Jira change, a new host). It can hand work off, run long builds in the background, review its own change before opening a PR, and write like you (see the next section).
-- **Links, calendar, notifications,** and plugins for the rest (Slack, Grafana, school, your own).
+- **Agent chat:** a chat with GitHub Copilot CLI or Claude Code, or both, each for its own folders or repos (see [The agent behind your chats](docs/agents.md)), on any PR or ticket, in your clone of the repo, inside a sandbox that asks before anything leaves your machine (a push, a ticket change, a new host). It can hand work off, run long builds in the background, review its own change before opening a PR, and write like you (see the next section).
+- **Links, calendar, notifications,** and plugins for the rest (Slack, Confluence, Grafana, school, your own).
 
-## Make Copilot write like you
+None of the tools is assumed. Tickets come from Jira, GitHub Issues or nowhere ([Where your tickets live](docs/trackers.md)), the chats run in Copilot or Claude Code, and Slack and the rest are plugins you add only if you use them. The menu and Settings call the chat **Copilot** for now, whichever agent runs it.
 
-Comments, PR descriptions and Jira replies that Copilot drafts for you go through the **write-like-me** skill. It reads a voice profile, `~/.copilot/voice.md`, if you have one, and checks each draft against it. The file is yours alone: it stays on your machine, is never sent anywhere by Clearsky, and doesn't belong in any repo or team pack.
+## Make your agent write like you
+
+Comments, PR descriptions and ticket replies that your agent drafts for you go through the **write-like-me** skill. It reads a voice profile, `~/.copilot/voice.md`, if you have one, and checks each draft against it. The same file is used whichever agent drafts. It is yours alone: it stays on your machine, is never sent anywhere by Clearsky, and doesn't belong in any repo or team pack.
 
 A good profile is short: a few rules on how you write, a checklist, and 10 to 20 real samples. To make one from what you've already written:
 
-1. **Collect samples you wrote yourself.** Copy them into a scratch file such as `~/voice-samples.txt`: PR review comments, PR descriptions, Jira tickets and comments, emails, Slack messages. Pick a mix: a pushback, a question, an approval, a bug report, a ticket description. Leave out anything an agent drafted for you, and anything you're not allowed to put through an AI tool; if your company has rules about that, follow them, or write a few samples fresh.
-2. **Let Copilot write the profile from them,** in a chat on your own machine:
+1. **Collect samples you wrote yourself.** Copy them into a scratch file such as `~/voice-samples.txt`: PR review comments, PR descriptions, tickets and their comments, emails, chat messages. Pick a mix: a pushback, a question, an approval, a bug report, a ticket description. Leave out anything an agent drafted for you, and anything you're not allowed to put through an AI tool; if your company has rules about that, follow them, or write a few samples fresh.
+2. **Let your agent write the profile from them,** in a chat on your own machine:
 
    > Read ~/voice-samples.txt. Write ~/.copilot/voice.md with: 5 to 10 rules on how I write (length, tone, structure, language, words I use and avoid); a "Check every draft against this" list; and 15 short samples from the file with people's names, ticket keys, repo and company names replaced by placeholders.
 
 3. **Delete the scratch file,** read `voice.md`, and fix anything that doesn't sound like you.
-4. **Try it:** ask Copilot to draft a review comment, compare, and tighten the rules where it's off. Small rules work best ("answer the question first", "one hedge at most", "no headings or sign-offs").
+4. **Try it:** ask your agent to draft a review comment, compare, and tighten the rules where it's off. Small rules work best ("answer the question first", "one hedge at most", "no headings or sign-offs").
 
 A profile looks like this:
 
@@ -65,32 +67,33 @@ A profile looks like this:
 
 ## Setup in detail
 
-The welcome page (`/welcome`) shows what this machine has (Node, git, gh, acli, Copilot, the sandbox, a calendar), with the install command for your OS next to anything missing, buttons to log in to GitHub and Jira through their CLIs, and your work organizations picked from your gh login. `clearsky doctor` prints the same check in a terminal.
+The welcome page (`/welcome`) shows what this machine has (Node, git, gh, the CLIs for your tracker and agent, the sandbox, a calendar), with the install command for your OS next to anything missing. It asks where your tickets live, has buttons to log in to GitHub and, if you use it, Jira through their CLIs, and picks your work organizations from your gh login. `clearsky doctor` prints the same check in a terminal.
 
-`sh scripts/install.sh` installs or updates everything. It puts `clearsky` and Anthropic's sandbox runtime (`srt`, for Settings → Copilot → Sandbox) on your PATH with npm, uses nvm's Node 22 when that's how Node is installed, and makes `~/.config/clearsky` (readable only by you). It never uses sudo: system packages the sandbox needs (bubblewrap, socat, ripgrep) and missing CLIs (gh, acli, copilot) are listed with the command to install them. `--no-sandbox` leaves srt out; `--service` starts Clearsky at login (systemd user service). Without the installer, `node bin/clearsky.mjs serve` works from the checkout.
+`sh scripts/install.sh` installs or updates everything. It puts `clearsky` and Anthropic's sandbox runtime (`srt`, for the agent chats' sandbox, Settings → Copilot → Sandbox) on your PATH with npm, uses nvm's Node 22 when that's how Node is installed, and makes `~/.config/clearsky` (readable only by you). It never uses sudo: system packages the sandbox needs (bubblewrap, socat, ripgrep) and missing CLIs (gh, and acli, copilot or claude-agent-acp for what you picked) are listed with the command to install them. `--no-sandbox` leaves srt out; `--service` starts Clearsky at login (systemd user service). Without the installer, `node bin/clearsky.mjs serve` works from the checkout.
 
 ### Try it first
 
-`clearsky try` opens Clearsky with made-up data (a company called Acme, its PRs, tickets, meetings and a Copilot chat) on http://127.0.0.1:7790. It needs no logins. Nothing of yours is read or shown, so it's also the way to show Clearsky to others. **Leave demo** in its menu, or Ctrl+C, stops it and removes its data. Settings → General → **Try with demo data** starts the same demo from the page.
+`clearsky try` opens Clearsky with made-up data (a company called Acme, its PRs, tickets, meetings and an agent chat) on http://127.0.0.1:7790. It needs no logins. Nothing of yours is read or shown, so it's also the way to show Clearsky to others. **Leave demo** in its menu, or Ctrl+C, stops it and removes its data. Settings → General → **Try with demo data** starts the same demo from the page.
 
 ### Logins
 
 - **GitHub:** nothing, if you're logged in with the GitHub CLI (`gh auth login`); Clearsky then uses `gh auth token`. Otherwise a fine-grained token with read access to Pull requests, Issues, Contents and Metadata on your work org. A classic token with `repo` scope also works. If your org uses SSO, authorize the token for it.
 - **Tickets:** Jira, GitHub Issues, or no tracker (Settings → General → Tickets live in; see [Where your tickets live](docs/trackers.md)). Chats use one `ticket view|comment|move|new` command for any of them.
-- **Jira:** no token in Clearsky. All Jira calls go through `acli` (`acli jira auth login --web`), so it uses whatever account `acli jira auth` is logged in as.
+- **Jira** (if you picked it): no token in Clearsky. All Jira calls go through `acli` (`acli jira auth login --web`), so it uses whatever account `acli jira auth` is logged in as.
 - **Google Calendar (optional), either or both ways.** When both are set up, their meetings are merged, and if one fails the other still shows:
   - **GNOME Online Accounts:** add your work Google account under Settings → Online Accounts with Calendar switched on, and set `CALENDAR_EMAIL`. Clearsky reads the calendar Evolution syncs locally, from its SQLite cache via `node:sqlite`, so it needs no login of its own. To include more calendars (a family or personal one), add that Google account in Online Accounts with only Calendar on, then tick the calendar in Clearsky's Settings (saved as `EVOLUTION_CALENDARS`). On a shared calendar like "Family", events only take your free time when you organise or are invited to them, or when one of your names (`CALENDAR_MY_NAMES`, say `Alex`) is in the title; the rest show greyed in the agenda. Holiday and birthday calendars are never picked automatically.
   - **Today's schedule** under Now / Next shows the day as a timeline: meetings as blocks (overlaps on their own line), your free slot in green, the rest of the workday, and a line for now. Hover over a meeting for its details (time, place, organizer, link, description); click to keep them open. The calendar names below the timeline hide or show each one (saved as `CALENDAR_HIDDEN`); a hidden calendar doesn't take your time either.
   - Times are 24-hour unless you pick 12-hour under Settings → General (`CLEARSKY_TIME_FORMAT=12`).
   - **iCal link:** in Google Calendar, open Settings, pick your calendar, then **Integrate calendar**, and copy **Secret address in iCal format** into `GOOGLE_CALENDAR_ICS`. Several addresses can be given, separated by spaces. Workspace admins often turn this off.
-- **Slack (optional, no token):** `clearsky add slack-mcp --trust` talks to Slack's own MCP server read only. You log in from Settings in your browser, Copilot chats read Slack with `door slack …`, and mentions show under Needs you. See [clearsky-slack-mcp](plugins/clearsky-slack-mcp/README.md).
-- **Confluence (optional, no token):** `clearsky add confluence` lets Copilot chats search and read Confluence with `confluence …`, read only, through Atlassian's MCP server. You log in from Settings in your browser; Clearsky registers itself as a client, so there's no app or token to create. Jira stays on `acli`. See [clearsky-confluence](plugins/clearsky-confluence/README.md).
+- **Agent:** GitHub Copilot CLI or Claude Code, each logged in with its own login (Settings → Copilot → Agent; see [The agent behind your chats](docs/agents.md)). Clearsky passes no tokens to either.
+- **Slack (optional, no token):** `clearsky add slack-mcp --trust` talks to Slack's own MCP server read only. You log in from Settings in your browser, agent chats read Slack with `door slack …`, and mentions show under Needs you. See [clearsky-slack-mcp](plugins/clearsky-slack-mcp/README.md).
+- **Confluence (optional, no token):** `clearsky add confluence` lets agent chats search and read Confluence with `confluence …`, read only, through Atlassian's MCP server. You log in from Settings in your browser; Clearsky registers itself as a client, so there's no app or token to create. Jira stays on `acli`. See [clearsky-confluence](plugins/clearsky-confluence/README.md).
 
 The Settings page (`/settings`) runs `gh auth login --web` and `acli jira auth login --web` for you. Pasted tokens and URLs are written to `~/.config/clearsky/.env` (mode 600) and never shown back. The page only listens on 127.0.0.1, and changes need a per-run token, so other websites can't use it. The config is read from `./.env`, then the repo's `.env`, then `~/.config/clearsky/.env`. Real environment variables override all of them.
 
 ### Team packs
 
-If your team shares a setup, join it: `clearsky join <git repo, https link or file>` (or paste it on the welcome page, or in Settings → General). It fills in the organizations, stand-up time, Copilot defaults, links and skills the team agreed on, and plugin settings such as the Slack app or the Grafana addresses (once you add the plugin), and keeps anything you set yourself. Tokens and the sandbox's doors are never part of a pack. A pack can also list the team's plugins, pinned to versions, and kinds of change the team suggests letting through without asking; you look at both and take them yourself.
+If your team shares a setup, join it: `clearsky join <git repo, https link or file>` (or paste it on the welcome page, or in Settings → General). It fills in the organizations, tracker, agent, stand-up time, chat defaults, links and skills the team agreed on, and plugin settings such as the Slack app or the Grafana addresses (once you add the plugin), and keeps anything you set yourself. Tokens and the sandbox's doors are never part of a pack. A pack can also list the team's plugins, pinned to versions, and kinds of change the team suggests letting through without asking; you look at both and take them yourself.
 
 To start one for your company, `clearsky team init ~/dev/clearsky-team` (or Settings → General → **Make a team pack**) writes a ready repo from your own settings: `clearsky-team.json`, a README for your colleagues, and folders for skills and work-only plugins, with no secrets in it. Push it to a private repo in your company's GitHub and share the link. See [docs/team-pack.md](docs/team-pack.md).
 
@@ -98,9 +101,9 @@ To start one for your company, `clearsky team init ~/dev/clearsky-team` (or Sett
 
 ```sh
 clearsky serve        # dashboard at http://127.0.0.1:7777, refreshes every 5 minutes
-clearsky restart      # restart once no Copilot chat is working (--now: right away)
+clearsky restart      # restart once no chat is working (--now: right away)
 clearsky              # Markdown summary in the terminal
-clearsky --json       # everything as JSON, for scripts and Copilot
+clearsky --json       # everything as JSON, for scripts and agents
 clearsky standup      # stand-up summary (add --json for the data)
 clearsky jira-debug   # raw acli output, if Jira data looks wrong
 ```
@@ -123,11 +126,11 @@ The server also answers JSON on 127.0.0.1: `/api/source/<github|jira|jiraMention
 
 ## Plugins
 
-Clearsky's core is GitHub, Jira, your calendars, Copilot and your links. Everything else is a plugin you add: a folder with a `clearsky-plugin.json` and one ES module, with no build step and no dependencies to install. These have repos of their own and short names in Clearsky's catalog ([plugins/catalog.json](plugins/catalog.json)), each pinned to a released version:
+Clearsky's core is GitHub, your tracker (Jira or GitHub Issues), your calendars, the agent chat and your links. Everything else is a plugin you add: a folder with a `clearsky-plugin.json` and one ES module, with no build step and no dependencies to install. These have repos of their own and short names in Clearsky's catalog ([plugins/catalog.json](plugins/catalog.json)), each pinned to a released version:
 
 | Name | What it does | Repo |
 | --- | --- | --- |
-| `grafana` | Logs and metrics for Copilot chats, read only, through `grafana …` | [clearsky-grafana](plugins/clearsky-grafana/) |
+| `grafana` | Logs and metrics for agent chats, read only, through `grafana …` | [clearsky-grafana](plugins/clearsky-grafana/) |
 | `visma-flyt` | Messages, forms and weekly plans from Visma Flyt Skole | [clearsky-visma-flyt](plugins/clearsky-visma-flyt/) |
 | `slack-mcp` | Slack through Slack's MCP server: mentions and read-only `door slack …` for chats, no token | [clearsky-slack-mcp](plugins/clearsky-slack-mcp/) |
 | `confluence` | Read-only Confluence search and pages for chats, through Atlassian's MCP server | [clearsky-confluence](plugins/clearsky-confluence/) |
@@ -147,11 +150,11 @@ clearsky remove <name> [--data]
 
 Or do the same under **Settings → Plugins**. Either way, you see what a plugin reaches (hosts, programs, files) before any of its code runs, and Clearsky loads it at its next start.
 
-A plugin you add runs in a sandbox of its own (srt, like Copilot's): every fetch is a separate process that reaches only the hosts in its manifest, reads only its own code, writes only its own data folder, and gets only its own settings, with nothing of Clearsky's environment. Clearsky itself never loads its code. Its files are hashed when it's added (git ones also pinned to the commit), and a plugin whose files changed isn't loaded until you update it. A plugin that can't work in the sandbox, say because it opens a browser to log in (School) or lends chats a login (Grafana), says why in its manifest and is added only with `--trust` (or the box in Settings).
+A plugin you add runs in a sandbox of its own (srt, like the agent chats'): every fetch is a separate process that reaches only the hosts in its manifest, reads only its own code, writes only its own data folder, and gets only its own settings, with nothing of Clearsky's environment. Clearsky itself never loads its code. Its files are hashed when it's added (git ones also pinned to the commit), and a plugin whose files changed isn't loaded until you update it. A plugin that can't work in the sandbox, say because it opens a browser to log in (School) or lends chats a login (Grafana), says why in its manifest and is added only with `--trust` (or the box in Settings).
 
 How to write one is in [docs/plugins.md](docs/plugins.md). For a quick private source there's still `~/.config/clearsky/sources/*.mjs`: one file each, loaded as it is, never shared. The hooks are the same; see the comment at the top of [lib/sources.mjs](lib/sources.mjs) and [test/sources/school.mjs](test/sources/school.mjs).
 
-Work and personal stay apart: a source sets `area: 'work'` to sit with GitHub, Jira and Slack on the **Work** tab, or leaves it out to land on the **Personal** tab (school, training and the like). Only the calendar mixes the two: personal events show in the day schedule on both tabs.
+Work and personal stay apart: a source sets `area: 'work'` to sit with GitHub, your tracker and Slack on the **Work** tab, or leaves it out to land on the **Personal** tab (school, training and the like). Only the calendar mixes the two: personal events show in the day schedule on both tabs.
 
 ## Its own window
 
@@ -167,7 +170,7 @@ PRs and tickets link to each other: a PR shows the Jira tickets in its title or 
 
 ## Running it
 
-`clearsky restart` asks the running server to restart once no Copilot chat is working or waiting for your OK, so updating never cuts a turn off; idle chats carry on afterwards. To start Clearsky at login and keep it running, `contrib/clearsky.service` is a systemd user service (instructions inside); it sets `CLEARSKY_SUPERVISED=1`, so a restart hands over to systemd. Starts, restarts (with how they were asked for and how many chats were busy), stops and unexpected errors are logged to `~/.cache/clearsky/clearsky.log` (`CLEARSKY_LOG` for another file).
+`clearsky restart` asks the running server to restart once no chat is working or waiting for your OK, so updating never cuts a turn off; idle chats carry on afterwards. To start Clearsky at login and keep it running, `contrib/clearsky.service` is a systemd user service (instructions inside); it sets `CLEARSKY_SUPERVISED=1`, so a restart hands over to systemd. Starts, restarts (with how they were asked for and how many chats were busy), stops and unexpected errors are logged to `~/.cache/clearsky/clearsky.log` (`CLEARSKY_LOG` for another file).
 
 ### In Docker
 
@@ -183,9 +186,9 @@ Online Accounts calendars are found from `~/.config/clearsky/eds-sources.json`, 
 
 While `clearsky serve` runs, it checks GitHub, Jira mentions and Slack every 3 minutes (Settings → General, or `CLEARSKY_POLL_MINUTES`), and GitHub again when you come back to the window and it is over a minute old. When something new needs you (a review request, a PR turning to your move, a mention), you get a desktop notification with an **Open** button on workdays from 07:00 until two hours after your workday ends. Dismissed and muted items stay quiet. Banners go straight to the desktop over D-Bus (`gdbus`), because Ubuntu's AppArmor profile for `notify-send` blocks the click on **Open**; a newer banner for the same item replaces the old one. Without D-Bus it falls back to `notify-send` (`CLEARSKY_NOTIFY=notify-send` forces it), and without either, the bell at the bottom of the menu turns on browser notifications instead. `CLEARSKY_NOTIFY=off` turns them off. New things also get a dot in the page and a count in the tab title until you've looked. A review request notifies when it's (re-)requested, not on every push or comment; a GitHub thread you were mentioned in notifies once; a status that flips back and forth notifies once; more than two at a time become one banner. **Notifications** in the menu lists the last 100 sent (kept across restarts), with links, to see why something came.
 
-## Copilot chat
+## Agent chat
 
-**✦ Copilot** in the top bar opens a chat with the GitHub Copilot CLI on your machine (`copilot`, logged in with your work account). The first message includes what's on your dashboard, so you can ask things like "what should I do first?". Answers link Jira keys and PRs with hover cards.
+The chat runs in the GitHub Copilot CLI or in Claude Code, on your machine and with that agent's own login; [The agent behind your chats](docs/agents.md) compares them, and says how to use both. The menu, the top bar and Settings call it **Copilot** whichever agent it is, and the rest of this section does too. **✦ Copilot** in the top bar opens a chat. The first message includes what's on your dashboard, so you can ask things like "what should I do first?". Answers link ticket keys and PRs with hover cards.
 
 **Settings → Copilot** sets what a new chat starts with: model, reasoning effort, access mode, the folder for general chats, and the folders Copilot may use. In the panel you can pick the model and reasoning effort, how much Copilot may do: **Ask** (Allow/Deny buttons for each step), **Sandboxed** (Copilot runs in Anthropic's sandbox runtime and everything inside runs; it asks only at the sandbox's doors out, see below), **Full** (Clearsky says yes to anything Copilot still asks; denied patterns stay denied), Read only, or Plan only, and click a skill to use it. Every mode runs Copilot in its Agent Client Protocol mode, so whenever Copilot wants your OK, even in Full, you get Allow/Deny buttons instead of a refusal, and long builds aren't cut off. Copilot runs in the Clearsky folder (or `COPILOT_CWD`), so the skills below are available. A chat about a PR or ticket starts in that repo's clone, or the worktree with the PR's branch. Copilot may use files under **Settings → Copilot → Folders Copilot can change** (default `~/dev`, passed as `--add-dir`) without the "Access paths outside trusted directories" question. If `copilot` isn't on your PATH, Clearsky looks under nvm, or set `COPILOT_BIN`. Clearsky's own tokens are not passed to it.
 
@@ -213,34 +216,35 @@ Sessions show up next to the PR or ticket they are about: one you started from t
 
 ## Hand-offs
 
-✦ on a PR, GitHub issue or ticket → **Work on it now, by itself** (or **From my next meeting**) hands it to Copilot. It works on hand-offs one at a time, always in the sandbox: on a feature branch, with the tests and a `review` before it opens anything, and it opens the PR as a draft. It never merges, approves, closes or deletes. The sandbox's doors still decide what leaves your machine, so a step that needs your OK waits for it in the chat. **Hand-offs** in the menu shows each one with its chat and how it ended: a draft PR (which then waits under Your PRs as not read by you), or a sentence on what it needs from you. They're kept in `~/.config/clearsky/handoffs.json`; a restart stops the one running, and its chat can carry on.
+✦ on a PR, GitHub issue or ticket → **Work on it now, by itself** (or **From my next meeting**) hands it to your agent. It works on hand-offs one at a time, always in the sandbox: on a feature branch, with the tests and a `review` before it opens anything, and it opens the PR as a draft. It never merges, approves, closes or deletes. The sandbox's doors still decide what leaves your machine, so a step that needs your OK waits for it in the chat. **Hand-offs** in the menu shows each one with its chat and how it ended: a draft PR (which then waits under Your PRs as not read by you), or a sentence on what it needs from you. They're kept in `~/.config/clearsky/handoffs.json`; a restart stops the one running, and its chat can carry on.
 
-## Copilot skills
+## Skills
 
-`.github/skills/` contains these skills for GitHub Copilot (agent mode in VS Code and the Copilot CLI):
+`.github/skills/` contains these skills. GitHub Copilot (the CLI and agent mode in VS Code) and Claude Code both read them:
 
 - **triage-my-work:** runs `clearsky --json` and sorts everything into Do now / Today / Later / Waiting on others.
 - **review-my-queue:** goes through your review requests, smallest and re-reviews first, and drafts review notes. It never submits a review unless you tell it to.
 - **continue-work:** checks a PR or ticket (CI, conflicts, unresolved review comments, what the ticket still asks for), then carries on with what's left after asking once. It never merges, approves, force-pushes or posts comments without asking. From ✦ on a PR in Clearsky, the chat runs in your local clone of that repository (found under `~/dev`, or `CLEARSKY_CODE_DIRS`).
 
-- **write-like-me:** anything posted as you (review comments, replies, PR descriptions, Jira comments, Slack) in your own voice: short, to the point, no filler. It reads your voice profile, `~/.copilot/voice.md`, if you have one; [Make Copilot write like you](#make-copilot-write-like-you) says how to make it.
+- **write-like-me:** anything posted as you (review comments, replies, PR descriptions, ticket comments, Slack) in your own voice: short, to the point, no filler. It reads your voice profile, `~/.copilot/voice.md`, if you have one; [Make your agent write like you](#make-your-agent-write-like-you) says how to make it.
 
-Inside this repo Copilot picks them up automatically. To have them in every repo, copy them to your personal skills folder:
+Inside this repo the agent picks them up automatically. To have them in every repo, copy them to your personal skills folder, `~/.copilot/skills` for Copilot or `~/.claude/skills` for Claude Code:
 
 ```sh
 mkdir -p ~/.copilot/skills && cp -r .github/skills/* ~/.copilot/skills/
+mkdir -p ~/.claude/skills && cp -r .github/skills/* ~/.claude/skills/
 ```
 
-Then ask Copilot "triage my work" or "review my queue".
+Then ask "triage my work" or "review my queue".
 
 ## Design docs
 
-[docs/](docs/index.md) has the design docs in Markdown, with rendered HTML next to them (`npm run docs`): [how Clearsky works](docs/architecture.md) and [running it in a container, reachable from the phone](docs/remote-access.md) (on hold).
+[docs/](docs/index.md) has the design docs in Markdown, with rendered HTML next to them (`npm run docs`): [how Clearsky works](docs/architecture.md), [where your tickets live](docs/trackers.md), [the agent behind your chats](docs/agents.md) and [running it in a container, reachable from the phone](docs/remote-access.md) (on hold).
 
 ## Notes
 
-- **Now / Next** treats back-to-back meetings (under 5 minutes apart) as one busy block and counts free time until the next meeting or `CLEARSKY_WORKDAY_END`. It then picks tasks in this order: PRs ready to merge, fresh Slack and Jira mentions, reviews (re-reviews and small ones first), your blocked PRs, and in-progress Jira work. A task is picked only if its rough time estimate fits.
-- Jira data comes from `acli jira workitem search --json` and `acli jira workitem view <KEY> --fields comment --json`. `comment list` is not used, because it flattens comments to plain text and drops @mentions. Each candidate issue costs one `acli` call, run 4 at a time, and at most 40 issues are checked.
+- **Now / Next** treats back-to-back meetings (under 5 minutes apart) as one busy block and counts free time until the next meeting or `CLEARSKY_WORKDAY_END`. It then picks tasks in this order: PRs ready to merge, fresh mentions, reviews (re-reviews and small ones first), your blocked PRs, and tickets in progress. A task is picked only if its rough time estimate fits.
+- With Jira, data comes from `acli jira workitem search --json` and `acli jira workitem view <KEY> --fields comment --json`. `comment list` is not used, because it flattens comments to plain text and drops @mentions. Each candidate issue costs one `acli` call, run 4 at a time, and at most 40 issues are checked.
 - Jira mentions are found with `comment ~ currentUser()` over the last 14 days. Each match is then confirmed by finding your account id in a mention in the comment's rich text. Mentions stay listed for the whole window; Jira's "seen" state isn't available. You can override the search with `JIRA_MENTIONS_JQL`.
 - The server listens on 127.0.0.1 only and caches results for 2 minutes. Use the Refresh button to force a fetch.
 - `npm test` runs the tests against a mocked GitHub and Slack, plus a fake `acli`.
