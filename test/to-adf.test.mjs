@@ -57,9 +57,9 @@ test('acli arguments: short flags, comment update and --from-json', () => {
   assert.equal(JSON.parse(files['description.json']).content[0].type, 'heading');
   // a file Clearsky may not read goes on with its absolute path
   assert.deepEqual(adfArgs(['--body-file', 'c.md'], () => { throw new Error('outside'); }, '/w', write), ['--body-file', '/w/c.md']);
-  // comment update takes ADF only from --body-adf
+  // comment update too: ADF in --body-file (acli has no --body-adf)
   const u = adfArgs(['jira', 'workitem', 'comment', 'update', '--key', 'ABC-1', '--id', '9', '--body', 'h3. Fixed\nIn abc123'], () => '', null, write);
-  assert.deepEqual(u.slice(-2), ['--body-adf', '/tmp/x/body.json']);
+  assert.deepEqual(u.slice(-2), ['--body-file', '/tmp/x/body.json']);
   assert.equal(JSON.parse(files['body.json']).content[0].type, 'heading');
   assert.deepEqual(adfArgs(['jira', 'workitem', 'comment', 'update', '--body', 'ok'], () => '', null, write), ['jira', 'workitem', 'comment', 'update', '--body', 'ok']);
   // a short plain line stays inline
