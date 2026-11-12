@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The agent behind your chats</title>
+<!-- Generated from agents.md by scripts/render-docs.mjs. Edit the Markdown, then run npm run docs. -->
+<style>
+  :root { color-scheme: light dark; --bg: #f7f8fa; --surface: #fff; --text: #111827; --text-2: #4b5563; --muted: #6b7280; --line: #e5e7eb; --accent: #2563eb; --code: #f2f4f7; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0c0e12; --surface: #14171c; --text: #f2f4f7; --text-2: #c5cad3; --muted: #8a93a3; --line: #252a33; --accent: #6b9bff; --code: #1b1f26; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 32px 20px 64px; }
+  .crumb { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+  a { color: var(--accent); }
+  h1 { font-size: 28px; line-height: 1.25; margin: 0 0 12px; letter-spacing: -.01em; }
+  h2 { font-size: 20px; margin: 36px 0 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+  h3 { font-size: 16px; margin: 24px 0 8px; }
+  p, li { color: var(--text-2); }
+  strong { color: var(--text); }
+  code { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--code); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; overflow-x: auto; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.5; }
+  .table { overflow-x: auto; margin: 12px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; background: var(--surface); }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px; border: 1px solid var(--line); }
+  th { color: var(--text); font-weight: 600; }
+  td { color: var(--text-2); }
+  img { max-width: 100%; height: auto; display: block; margin: 16px auto; }
+  nav.toc { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 16px; margin: 20px 0; font-size: 14px; }
+  nav.toc ol { margin: 4px 0; padding-left: 20px; }
+  @media (max-width: 560px) { .wrap { padding: 20px 16px 48px; } h1 { font-size: 23px; } }
+</style>
+</head>
+<body><div class="wrap">
+<div class="crumb"><a href="index.html">Clearsky design docs</a></div>
+<h1>The agent behind your chats</h1>
+<nav class="toc"><b>Contents</b><ol><li><a href="#modes">Modes</a></li><li><a href="#what-is-copilot-only-for-now">What is Copilot-only for now</a></li><li><a href="#settings">Settings</a></li></ol></nav>
+<p>Clearsky's chats run in <strong>GitHub Copilot CLI</strong> or in <strong>Claude Code</strong>. Pick one in <strong>Settings → Copilot → Agent</strong>, or in a team pack (<code>CLEARSKY_AGENT</code>: <code>copilot</code> or <code>claude</code>). Each uses its own login, so there's no token to make.</p>
+<p>Both speak the <a href="https://agentclientprotocol.com">Agent Client Protocol</a>, which is how Clearsky already talks to a chat. So the chat panel, its Allow and Deny cards, history, hand-offs, skills, background jobs and the sandbox with its doors work the same with either.</p>
+<div class="table"><table><thead><tr><th></th><th>GitHub Copilot CLI</th><th>Claude Code</th></tr></thead><tbody><tr><td>Install</td><td><code>npm install -g @github/copilot</code></td><td><code>npm install -g @agentclientprotocol/claude-agent-acp</code> (Claude Code's ACP adapter)</td></tr><tr><td>Login</td><td>Copilot's own (<code>copilot</code>, then <code>/login</code>)</td><td>Claude Code's own (<code>claude</code>, then <code>/login</code>)</td></tr><tr><td>Modes</td><td>Copilot's flags (<code>--allow-all-tools</code>, <code>--deny-tool</code>, <code>--mode plan</code>)</td><td>Claude Code's permission modes, set for each session</td></tr><tr><td>Model</td><td>the chat's picker (<code>--model</code>)</td><td>the chat's picker (<code>opus</code>, <code>sonnet</code>, <code>haiku</code> or a <code>claude-…</code> name, as <code>ANTHROPIC_MODEL</code>)</td></tr><tr><td>Reasoning effort</td><td>the chat's picker</td><td>Claude Code's own setting</td></tr><tr><td>More folders</td><td><code>--add-dir</code></td><td>the session's extra folders</td></tr><tr><td>Skills</td><td><code>.github/skills</code> and <code>~/.copilot/skills</code></td><td><code>.claude/skills</code>, <code>.github/skills</code> and <code>~/.claude/skills</code></td></tr><tr><td>Its state, writable in the sandbox</td><td><code>~/.copilot</code>, <code>~/.cache/copilot</code></td><td><code>~/.claude</code>, <code>~/.cache/claude</code></td></tr><tr><td>Its hosts in the sandbox</td><td><code>*.githubcopilot.com</code></td><td><code>api.anthropic.com</code>, <code>claude.ai</code>, <code>statsig.anthropic.com</code></td></tr><tr><td>Usage page, <code>usage</code> line</td><td>AI credits from its session logs</td><td>not counted: see your Claude or Anthropic account</td></tr></tbody></table></div>
+<p>Left on <strong>Automatic</strong>, it's Copilot when the Copilot CLI is installed, else Claude Code when its adapter is, so nothing changes for people who had Copilot.</p>
+<h2 id="modes">Modes</h2>
+<p>Clearsky's modes stay the same, and each becomes one of Claude Code's permission modes:</p>
+<div class="table"><table><thead><tr><th>Clearsky</th><th>Claude Code</th><th>What happens</th></tr></thead><tbody><tr><td>Ask</td><td><code>default</code></td><td>Claude Code asks before edits and commands; the question shows as Allow and Deny.</td></tr><tr><td>Sandboxed</td><td><code>bypassPermissions</code>, inside srt</td><td>Anything inside the sandbox runs. Leaving it (a push, a GitHub or Jira change, a new host) goes through Clearsky's doors and asks you, as with Copilot.</td></tr><tr><td>Full access</td><td><code>bypassPermissions</code></td><td>Everything runs without asking.</td></tr><tr><td>Read only, Plan only</td><td><code>plan</code></td><td>It reads and plans, and changes nothing.</td></tr></tbody></table></div>
+<p>In the sandbox Claude Code keeps its settings file in <code>~/.claude</code> (<code>CLAUDE_CONFIG_DIR</code>), next to its login, because it can't write in the rest of your home there. It has no built-in GitHub tools, so nothing reaches GitHub past the gate. MCP servers you set up for Claude Code yourself are its own; Clearsky doesn't add any.</p>
+<h2 id="what-is-copilot-only-for-now">What is Copilot-only for now</h2>
+<ul><li><strong>Usage:</strong> credits come from Copilot's session logs. With Claude Code the Usage page and <code>usage</code> say they aren't counted.</li><li><strong>Open elsewhere:</strong> Copilot marks a session open in a terminal or editor, so the menu shows it as open. Claude Code sessions show from Clearsky's own chats, and from its session list.</li><li><strong>Compaction notes:</strong> <code>/compact</code> reports what it removed from Copilot's log only.</li></ul>
+<p>Stand-up, the review queue and the reviewer (<code>review</code>) work with either: the stand-up summary is written by the agent you picked, and the reviewer is a fresh read-only session of it.</p>
+<h2 id="settings">Settings</h2>
+<div class="table"><table><thead><tr><th>Setting</th><th>What</th></tr></thead><tbody><tr><td><code>CLEARSKY_AGENT</code></td><td><code>copilot</code>, <code>claude</code>, or empty for automatic</td></tr><tr><td><code>COPILOT_BIN</code></td><td>where the Copilot CLI is, if not on PATH</td></tr><tr><td><code>CLAUDE_ACP_BIN</code></td><td>where <code>claude-agent-acp</code> is, if not on PATH</td></tr></tbody></table></div>
+<p>The Copilot settings (model, mode, folders, sandbox, hosts, VMs) apply to whichever agent you picked; they keep their names so nothing you set before changes.</p>
+</div></body>
+</html>

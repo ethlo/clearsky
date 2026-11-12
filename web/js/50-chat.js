@@ -872,11 +872,16 @@ async function loadCopilotInfo() {
   const i = chat.info;
   $('#cp-models').innerHTML = (i.models || []).map((m) => `<option value="${esc(m)}">`).join('');
   $('#cp-effort').innerHTML = `<option value="">Balanced</option>${(i.efforts || []).map((e) => `<option>${esc(e)}</option>`).join('')}`;
+  // Claude Code has no effort picker here (lib/agents.mjs).
+  $('#cp-effort').hidden = !!i.agent && !(i.efforts || []).length;
   $('#cp-perm').innerHTML = Object.entries(i.permissions || {}).map(([k, l]) => `<option value="${k}" title="${esc(i.permissionHints?.[k] || '')}">${esc(l)}</option>`).join('');
   pickDefaults();
   $('#cp-skills').innerHTML = (i.skills || []).map((sk) =>
     `<button class="chip" data-skill="${esc(sk.name)}" title="${esc(sk.description)}">${esc(sk.name)}</button>`).join('');
-  if (!i.available) addMsg('cp', `<div class="err">${esc(i.error || 'The GitHub Copilot CLI wasn’t found on this machine. Install it, or set COPILOT_BIN in ~/.config/clearsky/.env.')}</div>`);
+  const missing = i.agent?.name === 'claude'
+    ? `Claude Code’s ACP adapter wasn’t found on this machine. Install it with ${i.agent.install?.command || 'npm'}, or pick the agent in Settings → Copilot.`
+    : 'The GitHub Copilot CLI wasn’t found on this machine. Install it, or set COPILOT_BIN in ~/.config/clearsky/.env.';
+  if (!i.available) addMsg('cp', `<div class="err">${esc(i.error || missing)}</div>`);
   chatSub();
 }
 

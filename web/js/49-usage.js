@@ -43,6 +43,8 @@ function renderUsage() {
   const d = usageData;
   if (!d) { el.innerHTML = skeleton(3); return; }
   if (d.error) { el.innerHTML = `<div class="err">${esc(d.error)}</div>`; return; }
+  // Credits are Copilot's; Claude Code's usage is in your Claude or Anthropic account.
+  if (d.agent && d.agent !== 'copilot' && !d.calls) { el.innerHTML = '<div class="empty">Usage is counted for Copilot chats only. Your chats run in Claude Code, which keeps its own count in your Claude or Anthropic account.</div>'; return; }
   if (!d.calls) { el.innerHTML = '<div class="empty">No credits used yet. Copilot records them in each chat\'s session log, and they show up here after a chat\'s first answer.</div>'; return; }
   const tile = (name, n, c, tip) => `<div class="ut" title="${esc(tip)}"><small>${name}</small><b>${esc(fmtCr(n))}</b><span>${esc(costText(c)) || '&nbsp;'}</span></div>`;
   const day = (s) => new Date(`${s}T12:00:00`);

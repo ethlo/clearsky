@@ -25,6 +25,7 @@ clearsky-team/
   "settings": {
     "GITHUB_ORGS": "acme",
     "TRACKER": "jira",
+    "CLEARSKY_AGENT": "copilot",
     "CLEARSKY_STANDUP_TIME": "09:45",
     "CLEARSKY_WORKDAYS": "Mon-Fri",
     "COPILOT_FOLDERS": "~/dev/acme",
@@ -68,7 +69,7 @@ The plugins you added are listed with where they come from and their pins (one t
 
 ## What joining does
 
-- **Settings:** a pack value fills a setting you haven't set, or one the pack set before. A setting you changed yourself is kept, and joining says so. Only team-wide settings are taken (organizations, where tickets live (`TRACKER`: `jira`, `github` or `none`, see [Where your tickets live](trackers.md)), stand-up, workdays, starred Jira projects or repos, Copilot defaults and folders, the sandbox's extra hosts, VPN check), plus the settings plugins let a team set (below). Tokens, your calendar, and the sandbox's doors (**Never ask before**, the "always" rules) are never taken from a pack: those stay your own decisions.
+- **Settings:** a pack value fills a setting you haven't set, or one the pack set before. A setting you changed yourself is kept, and joining says so. Only team-wide settings are taken (organizations, where tickets live (`TRACKER`: `jira`, `github` or `none`, see [Where your tickets live](trackers.md)), the agent for chats (`CLEARSKY_AGENT`: `copilot` or `claude`, see [The agent behind your chats](agents.md)), stand-up, workdays, starred Jira projects or repos, Copilot defaults and folders, the sandbox's extra hosts, VPN check), plus the settings plugins let a team set (below). Tokens, your calendar, and the sandbox's doors (**Never ask before**, the "always" rules) are never taken from a pack: those stay your own decisions.
 - **The sandbox:** extra hosts in `COPILOT_DOMAINS` or `COPILOT_VM_IMAGES` are named when you join, so you know the sandbox may reach them.
 - **Links** are added to your work links. Links you already have aren't added twice.
 - **Skills** are copied to `~/.copilot/skills`, so Copilot has them in every repo. A skill you already have with the same name is left alone.

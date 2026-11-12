@@ -63,6 +63,7 @@ import { joinPack, joinSummary, readTeam, exportPack, TEAM_KEYS, applyWaiting, p
 import { scaffoldPack, writeScaffold, nextSteps } from '../lib/team-scaffold.mjs';
 import { NEW_TASK_HINT, cleanNewTask, newTaskPrompt } from '../lib/new-task.mjs';
 import { trackerName, TRACKERS, trackerHint, ghIssue } from '../lib/tracker.mjs';
+import { agentName, AGENTS } from '../lib/agents.mjs';
 import { readHandoffs, saveHandoffs, addHandoff, nextHandoff, settleAfterRestart, handoffPrompt, handoffResult, updateHandoff } from '../lib/handoff.mjs';
 import { srtInstalled } from '../lib/doctor.mjs';
 import { ownRead, chatPushes } from '../lib/own-read.mjs';
@@ -154,6 +155,9 @@ const config = buildConfig();
 // settings are saved.
 let trackerMemo = null;
 export const tracker = () => (trackerMemo ||= trackerName(process.env));
+// The coding agent behind chats: Copilot or Claude Code (lib/agents.mjs).
+let agentMemo = null;
+export const backend = () => AGENTS[agentMemo ||= agentName(process.env)];
 
 // Extra sources: the plugins you added (lib/plugins.mjs; `clearsky add`, or Settings → Plugins),
 // and your own single-file ones in ~/.config/clearsky/sources/*.mjs.
@@ -637,8 +641,8 @@ async function standupSay(s, force) {
   const key = `${s.sinceLabel}|${s.text}`;
   if (!force && sayCache.key === key) return sayCache;
   const info = await copilotInfo();
-  if (!info.available) throw new Error('Copilot CLI not found');
-  const text = await new Promise((done, fail) => {
+  if (!info.available) throw new Error(`${backend().product} not found`);
+  const text = backend().name !== 'copilot' ? await oneShot(info.bin, SAY_PROMPT + input, { model: process.env.COPILOT_MODEL || undefined }) : await new Promise((done, fail) => {
     let out = '';
     copilot.runCopilot(info.bin, copilot.copilotArgs({ prompt: SAY_PROMPT + input, permission: 'read', model: process.env.COPILOT_MODEL || undefined, cwd: copilotCwd() }), {
       env: copilotEnv(), timeoutMs: 120_000, onData: (d) => { out += d; },
@@ -658,7 +662,7 @@ async function standupCopilot(since) {
   // Only work repositories, and not chats from this panel (they're about the dashboard).
   const sessions = (await copilotSessions(info.bin))
     .filter((x) => x.title && Date.parse(x.updatedAt) >= +since && x.cwd !== copilotCwd())
-    .map((x) => ({ ...x, ws: workspaceInfo(x.id) }))
+    .map((x) => ({ ...x, ws: workspaceInfo(x.id, x.cwd) }))
     .filter((x) => orgs.has(x.ws.repository?.split('/')[0]?.toLowerCase()) && !/review/i.test(x.ws.client_name || ''));
   return {
     sessions: sessions.slice(0, 12).map(({ id, title, ws }) => ({
@@ -668,8 +672,16 @@ async function standupCopilot(since) {
   };
 }
 
-function workspaceInfo(id) {
+// Where a session works: Copilot's own session folder says; for Claude Code, the session's folder.
+function workspaceInfo(id, cwd) {
   const out = {};
+  if (backend().name !== 'copilot') {
+    if (!cwd) return out;
+    const repo = gitRepos(cwd)?.[0];
+    let branch = null;
+    try { branch = execFileSync('git', ['-C', cwd, 'branch', '--show-current'], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null; } catch { /* not a repo */ }
+    return { ...(repo && { repository: repo }), ...(branch && { branch }) };
+  }
   try {
     for (const line of readFileSync(join(copilotHome(), 'session-state', id, 'workspace.yaml'), 'utf8').split('\n')) {
       const m = line.match(/^(repository|branch|client_name):\s*["']?([^"'\s]+)["']?\s*$/);
@@ -1024,7 +1036,7 @@ const teamIo = () => ({
 });
 function joinTeam(from) {
   return joinPack(from, {
-    confDir: dirname(userEnvFile), skillsDir: join(homedir(), '.copilot', 'skills'), ...teamIo(),
+    confDir: dirname(userEnvFile), skillsDir: backend().personalSkills(), ...teamIo(),
     readLinks: () => readLinks(linksFile()), saveLinks: (d) => saveLinks(linksFile(), d),
     teamKey, known: (k) => !!settings.FIELDS[k], added: () => readRegistry(pluginDirs.registry).plugins,
   });
@@ -1046,7 +1058,7 @@ function makeTeamPack({ dir, name, repo, jiraSite, links = false, force = false 
 const teamPlugins = () => { const t = readTeam(dirname(userEnvFile)); return t?.plugins?.length ? { name: t.name, plugins: pluginOffers(t.plugins, readRegistry(pluginDirs.registry).plugins) } : null; };
 
 // `clearsky doctor` and the welcome page: what this machine has for Clearsky.
-const machineChecks = () => doctorChecks({ acliBin: config.jira.acli, tracker: tracker(), copilotBin: copilot.findCopilot(process.env.COPILOT_BIN),
+const machineChecks = () => doctorChecks({ acliBin: config.jira.acli, tracker: tracker(), agent: backend(), copilotBin: backend().find(),
   calendars: () => (process.platform === 'linux' && !wslInfo() ? edsCalendars() : []), browser: () => { try { return findBrowser(process.env, { windows: true }); } catch { return null; } },
   vm: () => vmSupport(), folders: [join(here, '..'), ...copilotFolders()] });
 // Nothing set up yet: no settings file of your own and no organizations from anywhere else.
@@ -1080,6 +1092,7 @@ function applySettings(values) {
   }
   Object.assign(config, buildConfig());
   trackerMemo = null;
+  if (agentMemo && agentMemo !== agentName(process.env)) { agentMemo = null; sessionsCache = null; }
   sourceCache.clear();
   detailCache.clear();
   copilotInfoCache = null;
@@ -1097,19 +1110,21 @@ let copilotInfoCache = null;
 
 async function copilotInfo(force) {
   if (!force && copilotInfoCache && Date.now() - copilotInfoCache.at < 10 * 6e4) return copilotInfoCache.data;
-  const bin = copilot.findCopilot(process.env.COPILOT_BIN);
+  const b = backend();
+  const bin = b.find();
   let skills = [];
-  if (bin) {
+  if (bin && b.name === 'copilot') {
     try {
       const { stdout } = await execFileP(bin, ['skill', 'list'], { cwd: copilotCwd(), timeout: 20_000, env: copilotEnv() });
       skills = copilot.parseSkillList(stdout);
     } catch { /* fall back to the files below */ }
   }
-  if (!skills.length) skills = copilot.listSkills([join(copilotCwd(), '.github', 'skills'), join(homedir(), '.copilot', 'skills')]);
+  if (!skills.length) skills = copilot.listSkills(b.skillsDirs(copilotCwd()));
   const data = {
     available: !!bin, bin, cwd: copilotCwd(), skills,
-    models: ['auto', ...copilot.recentModels().filter((m) => m !== 'auto')],
-    efforts: copilot.EFFORTS,
+    agent: { name: b.name, label: b.label, product: b.product, install: b.install, usage: b.usage },
+    models: b.models(),
+    efforts: b.efforts,
     permissions: Object.fromEntries(Object.entries(copilot.PERMISSIONS).map(([k, v]) => [k, v.label])),
     permissionHints: Object.fromEntries(Object.entries(copilot.PERMISSIONS).map(([k, v]) => [k, v.hint || ''])),
     // What a new chat starts with (Settings → Copilot); the chat's pickers override them.
@@ -1142,7 +1157,7 @@ function copilotEnv() {
   env.JAVA_TOOL_OPTIONS = `${env.JAVA_TOOL_OPTIONS ? `${env.JAVA_TOOL_OPTIONS} ` : ''}-Djava.io.tmpdir=${copilotTmp()}`;
   for (const k of ['GITHUB_TOKEN', 'GH_TOKEN', 'SLACK_TOKEN', 'GOOGLE_CALENDAR_ICS', 'CALENDAR_ICS_URL']) delete env[k];
   for (const p of plugins.sources.values()) for (const [k, f] of Object.entries(p.settings || {})) if (f.secret) delete env[k];
-  const bin = copilot.findCopilot(process.env.COPILOT_BIN);
+  const bin = backend().find();
   const dirs = [bin?.includes('/') && dirname(bin), dirname(process.execPath)].filter(Boolean);
   // acli that sends Jira text as ADF, so a description in wiki markup or Markdown shows formatted
   // (scripts/acli-bin; in the sandbox, the broker does it).
@@ -1201,13 +1216,19 @@ function ghToken() {
 }
 // Start Copilot, inside the sandbox (srt, run by Clearsky itself) when the mode or Settings →
 // Copilot says so.
-async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBOX === 'srt', folders = [] } = {}) {
-  if (!sandbox) return new AcpAgent(bin, args, { env: copilotEnv() });
+// `permission` and `model` are the chat's (Claude Code takes them as a session mode and an
+// environment variable); `dirs`, the folders it may use besides its own (Copilot takes flags).
+async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBOX === 'srt', folders = [], permission = 'ask', model = null, dirs = [] } = {}) {
+  const b = backend();
+  const how = { label: b.label, mode: b.sessionMode(permission), dirs, acp: false };
+  const own = () => ({ ...copilotEnv(), ...b.env({ model }) });
+  if (!sandbox) return new AcpAgent(bin, b.acp(args), { env: own(), ...how });
   // In Clearsky's container, the container is the sandbox: Copilot sees only what's mounted
   // (git already goes over https there). The network isn't limited to COPILOT_DOMAINS, though.
-  if (process.env.CLEARSKY_IN_CONTAINER === '1') return Object.assign(new AcpAgent(bin, args, { env: copilotEnv() }), { sandboxed: true });
-  // The chats' VMs share the sandbox's proxy, so its hosts include what they need (Docker Hub…).
-  const domains = [...(process.env.COPILOT_DOMAINS ? parseDomains(process.env.COPILOT_DOMAINS) : DEFAULT_DOMAINS), ...(vmSupport().ok ? VM_DOMAINS : [])];
+  if (process.env.CLEARSKY_IN_CONTAINER === '1') return Object.assign(new AcpAgent(bin, b.acp(args), { env: own(), ...how }), { sandboxed: true });
+  // The chats' VMs share the sandbox's proxy, so its hosts include what they need (Docker Hub…),
+  // and the agent's own service (Claude Code's; Copilot's is in the defaults).
+  const domains = [...new Set([...(process.env.COPILOT_DOMAINS ? parseDomains(process.env.COPILOT_DOMAINS) : DEFAULT_DOMAINS), ...b.hosts, ...(vmSupport().ok ? VM_DOMAINS : [])])];
   const keep = join(dirname(stateFile), 'sandbox');
   // Logins stay out here; srt adds them on the way out. srt reads them from Clearsky's own
   // environment, and the sandbox gets stand-ins: Maven's (lib/maven.mjs) and your gh login.
@@ -1220,7 +1241,7 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   // No settings.xml of yours: Maven still needs one, to find srt's proxy (below).
   if (!maven) try { maven = plainMaven('<settings>\n</settings>\n', join(dirname(brokerSocket()), 'maven')); } catch { /* can't write it */ }
   if (maven) Object.assign(process.env, maven.env);
-  const env = copilotEnv();
+  const env = { ...own(), ...b.sandboxEnv() };
   const n = Number(env.GIT_CONFIG_COUNT) || 0;
   // A token from Settings → Copilot if you made one, else your gh login.
   const token = process.env.COPILOT_SANDBOX_TOKEN || ghToken();
@@ -1243,8 +1264,8 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
     Object.assign(env, { CLEARSKY_BROKER_SOCKET: brokerSocket(), CLEARSKY_BROKER_KEY: key });
     env.PATH = `${join(here, '..', 'scripts', 'sandbox-bin')}${delimiter}${env.PATH}`;
   }
-  // Copilot's built-in GitHub tools would change GitHub past the gate: off.
-  const s = await sandboxedCommand(bin, [...args, '--disable-builtin-mcps', '--acp'], { ...sandboxOpts(cwd, folders), domains, maven, github, ca: sandboxCa(keep),
+  // Copilot's built-in GitHub tools would change GitHub past the gate: off (b.sandboxArgs).
+  const s = await sandboxedCommand(bin, b.acp([...args, ...b.sandboxArgs]), { ...sandboxOpts(cwd, folders), state: b.state, domains, maven, github, ca: sandboxCa(keep),
     // Read only, so the proxy reads them: CI logs (with GitHub on), Docker Hub (with the VM).
     inspect: [...(github ? GITHUB_LOG_HOSTS : []), ...(vmSupport().ok ? REGISTRY_HOSTS : [])] },
     sandboxGate());
@@ -1257,11 +1278,11 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
       if (proxy.token) env[PROXY_TOKEN_ENV] = proxy.token;
     } catch (e) { console.error(`clearsky: Maven's proxy for the sandbox: ${e.message}`); }
   }
-  const agent = new AcpAgent(s.bin, s.args, { env, acp: false });
+  const agent = new AcpAgent(s.bin, s.args, { env, ...how });
   agent.child.once('exit', sandboxEnded);
   // A background job (`bg <command>`) runs in a sandbox of its own with the same fence: folders,
   // hosts, logins added on the way out, and the GitHub gate.
-  agent.inSandbox = async (argv, dir) => ({ env, ...await sandboxedCommand(argv[0], argv.slice(1), { ...sandboxOpts(dir, folders), domains, maven, github, ca: sandboxCa(keep),
+  agent.inSandbox = async (argv, dir) => ({ env, ...await sandboxedCommand(argv[0], argv.slice(1), { ...sandboxOpts(dir, folders), state: b.state, domains, maven, github, ca: sandboxCa(keep),
     inspect: [...(github ? GITHUB_LOG_HOSTS : []), ...(vmSupport().ok ? REGISTRY_HOSTS : [])] },
   sandboxGate()) });
   return Object.assign(agent, { sandboxed: true, brokerKey: key,
@@ -1906,15 +1927,15 @@ async function reviewRun({ key, argv, cwd, signal }, out, err) {
     try { ticket = await ticketGoal(o.ticket); } catch (e) { err(`review: couldn't read ${o.ticket} (${e.message}); use --goal instead\n`); return 1; }
   }
   const info = await copilotInfo();
-  if (!info.available) { err('review: the Copilot CLI isn\'t found\n'); return 1; }
+  if (!info.available) { err(`review: ${backend().product} isn't found\n`); return 1; }
   err(`Clearsky: a fresh reviewer is reading ${change.branch || 'the change'} against ${change.base}${ticket ? ` for ${ticket.key}` : ''} (it sees only the goal and the code). This takes a few minutes.\n`);
   const model = process.env.COPILOT_REVIEW_MODEL || process.env.COPILOT_MODEL || undefined;
-  const args = [...copilot.optionArgs({ permission: 'read', model, deny: ['url'] }), '--disable-builtin-mcps'];
+  const args = backend().args({ permission: 'read', model, deny: ['url'] });
   // The changed files as they were before, in a folder the reviewer's sandbox can read.
   const baseDir = join(copilotTmp(), 'review', randomBytes(6).toString('hex'));
   const baseFiles = await writeBaseFiles(root, change, baseDir).catch(() => []);
   const roots = [root, ...(baseFiles.length ? [baseDir] : [])];
-  const agent = await startAgent(info.bin, args, root, { sandbox: true });
+  const agent = await startAgent(info.bin, args, root, { sandbox: true, permission: 'read', model });
   const tally = { allowed: 0, denied: 0 };
   const refused = [];
   // Copilot ends its whole turn ("Operation cancelled by user") when a tool call is refused, so
@@ -1998,6 +2019,7 @@ function chatCredits(id, model = null) {
 function usageRun({ key, argv = [] }) {
   const c = chatByKey(key);
   if (!c) return { code: 1, stdout: '', stderr: 'Clearsky: this chat is closed.\n' };
+  if (backend().name !== 'copilot') return { code: 1, stdout: '', stderr: `Clearsky: usage is only counted for Copilot chats so far, not ${backend().label}; leave the line out.\n` };
   if (process.env.COPILOT_DISCLOSE !== 'on') return { code: 1, stdout: '', stderr: 'Clearsky: saying what did the work is off (Settings → Copilot); leave the line out.\n' };
   const split = chatCredits(c.id, c.model);
   return { code: 0, stdout: `${argv.includes('--fields') ? disclosureFields(split) : disclosureLine(split)}\n`, stderr: '' };
@@ -2020,6 +2042,19 @@ const doorHints = () => [...doorsByName().values()].map(({ p, door }) => {
   try { const h = door.hint?.(makeContext(p).env); return h ? ` ${h}` : ''; } catch { return ''; }
 }).join('');
 
+// One prompt and its answer, changing nothing: the stand-up summary with Claude Code (Copilot
+// has `-p` for that).
+async function oneShot(bin, prompt, { model, timeoutMs = 120_000 } = {}) {
+  const b = backend();
+  const agent = await startAgent(bin, b.args({ permission: 'read', model }), copilotCwd(), { permission: 'read', model });
+  let text = '';
+  agent.onUpdate = (u) => { if (u.sessionUpdate === 'agent_message_chunk' && u.content?.type === 'text') text += u.content.text; };
+  const timer = setTimeout(() => agent.close(), timeoutMs);
+  try { await agent.start(copilotCwd()); await agent.prompt(prompt); } finally { clearTimeout(timer); agent.close(); }
+  if (!text.trim()) throw new Error(`${b.label} gave no answer`);
+  return text.trim();
+}
+
 // A short-lived Copilot process, for listing or reading sessions.
 async function withAgent(bin, fn) {
   const agent = await startAgent(bin, [], copilotCwd());
@@ -2038,6 +2073,7 @@ function isCopilot(pid) {
   try { return /copilot/i.test(readFileSync(`/proc/${pid}/cmdline`, 'utf8')); } catch { return false; }
 }
 function openCopilotSessions() {
+  if (backend().name !== 'copilot') return {}; // Copilot's own hold files
   const dir = join(copilotHome(), 'session-state');
   let state = {};
   try { state = JSON.parse(readFileSync(join(copilotHome(), 'open-sessions-state.json'), 'utf8')) || {}; } catch {}
@@ -2250,8 +2286,10 @@ async function copilotLinks(bin) {
   const gh = sourceCache.get('github')?.data || {};
   // Copilot's own log: every branch a session worked on (workspace.yaml only has the one it
   // started or last resumed on), and the steps it took, for sessions from the last two weeks.
-  const events = new Map(recent.filter((x) => Date.now() - (Date.parse(x.updatedAt) || 0) < 14 * 864e5).map((x) => [x.id, sessionEvents(copilotHome(), x.id)]));
-  const workspace = (id) => { const ws = workspaceInfo(id); return { ...ws, branches: [...new Set([...(events.get(id)?.branches || []), ws.branch].filter(Boolean))] }; };
+  const log = backend().name === 'copilot'; // Copilot's session log (lib/copilot-events.mjs)
+  const events = new Map(recent.filter((x) => log && Date.now() - (Date.parse(x.updatedAt) || 0) < 14 * 864e5).map((x) => [x.id, sessionEvents(copilotHome(), x.id)]));
+  const cwdOf = new Map(recent.map((x) => [x.id, x.cwd]));
+  const workspace = (id) => { const ws = workspaceInfo(id, cwdOf.get(id)); return { ...ws, branches: [...new Set([...(events.get(id)?.branches || []), ws.branch].filter(Boolean))] }; };
   const links = linkSessions(recent, { prs: [...(gh.myPrs || []), ...(gh.reviewRequested || [])], refs: localState.sessionRefs(stateFile), workspace });
   // The latest step Copilot took on each item, from any session linked to it.
   const actions = {};
@@ -2278,7 +2316,7 @@ async function copilotHistory(bin, id, cwd) {
   const messages = await withAgent(bin, (a) => a.history(id, cwd));
   for (const m of messages) if (m.role === 'me') m.text = typedPart(m.text);
   // Copilot replays steps without times; its log has them.
-  const { times = {} } = sessionEvents(copilotHome(), id);
+  const { times = {} } = backend().name === 'copilot' ? sessionEvents(copilotHome(), id) : {};
   for (const m of messages) for (const g of m.segs || []) if (g.type === 'tool' && times[g.id]) Object.assign(g, times[g.id]);
   return messages;
 }
@@ -2440,10 +2478,11 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, s
   // Changing the folders in Settings starts the chat's Copilot again (resuming it) on its next turn.
   // Changing a chat's own folders (its side panel) does the same.
   const extra = chatFolders(chat);
-  const args = [...copilot.optionArgs(options), ...copilot.folderArgs([...copilotFolders(), ...extra, copilotTmp(), memory.memoryDir()])];
+  const dirs = [...copilotFolders(), ...extra, copilotTmp(), memory.memoryDir()].map((f) => f.replace(/^~(?=\/|$)/, homedir())).filter(isDir);
+  const args = backend().args({ ...options, folders: dirs });
   // Sandboxed mode always runs in srt; the others when Settings → Copilot → Sandbox says so.
   const sandbox = !!copilot.PERMISSIONS[options.permission]?.sandbox || process.env.COPILOT_SANDBOX === 'srt';
-  const sig = JSON.stringify([args, sandbox, process.env.COPILOT_DOMAINS, process.env.COPILOT_FOLDERS]);
+  const sig = JSON.stringify([backend().name, args, dirs, options.permission, options.model, sandbox, process.env.COPILOT_DOMAINS, process.env.COPILOT_FOLDERS]);
   let c = acpChats.get(chat);
   // A new Copilot for the same chat keeps its VM, and the repos and Jira projects it works on.
   let keep = {};
@@ -2451,7 +2490,7 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, s
   let started = null;
   if (!c) startingChats.set(chat, new Promise((d) => { started = d; }));
   try { if (!c) {
-    const agent = await startAgent(bin, args, cwd, { sandbox, folders: extra });
+    const agent = await startAgent(bin, args, cwd, { sandbox, folders: extra, permission: options.permission, model: options.model, dirs });
     c = { agent, sig, cwd, vm: keep.vm || null, repos: keep.repos || new Set(), jira: keep.jira || new Set(), tickets: keep.tickets || new Set(), waiting: new Map(), pending: new Map(), approved: new Set(), running: new Set(), shared: new Set(), emit: () => {}, lastUsed: Date.now() };
     bindVm(c);
     const id = await agent.start(cwd, resumeId);
@@ -3503,7 +3542,7 @@ function serve() {
         } catch { /* ids only */ }
         const cost = (n) => costOf(n, rates);
         return json(res, 200, {
-          ...t, rates, liveFailed: rates.live && !!rates.currency && rates.rateFrom !== 'live',
+          ...t, agent: backend().name, rates, liveFailed: rates.live && !!rates.currency && rates.rateFrom !== 'live',
           cost: { total: cost(t.total), today: cost(t.today), week: cost(t.week), month: cost(t.month) },
           days: t.days.map((d) => ({ ...d, cost: cost(d.credits) })), weeks: t.weeks.map((w) => ({ ...w, cost: cost(w.credits) })),
           chats: t.chats.map((c) => ({ ...c, title: names[c.id] || null, cost: cost(c.credits) })),

@@ -1,6 +1,6 @@
 # Clearsky
 
-One local page for what needs you at work: reviews, your PRs, your tickets (Jira or GitHub Issues), mentions, today's meetings and a stand-up summary, with a GitHub Copilot chat next to it that runs in a sandbox. It runs on your own machine with your own logins (`gh`, and `acli` if you use Jira), needs no tokens, and keeps nothing anywhere else.
+One local page for what needs you at work: reviews, your PRs, your tickets (Jira or GitHub Issues), mentions, today's meetings and a stand-up summary, with a coding-agent chat next to it (GitHub Copilot CLI or Claude Code) that runs in a sandbox. It runs on your own machine with your own logins (`gh`, and `acli` if you use Jira), needs no tokens, and keeps nothing anywhere else.
 
 Website, with a getting started guide: **https://clearsky.ethlo.com** (built from `site/`, this README and `docs/` by `npm run site`).
 
@@ -29,7 +29,7 @@ Everything you set is in `~/.config/clearsky/` and can be changed under **Settin
 - **Work:** one list grouped by whose move it is: Copilot chats that need you, review requests, your PRs on your move, mentions (GitHub, Jira, Slack), your tickets, and what you're waiting on.
 - **Now / Next:** your current or next meeting, how long you're free, and tasks that fit that gap.
 - **Stand-up:** a ready-to-paste Yesterday / Today / Blockers for your daily stand-up.
-- **Copilot:** a chat with the GitHub Copilot CLI on any PR or ticket, in your clone of the repo, inside a sandbox that asks before anything leaves your machine (a push, a Jira change, a new host). It can hand work off, run long builds in the background, review its own change before opening a PR, and write like you (see the next section).
+- **Copilot:** a chat with the GitHub Copilot CLI, or Claude Code (Settings → Copilot → Agent; see [The agent behind your chats](docs/agents.md)), on any PR or ticket, in your clone of the repo, inside a sandbox that asks before anything leaves your machine (a push, a Jira change, a new host). It can hand work off, run long builds in the background, review its own change before opening a PR, and write like you (see the next section).
 - **Links, calendar, notifications,** and plugins for the rest (Slack, Grafana, school, your own).
 
 ## Make Copilot write like you

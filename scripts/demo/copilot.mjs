@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Stand-in for the Copilot CLI in Clearsky's demo: a few past sessions and one that reads like
-// real work, replayed when you open it. It speaks just enough Agent Client Protocol.
+// real work, replayed when you open it. It speaks just enough Agent Client Protocol. With no
+// arguments it is Claude Code's ACP adapter instead (CLEARSKY_DEMO_AGENT=claude).
 import { createInterface } from 'node:readline';
 import { CHAT, SESSIONS } from './chat.mjs';
 
@@ -8,7 +9,7 @@ const args = process.argv.slice(2);
 const out = (o) => process.stdout.write(`${JSON.stringify({ jsonrpc: '2.0', ...o })}\n`);
 if (args[0] === 'skill' && args[1] === 'list') {
   process.stdout.write('Personal skills:\n  continue-work - Check status and continue\n  feature-delivery - Build a ticket from branch to PR\n  propose-solution - Find the best fix\n  review-my-queue - Draft my reviews\n  standup - Write my stand-up\n  triage-my-work - Plan my day\n');
-} else if (args.includes('--acp')) {
+} else if (args.includes('--acp') || !args.length) {
   let sid = 'demo-new';
   createInterface({ input: process.stdin }).on('line', (line) => {
     const m = JSON.parse(line);
@@ -23,7 +24,7 @@ if (args[0] === 'skill' && args[1] === 'list') {
     else if (m.method === 'session/prompt') {
       upd(sid, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'This is a demo: nothing runs here.' } });
       out({ id: m.id, result: { stopReason: 'end_turn' } });
-    }
+    } else if (m.id != null) out({ id: m.id, result: {} }); // session/set_mode and the like
   });
 } else {
   process.stdout.write('This is a demo: nothing runs here.');
