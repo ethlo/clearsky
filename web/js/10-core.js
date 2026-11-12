@@ -148,10 +148,12 @@ function itemKey(url) {
   return r && refKeyOf(r);
 }
 // mini: just a ✦ and its status dot (in a list row); the name is in the tooltip.
+// 'state': ✦ and what the chat is doing ("✦ job running"), for a row that holds a running chat.
 function chip(x, mini) {
   const st = STATUS_TEXT[x.status] || '';
-  return `<button class="cp-chip${mini ? ' mini' : ''} s-${esc(x.status || 'closed')}" data-sid="${esc(x.id)}" data-cwd="${esc(x.cwd || '')}"
-    title="Copilot: ${esc(x.title)}${st ? `, ${st}` : ''}, ${esc(ago(x.updatedAt))}. Click to open it."${mini ? ` aria-label="Copilot: ${esc(x.title)}"` : ''}><i></i>${mini ? '✦' : `<span>${esc(x.title)}</span>${st ? `<b>· ${st}</b>` : ''}`}</button>`;
+  const body = mini === 'state' ? `✦ ${st ? `<b>${esc(st)}</b>` : 'Copilot'}` : mini ? '✦' : `<span>${esc(x.title)}</span>${st ? `<b>· ${st}</b>` : ''}`;
+  return `<button class="cp-chip${mini === true ? ' mini' : ''} s-${esc(x.status || 'closed')}" data-sid="${esc(x.id)}" data-cwd="${esc(x.cwd || '')}"
+    title="Copilot: ${esc(x.title)}${st ? `, ${st}` : ''}, ${esc(ago(x.updatedAt))}. Click to open it."${mini ? ` aria-label="Copilot: ${esc(x.title)}${st ? `, ${st}` : ''}"` : ''}><i></i>${body}</button>`;
 }
 function sessionChips(url) {
   const list = cpLinks.links[itemKey(url || '')];
