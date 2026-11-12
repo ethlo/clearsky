@@ -1,0 +1,15 @@
+#!/usr/bin/env node
+// `ticket …` for chats (and you): the same few verbs on Jira or GitHub Issues, whichever
+// Clearsky uses (CLEARSKY_TRACKER). It runs the acli or gh it translates to, from PATH, so in
+// the sandbox those are Clearsky's doors and ask you as usual (lib/tracker.mjs).
+const { spawnSync } = require('node:child_process');
+const { ticketArgv, TICKET_USAGE } = require('./translate.js');
+
+const tracker = process.env.CLEARSKY_TRACKER || 'jira';
+const r = ticketArgv(tracker, process.argv.slice(2));
+const label = { jira: 'Jira', github: 'GitHub Issues', none: 'none' }[tracker] || tracker;
+if (r.help) { process.stdout.write(`${TICKET_USAGE.replace('{{tracker}}', label)}\n`); process.exit(0); }
+if (r.error) { process.stderr.write(`ticket: ${r.error}\n`); process.exit(2); }
+const run = spawnSync(r.bin, r.args, { stdio: 'inherit' });
+if (run.error) { process.stderr.write(`ticket: ${r.bin} didn't start (${run.error.message})\n`); process.exit(127); }
+process.exit(run.status ?? 1);

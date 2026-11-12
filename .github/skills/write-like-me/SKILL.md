@@ -1,6 +1,6 @@
 ---
 name: write-like-me
-description: Write review comments, replies, PR descriptions, Jira comments and Slack messages in my own voice. Use whenever drafting text that will be posted as me, or when I ask to make a draft sound like me.
+description: Write review comments, replies, PR descriptions, ticket comments and Slack messages in my own voice. Use whenever drafting text that will be posted as me, or when I ask to make a draft sound like me.
 ---
 
 # Write like me
@@ -40,7 +40,7 @@ comment, a Slack message) should read as if I wrote it.
    my voice. A Jira description is three short parts: the problem, what we'll do, and what's
    still open. No "Today / Change / To consider" scaffolding unless the ticket needs it.
    Write Jira text in Markdown (`## Heading`, `- item`, `` `code` ``), never wiki markup
-   (`h3.`, `{{code}}`): Clearsky's `acli` sends it to Jira as rich text.
+   (`h3.`, `{{code}}`): Clearsky's `acli` and `ticket` send it to Jira as rich text.
    Leave out "out of scope" lines for things nobody would expect in it; name only what a
    reader could reasonably think is included.
 5. **Before showing a draft,** cut it once more: every sentence I wouldn't miss goes. Then
@@ -54,8 +54,8 @@ comment, a Slack message) should read as if I wrote it.
 7. **Never post it yourself** unless I've asked you to post; show it ready to paste or ready
    for me to approve.
 
-To update the profile, ask Copilot to read my recent comments again (GitHub and Jira, with
-`gh` and `acli`) and rewrite `~/.copilot/voice.md`: what I do, with a dozen short samples.
+To update the profile, ask Copilot to read my recent comments again (GitHub and the tracker, with
+`gh` and `ticket`) and rewrite `~/.copilot/voice.md`: what I do, with a dozen short samples.
 Leave out comments an agent drafted under my name (they read like an agent: "Fixed in <sha>:
 …", "ready for human review after N rounds", sectioned summaries), or the profile learns the
 agent's voice instead of mine. Chat messages I typed are good for tone. Keep the profile's

@@ -5,13 +5,13 @@ description: Look at where things stand in the code for a ticket, PR, bug or que
 
 # Check the status, find the best solution, ask me
 
-Read only until I've picked: no edits, commits, pushes, Jira or GitHub changes.
+Read only until I've picked: no edits, commits, pushes, ticket or GitHub changes.
 
 ## 1. Where it stands
 
 The subject is the ticket, PR or problem I attached or named; with none, the current branch.
 
-- Ticket: `acli jira workitem view <KEY> --fields summary,status,description,comment --json`.
+- Ticket: `ticket view <ref>` (Jira or GitHub Issues, whichever I use; `ticket help` says which).
 - PR: `gh pr view <n> --json state,reviews,statusCheckRollup` and its unresolved threads.
 - Code: find the local clone (the current folder, else under `~/dev/`), check out nothing. Read the code the problem touches, and search for what already exists: settings, flags, earlier fixes, the same pattern elsewhere. Check `git log -S` or `git log -- <file>` for earlier attempts.
 
@@ -42,7 +42,7 @@ Then stop and wait.
 
 ## 4. After I pick
 
-Carry on with the usual workflow for the choice: a personal delivery skill if I have one (for example a feature-delivery skill for "ticket, branch, PR"), otherwise `continue-work`. Say which one you're using. A new branch starts from the fix version's release branch (`1.2.4` → `v1.2`); when that isn't clear, ask me which branch to start from, as continue-work describes.
+Carry on with the usual workflow for the choice: a personal delivery skill if I have one (for example a feature-delivery skill for "ticket, branch, PR"), otherwise `continue-work`. Say which one you're using. In a repo with release branches, a new branch starts from the version's release branch (`1.2.4` → `v1.2`); when that isn't clear, ask me which branch to start from, as continue-work describes.
 
 If the pick is a new task of its own (a separate ticket, or work on something other than the subject here), don't start it in this chat: offer it as a `new-task` block, as continue-work describes, so I can start it in a new chat.
 
