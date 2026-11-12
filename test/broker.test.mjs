@@ -73,3 +73,29 @@ test('a plugin\'s door runs by its own name or as `door <name>`, and only doors 
     assert.deepEqual(calls, [['k1', 'grafana', 'logs', 'api'], ['k1', 'grafana', 'metrics']]);
   } finally { server.close(); }
 });
+
+test('acli text in a file from the chat or its scratch folder goes to Jira as an ADF file', async () => {
+  const { writeFileSync, readFileSync, realpathSync } = await import('node:fs');
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'broker-')));
+  const path = join(dir, 's', 'broker.sock');
+  const work = join(dir, 'work'); mkdirSync(work);
+  const scratch = join(dir, 'scratch'); mkdirSync(scratch);
+  writeFileSync(join(work, 'd.md'), '## Goal\n- a\n');
+  writeFileSync(join(scratch, 'c.md'), '## Done\n- b\n');
+  const seen = [];
+  const run = (bin, argv, opts, cb) => { const f = argv.indexOf('--description-file') + 1 || argv.indexOf('--body-file') + 1; seen.push([argv, f && argv[f].includes('clearsky-acli-') ? readFileSync(argv[f], 'utf8') : null]); cb(null, '', ''); };
+  const server = serveBroker({ path, run, where: (key) => (key === 'k1' ? [work] : null), reads: () => [scratch], ask: async () => true });
+  await new Promise((r) => server.once('listening', r));
+  const bin = fileURLToPath(new URL('../scripts/sandbox-bin/acli', import.meta.url));
+  const go = (args) => new Promise((r) => execFile(process.execPath, [bin, ...args],
+    { cwd: work, env: { ...process.env, CLEARSKY_BROKER_SOCKET: path, CLEARSKY_BROKER_KEY: 'k1' } }, (e) => r(e ? e.code : 0)));
+  try {
+    assert.equal(await go(['jira', 'workitem', 'edit', '--key', 'ABC-1', '--description-file', 'd.md']), 0);
+    assert.equal(JSON.parse(seen[0][1]).content[0].type, 'heading');
+    assert.equal(await go(['jira', 'workitem', 'comment', 'create', '--key', 'ABC-1', '--body-file', join(scratch, 'c.md')]), 0);
+    assert.equal(JSON.parse(seen[1][1]).content[1].type, 'bulletList');
+    // somewhere else: not read, sent on with its absolute path
+    assert.equal(await go(['jira', 'workitem', 'comment', 'create', '--key', 'ABC-1', '--body-file', '../x.md']), 0);
+    assert.deepEqual(seen[2][0].slice(-2), ['--body-file', `${work}/../x.md`]);
+  } finally { server.close(); }
+});

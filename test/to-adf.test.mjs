@@ -44,27 +44,34 @@ test('acli arguments: description and body go as ADF, short plain text stays', (
 test('acli arguments: short flags, comment update and --from-json', () => {
   const files = {};
   const write = (name, text) => { files[name] = text; return `/tmp/x/${name}`; };
+  // with a place for files, ADF goes in one: acli takes ADF from --description-file
   const d = adfArgs(['jira', 'workitem', 'create', '-d', 'h3. Goal\nFix it'], () => '', null, write);
-  assert.equal(d[3], '--description');
-  assert.equal(JSON.parse(d[4]).content[0].type, 'heading');
+  assert.deepEqual(d.slice(3), ['--description-file', '/tmp/x/description.json']);
+  assert.equal(JSON.parse(files['description.json']).content[0].type, 'heading');
   const b = adfArgs(['jira', 'workitem', 'comment', 'create', '--key', 'ABC-1', '-b', '## Done\n- one\n- two'], () => '', null, write);
-  assert.equal(b[6], '--body');
-  assert.equal(JSON.parse(b[7]).content[1].type, 'bulletList');
-  const F = adfArgs(['jira', 'workitem', 'comment', 'create', '-F', 'c.md'], () => 'h3. Note\ntext', '/w', write);
-  assert.equal(F[4], '--body');
-  // comment update takes ADF only from a file
+  assert.deepEqual(b.slice(6), ['--body-file', '/tmp/x/body.json']);
+  assert.equal(JSON.parse(files['body.json']).content[1].type, 'bulletList');
+  // Markdown in a file, at a relative path: read from the chat's folder, sent as ADF
+  const F = adfArgs(['jira', 'workitem', 'edit', '--key', 'ABC-1', '--description-file', 'd.md'], (p) => { assert.equal(p, '/w/d.md'); return '## Goal\n- a'; }, '/w', write);
+  assert.deepEqual(F.slice(-2), ['--description-file', '/tmp/x/description.json']);
+  assert.equal(JSON.parse(files['description.json']).content[0].type, 'heading');
+  // a file Clearsky may not read goes on with its absolute path
+  assert.deepEqual(adfArgs(['--body-file', 'c.md'], () => { throw new Error('outside'); }, '/w', write), ['--body-file', '/w/c.md']);
+  // comment update takes ADF only from --body-adf
   const u = adfArgs(['jira', 'workitem', 'comment', 'update', '--key', 'ABC-1', '--id', '9', '--body', 'h3. Fixed\nIn abc123'], () => '', null, write);
   assert.deepEqual(u.slice(-2), ['--body-adf', '/tmp/x/body.json']);
   assert.equal(JSON.parse(files['body.json']).content[0].type, 'heading');
   assert.deepEqual(adfArgs(['jira', 'workitem', 'comment', 'update', '--body', 'ok'], () => '', null, write), ['jira', 'workitem', 'comment', 'update', '--body', 'ok']);
+  // a short plain line stays inline
+  assert.deepEqual(adfArgs(['jira', 'workitem', 'comment', 'create', '--body', 'Looks good'], () => '', null, write), ['jira', 'workitem', 'comment', 'create', '--body', 'Looks good']);
   // --from-json: its description becomes ADF in a copy
   const j = adfArgs(['jira', 'workitem', 'create', '--from-json', 'w.json'], () => JSON.stringify({ summary: 'S', projectKey: 'ABC', description: 'h3. Goal\nX' }), '/w', write);
   assert.deepEqual(j.slice(-2), ['--from-json', '/tmp/x/workitem.json']);
   const def = JSON.parse(files['workitem.json']);
   assert.equal(def.summary, 'S');
   assert.equal(def.description.content[0].type, 'heading');
-  // without a place for files, those stay as they are
-  assert.deepEqual(adfArgs(['--from-json', 'w.json'], () => '{}', '/w'), ['--from-json', 'w.json']);
+  // without a place for files, --from-json stays as it is, with its path made absolute
+  assert.deepEqual(adfArgs(['--from-json', 'w.json'], () => '{}', '/w'), ['--from-json', '/w/w.json']);
 });
 
 test('plain ADF holding wiki text is found again', async () => {

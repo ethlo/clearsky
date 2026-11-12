@@ -1169,7 +1169,7 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   // asks you in this chat. The key tells Clearsky which chat a request comes from.
   const key = randomBytes(16).toString('hex');
   if (process.platform === 'linux') {
-    broker ||= serveBroker({ bins: { acli: config.jira.acli }, allow: assistedAllow, ask: brokerAsk, where: brokerWhere, vm: vmSupport().ok ? vmRun : null, doors: pluginDoor, review: reviewRun, usage: usageRun, jobs: jobsDoor, log: console.log });
+    broker ||= serveBroker({ bins: { acli: config.jira.acli }, allow: assistedAllow, ask: brokerAsk, where: brokerWhere, vm: vmSupport().ok ? vmRun : null, doors: pluginDoor, review: reviewRun, usage: usageRun, jobs: jobsDoor, reads: () => [copilotTmp()], log: console.log });
     Object.assign(env, { CLEARSKY_BROKER_SOCKET: brokerSocket(), CLEARSKY_BROKER_KEY: key });
     env.PATH = `${join(here, '..', 'scripts', 'sandbox-bin')}${delimiter}${env.PATH}`;
   }
@@ -1998,9 +1998,10 @@ const PR_HINT = 'When you open a PR or finish a round of work on one, write (or 
 // Jira Cloud shows wiki markup sent as text literally ("h3. Goal"); Clearsky's acli turns the
 // text into ADF (lib/to-adf.mjs), so Copilot writes plain Markdown and leaves the format to it.
 export const JIRA_HINT = 'When you write a Jira description or comment with `acli`, write it in Markdown (`## Heading`, `- item`, `1. step`, '
-  + '`**bold**`, `` `code` ``, ``` fences, `[text](url)`), not Jira wiki markup (`h3.`, `{{code}}`) and not ADF JSON. Pass it with `--description` or '
-  + '`--body`; for longer text, write it to a file in this folder and use `--description-file` or `--body-file`. Clearsky hands it to Jira as rich text, '
-  + 'so the headings and lists show as such.';
+  + '`**bold**`, `` `code` ``, ``` fences, `[text](url)`), not Jira wiki markup (`h3.`, `{{code}}`), and don\'t build ADF JSON yourself. Pass it with `--description` or '
+  + '`--body`; for longer text, write it to a file in this folder or in $TMPDIR (not /tmp) and use `--description-file` or `--body-file` (`comment update` too: '
+  + 'give it `--body-file`). Clearsky turns the text into ADF and hands acli the file and flag it needs, with the path made absolute, so the headings and lists '
+  + 'show as such. If a ticket still shows raw Markdown, say so instead of working around it.';
 const CHOICES_HINT = 'When you need me to choose (an approach, a next step, yes or no), ask once, at the end of your answer, as a block I can click:\n'
   + '```choices\nThe question, in one line\n- First option (recommended) | what happens if I pick it\n- Second option | what happens\n```\n'
   + 'Two to four options, the one you recommend first. Then stop and wait for my pick.';
