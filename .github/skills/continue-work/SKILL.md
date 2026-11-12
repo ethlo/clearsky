@@ -1,26 +1,28 @@
 ---
 name: continue-work
-description: Check the current status of a pull request or Jira ticket (or the current branch) and carry on with what's left. Use when I ask to check status and continue, pick up where I left off, or get a PR or ticket moving again.
+description: Check the current status of a pull request or ticket (or the current branch) and carry on with what's left. Use when I ask to check status and continue, pick up where I left off, or get a PR or ticket moving again.
 ---
 
 # Check status and continue work
 
-The item is the PR or Jira ticket I attached or named. With none, use the current branch: its PR (`gh pr view --json url`) and the ticket key in the branch name.
+The item is the PR or ticket I attached or named. With none, use the current branch: its PR (`gh pr view --json url`) and its ticket (a Jira key in the branch name, or the GitHub issue the PR closes).
+
+Tickets live in Jira, in GitHub Issues, or nowhere, depending on my setup. `ticket view <ref>` reads one in any of them (`ticket help` says which tracker is in use); with no tracker, skip the ticket steps.
 
 ## 1. Find the work
 
 - For a PR, find the local checkout of its repository: the current folder if it is that repo, otherwise look under `~/dev/` (for example `~/dev/acme/<repo>`). If there is none, ask me where it is, or whether to work from GitHub only.
 - In the checkout, fetch and switch to the PR's branch (`gh pr checkout <number>`). If I have uncommitted changes there, stop and ask.
-- For a ticket, read it with `acli jira workitem view <KEY> --json` and find its PR: search `gh pr list --search <KEY>` in the likely repos, or the branch named after the key.
+- For a ticket, read it with `ticket view <ref>` and find its PR: search `gh pr list --search <KEY>` in the likely repos (for a GitHub issue, the PR that closes it), or the branch named after it.
 - If the ticket has no branch yet, start one as in "Which branch to start from" below.
 
 ## Which branch to start from
 
-A new branch starts from the release branch of the ticket's fix version, not from the default branch. Our release branches are named after the minor version: fix version `1.2.4` starts from `v1.2`.
+If the repo has release branches named after the minor version (`git ls-remote --heads origin 'v*'` lists some, like `v1.2`), a new branch starts from the release branch of the ticket's version, not from the default branch: fix version (Jira) or milestone (GitHub) `1.2.4` starts from `v1.2`. Without release branches, start from the default branch.
 
-- Read the fix version (`acli jira workitem view <KEY> --fields fixVersions --json`) and check the branch exists (`git ls-remote --heads origin v1.2`).
+- Read the version (`ticket view <ref>`: Jira's `fixVersions`, GitHub's milestone) and check the branch exists (`git ls-remote --heads origin v1.2`).
 - If there's exactly one fix version and its branch exists, start from it (`git fetch origin v1.2 && git switch -c <branch> origin/v1.2`) and say which branch you used.
-- Otherwise ask me which branch to start from: no fix version, more than one, a version without a matching branch, or no ticket at all. Name what you found and suggest one. Don't fall back to the default branch on your own.
+- Otherwise, in a repo with release branches, ask me which branch to start from: no version, more than one, a version without a matching branch, or no ticket at all. Name what you found and suggest one. Don't fall back to the default branch on your own.
 - The PR targets that same branch, and the self-review gets it as `--base`.
 
 ## 2. Check the status
@@ -58,7 +60,7 @@ Ask me once whether to go ahead with the checklist, unless I already said to con
 
 A proper review by a fresh reviewer that knows only the goal and the code, not this conversation:
 
-- In Clearsky's sandbox, run `review --ticket <KEY>` in the repo (`--goal "<one or two sentences>"` when there's no ticket, `--base <branch>` when the PR targets a release branch such as `v1.2` rather than the default branch). Clearsky works out the diff and reads the ticket itself, and starts a new Copilot session that can only read the repo.
+- In Clearsky's sandbox, run `review --ticket <KEY>` in the repo (`--goal "<one or two sentences>"` when there's no ticket, `--base <branch>` when the PR targets a release branch such as `v1.2` rather than the default branch). Clearsky works out the diff and reads the ticket itself (a Jira key, or `owner/name#12` for a GitHub issue), and starts a new Copilot session that can only read the repo.
 - Give it the goal only. Never pass your own reasoning, plans or what you think is risky: the point is a review without them.
 - Without `review` (outside Clearsky's sandbox), start a new Copilot session yourself (`copilot -p`, read only) with only the ticket's summary and description and `git diff <base>...` in the prompt, and nothing from this conversation.
 - Check each finding against the code. Fix the ones that hold up, and note in one line why you skip the others. Run it again after fixing; stop when it says `VERDICT: ready`, or after three rounds, and tell me what's still open.
@@ -106,7 +108,7 @@ When you are the new chat, the first message names the other chat and gives its 
 ## Never without asking me
 
 - Merge, approve, close, or force-push.
-- Post review replies or Jira comments, or change a ticket's status: show me drafts.
+- Post review replies or ticket comments, or change a ticket's status: show me drafts.
 - Touch another branch or someone else's PR.
 
 End with what you did, what's still open, and anything that needs me.

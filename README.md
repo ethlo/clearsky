@@ -1,6 +1,6 @@
 # Clearsky
 
-One local page for what needs you at work: reviews, your PRs, Jira tickets, mentions, today's meetings and a stand-up summary, with a GitHub Copilot chat next to it that runs in a sandbox. It runs on your own machine with your own logins (`gh`, `acli`), needs no tokens, and keeps nothing anywhere else.
+One local page for what needs you at work: reviews, your PRs, your tickets (Jira or GitHub Issues), mentions, today's meetings and a stand-up summary, with a coding-agent chat next to it (GitHub Copilot CLI or Claude Code) that runs in a sandbox. It runs on your own machine with your own logins (`gh`, and `acli` if you use Jira), needs no tokens, and keeps nothing anywhere else.
 
 Website, with a getting started guide: **https://clearsky.ethlo.com** (built from `site/`, this README and `docs/` by `npm run site`).
 
@@ -15,7 +15,7 @@ clearsky try               # look around with made-up data first: no logins, not
 clearsky serve             # then the real thing, at http://127.0.0.1:7777
 ```
 
-The first time, Clearsky opens a **welcome page** that checks what this machine has and logs you in to GitHub and Jira with a button each. That's all the setup there is. After that:
+The first time, Clearsky opens a **welcome page** that checks what this machine has, asks where your tickets live (Jira, GitHub Issues or nowhere), and logs you in with a button each. That's all the setup there is. After that:
 
 - `clearsky app` opens it in a window of its own (it's in your app menu too).
 - If your team has a shared setup, join it: `clearsky join <the team's repo>` (see [Team packs](#team-packs)).
@@ -29,7 +29,7 @@ Everything you set is in `~/.config/clearsky/` and can be changed under **Settin
 - **Work:** one list grouped by whose move it is: Copilot chats that need you, review requests, your PRs on your move, mentions (GitHub, Jira, Slack), your tickets, and what you're waiting on.
 - **Now / Next:** your current or next meeting, how long you're free, and tasks that fit that gap.
 - **Stand-up:** a ready-to-paste Yesterday / Today / Blockers for your daily stand-up.
-- **Copilot:** a chat with the GitHub Copilot CLI on any PR or ticket, in your clone of the repo, inside a sandbox that asks before anything leaves your machine (a push, a Jira change, a new host). It can hand work off, run long builds in the background, review its own change before opening a PR, and write like you (see the next section).
+- **Copilot:** a chat with the GitHub Copilot CLI, or Claude Code (Settings → Copilot → Agent; see [The agent behind your chats](docs/agents.md)), on any PR or ticket, in your clone of the repo, inside a sandbox that asks before anything leaves your machine (a push, a Jira change, a new host). It can hand work off, run long builds in the background, review its own change before opening a PR, and write like you (see the next section).
 - **Links, calendar, notifications,** and plugins for the rest (Slack, Grafana, school, your own).
 
 ## Make Copilot write like you
@@ -76,6 +76,7 @@ The welcome page (`/welcome`) shows what this machine has (Node, git, gh, acli, 
 ### Logins
 
 - **GitHub:** nothing, if you're logged in with the GitHub CLI (`gh auth login`); Clearsky then uses `gh auth token`. Otherwise a fine-grained token with read access to Pull requests, Issues, Contents and Metadata on your work org. A classic token with `repo` scope also works. If your org uses SSO, authorize the token for it.
+- **Tickets:** Jira, GitHub Issues, or no tracker (Settings → General → Tickets live in; see [Where your tickets live](docs/trackers.md)). Chats use one `ticket view|comment|move|new` command for any of them.
 - **Jira:** no token in Clearsky. All Jira calls go through `acli` (`acli jira auth login --web`), so it uses whatever account `acli jira auth` is logged in as.
 - **Google Calendar (optional), either or both ways.** When both are set up, their meetings are merged, and if one fails the other still shows:
   - **GNOME Online Accounts:** add your work Google account under Settings → Online Accounts with Calendar switched on, and set `CALENDAR_EMAIL`. Clearsky reads the calendar Evolution syncs locally, from its SQLite cache via `node:sqlite`, so it needs no login of its own. To include more calendars (a family or personal one), add that Google account in Online Accounts with only Calendar on, then tick the calendar in Clearsky's Settings (saved as `EVOLUTION_CALENDARS`). On a shared calendar like "Family", events only take your free time when you organise or are invited to them, or when one of your names (`CALENDAR_MY_NAMES`, say `Alex`) is in the title; the rest show greyed in the agenda. Holiday and birthday calendars are never picked automatically.
