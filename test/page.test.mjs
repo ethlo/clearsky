@@ -58,10 +58,15 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
   assert.ok(await page.locator('#list li.r').count() >= 2, 'the inbox lists the PRs');
   assert.match(await page.locator("#list").innerText(), /ready for a reviewer/i);
 
-  // Your PR and the ticket in its branch link to each other, and the link opens the other here.
-  assert.match(await page.locator('#list li.r', { hasText: 'ABC-5' }).first().locator('.xref').innerText(), /OPS-1/);
+  // Your PR and the ticket in its branch are one task: one row in Work, the PR's, with the
+  // ticket and where it stands beside the title.
+  assert.match(await page.locator('#list li.r', { hasText: 'ABC-5' }).first().locator('.xref').innerText(), /OPS-1 · in progress/i);
+  assert.equal(await page.locator('#list li.r', { hasText: 'Rotate certs' }).count(), 0, 'the ticket has no row of its own');
+  // In Tickets they link to each other, and the link opens the other here.
+  await page.goto(`${base}/#tickets`);
+  await page.waitForSelector('#list li.r.tbl');
   const ticketLink = page.locator('#list li.r', { hasText: 'Rotate certs' }).locator('.xref');
-  assert.match(await ticketLink.innerText(), /api #1 · ready for a reviewer/i);
+  assert.match(await ticketLink.innerText(), /api #1/i);
   await ticketLink.click();
   await page.waitForSelector('#v-item:not([hidden]) h2:text("ABC-5: Fix capture")');
   assert.match(await page.locator('#item .stands').innerText(), /OPS-1/);

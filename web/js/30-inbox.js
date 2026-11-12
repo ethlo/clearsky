@@ -257,11 +257,56 @@ function sessionItems() {
       const k = linked(x.id), folder = (x.cwd || '').split('/').filter(Boolean).pop() || '';
       // A chat on one of your PRs also shows where the PR stands (review rounds, CI, reviewer).
       const st = prStateOf(k);
-      return { group: 'copilot', kind: 'session', sid: x.id, cwd: x.cwd, k: `cp:${x.id}`, title: x.title || 'Copilot chat',
+      return { group: 'copilot', kind: 'session', sid: x.id, cwd: x.cwd, k: `cp:${x.id}`, key: k, live: x, title: x.title || 'Copilot chat',
         ref: k ? k.replace(/^(pr|gh):[\w.-]+\//, '').replace('#', ' #').replace(/^issue:/, '') : folder, step: [st, k ? folder : ''].filter(Boolean).join(' · '),
         glyph: `s-${x.status}`, label: [STATUS_TEXT[x.status] || x.status, x.status === 'needs-you' ? 'amber' : x.status === 'working' ? 'green' : 'blue'],
         at: x.updatedAt, status: x.status };
     });
+}
+
+// One piece of work, one row (Work): a ticket, its PRs and the Copilot chats on them are the
+// same task, so they share a row instead of showing up once per source. The row is the most
+// urgent of them (a PR before its ticket, since the PR holds the next step), it goes in the
+// most urgent group of any of them, and the rest show beside its title with their own state.
+// Mentions stay rows of their own: each is something to answer.
+const GROUP_RANK = { needs: 0, copilot: 1, tickets: 2, waiting: 3 };
+const JOINS = new Set(['pr', 'review', 'ticket', 'issue']);
+const chatNeedsYou = (s) => s.status === 'needs-you' || s.status === 'waiting';
+function mergeWork(items, sessions, all) {
+  const up = items.map((_, i) => i);
+  const find = (i) => (up[i] === i ? i : (up[i] = find(up[i])));
+  const at = new Map();
+  const keysOf = (x) => [x.k, x.url && itemKey(x.url), x.issue && `issue:${x.issue}`].filter(Boolean);
+  items.forEach((x, i) => { if (JOINS.has(x.kind)) keysOf(x).forEach((k) => at.has(k) || at.set(k, i)); });
+  items.forEach((x, i) => {
+    if (!JOINS.has(x.kind)) return;
+    for (const r of relatedItems(x, all)) {
+      const j = keysOf(r).map((k) => at.get(k)).find((n) => n !== undefined);
+      if (j !== undefined && JOINS.has(items[j].kind)) up[find(j)] = find(i);
+    }
+  });
+  const units = new Map();
+  const unit = (i) => { const r = find(i); if (!units.has(r)) units.set(r, { members: [], chats: [] }); return units.get(r); };
+  items.forEach((x, i) => unit(i).members.push(x));
+  const loose = [];
+  for (const s of sessions) {
+    const i = s.key ? at.get(s.key) : undefined;
+    if (i === undefined) loose.push(s); else unit(i).chats.push(s.live);
+  }
+  const rank = (x) => GROUP_RANK[x.group] ?? 4;
+  const kindRank = (x) => (x.pr ? 0 : 1);
+  const out = [];
+  for (const { members, chats } of units.values()) {
+    if (members.length === 1 && !chats.length) { out.push(members[0]); continue; }
+    const [lead, ...also] = [...members].sort((a, b) => rank(a) - rank(b) || kindRank(a) - kindRank(b));
+    const group = members.some((x) => x.group === 'needs') || chats.some(chatNeedsYou) ? 'needs'
+      : chats.length ? 'copilot' : lead.group;
+    out.push({ ...lead, group, also, chats });
+  }
+  // In the order the lists came in: the lead's place.
+  const pos = new Map(items.map((x, i) => [x.k, i]));
+  out.sort((a, b) => pos.get(a.k) - pos.get(b.k));
+  return { rows: out, loose };
 }
 
 const LIST_VIEWS = { inbox: 'Work', reviews: 'Reviews', prs: 'Your PRs', mentions: 'Mentions', tickets: 'Tickets' };
@@ -512,14 +557,19 @@ document.addEventListener('visibilitychange', backFromGitHub);
 function itemRow(it, i) {
   const [lt, tone] = it.label || [];
   const fresh = it.kind !== 'session' && isNew(it.k, it.stamp);
-  const chips = it.url ? (cpLinks.links[itemKey(it.url)] || []).slice(0, 1).map((x) => chip(x, !WORK_COLS[listView])).join('') : '';
+  // A merged row shows the live chats on any part of the task with their state; otherwise the
+  // latest chat on the item, as a small ✦.
+  const chips = it.chats?.length ? it.chats.slice(0, 2).map((x) => chip(x, 'state')).join('')
+    : [it, ...(it.also || [])].map((x) => x.url && (cpLinks.links[itemKey(x.url)] || [])[0]).filter(Boolean).slice(0, 1).map((x) => chip(x, !WORK_COLS[listView])).join('');
+  const also = (it.also || []).map((x) => `${x.k}\t${x.stamp ?? ''}`).join('\n');
   const acts = it.kind === 'session' ? '' : `<span class="ra">${refFromUrl(it.url) ? `<button class="ask" data-ask="${esc(it.url)}" data-title="${esc(it.title)}" title="Copilot on this (A)" aria-label="Copilot on this">✦</button>` : ''}
-    <button data-mute="${esc(it.k)}" title="Snooze (H)" aria-label="Snooze">${MUTE_ICON}</button>
-    <button data-done="${esc(it.k)}" data-stamp="${esc(it.stamp ?? '')}" title="Done: hide until there's something new (E)" aria-label="Done">${DONE_ICON}</button></span>`;
+    <button data-mute="${esc(it.k)}"${also ? ` data-also="${esc(also)}"` : ''} title="Snooze (H)" aria-label="Snooze">${MUTE_ICON}</button>
+    <button data-done="${esc(it.k)}" data-stamp="${esc(it.stamp ?? '')}"${also ? ` data-also="${esc(also)}"` : ''} title="Done: hide until there's something new (E)" aria-label="Done">${DONE_ICON}</button></span>`;
   const rel = it.kind === 'session' ? [] : relatedItems(it, xrefAll);
   if (WORK_COLS[listView]) return tableRow(it, i, rel, chips, acts, fresh);
   // One related ticket or PR at most (it opens here); the rest is on the item's page.
-  const xrefs = rel.slice(0, 1).map((x) => xrefChip(x, !it.pr)).join('');
+  // On a merged row, every other part of the task, with where it stands.
+  const xrefs = it.also?.length ? it.also.map((x) => xrefChip(x, true)).join('') : rel.slice(0, 1).map((x) => xrefChip(x, !it.pr)).join('');
   return `<li class="r${it.group === 'waiting' ? ' quiet' : ''}${it.k === selK ? ' sel' : ''}" data-i="${i}" tabindex="-1">
     ${fresh ? '<span class="new-dot" title="New since you last looked" aria-label="New"></span>' : ''}<span class="st ${esc(it.glyph)}"></span>
     <span class="id"${refAttrs(it)}>${esc(it.ref || '')}</span>
@@ -557,10 +607,12 @@ function renderList() {
   const groups = [];
   const group = (title, glyph, items, opts = {}) => groups.push({ title, glyph, items, ...opts });
   if (listView === 'inbox') {
-    group('Copilot now', 's-working', sessionItems().filter((x) => matchesQ(x, q)), { hideEmpty: true });
-    group('Needs you', 'ment', by((x) => x.group === 'needs'), { empty: loading ? null : 'Nothing needs you right now.' });
-    group('Your tickets', 'prog', by((x) => x.group === 'tickets'), { hideEmpty: true });
-    group('Waiting on others', 'wait', by((x) => x.group === 'waiting'), { hideEmpty: true, fold: !showWaiting });
+    const { rows, loose } = mergeWork(live, sessionItems(), all);
+    const of = (g) => rows.filter((x) => x.group === g);
+    group('Copilot now', 's-working', [...loose.filter((x) => matchesQ(x, q)), ...of('copilot')], { hideEmpty: true });
+    group('Needs you', 'ment', of('needs'), { empty: loading ? null : 'Nothing needs you right now.' });
+    group('Your tickets', 'prog', of('tickets'), { hideEmpty: true });
+    group('Waiting on others', 'wait', of('waiting'), { hideEmpty: true, fold: !showWaiting });
   } else if (listView === 'reviews') group('Reviews for you', 'rev', by((x) => x.kind === 'review'), { empty: 'No reviews waiting.' });
   else if (listView === 'prs') {
     // Code under your name you haven't read (Copilot's, a colleague's) first, those out for review on top.

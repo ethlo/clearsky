@@ -15,6 +15,7 @@ document.body.append(menu);
 function openMuteMenu(btn) {
   const tomorrow = new Date(Date.now() + 864e5).toISOString().slice(0, 10);
   menu.dataset.key = btn.dataset.mute;
+  menu.dataset.also = btn.dataset.also || '';
   menu.innerHTML = `<div class="menu-h">Snooze until</div>
     ${[['1h', 'In 1 hour'], ['3h', 'In 3 hours'], ['tomorrow', 'Tomorrow’s stand-up'], ['week', 'In a week']]
       .map(([v, l]) => `<button role="menuitem" data-for="${v}">${l}</button>`).join('')}
@@ -25,6 +26,12 @@ function openMuteMenu(btn) {
   menu.style.left = `${Math.max(12, Math.min(r.right + window.scrollX - menu.offsetWidth, window.innerWidth - menu.offsetWidth - 12))}px`;
   menu.querySelector('button').focus();
 }
+// The other parts of a merged Work row (data-also: "key<TAB>stamp" per line).
+const alsoOf = (v) => (typeof v === 'string' ? v : v?.dataset?.also || '').split('\n').filter(Boolean).map((l) => l.split('\t'));
+async function muteAll(key, also, span) {
+  for (const [k] of alsoOf(also)) await post('/api/mute', { key: k, for: span }).catch(() => {});
+  return mute(key, span);
+}
 async function mute(key, span) {
   menu.hidden = true;
   try { ({ muted: mutedMap } = await post('/api/mute', { key, for: span })); } catch (e) { $('#status').textContent = `Could not save: ${e.message}`; }
@@ -34,7 +41,7 @@ async function mute(key, span) {
 }
 menu.addEventListener('click', (e) => {
   const v = e.target.closest('[data-for]')?.dataset.for;
-  if (v) return mute(menu.dataset.key, v);
+  if (v) return muteAll(menu.dataset.key, menu.dataset.also, v);
   const rs = e.target.closest('[data-resume]');
   if (rs) { menu.hidden = true; openChat(true, true); return openSession(rs.dataset.resume, rs.dataset.cwd); }
   const sk = e.target.closest('[data-run]');
@@ -79,7 +86,7 @@ async function startCopilotOn(ref, skill, quick = false) {
   openChat(true, true);
   if (pick) send(startMessage(pick, `What is the next step on ${refLabel(ref)}?`));
 }
-menu.addEventListener('change', (e) => { if (e.target.type === 'date' && e.target.value) mute(menu.dataset.key, e.target.value); });
+menu.addEventListener('change', (e) => { if (e.target.type === 'date' && e.target.value) muteAll(menu.dataset.key, menu.dataset.also, e.target.value); });
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-mute]');
   if (btn) { e.stopPropagation(); return menu.hidden || menu.dataset.key !== btn.dataset.mute ? openMuteMenu(btn) : (menu.hidden = true); }
@@ -87,7 +94,13 @@ document.addEventListener('click', (e) => {
   const un = e.target.closest('[data-unmute]')?.dataset.unmute;
   if (un) mute(un, null);
   const done = e.target.closest('[data-done]');
-  if (done) { dismissed[done.dataset.done] = done.dataset.stamp; dismiss({ key: done.dataset.done, stamp: done.dataset.stamp, done: true }); }
+  if (done) {
+    // A row that holds a whole task (ticket, PR) puts all of it away, so the ticket doesn't
+    // come back on its own.
+    const parts = [...alsoOf(done), [done.dataset.done, done.dataset.stamp]];
+    for (const [key, stamp] of parts) dismissed[key] = stamp;
+    (async () => { for (const [key, stamp] of parts.slice(0, -1)) await post('/api/dismiss', { key, stamp, done: true }).catch(() => {}); dismiss({ key: done.dataset.done, stamp: done.dataset.stamp, done: true }); })();
+  }
   const undone = e.target.closest('[data-undone]')?.dataset.undone;
   if (undone) { delete dismissed[undone]; dismiss({ key: undone, stamp: null }); }
 });
