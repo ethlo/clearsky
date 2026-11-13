@@ -1,11 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VmImage, ChatVm, reapOrphans, cpuSample, cpuBusy, vmsLoad, vmSize, VM_DEFAULT, loginForwarder, loginHead } from '../lib/vm.mjs';
+import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VmImage, ChatVm, reapOrphans, cpuSample, cpuBusy, vmsLoad, vmSize, VM_DEFAULT, loginForwarder, loginHead, folderSync, mavenCacheSync } from '../lib/vm.mjs';
 import { registryWrite, githubFilter } from '../lib/github-gate.mjs';
 import { srtSettings } from '../lib/sandbox.mjs';
 import { needs, serveBroker } from '../lib/broker.mjs';
@@ -29,7 +29,7 @@ test('the prepared image: our keys, Docker and Maven via the proxy, nothing left
   assert.match(c, /^#cloud-config\n/);
   assert.match(c, /ed25519_private: \|\n    -----BEGIN OPENSSH PRIVATE KEY-----\n    abc\n/);
   assert.match(c, /http_proxy: http:\/\/srt:t@10\.0\.2\.100:3128/);
-  assert.match(c, /packages: \[docker\.io, maven\]/);
+  assert.match(c, /packages: \[docker\.io, maven, rsync\]/);
   assert.match(cloudConfig({ key: 'k', hostKey: 'h', hostPub: 'p', proxy: 'x', uid: 1234 }), /    uid: 1234\n/);
   for (const s of ['PerSourcePenalties no', 'systemctl disable docker.service docker.socket', 'snapd.seeded.service', 'systemd-networkd-wait-online', 'rm -f /etc/apt/apt.conf.d/90cloud-init-aptproxy', 'cloud-init clean --logs', 'cloud-init.disabled']) assert.ok(c.includes(s), s);
 });
@@ -214,4 +214,44 @@ test('the VMs menu item\'s colour follows the busiest running VM', () => {
   assert.equal(vmsLoad([vm('a', 10, 900)]).level, 'hot'); // memory counts too
   assert.equal(vmsLoad([vm('a', null, 200)]).pct, 20); // no CPU figure on the first look
   assert.deepEqual(vmsLoad([{ chat: 'a', state: 'running', system: null }]), { pct: null, what: 'CPU', chat: 'a', title: null, level: 'ok' });
+});
+
+test('the chat\'s folder is copied into the VM and back: output stays in the VM, nothing overwrites a newer file here', async (t) => {
+  const s = folderSync({ cwd: '/w/repo/', ssh: 'ssh -p 1' });
+  assert.deepEqual(s.in.slice(-2), ['/w/repo/', 'clearsky@127.0.0.1:/w/repo/']);
+  assert.deepEqual(s.out.slice(-2), ['clearsky@127.0.0.1:/w/repo/', '/w/repo/']);
+  assert.ok(s.in.includes('--exclude=target/') && !folderSync({ cwd: '/w/repo', ssh: 'ssh', first: true }).in.includes('--exclude=target/'));
+  const m = mavenCacheSync({ ssh: 'ssh', cache: '/c/m2' });
+  assert.equal(m.in.at(-2), '/c/m2/'); assert.ok(m.in.at(-1).startsWith('clearsky@127.0.0.1:/') && m.in.at(-1).endsWith('/.m2/repository/'));
+  assert.ok(m.out.includes('--ignore-existing'));
+
+  const has = await new Promise((ok) => execFile('rsync', ['--version'], (e) => ok(!e)));
+  if (!has) { t.skip('no rsync here'); return; }
+  // The same rsync arguments, with a local folder standing in for the VM's.
+  const root = mkdtempSync(join(tmpdir(), 'vmsync-')), host = join(root, 'host'), vm = join(root, 'vm');
+  const local = (argv) => argv.filter((a, i) => a !== '-e' && argv[i - 1] !== '-e').map((a) => a.replace('clearsky@127.0.0.1:/w/repo/', `${vm}/`).replace('/w/repo/', `${host}/`));
+  const rsync = (argv) => new Promise((ok, fail) => execFile('rsync', local(argv), (e, o, er) => (e ? fail(new Error(er)) : ok())));
+  const put = (f, text, at) => { mkdirSync(join(f, '..'), { recursive: true }); writeFileSync(f, text); if (at) utimesSync(f, at, at); };
+  const old = new Date(Date.now() - 60_000);
+  put(join(host, 'src/A.java'), 'a', old); put(join(host, '.git/HEAD'), 'ref', old); put(join(host, 'target/Old.class'), 'old', old); put(join(host, 'mod/target/x'), 'x', old);
+  await rsync(folderSync({ cwd: '/w/repo', ssh: 'ssh', first: true }).in);
+  assert.equal(readFileSync(join(vm, 'target/Old.class'), 'utf8'), 'old');
+  // The build in the VM: cleans, compiles, edits a source; meanwhile you edit a file here.
+  rmSync(join(vm, 'target'), { recursive: true }); rmSync(join(vm, 'mod/target'), { recursive: true });
+  put(join(vm, 'target/New.class'), 'new'); put(join(vm, 'src/Gen.java'), 'gen'); put(join(vm, '.git/HEAD'), 'evil');
+  put(join(vm, 'README'), 'vm'); put(join(host, 'README'), 'mine', new Date(Date.now() + 60_000)); put(join(host, 'Notes.md'), 'new here');
+  await rsync(folderSync({ cwd: '/w/repo', ssh: 'ssh' }).out);
+  assert.ok(!existsSync(join(host, 'target/Old.class')) && !existsSync(join(host, 'mod/target')));
+  assert.equal(readFileSync(join(host, 'target/New.class'), 'utf8'), 'new');
+  assert.equal(readFileSync(join(host, 'src/Gen.java'), 'utf8'), 'gen');
+  assert.equal(readFileSync(join(host, '.git/HEAD'), 'utf8'), 'ref');
+  assert.equal(readFileSync(join(host, 'README'), 'utf8'), 'mine');
+  assert.ok(existsSync(join(host, 'Notes.md')));
+  // Next command: your edits go in, the VM's own target/ stays (incremental builds).
+  put(join(host, 'src/A.java'), 'a2'); utimesSync(join(vm, 'target/New.class'), old, old); put(join(host, 'target/New.class'), 'stale', new Date(Date.now() - 3600_000));
+  rmSync(join(host, 'src/Gen.java'));
+  await rsync(folderSync({ cwd: '/w/repo', ssh: 'ssh' }).in);
+  assert.equal(readFileSync(join(vm, 'src/A.java'), 'utf8'), 'a2');
+  assert.equal(readFileSync(join(vm, 'target/New.class'), 'utf8'), 'new');
+  assert.ok(!existsSync(join(vm, 'src/Gen.java')));
 });
