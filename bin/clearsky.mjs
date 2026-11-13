@@ -44,7 +44,7 @@ import { parseReviewArgs, changeOf, reviewPrompt, writeBaseFiles, reviewDecision
 import { buildMap, buildKind } from '../lib/map.mjs';
 import { serveBroker, brokerSocket } from '../lib/broker.mjs';
 import { mavenSandbox, sandboxCa, plainMaven, withSandboxProxy, PROXY_TOKEN_ENV } from '../lib/maven.mjs';
-import { githubFilter, REGISTRY_HOSTS, GITHUB_LOG_HOSTS, SHARED_BRANCH } from '../lib/github-gate.mjs';
+import { githubFilter, REGISTRY_HOSTS, GITHUB_LOG_HOSTS, SHARED_BRANCH, NODES_REPO_QUERY, repoFromNodes } from '../lib/github-gate.mjs';
 import { githubAdvice, jiraAdvice, outsideAdvice, parseRules, ruleLabel } from '../lib/advice.mjs';
 import { attentionItems, diffAttention, desktopNotify, DbusNotifier } from '../lib/notify.mjs';
 import { loadSources, makeContext, hook, asList } from '../lib/sources.mjs';
@@ -1423,7 +1423,7 @@ async function githubCardAdvice(what, repo, nodes, why, chats) {
   const facts = { chatRepos: new Set(chats.flatMap((c) => [...chatRepos(c)])) };
   let number = Number(what.match(/\/pulls\/(\d+)\/merge\b/)?.[1]) || null;
   if (!number && /\(mergePullRequest\)$/.test(what)) {
-    const d = await gql('query($ids: [ID!]!) { nodes(ids: $ids) { ... on PullRequest { number repository { nameWithOwner } } } }', { ids: nodes }).catch(() => null);
+    const d = await gql('query($ids: [ID!]!) { nodes(ids: $ids) { ... on PullRequest { number repository { nameWithOwner } } } }', { ids: nodes }, { partial: true }).catch(() => null);
     const pr = (d?.nodes || []).find((n) => n?.number);
     if (pr) { number = pr.number; repo ||= pr.repository.nameWithOwner; }
     facts.merge = null;
@@ -1526,12 +1526,7 @@ async function nodesRepo(ids) {
   if (!ids.length) return null;
   try {
     config.github.token ||= await ghCliToken();
-    const d = await gql(`query($ids: [ID!]!) { nodes(ids: $ids) { __typename ... on Repository { nameWithOwner }
-      ... on PullRequest { repository { nameWithOwner } } ... on Issue { repository { nameWithOwner } }
-      ... on PullRequestReview { repository { nameWithOwner } } ... on PullRequestReviewComment { repository { nameWithOwner } }
-      ... on PullRequestReviewThread { pullRequest { repository { nameWithOwner } } } ... on IssueComment { repository { nameWithOwner } } } }`, { ids });
-    const n = (d.nodes || []).find(Boolean);
-    return (n?.nameWithOwner || n?.repository?.nameWithOwner || n?.pullRequest?.repository?.nameWithOwner || '').toLowerCase() || null;
+    return repoFromNodes(await gql(NODES_REPO_QUERY, { ids }, { partial: true }));
   } catch { return null; }
 }
 // The GitHub repos a chat works on: those of its folder's git remotes (or, when it started in a
