@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { githubWrite, githubFilter, graphqlNodeIds, pushedRefs, GITHUB_LOG_HOSTS } from '../lib/github-gate.mjs';
+import { githubWrite, githubFilter, graphqlNodeIds, graphqlRepo, repoFromNodes, pushedRefs, GITHUB_LOG_HOSTS } from '../lib/github-gate.mjs';
 
 const req = (method, url, body) => new Request(url, { method, body: body == null ? undefined : JSON.stringify(body) });
 
@@ -41,6 +41,53 @@ test('a GraphQL change names its nodes, so Clearsky can find the repo (and the c
   await githubFilter(async () => true, { told: (what, opts) => seen.push(opts.nodes) })(
     req('POST', 'https://api.github.com/graphql', { query: 'mutation { addComment(input: {subjectId: "PR_kwDOabc999", body: "x"}) { x } }' }));
   assert.deepEqual(seen, [['PR_kwDOabc999']]);
+});
+
+test('gh pr create on an older repo: its legacy id is found, the fork head comes last', () => {
+  // gh sends the repo id as GitHub gave it: repos from before 2021 still have the base64 kind.
+  const legacy = 'MDEwOlJlcG9zaXRvcnkxMjM0NTY3OA==';
+  const create = { query: 'mutation PullRequestCreate($input: CreatePullRequestInput!) { createPullRequest(input: $input) { pullRequest { id url } } }',
+    variables: { input: { headRepositoryId: 'R_kgDOfork001', repositoryId: legacy, baseRefName: 'main', headRefName: 'feature/abc-1', title: 'Fix R_kgDOnotanid1 in text', body: 'x', draft: false } } };
+  assert.deepEqual(graphqlNodeIds(create), [legacy, 'R_kgDOnotanid1', 'R_kgDOfork001']);
+  // gh's follow-ups: reviewers and labels on the new PR; people and labels aren't where it goes.
+  assert.deepEqual(graphqlNodeIds({ query: 'mutation($input: RequestReviewsInput!) { requestReviews(input: $input) { clientMutationId } }',
+    variables: { input: { pullRequestId: 'MDExOlB1bGxSZXF1ZXN0OTg3NjU0', userIds: ['MDQ6VXNlcjEyMzQ1'], union: true } } }), ['MDExOlB1bGxSZXF1ZXN0OTg3NjU0']);
+  assert.deepEqual(graphqlNodeIds({ query: 'mutation { updateIssue(input: {id: "MDU6SXNzdWUxMjM0NQ==", labelIds: ["LA_kwDOlabel1"]}) { x } }' }), ['MDU6SXNzdWUxMjM0NQ==']);
+  assert.equal(graphqlRepo({ variables: { input: { branch: { repositoryNameWithOwner: 'Acme/Api', branchName: 'x' } } } }), 'acme/api');
+});
+
+test('the repo of looked-up ids: the first id GitHub knows that sits in a repo', () => {
+  assert.equal(repoFromNodes({ nodes: [null, { __typename: 'User' }, { __typename: 'Repository', nameWithOwner: 'Acme/Api' }] }), 'acme/api');
+  assert.equal(repoFromNodes({ nodes: [{ __typename: 'PullRequestReviewThread', pullRequest: { repository: { nameWithOwner: 'acme/web' } } }] }), 'acme/web');
+  assert.equal(repoFromNodes({ nodes: [null] }), null);
+  assert.equal(repoFromNodes(null), null);
+});
+
+test('a PR made through GraphQL goes to the scope check with its repo id', async () => {
+  const scoped = [];
+  const f = githubFilter(async () => false, { scope: async (info) => { scoped.push(info); return null; } });
+  const r = await f(req('POST', 'https://api.github.com/graphql', { query: 'mutation PullRequestCreate($input: CreatePullRequestInput!) { createPullRequest(input: $input) { pullRequest { url } } }',
+    variables: { input: { repositoryId: 'MDEwOlJlcG9zaXRvcnkxMjM0NTY3OA==', baseRefName: 'main', headRefName: 'feature/abc-1', title: 't' } } }));
+  assert.equal(r.action, 'allow');
+  assert.deepEqual(scoped[0].nodes, ['MDEwOlJlcG9zaXRvcnkxMjM0NTY3OA==']);
+});
+
+test('GraphQL branches, tags and commits are told like pushes', async () => {
+  const asked = [];
+  const look = { protected: async (repo, b) => repo === 'acme/api' && b === 'main' };
+  const f = githubFilter(async (what) => { asked.push(what.replace(/^.*\((.*)\)$/, '$1')); return true; }, { look });
+  const g = (query, variables) => f(req('POST', 'https://api.github.com/graphql', { query, variables }));
+  const ref = 'mutation($input: CreateRefInput!) { createRef(input: $input) { ref { name } } }';
+  const commit = 'mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }';
+  await g(ref, { input: { repositoryId: 'R_kgDOabc123', name: 'refs/heads/feature/abc-2', oid: 'a'.repeat(40) } });
+  await g(commit, { input: { branch: { repositoryNameWithOwner: 'acme/web', branchName: 'feature/abc-2' }, expectedHeadOid: 'a', message: { headline: 'x' }, fileChanges: {} } });
+  await g(commit, { input: { branch: { repositoryNameWithOwner: 'acme/api', branchName: 'main' }, expectedHeadOid: 'a', message: { headline: 'x' }, fileChanges: {} } });
+  assert.deepEqual(asked, [], 'a feature branch, and main where GitHub\'s protection decides');
+  await g(ref, { input: { repositoryId: 'R_kgDOabc123', name: 'refs/tags/v1.0', oid: 'a' } });
+  await g('mutation { createRef(input: {repositoryId: "R_kgDOabc123", name: "refs/heads/main", oid: "a"}) { ref { id } } }');
+  await g(commit, { input: { branch: { repositoryNameWithOwner: 'acme/web', branchName: 'main' }, expectedHeadOid: 'a', message: { headline: 'x' }, fileChanges: {} } });
+  await g(commit, { input: { branch: { id: 'REF_kwDOabc1' }, expectedHeadOid: 'a', message: { headline: 'x' }, fileChanges: {} } });
+  assert.deepEqual(asked, ['creates tag v1.0', 'creates main', 'pushes to main', 'a commit Clearsky couldn\'t place']);
 });
 
 const pkt = (s) => (s.length + 4).toString(16).padStart(4, '0') + s;
