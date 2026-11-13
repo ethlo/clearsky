@@ -9,7 +9,7 @@ import { connect as netConnect } from 'node:net';
 import { Readable } from 'node:stream';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { registryMirror, proxiedRequest, pruneMirror } from '../lib/registry-mirror.mjs';
+import { registryMirror, proxiedRequest, pruneMirror, mirrorStats, cacheCapBytes } from '../lib/registry-mirror.mjs';
 import { loginForwarder, dockerDaemon } from '../lib/vm.mjs';
 
 const sha = (b) => `sha256:${createHash('sha256').update(b).digest('hex')}`;
@@ -90,6 +90,10 @@ test('Docker Hub layers are kept: a second pull comes from this machine, checked
   assert.equal((await get(port, '/v2/library/pg/blobs/uploads/', { method: 'POST' })).status, 405);
   assert.equal((await get(port, '/v2/../../etc/manifests/x')).status, 404);
   assert.equal((await get(port, '/v2/library/pg/manifests/nope')).status, 404);
+  const st = mirrorStats(dir);
+  assert.equal(st.images, 1);
+  assert.equal(st.recent[0].name, 'pg:16');
+  assert.equal(st.layers, 1);
   fwd.close();
 });
 
@@ -100,14 +104,32 @@ test('Docker in the VM asks the image cache first, on the proxy\'s address, with
   assert.equal(d.proxies['https-proxy'], 'http://10.0.2.100:3128');
 });
 
-test('layers no VM used for a month are cleared out', () => {
+test('the cache keeps under its size cap by dropping the layers used longest ago; Purge empties it', () => {
   const dir = mkdtempSync(join(tmpdir(), 'mirror-'));
-  mkdirSync(join(dir, 'blobs'), { recursive: true });
-  const old = new Date(Date.now() - 40 * 864e5);
-  writeFileSync(join(dir, 'blobs', 'a'), 'x'); utimesSync(join(dir, 'blobs', 'a'), old, old);
-  writeFileSync(join(dir, 'blobs', 'b'), 'y');
-  assert.equal(pruneMirror(dir), 1);
-  assert.deepEqual(readdirSync(join(dir, 'blobs')), ['b']);
+  for (const d of ['blobs', 'manifests', 'tmp']) mkdirSync(join(dir, d), { recursive: true });
+  const at = (days) => new Date(Date.now() - days * 864e5);
+  const put = (sub, f, bytes, days, text) => { writeFileSync(join(dir, sub, f), text ?? 'x'.repeat(bytes)); utimesSync(join(dir, sub, f), at(days), at(days)); };
+  put('blobs', 'month', 10, 40); put('blobs', 'old', 100, 5); put('blobs', 'mid', 100, 2); put('blobs', 'new', 100, 0);
+  put('manifests', 'm1', 0, 1, JSON.stringify({ name: 'library/postgres', ref: '16', type: 't', data: '' }));
+  put('manifests', 'm2', 0, 0, JSON.stringify({ name: 'testcontainers/ryuk', ref: '0.11.0', type: 't', data: '' }));
+  put('manifests', 'm3', 0, 0, JSON.stringify({ name: 'library/postgres', ref: `sha256:${'a'.repeat(64)}`, type: 't', data: '' }));
+  put('tmp', 'downloading', 5, 0);
+  const s = mirrorStats(dir);
+  assert.equal(s.images, 2);
+  assert.equal(s.layers, 4);
+  assert.deepEqual(s.recent.map((x) => x.name), ['ryuk:0.11.0'.replace(/^/, 'testcontainers/'), 'postgres:16']);
+  // 30 days unused goes anyway; over 250 bytes, the oldest used goes next.
+  const r = pruneMirror(dir, { maxBytes: 250 });
+  assert.equal(r.removed, 2);
+  assert.deepEqual(readdirSync(join(dir, 'blobs')).sort(), ['mid', 'new']);
+  assert.equal(cacheCapBytes({}), 20 * 1024 ** 3);
+  assert.equal(cacheCapBytes({ COPILOT_VM_IMAGE_CACHE_GB: '2,5' }), 2.5 * 1024 ** 3);
+  // Purge: all of it, except a download running now.
+  pruneMirror(dir, { all: true });
+  assert.deepEqual(readdirSync(join(dir, 'blobs')), []);
+  assert.deepEqual(readdirSync(join(dir, 'manifests')), []);
+  assert.deepEqual(readdirSync(join(dir, 'tmp')), ['downloading']);
+  assert.deepEqual(mirrorStats(dir), { images: 0, layers: 0, bytes: 0, recent: [] });
 });
 
 test('Docker Hub is reached through srt\'s proxy, with its login, trusting its CA', async (t) => {
