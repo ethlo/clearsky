@@ -25,6 +25,7 @@ import { sandboxedCommand, sandboxEnded, stopSandbox, sandboxProxy, sandboxProxy
 import { HostDoor, ruleMatches } from '../lib/host-door.mjs';
 import { closeCards } from '../lib/chat-cards.mjs';
 import { VmImage, ChatVm, vmSupport, VM_DOMAINS, reapOrphans, vmsLoad } from '../lib/vm.mjs';
+import { mirrorStats, pruneMirror, cacheCapBytes } from '../lib/registry-mirror.mjs';
 import { VmQueue } from '../lib/vm-queue.mjs';
 import { TreeLoad } from '../lib/proc-load.mjs';
 import { Jobs, jobReport, jobView, shellLine, tailOf } from '../lib/jobs.mjs';
@@ -1765,7 +1766,16 @@ async function vmsOverview({ look = true } = {}) {
       startedAt: v.startedAt, cwd: tilde(v.cwd), commands: v.commands, vcpus: v.vcpus, memMb: v.memMb, diskBytes: v.diskBytes, system: v.system, containers: v.containers };
   }).sort((a, b) => (a.place === 'waiting') - (b.place === 'waiting') || (a.position ?? 0) - (b.position ?? 0) || Date.parse(a.since) - Date.parse(b.since));
   return { limit: snap.limit, running: snap.holders.length, waiting: snap.line.length, vms, sandboxes: sandboxesLoad(names, titles), builds: buildsWhere(),
-    host: { cpus: availableParallelism(), memMb: Math.floor(totalmem() / 1048576) } };
+    imageCache: imageCacheView(), host: { cpus: availableParallelism(), memMb: Math.floor(totalmem() / 1048576) } };
+}
+// The VMs' Docker Hub image cache (lib/registry-mirror.mjs): what's in it, looked at most every
+// 15 seconds (the VMs view asks every 3).
+const IMAGE_CACHE_DIR = join(homedir(), '.cache', 'clearsky', 'vm', 'registry');
+let imageCacheSeen = null;
+function imageCacheView(fresh = false) {
+  if (fresh || !imageCacheSeen || Date.now() - imageCacheSeen.at > 15_000) imageCacheSeen = { at: Date.now(), ...mirrorStats(IMAGE_CACHE_DIR) };
+  const { at, ...s } = imageCacheSeen;
+  return { ...s, capBytes: cacheCapBytes() };
 }
 // What chats' sandboxes run on this machine itself (Linux): the sandbox fences files and network,
 // not CPU, so a build run there instead of in the VM shows here, with its busiest process.
@@ -3090,6 +3100,12 @@ function serve() {
           const c = acpChats.get(String(chat || ''));
           if (c) { stopCopilot(String(chat)); jobs.stopChat(String(chat)); watchdog.forget(String(chat)); c.agent.close(); c.vm?.stop(); acpChats.delete(String(chat)); }
           return json(res, 200, { closed: !!c });
+        }
+        // The VMs view's Purge: the image cache emptied (a pull running now still finishes).
+        if (url.pathname === '/api/vms/image-cache/purge') {
+          if (isDemo()) return json(res, 200, { removed: 0, freed: 0 });
+          const r = pruneMirror(IMAGE_CACHE_DIR, { all: true });
+          return json(res, 200, { ...r, imageCache: imageCacheView(true) });
         }
         if (url.pathname === '/api/vm/stop') {
           const { chat } = await readJson(req);

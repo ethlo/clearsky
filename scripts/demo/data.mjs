@@ -198,6 +198,8 @@ export function vms(now = Date.now()) {
       { chat: 'demo-pay412-refunds', title: 'PAY-412: Partial refunds for split payments', cpuPct: 3, memMb: 310, procs: 9, top: { pid: 40112, name: 'node', cpuPct: 2 }, jobs: 1 },
     ],
     builds: 'vm',
+    imageCache: { images: 6, layers: 41, bytes: 3.4 * 1024 ** 3, capBytes: 20 * 1024 ** 3,
+      recent: ['postgres:16-alpine', 'testcontainers/ryuk:0.11.0', 'redis:7', 'confluentinc/cp-kafka:7.6.1', 'localstack/localstack:3', 'mongo:7'].map((name, i) => ({ name, used: new Date(now - i * 47 * 6e4).toISOString() })) },
     host: { cpus: 12, memMb: 31744 },
   };
 }
