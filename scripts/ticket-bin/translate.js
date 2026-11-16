@@ -6,6 +6,7 @@ const TICKET_USAGE = `ticket <verb> …   (your tracker: {{tracker}})
 
 ticket view <ref>                          read a ticket and its description
 ticket comment <ref> --body "…"            add a comment (--body-file <file> for longer text)
+ticket comment <ref> --edit <id>|last …    replace a comment's text (GitHub: last only)
 ticket move <ref> <status>                 change its status ("In Progress", "Done"; GitHub: open or closed)
 ticket new --title "…" [--body "…"]        create one (Jira: --project KEY [--type Task]; GitHub: [--repo owner/name])
 ticket mine                                your open tickets
@@ -16,7 +17,7 @@ Write text in Markdown.`;
 const JIRA_KEY = /^[A-Z][A-Z0-9_]+-\d+$/i;
 const GH_REF = /^(?:([\w-][\w.-]*\/[\w-][\w.-]*))?#?(\d+)$/;
 const GH_URL = /^https:\/\/github\.com\/([\w-][\w.-]*\/[\w-][\w.-]*)\/issues\/(\d+)\/?$/;
-const FLAGS = new Set(['--body', '--body-file', '--title', '--project', '--repo', '--type', '--reason']);
+const FLAGS = new Set(['--body', '--body-file', '--edit', '--title', '--project', '--repo', '--type', '--reason']);
 
 function parse(argv) {
   const pos = [], o = {};
@@ -58,7 +59,10 @@ function ticketArgv(tracker, argv = []) {
     if (verb === 'view') return acli(['view', key, '--fields', 'summary,status,assignee,reporter,priority,issuetype,description,labels,fixVersions', '--json']);
     if (verb === 'comment') {
       const t = textArgs(o, '--body');
-      return t.length ? acli(['comment', 'create', '--key', key, ...t]) : { error: 'say what to write: --body "…" or --body-file <file>' };
+      if (!t.length) return { error: 'say what to write: --body "…" or --body-file <file>' };
+      if (o.edit === 'last') return acli(['comment', 'create', '--key', key, '--edit-last', ...t]);
+      if (o.edit != null) return /^\d+$/.test(o.edit) ? acli(['comment', 'update', '--key', key, '--id', o.edit, ...t]) : { error: `--edit takes a comment id or last (got ${o.edit})` };
+      return acli(['comment', 'create', '--key', key, ...t]);
     }
     if (verb === 'move') {
       const status = pos.slice(1).join(' ').trim();
@@ -79,7 +83,9 @@ function ticketArgv(tracker, argv = []) {
     if (verb === 'view') return gh(['issue', 'view', ref.number, ...repoArgs(ref, o), '--comments', ...(o.json ? ['--json', 'number,title,state,body,author,assignees,labels,milestone,comments,url'] : [])]);
     if (verb === 'comment') {
       const t = textArgs(o, '--body');
-      return t.length ? gh(['issue', 'comment', ref.number, ...repoArgs(ref, o), ...t]) : { error: 'say what to write: --body "…" or --body-file <file>' };
+      if (!t.length) return { error: 'say what to write: --body "…" or --body-file <file>' };
+      if (o.edit != null && o.edit !== 'last') return { error: 'on GitHub, --edit only takes last (your last comment)' };
+      return gh(['issue', 'comment', ref.number, ...repoArgs(ref, o), ...(o.edit === 'last' ? ['--edit-last'] : []), ...t]);
     }
     if (verb === 'move') {
       const status = pos.slice(1).join(' ').trim().toLowerCase();
