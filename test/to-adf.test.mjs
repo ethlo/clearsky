@@ -57,9 +57,17 @@ test('acli arguments: short flags, comment update and --from-json', () => {
   assert.equal(JSON.parse(files['description.json']).content[0].type, 'heading');
   // a file Clearsky may not read goes on with its absolute path
   assert.deepEqual(adfArgs(['--body-file', 'c.md'], () => { throw new Error('outside'); }, '/w', write), ['--body-file', '/w/c.md']);
-  // comment update too: ADF in --body-file (acli has no --body-adf)
+  // comment update reads --body-file as plain text: ADF goes in --body-adf where acli has it
   const u = adfArgs(['jira', 'workitem', 'comment', 'update', '--key', 'ABC-1', '--id', '9', '--body', 'h3. Fixed\nIn abc123'], () => '', null, write);
-  assert.deepEqual(u.slice(-2), ['--body-file', '/tmp/x/body.json']);
+  assert.deepEqual(u.slice(-2), ['--body-adf', '/tmp/x/body.json']);
+  const u2 = adfArgs(['jira', 'workitem', 'comment', 'update', '--id', '9', '--body-file', 'c.md'], () => '## Fixed\n- a', '/w', write, { updateFlag: '--body-file' });
+  assert.deepEqual(u2.slice(-2), ['--body-file', '/tmp/x/body.json']);
+  // --body-adf given a Markdown file still gets ADF
+  const u3 = adfArgs(['jira', 'workitem', 'comment', 'update', '--body-adf', 'c.md'], () => '## Fixed', '/w', write);
+  assert.deepEqual(u3.slice(-2), ['--body-adf', '/tmp/x/body.json']);
+  // create --edit-last replaces the last comment through create's --body-file
+  const e = adfArgs(['jira', 'workitem', 'comment', 'create', '--key', 'ABC-1', '--edit-last', '--body-file', 'c.md'], () => '## Fixed', '/w', write);
+  assert.deepEqual(e.slice(-2), ['--body-file', '/tmp/x/body.json']);
   assert.equal(JSON.parse(files['body.json']).content[0].type, 'heading');
   assert.deepEqual(adfArgs(['jira', 'workitem', 'comment', 'update', '--body', 'ok'], () => '', null, write), ['jira', 'workitem', 'comment', 'update', '--body', 'ok']);
   // a short plain line stays inline
@@ -81,4 +89,11 @@ test('plain ADF holding wiki text is found again', async () => {
   assert.equal(hasLiteralMarkup('h3. Goal\nFix'), true);
   assert.equal(hasLiteralMarkup('Just a sentence. And another - with a dash.'), false);
   assert.equal(plainAdfText(toAdf('## Real\n\ntext')), null);
+});
+
+test('the flag comment update takes ADF from, by acli\'s help', async () => {
+  const { acliUpdateFlag } = await import('../lib/to-adf.mjs');
+  assert.equal(acliUpdateFlag(() => '      --body-adf string   Body in Atlassian Document Format (JSON file)\n  -F, --body-file string'), '--body-adf');
+  assert.equal(acliUpdateFlag(() => '  -F, --body-file string   Comment body (text or ADF)'), '--body-file');
+  assert.equal(acliUpdateFlag(() => { throw new Error('no acli'); }), '--body-adf');
 });

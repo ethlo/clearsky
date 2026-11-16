@@ -39,12 +39,16 @@ function realAcli() {
   }
   if (acliWrites(argv)) {
     try {
-      const { adfArgs } = await import('../../lib/to-adf.mjs');
+      const { adfArgs, acliUpdateFlag } = await import('../../lib/to-adf.mjs');
+      const i = argv.indexOf('comment');
+      const updateFlag = i >= 0 && argv[i + 1] === 'update'
+        ? acliUpdateFlag(() => { const h = spawnSync(bin, ['jira', 'workitem', 'comment', 'update', '--help'], { encoding: 'utf8', timeout: 15_000 }); const t = `${h.stdout || ''}${h.stderr || ''}`; if (!t.trim()) throw h.error || new Error('no help'); return t; })
+        : undefined;
       argv = adfArgs(argv, (f) => readFileSync(f, 'utf8'), process.cwd(), (name, text) => {
         tmp ||= mkdtempSync(join(tmpdir(), 'clearsky-acli-'));
         writeFileSync(join(tmp, name), text, { mode: 0o600 });
         return join(tmp, name);
-      });
+      }, { updateFlag });
     } catch (e) { process.stderr.write(`acli (Clearsky): text left as it is: ${e.message}\n`); }
   }
   const r = spawnSync(bin, argv, { stdio: 'inherit' });

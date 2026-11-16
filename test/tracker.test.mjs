@@ -39,6 +39,11 @@ test('chats are told where tickets live', () => {
 test('`ticket` on Jira runs acli', () => {
   assert.deepEqual(ticketArgv('jira', ['view', 'pay-12']).args.slice(0, 4), ['jira', 'workitem', 'view', 'PAY-12']);
   assert.deepEqual(ticketArgv('jira', ['comment', 'PAY-12', '--body-file', 'note.md']), { bin: 'acli', args: ['jira', 'workitem', 'comment', 'create', '--key', 'PAY-12', '--body-file', 'note.md'] });
+  assert.deepEqual(ticketArgv('jira', ['comment', 'PAY-12', '--edit', '10042', '--body-file', 'note.md']), { bin: 'acli', args: ['jira', 'workitem', 'comment', 'update', '--key', 'PAY-12', '--id', '10042', '--body-file', 'note.md'] });
+  assert.deepEqual(ticketArgv('jira', ['comment', 'PAY-12', '--edit', 'last', '--body', 'x']), { bin: 'acli', args: ['jira', 'workitem', 'comment', 'create', '--key', 'PAY-12', '--edit-last', '--body', 'x'] });
+  assert.match(ticketArgv('jira', ['comment', 'PAY-12', '--edit', 'abc', '--body', 'x']).error, /comment id/);
+  assert.deepEqual(ticketArgv('github', ['comment', 'acme/api#3', '--edit', 'last', '--body', 'x']).args, ['issue', 'comment', '3', '-R', 'acme/api', '--edit-last', '--body', 'x']);
+  assert.match(ticketArgv('github', ['comment', 'acme/api#3', '--edit', '12', '--body', 'x']).error, /last/);
   assert.deepEqual(ticketArgv('jira', ['move', 'PAY-12', 'In', 'Progress']), { bin: 'acli', args: ['jira', 'workitem', 'transition', '--key', 'PAY-12', '--status', 'In Progress', '--yes'] });
   assert.deepEqual(ticketArgv('jira', ['new', '--project', 'pay', '--title', 'Fix it', '--body', 'Why']),
     { bin: 'acli', args: ['jira', 'workitem', 'create', '--project', 'PAY', '--type', 'Task', '--summary', 'Fix it', '--description', 'Why'] });
