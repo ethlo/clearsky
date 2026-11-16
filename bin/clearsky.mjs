@@ -1226,6 +1226,8 @@ const chatFolders = (id) => (id ? (localState.sessionFolders(stateFile)[id] || [
 // Settings → Copilot's folders (read-write and read only) and the folders added to it.
 const chatReadRoots = (id, cwd) => fileRoots([cwd || acpChats.get(id)?.cwd || copilotCwd(), ...copilotFolders(), ...list(process.env.COPILOT_READ), ...chatFolders(id)], homedir());
 // Copilot's memory (lib/memory.mjs) is readable in the sandbox, not writable: notes go in through your Save.
+// srt's own TMPDIR when it isn't given one (kept readable for acli's text files, lib/broker.mjs).
+const SRT_TMP = '/tmp/claude';
 const sandboxOpts = (cwd, extra = []) => ({ cwd, folders: [...copilotFolders(), ...extra, copilotTmp()], home: homedir(), read: [...list(process.env.COPILOT_READ), join(here, '..'), memory.memoryDir()] });
 let broker = null;
 function ghToken() {
@@ -1280,10 +1282,14 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   // asks you in this chat. The key tells Clearsky which chat a request comes from.
   const key = randomBytes(16).toString('hex');
   if (process.platform === 'linux') {
-    broker ||= serveBroker({ bins: { acli: config.jira.acli }, gate: ({ argv }) => reviewGate(argv, (k) => ghModule.ticketPrs(k, { fresh: true })), allow: assistedAllow, ask: brokerAsk, where: brokerWhere, vm: vmSupport().ok ? vmRun : null, doors: pluginDoor, review: reviewRun, usage: usageRun, jobs: jobsDoor, reads: () => [copilotTmp()], log: console.log });
+    broker ||= serveBroker({ bins: { acli: config.jira.acli }, gate: ({ argv }) => reviewGate(argv, (k) => ghModule.ticketPrs(k, { fresh: true })), allow: assistedAllow, ask: brokerAsk, where: brokerWhere, vm: vmSupport().ok ? vmRun : null, doors: pluginDoor, review: reviewRun, usage: usageRun, jobs: jobsDoor, reads: () => [copilotTmp(), SRT_TMP], log: console.log });
     Object.assign(env, { CLEARSKY_BROKER_SOCKET: brokerSocket(), CLEARSKY_BROKER_KEY: key });
     env.PATH = `${join(here, '..', 'scripts', 'sandbox-bin')}${delimiter}${env.PATH}`;
   }
+  // srt hands the sandbox TMPDIR=/tmp/claude unless told otherwise, so $TMPDIR in a chat wasn't
+  // the scratch folder Clearsky reads acli's text files from (lib/broker.mjs): its Markdown went
+  // to Jira as it was. The same folder inside and out.
+  process.env.CLAUDE_CODE_TMPDIR = copilotTmp();
   // Copilot's built-in GitHub tools would change GitHub past the gate: off (b.sandboxArgs).
   const s = await sandboxedCommand(bin, b.acp([...args, ...b.sandboxArgs]), { ...sandboxOpts(cwd, folders), state: b.state, domains, maven, github, ca: sandboxCa(keep),
     // Read only, so the proxy reads them: CI logs (with GitHub on), Docker Hub (with the VM).
