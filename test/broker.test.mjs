@@ -94,8 +94,17 @@ test('acli text in a file from the chat or its scratch folder goes to Jira as an
     assert.equal(JSON.parse(seen[0][1]).content[0].type, 'heading');
     assert.equal(await go(['jira', 'workitem', 'comment', 'create', '--key', 'ABC-1', '--body-file', join(scratch, 'c.md')]), 0);
     assert.equal(JSON.parse(seen[1][1]).content[1].type, 'bulletList');
-    // somewhere else: not read, sent on with its absolute path
-    assert.equal(await go(['jira', 'workitem', 'comment', 'create', '--key', 'ABC-1', '--body-file', '../x.md']), 0);
-    assert.deepEqual(seen[2][0].slice(-2), ['--body-file', `${work}/../x.md`]);
+    // somewhere Clearsky may not read: refused, as acli would post its Markdown as it is
+    writeFileSync(join(dir, 'x.md'), '## Elsewhere\n- c\n');
+    assert.equal(await go(['jira', 'workitem', 'comment', 'create', '--key', 'ABC-1', '--body-file', '../x.md']), 1);
+    assert.equal(seen.length, 2);
+    // `ticket comment` turns into the same acli command, so it goes the same way
+    const ticket = fileURLToPath(new URL('../scripts/ticket-bin/ticket', import.meta.url));
+    const sandboxBin = fileURLToPath(new URL('../scripts/sandbox-bin', import.meta.url));
+    const t = await new Promise((r) => execFile(process.execPath, [ticket, 'comment', 'ABC-1', '--body-file', join(scratch, 'c.md')],
+      { cwd: work, env: { ...process.env, PATH: `${sandboxBin}:${process.env.PATH}`, CLEARSKY_TRACKER: 'jira', CLEARSKY_BROKER_SOCKET: path, CLEARSKY_BROKER_KEY: 'k1' } }, (e) => r(e ? e.code : 0)));
+    assert.equal(t, 0);
+    assert.deepEqual(seen[2][0].slice(0, 6), ['jira', 'workitem', 'comment', 'create', '--key', 'ABC-1']);
+    assert.equal(JSON.parse(seen[2][1]).content[1].type, 'bulletList');
   } finally { server.close(); }
 });
