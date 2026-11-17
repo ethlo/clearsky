@@ -2,6 +2,13 @@
 // The server joins web/js/*.js in name order into one script in index.html, so they share one scope.
 
 const REFRESH_MS = 5 * 60 * 1000;
+// The agent your chats run in, by name ("Copilot", "Claude Code"): the server writes it into the
+// page (forAgent in bin/clearsky.mjs). agentNow() is the open chat's own agent, which Settings →
+// Agent can set per folder or repo.
+const AGENT = '__AGENT__'.startsWith('__') ? 'the agent' : '__AGENT__';
+function agentNow() {
+  try { return (chat.info?.agents || []).find((a) => a.name === chat.agent)?.label || AGENT; } catch { return AGENT; }
+}
 let SOURCES = ['github', 'jira', 'jiraMentions', 'calendar'];
 // Where tickets live (lib/tracker.mjs), from /api/sources: { name: 'jira' | 'github' | 'none', label }.
 let TRACKER = { name: 'jira', label: 'Jira' };
@@ -176,9 +183,9 @@ function itemKey(url) {
 // 'state': ✦ and what the chat is doing ("✦ job running"), for a row that holds a running chat.
 function chip(x, mini) {
   const st = STATUS_TEXT[x.status] || '';
-  const body = mini === 'state' ? `✦ ${st ? `<b>${esc(st)}</b>` : 'Copilot'}` : mini ? '✦' : `<span>${esc(x.title)}</span>${st ? `<b>· ${st}</b>` : ''}`;
+  const body = mini === 'state' ? `✦ ${st ? `<b>${esc(st)}</b>` : `${AGENT}`}` : mini ? '✦' : `<span>${esc(x.title)}</span>${st ? `<b>· ${st}</b>` : ''}`;
   return `<button class="cp-chip${mini === true ? ' mini' : ''} s-${esc(x.status || 'closed')}" data-sid="${esc(x.id)}" data-cwd="${esc(x.cwd || '')}"
-    title="Copilot: ${esc(x.title)}${st ? `, ${st}` : ''}, ${esc(ago(x.updatedAt))}. Click to open it."${mini ? ` aria-label="Copilot: ${esc(x.title)}${st ? `, ${st}` : ''}"` : ''}><i></i>${body}</button>`;
+    title="${AGENT}: ${esc(x.title)}${st ? `, ${st}` : ''}, ${esc(ago(x.updatedAt))}. Click to open it."${mini ? ` aria-label="${AGENT}: ${esc(x.title)}${st ? `, ${st}` : ''}"` : ''}><i></i>${body}</button>`;
 }
 function sessionChips(url) {
   const list = cpLinks.links[itemKey(url || '')];
@@ -368,7 +375,7 @@ function refFromUrl(url = '') {
   return m ? { kind: 'issue', key: m[1] } : null;
 }
 function askButton(url, title) {
-  return refFromUrl(url) ? `<button class="ask" data-ask="${esc(url)}" data-title="${esc(title)}" title="Copilot: ask about this or run a skill on it" aria-label="Copilot on this" aria-haspopup="menu">✦</button>` : '';
+  return refFromUrl(url) ? `<button class="ask" data-ask="${esc(url)}" data-title="${esc(title)}" title="${AGENT}: ask about this or run a skill on it" aria-label="${AGENT} on this" aria-haspopup="menu">✦</button>` : '';
 }
 
 function row({ url, stamp, dismissKey, title, meta, badge, tone, quote, issue, pr, detail, src, key }) {

@@ -65,7 +65,7 @@ function chatTabs() {
     const current = id === chat.session && (chat.turns || chat.stop);
     const status = current && chat.stop ? ($('#chat-log .perm-b button') ? 'needs-you' : 'working') : live.get(id)?.status || 'closed';
     const key = Object.entries(cpLinks.links || {}).find(([, list]) => list.some((x) => x.id === id))?.[0];
-    return { id, cwd: l?.cwd || r?.cwd, title: (current && chat.title) || (r?.title?.startsWith('/') && l?.title) || r?.title || l?.title || 'Copilot chat', status, live: live.has(id), pr: prStateOf(key) };
+    return { id, cwd: l?.cwd || r?.cwd, title: (current && chat.title) || (r?.title?.startsWith('/') && l?.title) || r?.title || l?.title || `${agentNow()} chat`, status, live: live.has(id), pr: prStateOf(key) };
   }).sort((a, b) => (b.live - a.live)).slice(0, 8);
 }
 function drawTabs() {
@@ -75,7 +75,7 @@ function drawTabs() {
   $('#side-cp').innerHTML = tabs.map((t, i) => `<a class="ni cp${onChat && t.id === chat.session && !isNew ? ' on' : ''}" href="#copilot"
       data-tab="${esc(t.id)}" data-cwd="${esc(t.cwd || '')}" title="${esc(t.title)}${STATUS_TEXT[t.status] ? ` · ${STATUS_TEXT[t.status]}` : ''}${i < 9 ? ` (Alt+${i + 1})` : ''}">
       <span class="live s-${esc(t.status)}"></span><span class="lab">${esc(t.title)}<small>${esc([STATUS_TEXT[t.status] || (t.live ? 'open' : ''), t.pr, folder(t.cwd)].filter(Boolean).join(' · '))}</small></span>
-      ${t.status === 'working' || t.status === 'needs-you' ? '' : `<span class="x" data-nudge-tab="${esc(t.id)}" title="Nudge: send Copilot “Try again.”" aria-label="Nudge">${icon('refresh', 12)}</span>`}
+      ${t.status === 'working' || t.status === 'needs-you' ? '' : `<span class="x" data-nudge-tab="${esc(t.id)}" title="Nudge: send ${agentNow()} “Try again.”" aria-label="Nudge">${icon('refresh', 12)}</span>`}
       ${t.live ? '' : `<span class="x" data-forget="${esc(t.id)}" title="Remove from this list" aria-label="Remove">✕</span>`}</a>`).join('')
     + (onChat && isNew ? '<a class="ni cp on" href="#copilot"><span class="live"></span><span class="lab">New chat</span></a>' : '');
 }
@@ -176,7 +176,7 @@ function drawCtx() {
   // title is left out when it only repeats them.
   const labels = [...keys].map((k) => k.replace(/^(pr|gh|issue):/, '').replace(/^[\w.-]+\//, ''));
   const showTitle = !labels.some((l) => (title || '').includes(l));
-  el.innerHTML = `${showTitle ? `<div class="ctx-line"><span class="ctx-title">${esc(title || (chat.turns ? 'Copilot session' : 'New chat'))}</span></div>` : ''}
+  el.innerHTML = `${showTitle ? `<div class="ctx-line"><span class="ctx-title">${esc(title || (chat.turns ? `${agentNow()} session` : 'New chat'))}</span></div>` : ''}
     ${items}
     <div class="ctx-line ctx-work">${status ? `<span class="ctx-st s-${esc(status)}" title="This chat"><i></i>chat ${esc(STATUS_TEXT[status] || status)}</span>` : ''}</div>
     ${next ? `<div class="ctx-line ctx-next"><span class="lbl-next">Next</span>${next}</div>` : ''}
@@ -201,7 +201,7 @@ async function drawInfo(force) {
   const rows = [
     ['Mode', `${i.permissions?.[perm] || perm} · ${sandbox}`],
     chat.turns && ['Turns', String(chat.turns)],
-    ['Model', $('#cp-model').value.trim() || 'Copilot default'],
+    ['Model', $('#cp-model').value.trim() || `${agentNow()} default`],
     ['Effort', $('#cp-effort').selectedOptions[0]?.textContent || 'Balanced'],
     u && ['Tokens', `in ${k(u.input)}${u.input ? ` (${Math.floor(100 * u.cached / u.input)}% cached)` : ''} · out ${k(u.output)}${u.premium != null ? ` · ${u.premium} premium` : ''}`],
     // AI credits so far, split like the line a finished chat puts on its PR and ticket.
@@ -210,7 +210,7 @@ async function drawInfo(force) {
     d.cwd && ['Folder', d.cwd],
     d.folders?.length && ['Can change', d.folders.join(', ')],
     d.read?.length && ['Can read', d.read.join(', ')],
-    // Folders for this chat only: added here, on top of Settings → Copilot.
+    // Folders for this chat only: added here, on top of Settings → Agent.
     chat.turns && ['This chat', `${(d.chatFolders || []).map((f) => `<span class="cf">${esc(f)}<button type="button" class="x" data-folder-off="${esc(f)}" title="Take ${esc(f)} off this chat" aria-label="Remove">✕</button></span>`).join('')}<form class="cf-add" data-folder-form><input name="f" placeholder="~/dev/another-repo" spellcheck="false" aria-label="Folder to add to this chat"><button type="submit" class="linkish" title="This chat may read and change files there; review, vm and outside work there too. It applies from your next message.">Add folder</button></form>`],
     d.github && ['GitHub', d.github],
     d.hosts && ['Hosts', `<details><summary>${d.hosts.length} allowed</summary>${d.hosts.map(esc).join(', ')}</details>`],
@@ -249,7 +249,7 @@ function drawTrim() {
   const pct = `${Math.round(100 * full)}% full`;
   el.innerHTML = `<span>${cold ? `This chat is ${pct} and was last used ${esc(ago(new Date(d.lastAt).toISOString()))}: picking it up reads all of it again.`
     : `This chat's context is ${pct}: long chats get slower and lose track.`}</span>
-    <button type="button" data-trim="compact" title="Copilot's /compact: it replaces the conversation with its own summary">Compact</button>
+    <button type="button" data-trim="compact" title="${agentNow()}'s /compact: it replaces the conversation with its own summary">Compact</button>
     ${cold ? '<button type="button" data-trim="fresh" title="A new chat in the same folder, with the same PRs and tickets and this chat\'s last answer, ready for you to edit and send. This one stays in History.">Start fresh</button>' : ''}
     <button type="button" data-trim="hide" class="x" title="Not now" aria-label="Not now">✕</button>`;
 }
@@ -295,11 +295,11 @@ async function drawVm() {
   const on = v.state === 'running', gb = (mb) => `${(mb / 1024).toFixed(1)} GB`;
   const up = v.startedAt ? Math.round((Date.now() - Date.parse(v.startedAt)) / 6e4) : null;
   const sys = v.system ? `${gb(v.system.memUsedMb)} of ${gb(v.system.memTotalMb)}` : gb(v.memMb);
-  // Waiting in line for a VM (Settings → Copilot → VMs at the same time): where, and of how many.
+  // Waiting in line for a VM (Settings → Agent → VMs at the same time): where, and of how many.
   const qd = v.queue?.position ? v.queue : null;
   const st = qd ? 'queued' : v.state;
   const head = `<div class="vm-h"><span class="vm-st s-${esc(st)}"><i></i>VM ${esc(qd ? 'waiting' : v.state === 'running' ? 'running' : v.state === 'starting' ? 'starting' : 'stopped')}</span>
-    ${qd ? `<span class="vm-sub" title="${esc(`${qd.limit} VM${qd.limit === 1 ? '' : 's'} at a time (Settings → Copilot). Starts on its own when it's this chat's turn.`)}">${qd.position === 1 ? 'next in line' : `${qd.position - 1} ahead`} · ${qd.running} running</span>` : ''}
+    ${qd ? `<span class="vm-sub" title="${esc(`${qd.limit} VM${qd.limit === 1 ? '' : 's'} at a time (Settings → Agent). Starts on its own when it's this chat's turn.`)}">${qd.position === 1 ? 'next in line' : `${qd.position - 1} ahead`} · ${qd.running} running</span>` : ''}
     ${on && up != null ? `<span class="vm-sub">up ${up < 1 ? '<1' : up} min · ${v.commands} run${v.commands === 1 ? '' : 's'}</span>` : ''}
     ${qd ? '<button class="chip" id="vm-stop" type="button" title="Leave the line: the waiting vm command stops">Leave line</button>'
       : v.state !== 'off' ? '<button class="chip" id="vm-stop" type="button" title="Stop this chat\'s VM; the next vm command starts a fresh one">Stop</button>' : ''}</div>`;
@@ -365,7 +365,7 @@ async function drawJobs() {
       <span class="job-acts"><button type="button" class="linkish" data-job-log="${esc(j.id)}">Output</button>${j.state === 'running' ? ` · <button type="button" class="linkish" data-job-stop="${esc(j.id)}" title="Stop it; the chat hears it was stopped">Stop</button>` : ''}</span>
       <pre class="job-log" data-log-for="${esc(j.id)}" hidden></pre></div></li>`).join('');
   // The watchdog for this chat: on or paused, how many nudges so far, and the next one.
-  const wd = !w.on ? 'Off (Settings → Copilot → Long tasks)'
+  const wd = !w.on ? 'Off (Settings → Agent → Long tasks)'
     : w.paused ? 'Paused for this chat'
       : w.due ? `Nudging at ${clock(Date.parse(w.due))}: ${esc(w.reason || '')} (${w.nudges + 1} of ${w.max})`
         : w.gaveUp ? `Gave up after ${w.max} nudges: over to you`
@@ -557,12 +557,12 @@ function chatSub() {
   drawChanges();
   drawMap();
   drawOutputs();
-  if (!$('#chat-title input')) $('#chat-title').textContent = chat.title || (chat.turns ? 'Copilot session' : 'New chat');
+  if (!$('#chat-title input')) $('#chat-title').textContent = chat.title || (chat.turns ? `${agentNow()} session` : 'New chat');
   const i = chat.info;
   // The header keeps to the title; mode and turns are in the composer and under This chat.
   $('#chat-sub').textContent = i && !i.available ? 'Copilot CLI not found' : '';
   const hint = i?.permissionHints?.[$('#cp-perm').value];
-  $('#cp-perm').title = hint ? `What Copilot may do without asking: ${hint}` : 'What Copilot may do without asking';
+  $('#cp-perm').title = hint ? `What ${agentNow()} may do without asking: ${hint}` : `What ${agentNow()} may do without asking`;
 }
 
 const jiraBaseGuess = () => standupData?.jiraBase || (state.jira?.assigned?.[0]?.url || '').replace(/\/browse\/.*$/, '') || '';
@@ -854,12 +854,12 @@ function newChat() {
   if (chat.info?.permissions) { pickDefaults(); saveCp(); }
   rememberChat();
   showHistory(false);
-  $('#chat-log').innerHTML = `<div class="chat-empty">Ask about your PRs, tickets and meetings. Copilot sees what's on your dashboard
-    when the chat starts, and runs on your machine with your own Copilot login.</div>`;
+  $('#chat-log').innerHTML = `<div class="chat-empty">Ask about your PRs, tickets and meetings. ${agentNow()} sees what's on your dashboard
+    when the chat starts, and runs on your machine with your own ${agentNow()} login.</div>`;
   chatSub();
 }
 
-// A new chat starts with the defaults from Settings → Copilot, where set, else what you
+// A new chat starts with the defaults from Settings → Agent, where set, else what you
 // picked last; changing a picker applies to the chat you're in.
 function pickDefaults() {
   const i = chat.info || {}, d = i.defaults || {};
@@ -886,7 +886,7 @@ function drawAgent() {
       + (i.agents || []).filter((a) => a.available || a.name === chat.agent).map((a) => `<option value="${esc(a.name)}">${esc(a.label)}</option>`).join('');
     sel.value = started ? chat.agent : (sel.dataset.pick || '');
     sel.disabled = !!started;
-    sel.title = started ? `This chat runs in ${(i.agents || []).find((a) => a.name === chat.agent)?.label || chat.agent}` : 'The agent for this chat (Auto: Settings → Copilot decides by its folder and repo)';
+    sel.title = started ? `This chat runs in ${(i.agents || []).find((a) => a.name === chat.agent)?.label || chat.agent}` : 'The agent for this chat (Auto: Settings → Agent decides by its folder and repo)';
   }
   const a = agentShown();
   $('#cp-models').innerHTML = (a.models || i.models || []).map((m) => `<option value="${esc(m)}">`).join('');
@@ -905,7 +905,7 @@ async function loadCopilotInfo() {
   $('#cp-skills').innerHTML = (i.skills || []).map((sk) =>
     `<button class="chip" data-skill="${esc(sk.name)}" title="${esc(sk.description)}">${esc(sk.name)}</button>`).join('');
   const missing = i.agent?.name === 'claude'
-    ? `Claude Code’s ACP adapter wasn’t found on this machine. Install it with ${i.agent.install?.command || 'npm'}, or pick the agent in Settings → Copilot.`
+    ? `Claude Code’s ACP adapter wasn’t found on this machine. Install it with ${i.agent.install?.command || 'npm'}, or pick the agent in Settings → Agent.`
     : 'The GitHub Copilot CLI wasn’t found on this machine. Install it, or set COPILOT_BIN in ~/.config/clearsky/.env.';
   if (!i.available) addMsg('cp', `<div class="err">${esc(i.error || missing)}</div>`);
   chatSub();
@@ -940,7 +940,7 @@ function renderAnswer(segs, running = false) {
   return segs.map((g) => {
     if (g.type === 'text' && RESUME_WARN.test(g.text)) {
       const n = Number(g.text.match(RESUME_WARN)[1]) || 1;
-      return `<div class="tool s-resumed"><span>${icon('refresh', 13)}</span>Picked up after an interruption: ${n === 1 ? 'a step that was running didn’t finish' : `${n} steps that were running didn’t finish`}, so Copilot checks and runs ${n === 1 ? 'it' : 'them'} again.</div>${md(g.text.replace(RESUME_WARN_ALL, '').trim())}`;
+      return `<div class="tool s-resumed"><span>${icon('refresh', 13)}</span>Picked up after an interruption: ${n === 1 ? 'a step that was running didn’t finish' : `${n} steps that were running didn’t finish`}, so ${agentNow()} checks and runs ${n === 1 ? 'it' : 'them'} again.</div>${md(g.text.replace(RESUME_WARN_ALL, '').trim())}`;
     }
     if (g.type === 'text') return md(g.text);
     if (g.type === 'tool' && resumed && g.status === 'failed' && (!g.title || g.title === 'Tool')) return '';
@@ -962,7 +962,7 @@ function renderAnswer(segs, running = false) {
   }).join('')
     // The whole answer, as Markdown (or as formatted text where the paste takes it).
     + (!running && segs.some((g) => g.type === 'text' && g.text.trim()) ? `<button type="button" class="b-copy ans" data-copy-answer title="Copy the answer" aria-label="Copy the answer">${icon('copy', 13)}</button>` : '')
-    + (running && segs.moved ? `<div class="idle" data-at="${segs.moved}">Last activity ${clock(segs.moved)} · <b>${sinceNow(segs.moved)}</b></div>` : '') + (stuck ? `<button class="nudge" data-nudge title="Send Copilot “Try again.”">${icon('refresh', 13)} Nudge</button>` : '');
+    + (running && segs.moved ? `<div class="idle" data-at="${segs.moved}">Last activity ${clock(segs.moved)} · <b>${sinceNow(segs.moved)}</b></div>` : '') + (stuck ? `<button class="nudge" data-nudge title="Send ${agentNow()} “Try again.”">${icon('refresh', 13)} Nudge</button>` : '');
 }
 
 // Reopen a Copilot session (from here, the terminal or an editor) with its conversation so far.
@@ -1013,7 +1013,7 @@ async function openSession(id, cwd) {
 
 let sessions = null;
 async function loadSessions(force) {
-  $('#hist-list').innerHTML = '<div class="chat-empty"><span class="typing">Asking Copilot</span></div>';
+  $('#hist-list').innerHTML = `<div class="chat-empty"><span class="typing">Asking ${agentNow()}</span></div>`;
   try { sessions = await getJson(`/api/copilot/sessions${force ? '?refresh' : ''}`); drawSessions(); }
   catch (e) { $('#hist-list').innerHTML = `<div class="err">${esc(e.message)}</div>`; }
 }
@@ -1067,7 +1067,7 @@ function drawRefs() {
   for (const [i, f] of chat.files.entries()) {
     const el = document.createElement('span');
     el.className = 'ref file';
-    el.innerHTML = `<span title="${esc(f.pointed ? `${f.shown}: Copilot gets the path and reads it itself` : f.path || 'uploading')}">${f.pointed ? '@' : icon('clip', 12)} ${esc(f.name)}${f.dir ? '/' : ''}${f.path ? '' : ' …'}</span><button type="button" data-unfile="${i}" aria-label="Remove">✕</button>`;
+    el.innerHTML = `<span title="${esc(f.pointed ? `${f.shown}: ${agentNow()} gets the path and reads it itself` : f.path || 'uploading')}">${f.pointed ? '@' : icon('clip', 12)} ${esc(f.name)}${f.dir ? '/' : ''}${f.path ? '' : ' …'}</span><button type="button" data-unfile="${i}" aria-label="Remove">✕</button>`;
     $('#cp-refs').append(el);
   }
   for (const [i, r] of chat.refs.entries()) {
@@ -1211,7 +1211,7 @@ async function send(text, extra = {}) {
     }
     const last = segs.at(-1);
     if (last?.type === 'text') last.text = last.text.trimEnd();
-    if (!ended) segs.push({ type: 'error', message: 'Interrupted: Copilot stopped before finishing (was Clearsky restarted?). Send a message to carry on in this session.' });
+    if (!ended) segs.push({ type: 'error', message: `Interrupted: ${agentNow()} stopped before finishing (was Clearsky restarted?). Send a message to carry on in this session.` });
     if (here()) chat.turns++;
   } catch (e) {
     segs.push({ type: 'error', message: e.name !== 'AbortError' ? e.message : halted ? 'Stopped.' : 'Stopped watching; it goes on in the background.' });
@@ -1370,7 +1370,7 @@ $('#chat-form').onsubmit = (e) => {
   if (chat.stop && !t.trim()) return chat.halt ? chat.halt() : chat.stop();
   $('#chat-text').value = '';
   if (chat.stop) {
-    const el = addMsg('me', `${esc(t)}<span class="queued">Sends when Copilot is done · <button type="button" class="linkish" data-now>Send now</button> · <button type="button" class="linkish" data-unqueue title="Take it back; its text goes back in the box">Cancel</button></span>`);
+    const el = addMsg('me', `${esc(t)}<span class="queued">Sends when ${agentNow()} is done · <button type="button" class="linkish" data-now>Send now</button> · <button type="button" class="linkish" data-unqueue title="Take it back; its text goes back in the box">Cancel</button></span>`);
     el.classList.add('is-queued');
     const q = { text: t, el };
     chat.queued.push(q);
@@ -1386,12 +1386,12 @@ let forceNext = false;
 function sendNow(q) {
   if (!chat.stop) return;
   chat.queued = [q, ...chat.queued.filter((x) => x !== q)];
-  q.el.querySelector('.queued').textContent = 'Sending now: stopping what Copilot is doing';
+  q.el.querySelector('.queued').textContent = `Sending now: stopping what ${agentNow()} is doing`;
   const id = chat.session;
   (chat.halt || chat.stop)();
   setTimeout(async () => {
     if (chat.session !== id || !chat.stop || chat.queued[0] !== q) return;
-    q.el.querySelector('.queued').textContent = 'Sending now: Copilot didn\'t stop, restarting it on this conversation';
+    q.el.querySelector('.queued').textContent = `Sending now: ${agentNow()} didn\'t stop, restarting it on this conversation`;
     await post('/api/copilot/close', { chat: id }).catch(() => {});
     chat.stop?.();
   }, 8000);
@@ -1431,7 +1431,7 @@ function sendLabel() {
   if (b.dataset.state === st) return;
   b.dataset.state = st;
   b.innerHTML = `<svg viewBox="0 0 16 16">${SEND_ICONS[st]}</svg>`;
-  const t = { send: 'Send (Enter)', queue: 'Queue: sends when Copilot is done (Enter; Ctrl+Enter stops Copilot and sends now)', stop: 'Stop Copilot' }[st];
+  const t = { send: 'Send (Enter)', queue: `Queue: sends when ${agentNow()} is done (Enter; Ctrl+Enter stops ${agentNow()} and sends now)`, stop: `Stop ${agentNow()}` }[st];
   b.title = t; b.setAttribute('aria-label', t.replace(/ \(.*/, ''));
 }
 $('#chat-text').addEventListener('input', sendLabel);
@@ -1454,7 +1454,7 @@ function sendQueued() {
 // "/" at the start of the message opens a menu of skills and a few panel commands.
 const SLASH = [
   { name: 'new', description: 'Start a new chat', run: () => newChat() },
-  { name: 'history', description: 'Your Copilot sessions', run: () => showHistory(true) },
+  { name: 'history', description: `Your ${agentNow()} sessions`, run: () => showHistory(true) },
   { name: 'ref', description: 'Attach a PR, ticket or file', run: () => openRefPick() },
 ];
 let slash = null;
@@ -1501,7 +1501,7 @@ $('#chat-title').addEventListener('click', () => {
     if (done) return;
     done = true;
     const v = input.value.trim();
-    h.textContent = (save && v) || chat.title || 'Copilot session';
+    h.textContent = (save && v) || chat.title || `${agentNow()} session`;
     if (save && v && v !== chat.title) {
       chat.title = v;
       rememberChat();
@@ -1545,16 +1545,16 @@ $('#cp-skills').addEventListener('click', (e) => {
 
 // Restart: this chat's Copilot stops; the next message starts it again on the same conversation.
 $('#cp-restart').onclick = async () => {
-  if (chat.stop && !confirm('Copilot is working in this chat. Stop it and restart?')) return;
+  if (chat.stop && !confirm(`${agentNow()} is working in this chat. Stop it and restart?`)) return;
   const id = chat.session;
   if (chat.stop) chat.stop();
   await post('/api/copilot/close', { chat: id }).catch(() => {});
-  addMsg('cp', `<div class="tool"><span>${icon('refresh', 13)}</span>Copilot restarted. Your next message continues this conversation.</div>`);
+  addMsg('cp', `<div class="tool"><span>${icon('refresh', 13)}</span>${agentNow()} restarted. Your next message continues this conversation.</div>`);
   drawInfo(true);
 };
 // Close: stop it and leave the chat; it stays in History.
 $('#cp-close').onclick = async () => {
-  if (chat.stop && !confirm('Copilot is working in this chat. Stop it and close the chat?')) return;
+  if (chat.stop && !confirm(`${agentNow()} is working in this chat. Stop it and close the chat?`)) return;
   const id = chat.session;
   if (chat.stop) chat.stop();
   await post('/api/copilot/close', { chat: id }).catch(() => {});

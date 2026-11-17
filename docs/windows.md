@@ -126,7 +126,7 @@ GNOME Online Accounts, which Clearsky uses for calendars on Linux, isn't there i
 
 Sandboxed chats use srt with bubblewrap inside WSL2, the same as on Linux (not srt's Windows mode, which needs an administrator setup). Under WSL the sandbox also hides:
 
-- the Windows drives (`/mnt/c` and the rest), which hold your Windows profile and its browsers' data. A folder you give Copilot there (Settings → Copilot) is let back in, but your repos are better off in `~/dev`.
+- the Windows drives (`/mnt/c` and the rest), which hold your Windows profile and its browsers' data. A folder you give Copilot there (Settings → Agent) is let back in, but your repos are better off in `~/dev`.
 - WSL's interop socket (`/run/WSL`), so a sandboxed command can't start a Windows program such as `cmd.exe` or `powershell.exe` outside the sandbox.
 
 ## Builds that need Docker (the VM)

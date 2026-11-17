@@ -140,10 +140,10 @@
     <label for="CLEARSKY_POLL_MINUTES">Check GitHub, mentions and plugins every … minutes</label>
     <input id="CLEARSKY_POLL_MINUTES" data-key="CLEARSKY_POLL_MINUTES" inputmode="numeric" placeholder="3">
     <div class="row"><button class="save" data-keys="CLEARSKY_STANDUP_TIME,CLEARSKY_WORKDAYS,CLEARSKY_WORKDAY_END,CLEARSKY_MENTION_DAYS,CLEARSKY_TIME_FORMAT,CLEARSKY_POLL_MINUTES">Save</button><span class="msg"></span></div>
-    <h3>Team pack<span class="more">Your team's shared setup: organizations, stand-up time, links and Copilot skills, from a git repo, an https link or a file the team keeps. Settings you changed yourself are kept. <code>clearsky team export</code> makes one from your settings.</span></h3>
+    <h3>Team pack<span class="more">Your team's shared setup: organizations, stand-up time, links and the agent's skills, from a git repo, an https link or a file the team keeps. Settings you changed yourself are kept. <code>clearsky team export</code> makes one from your settings.</span></h3>
     <p class="hint" id="team-now">Your team's shared setup.</p>
     <div class="row"><input id="team-from" placeholder="https://github.com/acme/clearsky-team.git" spellcheck="false" style="flex:1;min-width:220px"><button class="secondary" id="team-join" type="button">Join</button><span class="msg" id="team-msg"></span></div>
-    <h3>Make a team pack<span class="more">Starts the repo your company keeps its Clearsky setup in, from your own settings: organizations, stand-up, Copilot's folders and hosts, Grafana, the plugins you use with their versions, and the kinds of change you let through without asking (offered to colleagues, never forced on them). It writes a README for colleagues and folders for shared skills and work-only plugins. No tokens or other secrets go in. Nothing is pushed: you look it through, then push it to a private repo. In a terminal: <code>clearsky team init &lt;folder&gt;</code>.</span></h3>
+    <h3>Make a team pack<span class="more">Starts the repo your company keeps its Clearsky setup in, from your own settings: organizations, stand-up, the agent's folders and hosts, Grafana, the plugins you use with their versions, and the kinds of change you let through without asking (offered to colleagues, never forced on them). It writes a README for colleagues and folders for shared skills and work-only plugins. No tokens or other secrets go in. Nothing is pushed: you look it through, then push it to a private repo. In a terminal: <code>clearsky team init &lt;folder&gt;</code>.</span></h3>
     <p class="hint">A ready repo for your team's shared setup, with no secrets in it.</p>
     <label for="scaf-name">Team name</label>
     <input id="scaf-name" placeholder="Payments team">
@@ -156,7 +156,7 @@
     <label class="tick"><input type="checkbox" id="scaf-links"> Include my work links</label>
     <div class="row"><button class="secondary" id="scaf-go" type="button">Make it</button><span class="msg" id="scaf-msg"></span></div>
     <pre id="scaf-out" class="hint" hidden></pre>
-    <h3>Set-up check<span class="more">Checks gh, acli, Copilot, the sandbox and a calendar, and says how to get what's missing. In a terminal: <code>clearsky doctor</code>.</span></h3>
+    <h3>Set-up check<span class="more">Checks gh, acli, the agent, the sandbox and a calendar, and says how to get what's missing. In a terminal: <code>clearsky doctor</code>.</span></h3>
     <p class="hint">See what this machine has on <a href="/welcome">the welcome page</a>.</p>
     <h3>Demo<span class="more">For showing Clearsky to others without your own work on screen. Nothing of yours is read or shown. It stops when you click Leave demo in its menu.</span></h3>
     <p class="hint">Clearsky with made-up data, in a new tab.</p>
@@ -234,8 +234,8 @@
   </div>
   </section>
 
-  <section>
-    <h2>Copilot</h2>
+  <section id="copilot">
+    <h2>Agent</h2>
     <nav class="parts" aria-label="Parts of this page"><a href="#copilot/folders">Folders and sandbox</a><a href="#copilot/network">Network</a><a href="#copilot/asking">Without asking</a><a href="#copilot/vm-builds">VMs and builds</a><a href="#copilot/long-tasks">Long tasks</a><a href="#copilot/cost">Credits and cost</a><a href="#copilot/memory">Memory</a><a href="#copilot/reach">What it holds and reaches</a></nav>
     <label for="CLEARSKY_AGENT">Agent<span class="more">The coding agent behind your chats. <b>GitHub Copilot CLI</b> uses your Copilot login. <b>Claude Code</b> runs through its ACP adapter (<code>npm install -g @agentclientprotocol/claude-agent-acp</code>) with your Claude Code login (run <code>claude</code> once and <code>/login</code>). Modes, the sandbox and its doors, Allow/Deny cards and history work the same with both; Usage counts Copilot's credits only. Left on automatic, it's Copilot when it's installed, else Claude Code. New chats use the new agent; an open chat starts over in it on its next message.</span></label>
     <select id="CLEARSKY_AGENT" data-key="CLEARSKY_AGENT"><option value="">Automatic</option><option value="copilot">GitHub Copilot CLI</option><option value="claude">Claude Code</option></select>
@@ -257,26 +257,26 @@
     <label for="COPILOT_DISCLOSE">Say what did the work<span class="more">When a sandboxed chat is done, it ends the PR description (and the ticket description, if it wrote that) with a line like <i>Implemented with Copilot (Claude Opus 5.5). 939 credits used.</i> The model and credits come from the chat's own session log. Applies to chats started after you switch it on.</span></label>
     <select id="COPILOT_DISCLOSE" data-key="COPILOT_DISCLOSE"><option value="">Off</option><option value="on">On: last line of the PR description</option></select>
     <h3 id="folders" style="margin-top:28px">Folders and sandbox</h3>
-    <label for="COPILOT_FOLDERS">Folders Copilot can change (read and write)<span class="more">Copilot can read and change files there, including worktrees next to your clones, without the "Access paths outside trusted directories" question. Commands and edits still follow the access mode. Running chats pick changes up on their next message.</span></label>
+    <label for="COPILOT_FOLDERS">Folders the agent can change (read and write)<span class="more">The agent can read and change files there, including worktrees next to your clones, without the "Access paths outside trusted directories" question. Commands and edits still follow the access mode. Running chats pick changes up on their next message.</span></label>
     <input id="COPILOT_FOLDERS" data-key="COPILOT_FOLDERS" data-list data-item="~/dev/work" placeholder="~/dev" spellcheck="false">
     <p class="hint warn" id="copilot-unmounted" hidden></p>
-    <label for="COPILOT_READ">Folders Copilot can only read<span class="more">In the sandbox, Copilot can read these but not change them. It can also always read <span id="read-default"></span> (what it needs to run and build) and files outside your home, like <code>/usr/lib/jvm</code>. The rest of your home is hidden from it: mail, documents, browser profiles, shell history and logins. Maven still reaches your repositories: Copilot gets a copy of <code>~/.m2/settings.xml</code> without the passwords, and the sandbox adds your login on the way out, only to the hosts that login is for.</span></label>
+    <label for="COPILOT_READ">Folders the agent can only read<span class="more">In the sandbox, the agent can read these but not change them. It can also always read <span id="read-default"></span> (what it needs to run and build) and files outside your home, like <code>/usr/lib/jvm</code>. The rest of your home is hidden from it: mail, documents, browser profiles, shell history and logins. Maven still reaches your repositories: the agent gets a copy of <code>~/.m2/settings.xml</code> without the passwords, and the sandbox adds your login on the way out, only to the hosts that login is for.</span></label>
     <input id="COPILOT_READ" data-key="COPILOT_READ" data-list data-item="~/notes" placeholder="nothing more" spellcheck="false">
-    <label for="COPILOT_SANDBOX">Sandbox<span class="more">Copilot and everything it runs can write only in the chat's folder, the folders above, <code>~/.copilot</code> and <code>/tmp</code>. It reads only the parts of your home listed above (never <code>~/.ssh</code>, keyrings, browser profiles or Clearsky's own settings), and reaches only the hosts below. That holds in every access mode, Full included. The <b>Sandboxed</b> access mode always runs in it, and runs every step inside without asking; only its doors out ask.<br><br>Your GitHub login never enters it: Copilot, git and gh inside get stand-ins, and the sandbox's proxy adds your <code>gh</code> login on the way to GitHub. Reading goes through; a push or any change waits until you click Allow in the chat. Hosts are checked by name only, so an allowed host can be written to as well as read.<br><br>srt comes with Clearsky. Linux also needs <code>bubblewrap</code>, <code>socat</code> and <code>ripgrep</code>.</span></label>
+    <label for="COPILOT_SANDBOX">Sandbox<span class="more">The agent and everything it runs can write only in the chat's folder, the folders above, <code>~/.copilot</code> and <code>/tmp</code>. It reads only the parts of your home listed above (never <code>~/.ssh</code>, keyrings, browser profiles or Clearsky's own settings), and reaches only the hosts below. That holds in every access mode, Full included. The <b>Sandboxed</b> access mode always runs in it, and runs every step inside without asking; only its doors out ask.<br><br>Your GitHub login never enters it: the agent, git and gh inside get stand-ins, and the sandbox's proxy adds your <code>gh</code> login on the way to GitHub. Reading goes through; a push or any change waits until you click Allow in the chat. Hosts are checked by name only, so an allowed host can be written to as well as read.<br><br>srt comes with Clearsky. Linux also needs <code>bubblewrap</code>, <code>socat</code> and <code>ripgrep</code>.</span></label>
     <select id="COPILOT_SANDBOX" data-key="COPILOT_SANDBOX"><option value="off">Off</option><option value="srt">Anthropic sandbox runtime (srt)</option></select>
-    <p class="hint">Keeps Copilot to your folders and the hosts below.</p>
+    <p class="hint">Keeps the agent to your folders and the hosts below.</p>
     <label for="COPILOT_SANDBOX_TOKEN">GitHub token for the sandbox (optional)<span class="more">Not needed: by default the sandbox uses your <code>gh</code> login. A fine-grained token (with <b>Copilot Requests</b>) is used instead if you give one, for example one that can only read your work repos. Either way it stays out of the sandbox, and changes still wait for your Allow.</span></label>
     <input id="COPILOT_SANDBOX_TOKEN" data-key="COPILOT_SANDBOX_TOKEN" type="password" autocomplete="off" placeholder="leave empty to use your gh login">
     <h3 id="network" style="margin-top:28px">Network</h3>
-    <label for="COPILOT_DOMAINS">Hosts a sandboxed Copilot may reach<span class="more">Wildcards like <code>*.atlassian.net</code> are allowed. Add package registries (say <code>repo.maven.apache.org</code>, <code>registry.npmjs.org</code>) if builds need them.</span></label>
+    <label for="COPILOT_DOMAINS">Hosts a sandboxed agent may reach<span class="more">Wildcards like <code>*.atlassian.net</code> are allowed. Add package registries (say <code>repo.maven.apache.org</code>, <code>registry.npmjs.org</code>) if builds need them.</span></label>
     <input id="COPILOT_DOMAINS" data-key="COPILOT_DOMAINS" data-list data-words data-item="registry.npmjs.org" spellcheck="false">
-    <label for="COPILOT_READ_HOSTS">Hosts allowed from a chat<span class="more">When Copilot asks for a host that isn't on the list above, the chat shows a card and its request waits for your answer. <b>Always allow</b> puts the host here. These are for reading: sending data to one (a POST, say) asks again. Remove one to be asked again.</span></label>
+    <label for="COPILOT_READ_HOSTS">Hosts allowed from a chat<span class="more">When the agent asks for a host that isn't on the list above, the chat shows a card and its request waits for your answer. <b>Always allow</b> puts the host here. These are for reading: sending data to one (a POST, say) asks again. Remove one to be asked again.</span></label>
     <input id="COPILOT_READ_HOSTS" data-key="COPILOT_READ_HOSTS" data-list data-words data-item="www.rfc-editor.org" placeholder="none yet" spellcheck="false">
     <h3 id="asking" style="margin-top:28px">Without asking</h3>
-    <label for="COPILOT_ASSISTED_ALLOW">Never ask before<span class="more">In the sandbox, Copilot runs everything without asking, and asks you only at its doors out: <code>git push</code> and GitHub changes (held at the sandbox's network until you click Allow), Jira changes through <code>acli</code>, and <code>outside</code> (a command run on your machine, like tests that start Docker containers). <code>outside</code> commands only match exactly, like <code>outside ./mvnw verify</code>.</span></label>
+    <label for="COPILOT_ASSISTED_ALLOW">Never ask before<span class="more">In the sandbox, the agent runs everything without asking, and asks you only at its doors out: <code>git push</code> and GitHub changes (held at the sandbox's network until you click Allow), Jira changes through <code>acli</code>, and <code>outside</code> (a command run on your machine, like tests that start Docker containers). <code>outside</code> commands only match exactly, like <code>outside ./mvnw verify</code>.</span></label>
     <input id="COPILOT_ASSISTED_ALLOW" data-key="COPILOT_ASSISTED_ALLOW" data-list data-item="acli jira workitem transition" placeholder="nothing" spellcheck="false">
     <p class="hint">Jira and <code>outside</code> commands that start like one of these.</p>
-    <label for="COPILOT_GATE_RULES">Let through without asking<span class="more">Kinds of change you said to always allow, from <b>Allow, and always for…</b> on a card. Each still shows in the chat and in <b>Copilot's changes</b>. Remove one to be asked again.<br><br><code>merge-ready</code>: merging a PR of the chat's repo when CI is green, it's approved and has no conflicts.<br><code>delete-merged-branch</code>: deleting a branch whose PR is merged.<br><code>repo:owner/name</code>: everyday changes to that repo from any chat.<br><code>jira:KEY</code>: changes to tickets in that Jira project.</span></label>
+    <label for="COPILOT_GATE_RULES">Let through without asking<span class="more">Kinds of change you said to always allow, from <b>Allow, and always for…</b> on a card. Each still shows in the chat and on the <b>Changes</b> page. Remove one to be asked again.<br><br><code>merge-ready</code>: merging a PR of the chat's repo when CI is green, it's approved and has no conflicts.<br><code>delete-merged-branch</code>: deleting a branch whose PR is merged.<br><code>repo:owner/name</code>: everyday changes to that repo from any chat.<br><code>jira:KEY</code>: changes to tickets in that Jira project.</span></label>
     <input id="COPILOT_GATE_RULES" data-key="COPILOT_GATE_RULES" data-list data-words data-item="repo:owner/name" placeholder="nothing yet" spellcheck="false">
     <div id="team-gate" class="hint" hidden></div>
     <h3 id="vm-builds" style="margin-top:28px">VMs and builds</h3>
@@ -304,17 +304,17 @@
     <label for="CLEARSKY_FX_LIVE">Live rate</label>
     <select id="CLEARSKY_FX_LIVE" data-key="CLEARSKY_FX_LIVE"><option value="">Off: use my rate</option><option value="on">On: look it up once a day</option></select>
     <div class="row"><button class="save" data-keys="COPILOT_CREDIT_USD,CLEARSKY_CURRENCY,CLEARSKY_FX_RATE,CLEARSKY_FX_LIVE">Save</button><span class="msg"></span></div>
-    <h3 id="memory" style="margin-top:28px">Memory<span class="more">Kept in <code id="memory-path">~/.local/share/clearsky/memory/memory.md</code> on this machine. Copilot is told never to change this file (in the sandbox it can't): it suggests notes in the chat, and they're saved only when you press Save on the card. Put notes for one repo under a <code>## owner/name</code> heading.</span></h3>
-    <textarea id="memory-text" data-talk rows="8" aria-label="Copilot's memory" spellcheck="true" placeholder="Nothing yet. Notes you save from a chat's Remember card show up here."></textarea>
+    <h3 id="memory" style="margin-top:28px">Memory<span class="more">Kept in <code id="memory-path">~/.local/share/clearsky/memory/memory.md</code> on this machine. The agent is told never to change this file (in the sandbox it can't): it suggests notes in the chat, and they're saved only when you press Save on the card. Put notes for one repo under a <code>## owner/name</code> heading.</span></h3>
+    <textarea id="memory-text" data-talk rows="8" aria-label="The agent's memory" spellcheck="true" placeholder="Nothing yet. Notes you save from a chat's Remember card show up here."></textarea>
     <p class="hint">Notes every new chat reads. <span id="memory-size"></span></p>
     <div class="row"><button id="memory-save" class="save">Save memory</button><span class="msg" id="memory-msg"></span></div>
-    <h3 id="reach" style="margin-top:28px">What Copilot holds and reaches</h3>
+    <h3 id="reach" style="margin-top:28px">What the agent holds and reaches</h3>
     <div class="reach" id="copilot-reach"></div>
   </section>
 
   <section>
     <h2>VPN <span class="state" id="vpn-state"></span></h2>
-    <label for="VPN_CHECK">VPN check<span class="more">A host or URL. Off the VPN it either can't be reached or refuses you with 403, as many work sites do at their load balancer. Then the menu says <b>VPN off</b>, the plugins ticked below pause instead of failing, plugins' doors (Grafana) say so, and Copilot is told to ask you to connect. Clearsky never runs the VPN itself.</span></label>
+    <label for="VPN_CHECK">VPN check<span class="more">A host or URL. Off the VPN it either can't be reached or refuses you with 403, as many work sites do at their load balancer. Then the menu says <b>VPN off</b>, the plugins ticked below pause instead of failing, plugins' doors (Grafana) say so, and the agent is told to ask you to connect. Clearsky never runs the VPN itself.</span></label>
     <input id="VPN_CHECK" data-key="VPN_CHECK" spellcheck="false" placeholder="the first host a plugin names, such as your first Grafana">
     <p class="hint">A host behind your work VPN.</p>
     <label for="VPN_NEEDED_BY">Plugins that need the VPN</label>
@@ -353,7 +353,7 @@
     }).join('');
     if (nav.innerHTML !== html) nav.innerHTML = html;
   }
-  // #copilot/cost: the Copilot tab, scrolled to its Credits and cost part.
+  // #copilot/cost: the Agent tab, scrolled to its Credits and cost part.
   const toPart = () => { const [tab, part] = location.hash.slice(1).split('/'); if (tab === 'copilot' && part) setTimeout(() => document.getElementById(part)?.scrollIntoView({ block: 'start' }), 0); };
   addEventListener('hashchange', () => { draw(); document.querySelector('.set-b').scrollTop = 0; toPart(); });
   new MutationObserver(draw).observe(main, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['hidden', 'class'] });

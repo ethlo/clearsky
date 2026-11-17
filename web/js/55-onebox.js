@@ -7,7 +7,7 @@
 // A key or link it doesn't know (an old ticket, someone's PR) still opens: that item is looked
 // up when you pick it, the same way hover cards do.
 
-const OB_KIND = { work: 'Work', chat: 'Copilot', link: 'Link', meeting: 'Meeting', page: 'Go to', setting: 'Settings', skill: 'Skill', cmd: 'Do', server: 'Server', open: 'Open', personal: 'Personal' };
+const OB_KIND = { work: 'Work', chat: `${AGENT}`, link: 'Link', meeting: 'Meeting', page: 'Go to', setting: 'Settings', skill: 'Skill', cmd: 'Do', server: 'Server', open: 'Open', personal: 'Personal' };
 // Higher first when scores tie: what you most likely want.
 const OB_RANK = { open: 9, work: 8, chat: 7, page: 6, skill: 5, cmd: 5, link: 4, meeting: 4, personal: 3, server: 3, setting: 2 };
 
@@ -19,7 +19,7 @@ function oneboxIndex() {
   // Copilot chats: the live ones and the ones you used lately.
   const seen = new Set();
   for (const s of sessionItems()) { seen.add(s.sid); add('chat', s.title, [s.ref, s.label?.[0]].filter(Boolean).join(' · '), () => openItem(s)); }
-  for (const t of (typeof chatTabs === 'function' ? chatTabs() : [])) if (!seen.has(t.id)) add('chat', t.title, 'Copilot chat', () => { openChat(true, true); openSession(t.id, t.cwd); });
+  for (const t of (typeof chatTabs === 'function' ? chatTabs() : [])) if (!seen.has(t.id)) add('chat', t.title, `${AGENT} chat`, () => { openChat(true, true); openSession(t.id, t.cwd); });
   // Links, both sides.
   for (const g of linksDoc?.groups || []) for (const l of g.links) add('link', l.title, `${g.name} · ${linkHost(l.url)}`, () => window.open(l.url, '_blank', 'noopener'), l.url);
   // Meetings today and tomorrow.
@@ -35,13 +35,13 @@ function oneboxIndex() {
   // Pages in the menu, and Settings' tabs.
   for (const a of document.querySelectorAll('#nav a[data-nav], #side-personal a[data-nav]')) if (!a.hidden) add('page', a.querySelector('.lab')?.textContent, '', () => { location.hash = a.getAttribute('href') || '#'; });
   for (const [name, slug, words] of [['General', 'general', 'stand-up workday clock team pack demo'], ['GitHub', 'plugins/github', 'organizations token plugin'], ['Jira', 'plugins/jira', 'atlassian acli plugin'],
-    ['Calendar', 'plugins/calendar', 'ical gnome google plugin'], ['Plugins', 'plugins', 'add sources modules'], ['Copilot', 'copilot', 'sandbox model folders doors'], ['VPN', 'vpn', 'grafana'],
+    ['Calendar', 'plugins/calendar', 'ical gnome google plugin'], ['Plugins', 'plugins', 'add sources modules'], ['Agent', 'copilot', 'sandbox model folders doors agent'], ['VPN', 'vpn', 'grafana'],
     ...extraSources.map((x) => [x.label || x.panel?.title || x.name, `plugins/${x.name}`, `${x.name} plugin`])]) {
     add('setting', `Settings: ${name}`, '', () => { location.href = `/settings#${slug}`; }, words);
   }
   // Skills: a new chat that runs it.
   for (const sk of chat.info?.skills || []) add('skill', `/${sk.name}`, sk.description || 'Run in a new chat', () => { newChat(); openChat(true, true); send(`/${sk.name}`); }, sk.name);
-  add('cmd', 'New Copilot chat', 'Alt+N', () => { newChat(); openChat(true, true); $('#chat-text').focus(); }, 'ask copilot');
+  add('cmd', `New ${AGENT} chat`, 'Alt+N', () => { newChat(); openChat(true, true); $('#chat-text').focus(); }, 'ask copilot');
   add('cmd', 'Refresh everything', '', () => $('#refresh').click(), 'reload update');
   add('cmd', 'Copy the stand-up for Slack', '', async () => { if (!standupData) await loadStandup(false); copyText(standupData?.text || '', 'Stand-up copied'); }, 'standup');
   add('cmd', 'Switch theme', 'light, dark or auto', () => $('#theme').click(), 'dark light mode');

@@ -74,7 +74,7 @@ The plugins you added are listed with where they come from and their pins (one t
 - **Links** are added to your work links. Links you already have aren't added twice.
 - **Skills** are copied to `~/.copilot/skills`, so Copilot has them in every repo. A skill you already have with the same name is left alone.
 
-- **Suggested rules** (`gate.suggest`): kinds of change the team lets through without asking, such as a docs repo's everyday changes (`repo:acme/docs`) or one Jira project's tickets (`jira:PAY`). They're offered under Settings → Copilot → Let through without asking, each with **Add**; the pack never changes your gate itself.
+- **Suggested rules** (`gate.suggest`): kinds of change the team lets through without asking, such as a docs repo's everyday changes (`repo:acme/docs`) or one Jira project's tickets (`jira:PAY`). They're offered under Settings → Agent → Let through without asking, each with **Add**; the pack never changes your gate itself.
 - **Jira** (`jira.site`): joining tells you which site to log in to with `acli`.
 
 - **Plugins** are offered, never added unseen. They show under Settings → Plugins → From *your team*, each with **Look at it**, and `clearsky add --team` goes through them in a terminal. You see what each one reaches before it's added, like any plugin.

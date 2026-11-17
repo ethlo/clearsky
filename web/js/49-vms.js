@@ -34,7 +34,7 @@ function renderVms(quick) {
     nav.classList.remove('load-ok', 'load-warm', 'load-hot');
     if (L) nav.classList.add(`load-${L.level}`);
     nav.title = L ? `VMs: ${d.running} running${d.waiting ? `, ${d.waiting} waiting` : ''}. Busiest: ${L.pct != null ? `${L.pct}% ${L.what}` : 'starting'}${L.title ? ` (${L.title})` : ''}`
-      : 'Copilot\'s VMs for builds with Docker: what runs in them and who waits for one';
+      : `${AGENT}\'s VMs for builds with Docker: what runs in them and who waits for one`;
   }
   if (quick || $('#v-vms').hidden || !d) return;
   const el = $('#vms');
@@ -83,19 +83,19 @@ function renderVms(quick) {
     <span class="vms-where">${x.top ? `${esc(x.top.name)} ${x.top.cpuPct}%` : ''}${x.jobs ? ` · ${x.jobs} background job${x.jobs === 1 ? '' : 's'}` : ''}</span><span class="muted">${gbOf(x.memMb)}</span></li>`;
   const sbPart = sb.length ? `<h2 class="vms-h" style="margin-top:24px">On this machine, in chats' sandboxes <span class="muted">${busy.length ? `${busy.length} busy` : 'all quiet'}</span></h2>
     ${busy.length ? `<ol class="vms-line">${busy.map(sbRow).join('')}</ol>` : ''}
-    <div class="b-foot">${d.builds === 'vm' ? 'Chats are told to run builds and tests in their VM; a busy sandbox here is one that didn\'t.' : 'Chats run builds and tests in their sandbox, on this machine at low priority, and use a VM only for Docker.'} Change it in <a href="/settings#copilot">Settings → Copilot → Run builds in</a>.</div>` : '';
+    <div class="b-foot">${d.builds === 'vm' ? 'Chats are told to run builds and tests in their VM; a busy sandbox here is one that didn\'t.' : 'Chats run builds and tests in their sandbox, on this machine at low priority, and use a VM only for Docker.'} Change it in <a href="/settings#copilot">Settings → Agent → Run builds in</a>.</div>` : '';
   // The VMs' Docker Hub image cache: how full, the images in it, and a Purge.
   const ic = d.imageCache, gbB = (b) => `${(b / 1024 ** 3).toFixed(1)} GB`;
   const icPart = ic ? `<h2 class="vms-h" style="margin-top:24px">Image cache <span class="muted">${ic.images} image${ic.images === 1 ? '' : 's'} · ${ic.layers} layer${ic.layers === 1 ? '' : 's'}</span></h2>
     <div class="vms-cache">${meter(ic.capBytes ? (ic.bytes / ic.capBytes) * 100 : null, `${gbB(ic.bytes)} of ${gbB(ic.capBytes)}`, 'Over the cap, the layers used longest ago go first')}
       <button class="chip" data-cache-purge type="button" ${ic.layers || ic.images ? '' : 'disabled'} title="Empty the cache: the next pull of each image downloads it again">Purge</button></div>
     ${ic.recent?.length ? `<div class="vms-images">${ic.recent.map((x) => `<span class="vms-image" title="Last pulled ${esc(mins(x.used))} ago">${esc(x.name)}</span>`).join('')}</div>` : ''}
-    <div class="b-foot">VMs pull Docker Hub images through it, so a layer an earlier VM pulled comes from this machine. Size cap: <a href="/settings#copilot">Settings → Copilot → Image cache</a>.</div>` : '';
+    <div class="b-foot">VMs pull Docker Hub images through it, so a layer an earlier VM pulled comes from this machine. Size cap: <a href="/settings#copilot">Settings → Agent → Image cache</a>.</div>` : '';
   el.innerHTML = `${tiles}
     ${wait.length ? `<h2 class="vms-h">Waiting in line <span class="muted">${wait.length}</span></h2><ol class="vms-line">${wait.map(waitRow).join('')}</ol>` : ''}
     <h2 class="vms-h">Running <span class="muted">${run.length}</span></h2>
     ${run.length ? run.map(card).join('') : `<div class="empty">${d.support?.ok === false ? `VMs can't run on this machine: ${esc(d.support.why || 'unknown reason')}` : 'No VM runs now. A chat starts one with its first vm command.'}</div>`}
-    <div class="b-foot">${d.limit} VM${d.limit === 1 ? '' : 's'} at the same time: <a href="/settings#copilot">Settings → Copilot</a></div>
+    <div class="b-foot">${d.limit} VM${d.limit === 1 ? '' : 's'} at the same time: <a href="/settings#copilot">Settings → Agent</a></div>
     ${icPart}
     ${sbPart}`;
 }

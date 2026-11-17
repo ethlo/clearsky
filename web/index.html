@@ -76,7 +76,7 @@
       <input type="search" id="list-q" class="list-q" placeholder="Filter  /" aria-label="Filter this list (/)" spellcheck="false" autocomplete="off"><span class="spacer"></span><span id="su-alert"></span><button class="fresh" data-fresh title="Refresh everything"></button><button class="nowline" id="nowline" title="Open the calendar"></button></header>
     <div class="view-b" id="list" tabindex="-1"></div>
     <div class="kb"><span><kbd>J</kbd><kbd>K</kbd> move</span><span><kbd>↵</kbd> open</span><span><kbd>Esc</kbd> back</span>
-      <span><kbd>E</kbd> done</span><span><kbd>H</kbd> snooze</span><span><kbd>A</kbd> Copilot</span></div>
+      <span><kbd>E</kbd> done</span><span><kbd>H</kbd> snooze</span><span><kbd>A</kbd> __AGENT__</span></div>
   </section>
 
   <!-- One item in full: a PR, a ticket, a mention, a school message. -->
@@ -103,7 +103,7 @@
     <div class="view-b"><div class="page" id="servers"></div></div>
   </section>
   <section class="view" id="v-vms" hidden>
-    <header class="vh"><h1 title="The VMs Copilot's chats run Docker builds in (Testcontainers). Settings → Copilot sets how many run at the same time; other chats wait in line and start on their own.">VMs</h1><span class="sub" id="vms-sub"></span><span class="spacer"></span>
+    <header class="vh"><h1 title="The VMs __AGENT__'s chats run Docker builds in (Testcontainers). Settings → Agent sets how many run at the same time; other chats wait in line and start on their own.">VMs</h1><span class="sub" id="vms-sub"></span><span class="spacer"></span>
       <div class="vh-acts"><button type="button" class="icon-btn" id="vms-refresh" title="Look again" aria-label="Look again"><span data-i="refresh" data-size="14"></span></button></div></header>
     <div class="view-b"><div class="page" id="vms"></div></div>
   </section>
@@ -119,16 +119,16 @@
     <div class="view-b"><div class="page" id="builds"></div></div>
   </section>
   <section class="view" id="v-handoffs" hidden>
-    <header class="vh"><h1 title="PRs and tickets you handed to Copilot (✦ on a row → Hand off). It works on them one at a time, in the sandbox, and ends with a draft PR or a note on what it needs from you.">Hand-offs</h1><span class="sub" id="ho-sub"></span><span class="spacer"></span></header>
+    <header class="vh"><h1 title="PRs and tickets you handed to __AGENT__ (✦ on a row → Hand off). It works on them one at a time, in the sandbox, and ends with a draft PR or a note on what it needs from you.">Hand-offs</h1><span class="sub" id="ho-sub"></span><span class="spacer"></span></header>
     <div class="view-b"><div class="page" id="handoffs"></div></div>
   </section>
   <section class="view" id="v-usage" hidden>
-    <header class="vh"><h1 title="The AI credits all Copilot chats used, from their own session logs, and what they cost. Set the price and your currency in Settings → Copilot.">Usage</h1><span class="spacer"></span>
+    <header class="vh"><h1 title="The AI credits all __AGENT__ chats used, from their own session logs, and what they cost. Set the price and your currency in Settings → Agent.">Usage</h1><span class="spacer"></span>
       <div class="vh-acts"><button type="button" class="icon-btn" id="usage-refresh" title="Count again" aria-label="Count again"><span data-i="refresh" data-size="14"></span></button></div></header>
     <div class="view-b"><div class="page" id="usage"></div></div>
   </section>
   <section class="view" id="v-changes" hidden>
-    <header class="vh"><h1 title="What Copilot changed as you on GitHub and Jira, and what it read in Grafana, from its sandbox">Agent's changes</h1><span class="spacer"></span></header>
+    <header class="vh"><h1 title="What __AGENT__ changed as you on GitHub and Jira, and what it read in Grafana, from its sandbox">Agent's changes</h1><span class="spacer"></span></header>
     <div class="view-b"><div id="changes"></div></div>
   </section>
   <div class="fview" id="fview" hidden><div class="fv-box"><header><b id="fv-name"></b><span class="spacer"></span><span class="fv-tabs" id="fv-tabs" hidden><button type="button" data-fv-tab="diff">Changes</button><button type="button" data-fv-tab="file">File</button></span><a id="fv-code" title="Open in VS Code">VS Code</a><a id="fv-open" target="_blank" rel="noopener">Raw</a><button type="button" id="fv-close" aria-label="Close">✕</button></header><div id="fv-body"></div></div></div>
@@ -143,7 +143,7 @@
       <div id="links" class="links"></div></div>
   </section>
   <section class="view" id="v-map" hidden>
-    <header class="vh"><h1 title="Per chat, oldest first: every repo, ticket and environment Copilot worked on, and what it did there. Green passed or ready, red failed, amber went through after you allowed it. Hover a step for its command and time.">Agent map</h1><span class="spacer"></span></header>
+    <header class="vh"><h1 title="Per chat, oldest first: every repo, ticket and environment __AGENT__ worked on, and what it did there. Green passed or ready, red failed, amber went through after you allowed it. Hover a step for its command and time.">Agent map</h1><span class="spacer"></span></header>
     <div class="view-b"><div id="map"></div></div>
   </section>
   <section class="view" id="v-notes" hidden>
@@ -155,19 +155,19 @@
     <div class="view-b"><div class="page src-page" id="src-body"></div></div>
   </section>
 
-  <!-- Copilot: a chat uses the whole work area, with what it's about on the right. -->
-  <section class="view" id="chat" hidden aria-label="Copilot">
+  <!-- The agent: a chat uses the whole work area, with what it's about on the right. -->
+  <section class="view" id="chat" hidden aria-label="__AGENT__">
     <header class="vh">
       <button class="back" data-back title="Back (Esc)" aria-label="Back"><span data-i="back"></span></button>
-      <h1 id="chat-title" title="Click to rename">Copilot</h1>
+      <h1 id="chat-title" title="Click to rename">__AGENT__</h1>
       <span class="sub" id="chat-sub" role="status"></span>
       <span class="spacer"></span>
       <span class="vh-acts">
-        <button class="icon-btn small" id="chat-hist-btn" title="All your Copilot sessions: here, in the terminal or your editor"><span data-i="history" data-size="14"></span>History</button>
+        <button class="icon-btn small" id="chat-hist-btn" title="All your __AGENT__ sessions: here, in the terminal or your editor"><span data-i="history" data-size="14"></span>History</button>
         <button class="icon-btn small" id="chat-new" title="New chat (Alt+N)"><span data-i="plus" data-size="14"></span>New</button>
         <button class="icon-btn small" id="cp-details" type="button" title="What this chat is about, what it made and what it did, across the whole width" aria-pressed="false"><span data-i="panel" data-size="14"></span>Details</button>
         <span class="vh-sep" aria-hidden="true"></span>
-        <button class="icon-btn small only" id="cp-restart" type="button" title="Restart this chat's Copilot. Your next message carries on the conversation." aria-label="Restart Copilot"><span data-i="refresh" data-size="14"></span></button>
+        <button class="icon-btn small only" id="cp-restart" type="button" title="Restart this chat's __AGENT__. Your next message carries on the conversation." aria-label="Restart __AGENT__"><span data-i="refresh" data-size="14"></span></button>
         <button class="icon-btn small only" id="cp-close" type="button" title="Close chat (it stays in History)" aria-label="Close chat"><span data-i="x" data-size="14"></span></button>
       </span>
     </header>
@@ -180,12 +180,12 @@
           <div class="cbox">
             <textarea id="chat-text" rows="2" spellcheck="true" placeholder="Ask a follow-up. Type @ to add a PR, ticket or file, / for skills." aria-label="Message (Enter sends, Shift+Enter for a new line)"></textarea>
             <div class="cbar">
-              <button class="cb-btn" id="cp-ref-add" type="button" title="Give Copilot a PR, Jira ticket or file on disk to work with (@). Files go in as a path, so they cost no context until Copilot reads them" aria-label="Add a PR, ticket or file"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg></button>
+              <button class="cb-btn" id="cp-ref-add" type="button" title="Give __AGENT__ a PR, Jira ticket or file on disk to work with (@). Files go in as a path, so they cost no context until __AGENT__ reads them" aria-label="Add a PR, ticket or file"><svg viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg></button>
               <button class="cb-btn" id="cp-attach" type="button" title="Attach files (or drop them on the chat)" aria-label="Attach files"><svg viewBox="0 0 16 16"><path d="M13.5 7.5 8 13a3.5 3.5 0 0 1-5-5l6-6a2.3 2.3 0 0 1 3.3 3.3L6.4 11.2a1.2 1.2 0 0 1-1.7-1.7L10 4.2"/></svg></button>
               <input type="file" id="cp-file" multiple hidden>
-              <select class="cb-sel" id="cp-agent" hidden title="The agent for this chat (Auto: Settings → Copilot decides by its folder and repo)"></select>
-              <select class="cb-sel" id="cp-perm" title="What Copilot may do without asking"></select>
-              <input class="cb-sel cb-model" id="cp-model" list="cp-models" placeholder="Auto" spellcheck="false" title="Model (empty: Copilot's default)">
+              <select class="cb-sel" id="cp-agent" hidden title="The agent for this chat (Auto: Settings → Agent decides by its folder and repo)"></select>
+              <select class="cb-sel" id="cp-perm" title="What __AGENT__ may do without asking"></select>
+              <input class="cb-sel cb-model" id="cp-model" list="cp-models" placeholder="Auto" spellcheck="false" title="Model (empty: __AGENT__'s default)">
               <datalist id="cp-models"></datalist>
               <select class="cb-sel" id="cp-effort" title="Reasoning effort"><option value="">Balanced</option></select>
               <button class="cb-btn" id="chat-mic" type="button" hidden title="Talk: click, speak, click again to stop" aria-label="Talk" aria-pressed="false"><svg viewBox="0 0 16 16"><rect x="5.75" y="1.75" width="4.5" height="8" rx="2.25"/><path d="M3.5 7.5a4.5 4.5 0 0 0 9 0M8 12v2.25"/></svg></button>
@@ -225,7 +225,7 @@
       <div class="chat-hist" id="chat-hist" hidden>
         <div class="chat-hist-h">
           <input type="search" id="hist-q" placeholder="Search sessions…">
-          <label title="Only sessions started in Clearsky's Copilot folder"><input type="checkbox" id="hist-here"> This folder</label>
+          <label title="Only sessions started in Clearsky's __AGENT__ folder"><input type="checkbox" id="hist-here"> This folder</label>
           <button class="icon-btn small" id="hist-refresh" title="Reload the list" aria-label="Reload the list"><span data-i="refresh" data-size="14"></span></button>
         </div>
         <div class="chat-hist-l" id="hist-list"></div>

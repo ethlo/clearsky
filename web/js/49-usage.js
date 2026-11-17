@@ -1,6 +1,6 @@
 // Usage: the AI credits all Copilot chats used (today, this week, this month, all time), by day,
 // by week and by chat, and what that costs (GET /api/copilot/usage, lib/credit-usage.mjs).
-// The price per credit and your currency are in Settings → Copilot → Credits and cost.
+// The price per credit and your currency are in Settings → Agent → Credits and cost.
 
 let usageData = null, usageLoading = false, usageAt = 0;
 

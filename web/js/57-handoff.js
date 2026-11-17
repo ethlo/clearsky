@@ -11,8 +11,8 @@ const HO_TEXT = { queued: ['Waiting', 'gray'], working: ['Working', 'green'], 'n
 function handoffMenu() {
   const next = state.plan?.plan?.next;
   const at = next && Date.parse(next.start) > Date.now() && sameDay(next.start) ? next.start : null;
-  return `<div class="menu-h">Hand off to Copilot</div>
-    <button role="menuitem" data-handoff="" title="Copilot works on it by itself in the sandbox, and ends with a draft PR or a note">Work on it now, by itself</button>
+  return `<div class="menu-h">Hand off to ${AGENT}</div>
+    <button role="menuitem" data-handoff="" title="${AGENT} works on it by itself in the sandbox, and ends with a draft PR or a note">Work on it now, by itself</button>
     ${at ? `<button role="menuitem" data-handoff="${esc(at)}">From my next meeting (${esc(hm(at))})</button>` : ''}`;
 }
 
@@ -42,7 +42,7 @@ function drawHandoffs() {
   $('#ho-sub').textContent = open.length ? `${open.length} open, one at a time` : '';
   const warn = handoffData.sandbox ? '' : '<div class="err">Hand-offs run only in the sandbox, and it isn’t installed here. See <a href="/welcome">the set-up check</a>.</div>';
   if (!list.length) {
-    el.innerHTML = `${warn}<div class="empty">Nothing handed off yet. On a PR or ticket, click ✦ and pick <b>Work on it now, by itself</b>, or <b>From my next meeting</b>. Copilot works in the sandbox, runs the tests and a review, and opens a draft PR, which then waits under Your PRs as not read by you. It never merges, approves or deletes anything.</div>`;
+    el.innerHTML = `${warn}<div class="empty">Nothing handed off yet. On a PR or ticket, click ✦ and pick <b>Work on it now, by itself</b>, or <b>From my next meeting</b>. ${AGENT} works in the sandbox, runs the tests and a review, and opens a draft PR, which then waits under Your PRs as not read by you. It never merges, approves or deletes anything.</div>`;
     return;
   }
   el.innerHTML = warn + list.map((h) => {

@@ -15,7 +15,7 @@ async function askStart({ label = '', title = '', skill = '', handoff = '', plac
   const pick = skills.some((s) => s.name === skill) ? skill : '';
   const desc = (n) => skills.find((s) => s.name === n)?.description || 'Only the ticket and your words, no skill';
   dlg.innerHTML = `<form method="dialog">
-    <div class="sd-h">${icon('spark', 15)}<span>Start Copilot on ${esc(label || 'this')}</span></div>
+    <div class="sd-h">${icon('spark', 15)}<span>Start ${AGENT} on ${esc(label || 'this')}</span></div>
     ${title && title !== label ? `<div class="sd-title">${esc(title)}</div>` : ''}
     ${handoff ? `<div class="sd-note">The hand-off from the other chat goes in too.</div>` : ''}
     <label class="sd-l" for="sd-text">Anything to add <span>(optional)</span></label>

@@ -210,7 +210,7 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
   await page.goto(`${base}/settings#extra`);
   await page.waitForFunction(() => location.hash === '#plugins' && !document.querySelector('#plug-list').hidden);
 
-  // Settings → Copilot: defaults for new chats, with Copilot's own choices; a saved default is used by a new chat.
+  // Settings → Agent: defaults for new chats, with Copilot's own choices; a saved default is used by a new chat.
   await page.goto(`${base}/settings#copilot`);
   await page.waitForSelector('#COPILOT_PERMISSION option[value="full"]', { state: 'attached' });
   if (process.env.SHOT) await page.screenshot({ path: `${process.env.SHOT}/settings.png` });
