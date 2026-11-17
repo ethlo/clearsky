@@ -124,3 +124,12 @@ test('a plugin\'s team settings: set when you join if you have it, else once you
   assert.equal(readTeam(conf).applied.DEPLOYS_URL, 'https://deploys.acme.example');
   assert.deepEqual(applyWaiting(conf, { teamKey, ...io }), []);
 });
+
+test('a pack can\'t make chats run with Full access or switch the sandbox off', () => {
+  const p = parsePack(JSON.stringify({ name: 'T', settings: { COPILOT_PERMISSION: 'full', COPILOT_SANDBOX: 'off', COPILOT_MODEL: 'auto' } }));
+  assert.deepEqual(p.settings, { COPILOT_MODEL: 'auto' });
+  assert.deepEqual(p.ignored.sort(), ['COPILOT_PERMISSION', 'COPILOT_SANDBOX']);
+  const tight = parsePack(JSON.stringify({ name: 'T', settings: { COPILOT_PERMISSION: 'sandboxed', COPILOT_SANDBOX: 'srt' } }));
+  assert.deepEqual(tight.settings, { COPILOT_PERMISSION: 'sandboxed', COPILOT_SANDBOX: 'srt' });
+  assert.match(joinSummary({ written: ['COPILOT_FOLDERS'], kept: [], links: 0, skills: { installed: [], skipped: [] }, widens: [], ignored: [], write: { COPILOT_FOLDERS: '~/dev/acme' } }), /change files in ~\/dev\/acme without asking/);
+});
