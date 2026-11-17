@@ -242,3 +242,20 @@ if (APP_WINDOW) {
   addEventListener('resize', keep);
   addEventListener('beforeunload', () => { try { localStorage.setItem(KEY, JSON.stringify({ w: outerWidth, h: outerHeight, x: screenX, y: screenY })); } catch {} });
 }
+
+// The menu's groups (Project, Day, Agent) fold when you click their heading: then only the page
+// you're on and the ones with something new stay. Which are folded is remembered in this browser.
+{
+  const KEY = 'clearsky-menu-folded';
+  let folded = [];
+  try { folded = JSON.parse(localStorage.getItem(KEY) || '[]') || []; } catch {}
+  for (const g of document.querySelectorAll('.grp[data-grp]')) {
+    const h = g.querySelector('button.sg');
+    const set = (on) => { g.classList.toggle('folded', on); h.setAttribute('aria-expanded', String(!on)); };
+    set(folded.includes(g.dataset.grp));
+    h.onclick = () => {
+      set(!g.classList.contains('folded'));
+      try { localStorage.setItem(KEY, JSON.stringify([...document.querySelectorAll('.grp.folded')].map((x) => x.dataset.grp))); } catch {}
+    };
+  }
+}

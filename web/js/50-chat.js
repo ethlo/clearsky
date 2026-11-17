@@ -398,7 +398,7 @@ async function drawChanges() {
   if (id) try { list = (await getJson(`/api/agent-log?chat=${encodeURIComponent(id)}&limit=8`)).writes; } catch {}
   if (id !== (chat.turns ? chat.session : null)) return;
   el.hidden = !list.length;
-  el.innerHTML = list.length ? `<h4>Changed as you</h4>${changeRows(list, { chats: false })}<a href="#changes" class="more">All of Copilot's changes</a>` : '';
+  el.innerHTML = list.length ? `<h4>Changed as you</h4>${changeRows(list, { chats: false })}<a href="#changes" class="more">All changes, from every chat</a>` : '';
 }
 
 // Files for the next message: dropped on the chat or picked with the paperclip, uploaded at once.
