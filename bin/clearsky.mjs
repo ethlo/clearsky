@@ -1229,8 +1229,11 @@ function stopCopilot(chat) {
 
 // Inside the sandbox ssh can't get out, so git talks to GitHub over https, sending the login
 // header srt fills in (lib/sandbox.mjs, githubLogin) instead of asking a credential helper.
+// A clone's git settings can't be written in the sandbox (lib/sandbox.mjs, repoGuards), so a
+// branch's upstream isn't saved: a plain `git push` pushes the branch you're on, by its name, and
+// a new branch doesn't try to save one (which would only print an error).
 const SANDBOX_GIT = [['url.https://github.com/.insteadOf', 'git@github.com:'], ['url.https://github.com/.insteadOf', 'ssh://git@github.com/'],
-  ['credential.https://github.com.helper', '']];
+  ['credential.https://github.com.helper', ''], ['push.default', 'current'], ['branch.autoSetupMerge', 'false']];
 // What the sandbox may read besides your folders: Settings → Agent → Also readable, and
 // Clearsky's own folder (its acli for the sandbox).
 // Folders added to one chat in its side panel (lib/chat-folders.mjs), as absolute paths.
@@ -1307,7 +1310,7 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   // to Jira as it was. The same folder inside and out.
   process.env.CLAUDE_CODE_TMPDIR = copilotTmp();
   // Copilot's built-in GitHub tools would change GitHub past the gate: off (b.sandboxArgs).
-  const s = await sandboxedCommand(bin, b.acp([...args, ...b.sandboxArgs]), { ...sandboxOpts(cwd, folders), state: b.state, domains, maven, github, ca: sandboxCa(keep),
+  const s = await sandboxedCommand(bin, b.acp([...args, ...b.sandboxArgs]), { ...sandboxOpts(cwd, folders), state: b.state, protect: b.protect, run: dirname(brokerSocket()), domains, maven, github, ca: sandboxCa(keep),
     // Read only, so the proxy reads them: CI logs (with GitHub on), Docker Hub (with the VM).
     inspect: [...(github ? GITHUB_LOG_HOSTS : []), ...(vmSupport().ok ? REGISTRY_HOSTS : [])] },
     sandboxGate());
@@ -1324,7 +1327,7 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   agent.child.once('exit', sandboxEnded);
   // A background job (`bg <command>`) runs in a sandbox of its own with the same fence: folders,
   // hosts, logins added on the way out, and the GitHub gate.
-  agent.inSandbox = async (argv, dir) => ({ env, ...await sandboxedCommand(argv[0], argv.slice(1), { ...sandboxOpts(dir, folders), state: b.state, domains, maven, github, ca: sandboxCa(keep),
+  agent.inSandbox = async (argv, dir) => ({ env, ...await sandboxedCommand(argv[0], argv.slice(1), { ...sandboxOpts(dir, folders), state: b.state, protect: b.protect, run: dirname(brokerSocket()), domains, maven, github, ca: sandboxCa(keep),
     inspect: [...(github ? GITHUB_LOG_HOSTS : []), ...(vmSupport().ok ? REGISTRY_HOSTS : [])] },
   sandboxGate()) });
   return Object.assign(agent, { sandboxed: true, brokerKey: key, maven,
@@ -2205,7 +2208,9 @@ export function buildsHint(where = buildsWhere()) {
     + 'failures (fix those, or ask me), and don\'t quote arguments you don\'t need to. ';
 }
 // How the sandbox works for Copilot, and its doors out (lib/broker.mjs).
-const SANDBOX_HINT = 'You run in a sandbox: everything inside it runs without asking me. git and gh work as usual; reading GitHub '
+const SANDBOX_HINT = 'You run in a sandbox: everything inside it runs without asking me. git and gh work as usual, except that a clone\'s '
+  + 'git settings and hooks can\'t be changed here (no `git config`, no `git remote add`, no saved upstream): push and pull by name, like '
+  + '`git push origin HEAD`, and use `outside git config …` if a setting has to change. Reading GitHub '
   + 'goes through, while a push or any GitHub change (a PR, a comment, a review) waits at the sandbox\'s network until I click Allow, '
   + 'and fails with "declined" if I don\'t.{{trackerDoor}} Your built-in GitHub tools are off here. '
   + '{{builds}}'
