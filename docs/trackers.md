@@ -30,7 +30,7 @@ ticket mine                                your open tickets
 
 ### Code review waits for a reviewer
 
-A chat moves a Jira ticket to a review status (Code review, In Review, Ready for review) only once a person is asked to review its PR. Opening the PR isn't enough, and Copilot's PR reviewer doesn't count. Before the move, Clearsky looks up the ticket's PRs on GitHub (the key in the PR's title) and holds it while none of them has a person asked to review, or who has reviewed; the chat is told why and leaves the ticket In Progress. This holds even when Jira changes are on Settings → Copilot's never-ask list. If GitHub can't be reached, the move goes ahead as before (and asks you as usual). You can still move a ticket yourself in Jira at any time.
+A chat moves a Jira ticket to a review status (Code review, In Review, Ready for review) only once a person is asked to review its PR. Opening the PR isn't enough, and Copilot's PR reviewer doesn't count. Before the move, Clearsky looks up the ticket's PRs on GitHub (the key in the PR's title) and holds it while none of them has a person asked to review, or who has reviewed; the chat is told why and leaves the ticket In Progress. This holds even when Jira changes are on Settings → Agent's never-ask list. If GitHub can't be reached, the move goes ahead as before (and asks you as usual). You can still move a ticket yourself in Jira at any time.
 
 ## GitHub Issues details
 

@@ -59,7 +59,7 @@ async function openAskMenu(btn) {
     const ref = refFromUrl(btn.dataset.ask);
     const skills = chat.info?.skills || [];
     const linked = cpLinks.links[itemKey(btn.dataset.ask)] || [];
-    menu.innerHTML = `<div class="menu-h">Copilot on ${esc(refLabel(ref))}</div>
+    menu.innerHTML = `<div class="menu-h">${AGENT} on ${esc(refLabel(ref))}</div>
       ${linked.map((x) => `<button role="menuitem" data-resume="${esc(x.id)}" data-cwd="${esc(x.cwd || '')}">↩ Continue: ${esc(x.title.slice(0, 50))}${STATUS_TEXT[x.status] ? ` (${STATUS_TEXT[x.status]})` : ''}</button>`).join('')}
       <button role="menuitem" data-run="">${linked.length ? 'New chat: ask a question…' : 'Ask a question…'}</button>
       ${handoffMenu()}

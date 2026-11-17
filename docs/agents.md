@@ -1,6 +1,6 @@
 # The agent behind your chats
 
-Clearsky's chats run in **GitHub Copilot CLI**, in **Claude Code**, or in both, each for its own folders and repos (see below). Pick the default in **Settings → Copilot → Agent**, or in a team pack (`CLEARSKY_AGENT`: `copilot` or `claude`). Each uses its own login, so there's no token to make.
+Clearsky's chats run in **GitHub Copilot CLI**, in **Claude Code**, or in both, each for its own folders and repos (see below). Pick the default in **Settings → Agent → Agent**, or in a team pack (`CLEARSKY_AGENT`: `copilot` or `claude`). Each uses its own login, so there's no token to make.
 
 Both speak the [Agent Client Protocol](https://agentclientprotocol.com), which is how Clearsky already talks to a chat. So the chat panel, its Allow and Deny cards, history, hand-offs, skills, background jobs and the sandbox with its doors work the same with either.
 
@@ -21,7 +21,7 @@ Left on **Automatic**, it's Copilot when the Copilot CLI is installed, else Clau
 
 ## Copilot for work, Claude Code for the rest
 
-Both agents can be installed at once, and each chat runs in one of them. **Settings → Copilot → Use Copilot for** and **Use Claude Code for** list where each one is used: folders (`~/dev/work`), GitHub owners (`acme`) or repos (`acme/api`). A new chat goes by its folder and the PRs or issues it's about. A repo beats a folder, a folder beats an owner, and the deeper folder wins. A chat that fits no entry goes to the **Agent** above.
+Both agents can be installed at once, and each chat runs in one of them. **Settings → Agent → Use Copilot for** and **Use Claude Code for** list where each one is used: folders (`~/dev/work`), GitHub owners (`acme`) or repos (`acme/api`). A new chat goes by its folder and the PRs or issues it's about. A repo beats a folder, a folder beats an owner, and the deeper folder wins. A chat that fits no entry goes to the **Agent** above.
 
 The chat box shows an agent picker when both are installed: **Auto** follows those lists, or pick one for the new chat. A chat keeps the agent it started in, also after Clearsky restarts (it's remembered in Clearsky's state), and the chat list marks which agent each chat is in. Its sandbox, hosts and reviewer (`review`) are that agent's, so a work chat in Copilot never reaches Anthropic's hosts, and a Claude Code chat never reaches Copilot's.
 

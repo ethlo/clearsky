@@ -146,9 +146,9 @@ function nextStep(it, rel = relatedItems(it, xrefAll.length ? xrefAll : inboxIte
   if (n.run !== 'start') return { ...n, skill: cont };
   const chats = cpLinks.links[itemKey(it.url || '')] || [], did = cpLinks.actions?.[itemKey(it.url || '')]?.text;
   const feature = hasSkill('feature-delivery') ? 'feature-delivery' : cont;
-  if (chats.some((c) => c.status === 'working')) return { label: 'Copilot is working on it', wait: true };
-  if (chats.length) return { label: `Continue the Copilot chat${did ? `: it ${did}` : ''}`, run: 'copilot', skill: cont || feature, prompt: '' };
-  return { label: it.glyph === 'prog' ? 'Pick it up in Copilot' : 'Start it in Copilot', tip: 'Copilot makes the branch, writes the code and opens the PR. You can add instructions and pick a skill first; Shift+click starts right away', run: 'copilot', skill: feature, prompt: '' };
+  if (chats.some((c) => c.status === 'working')) return { label: `${AGENT} is working on it`, wait: true };
+  if (chats.length) return { label: `Continue the ${AGENT} chat${did ? `: it ${did}` : ''}`, run: 'copilot', skill: cont || feature, prompt: '' };
+  return { label: it.glyph === 'prog' ? `Pick it up in ${AGENT}` : `Start it in ${AGENT}`, tip: `${AGENT} makes the branch, writes the code and opens the PR. You can add instructions and pick a skill first; Shift+click starts right away`, run: 'copilot', skill: feature, prompt: '' };
 }
 function nextHtml(it, n = nextStep(it)) {
   if (!n) return '';
@@ -257,7 +257,7 @@ function sessionItems() {
       const k = linked(x.id), folder = (x.cwd || '').split('/').filter(Boolean).pop() || '';
       // A chat on one of your PRs also shows where the PR stands (review rounds, CI, reviewer).
       const st = prStateOf(k);
-      return { group: 'copilot', kind: 'session', sid: x.id, cwd: x.cwd, k: `cp:${x.id}`, key: k, live: x, title: x.title || 'Copilot chat',
+      return { group: 'copilot', kind: 'session', sid: x.id, cwd: x.cwd, k: `cp:${x.id}`, key: k, live: x, title: x.title || `${AGENT} chat`,
         ref: k ? k.replace(/^(pr|gh):[\w.-]+\//, '').replace('#', ' #').replace(/^issue:/, '') : folder, step: [st, k ? folder : ''].filter(Boolean).join(' · '),
         glyph: `s-${x.status}`, label: [STATUS_TEXT[x.status] || x.status, x.status === 'needs-you' ? 'amber' : x.status === 'working' ? 'green' : 'blue'],
         at: x.updatedAt, status: x.status };
@@ -562,7 +562,7 @@ function itemRow(it, i) {
   const chips = it.chats?.length ? it.chats.slice(0, 2).map((x) => chip(x, 'state')).join('')
     : [it, ...(it.also || [])].map((x) => x.url && (cpLinks.links[itemKey(x.url)] || [])[0]).filter(Boolean).slice(0, 1).map((x) => chip(x, !WORK_COLS[listView])).join('');
   const also = (it.also || []).map((x) => `${x.k}\t${x.stamp ?? ''}`).join('\n');
-  const acts = it.kind === 'session' ? '' : `<span class="ra">${refFromUrl(it.url) ? `<button class="ask" data-ask="${esc(it.url)}" data-title="${esc(it.title)}" title="Copilot on this (A)" aria-label="Copilot on this">✦</button>` : ''}
+  const acts = it.kind === 'session' ? '' : `<span class="ra">${refFromUrl(it.url) ? `<button class="ask" data-ask="${esc(it.url)}" data-title="${esc(it.title)}" title="${AGENT} on this (A)" aria-label="${AGENT} on this">✦</button>` : ''}
     <button data-mute="${esc(it.k)}"${also ? ` data-also="${esc(also)}"` : ''} title="Snooze (H)" aria-label="Snooze">${MUTE_ICON}</button>
     <button data-done="${esc(it.k)}" data-stamp="${esc(it.stamp ?? '')}"${also ? ` data-also="${esc(also)}"` : ''} title="Done: hide until there's something new (E)" aria-label="Done">${DONE_ICON}</button></span>`;
   const rel = it.kind === 'session' ? [] : relatedItems(it, xrefAll);
@@ -609,7 +609,7 @@ function renderList() {
   if (listView === 'inbox') {
     const { rows, loose } = mergeWork(live, sessionItems(), all);
     const of = (g) => rows.filter((x) => x.group === g);
-    group('Copilot now', 's-working', [...loose.filter((x) => matchesQ(x, q)), ...of('copilot')], { hideEmpty: true });
+    group(`${AGENT} now`, 's-working', [...loose.filter((x) => matchesQ(x, q)), ...of('copilot')], { hideEmpty: true });
     group('Needs you', 'ment', of('needs'), { empty: loading ? null : 'Nothing needs you right now.' });
     group('Your tickets', 'prog', of('tickets'), { hideEmpty: true });
     group('Waiting on others', 'wait', of('waiting'), { hideEmpty: true, fold: !showWaiting });

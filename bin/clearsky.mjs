@@ -162,7 +162,7 @@ const config = buildConfig();
 let trackerMemo = null;
 export const tracker = () => (trackerMemo ||= trackerName(process.env));
 // The coding agent behind chats: Copilot or Claude Code (lib/agents.mjs). `backend()` is the
-// default one; `backend(name)` a chat's own (Settings → Copilot → Use … for).
+// default one; `backend(name)` a chat's own (Settings → Agent → Use … for).
 let agentMemo = null;
 export const backend = (name) => AGENTS[name] || AGENTS[agentMemo ||= agentName(process.env)];
 // The agents installed here (the default one even when it isn't, so its error shows).
@@ -374,7 +374,7 @@ const BUILTIN_MANIFESTS = [
   calendarManifest,
   { name: 'copilot', label: 'Copilot', area: 'work', secrets: [{ kind: 'cli-login', note: 'none from Clearsky (its tokens are removed from Copilot\'s environment); Copilot keeps its own login in ~/.copilot or the keyring' }],
     hosts: ['*.githubcopilot.com', 'github.com'], clis: ['copilot'], files: ['~/.copilot', 'your Copilot folders'],
-    note: 'Settings → Copilot → Sandbox limits it to your folders and listed hosts.' },
+    note: 'Settings → Agent → Sandbox limits it to your folders and listed hosts.' },
   { name: 'links', label: 'Links', area: 'work', description: 'Your favourite links, in the menu. Edit them in Clearsky.', secrets: [], files: ['~/.config/clearsky/links.json'],
     note: 'Your favourites, edited in Clearsky. Only http(s) links; Clearsky never opens them itself.' },
 ];
@@ -1151,7 +1151,7 @@ async function copilotInfo(force) {
     efforts: b.efforts,
     permissions: Object.fromEntries(Object.entries(copilot.PERMISSIONS).map(([k, v]) => [k, v.label])),
     permissionHints: Object.fromEntries(Object.entries(copilot.PERMISSIONS).map(([k, v]) => [k, v.hint || ''])),
-    // What a new chat starts with (Settings → Copilot); the chat's pickers override them.
+    // What a new chat starts with (Settings → Agent); the chat's pickers override them.
     defaults: { model: process.env.COPILOT_MODEL || '', effort: process.env.COPILOT_EFFORT || '', permission: process.env.COPILOT_PERMISSION || '' },
   };
   copilotInfoCache = { at: Date.now(), data };
@@ -1226,13 +1226,13 @@ function stopCopilot(chat) {
 // header srt fills in (lib/sandbox.mjs, githubLogin) instead of asking a credential helper.
 const SANDBOX_GIT = [['url.https://github.com/.insteadOf', 'git@github.com:'], ['url.https://github.com/.insteadOf', 'ssh://git@github.com/'],
   ['credential.https://github.com.helper', '']];
-// What the sandbox may read besides your folders: Settings → Copilot → Also readable, and
+// What the sandbox may read besides your folders: Settings → Agent → Also readable, and
 // Clearsky's own folder (its acli for the sandbox).
 // Folders added to one chat in its side panel (lib/chat-folders.mjs), as absolute paths.
 const folderNotes = new Map(); // chat → what to tell its Copilot about a folder you added
 const chatFolders = (id) => (id ? (localState.sessionFolders(stateFile)[id] || []).filter(isDir) : []);
 // What a chat can read, for the files you point it at with @ (lib/file-refs.mjs): its folder,
-// Settings → Copilot's folders (read-write and read only) and the folders added to it.
+// Settings → Agent's folders (read-write and read only) and the folders added to it.
 const chatReadRoots = (id, cwd) => fileRoots([cwd || acpChats.get(id)?.cwd || copilotCwd(), ...copilotFolders(), ...list(process.env.COPILOT_READ), ...chatFolders(id)], homedir());
 // Copilot's memory (lib/memory.mjs) is readable in the sandbox, not writable: notes go in through your Save.
 // srt's own TMPDIR when it isn't given one (kept readable for acli's text files, lib/broker.mjs).
@@ -1276,7 +1276,7 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   if (maven?.unmatched?.length) console.error(`clearsky: Maven logins with no repository host found (in settings.xml or the poms under ${cwd}): ${maven.unmatched.join(', ')}`);
   const env = { ...own(), ...b.sandboxEnv() };
   const n = Number(env.GIT_CONFIG_COUNT) || 0;
-  // A token from Settings → Copilot if you made one, else your gh login.
+  // A token from Settings → Agent if you made one, else your gh login.
   const token = process.env.COPILOT_SANDBOX_TOKEN || ghToken();
   const github = token ? githubLogin(token, process.env, n + SANDBOX_GIT.length) : null;
   [...SANDBOX_GIT, ...(github ? [github.git] : [])].forEach(([k, v], i) => { env[`GIT_CONFIG_KEY_${n + i}`] = k; env[`GIT_CONFIG_VALUE_${n + i}`] = v; });
@@ -1336,7 +1336,7 @@ function sandboxGate() {
   return { ask: (p) => hostDoor.decide(p), filterRequest: async (req) => (await hostDoor.check(req, { listed })) || github(req) };
 }
 // The host door (lib/host-door.mjs): a host not on the sandbox's list waits at the proxy for your
-// answer in the working chat. Always allowed ones are Settings → Copilot → Hosts allowed from a chat.
+// answer in the working chat. Always allowed ones are Settings → Agent → Hosts allowed from a chat.
 const hostDoor = new HostDoor({
   chats: () => askingChats(null),
   ask: hostAsk,
@@ -1426,7 +1426,7 @@ async function githubAsk(what, { repo, nodes = [], why = null } = {}) {
   });
 }
 
-// Kinds of change you let through from now on, from a card's "always" button (Settings → Copilot).
+// Kinds of change you let through from now on, from a card's "always" button (Settings → Agent).
 const gateRules = () => parseRules(process.env.COPILOT_GATE_RULES);
 function addGateRule(rule) {
   const rules = gateRules();
@@ -1568,7 +1568,7 @@ function gitRepos(dir) {
 const gitReposLater = (dir) => execFileP('git', ['-C', dir, 'remote', '-v'], { timeout: 5000 })
   .then((r) => String(r.stdout).split('\n').map((l) => remoteRepo(l.split(/\s+/)[1] || '')).filter(Boolean), () => null);
 // Clones of a repo where a push's commits may be: working chats' folders, and the clones (and
-// worktrees) in your code folders (Settings → Copilot), since a chat may cd into one to push.
+// worktrees) in your code folders (Settings → Agent), since a chat may cd into one to push.
 function cloneDirs(repo) {
   const r = repo?.toLowerCase(), out = [];
   const roots = [...[...acpChats.values()].filter((c) => c.busy).flatMap((c) => [c.cwd, ...chatFolders(c.id)]), ...copilotFolders().map((d) => d.replace(/^~(?=\/|$)/, homedir()))];
@@ -1608,7 +1608,7 @@ async function vmRun({ key, argv, cwd, java, signal }, out, err) {
     c.vm.events.push(...old);
     bindVm(c);
   }
-  // In line for a VM when other chats' VMs fill the places (Settings → Copilot → VMs at the same
+  // In line for a VM when other chats' VMs fill the places (Settings → Agent → VMs at the same
   // time): the command, the chat and the VM's view all say where it is.
   const vm = c.vm;
   vm.onStop ||= () => vmQueue.drop(vm, 'this chat\'s VM was stopped while it waited');
@@ -2051,7 +2051,7 @@ async function reviewRun({ key, argv, cwd, signal }, out, err) {
   }
 }
 
-// The last looked-up dollar rate (Settings → Copilot, live rate), without asking again.
+// The last looked-up dollar rate (Settings → Agent, live rate), without asking again.
 function readFx() {
   if (process.env.CLEARSKY_FX_LIVE !== 'on') return null;
   try { return JSON.parse(readFileSync(join(homedir(), '.cache', 'clearsky', 'fx.json'), 'utf8')); } catch { return null; }
@@ -2071,12 +2071,12 @@ function chatCredits(id, model = null) {
 
 // `usage` from a chat: the line for the end of its PR description (lib/disclosure.mjs), from
 // the chats' own session logs; `usage --fields` gives it as Jira field values too. Only when
-// you switched it on in Settings → Copilot.
+// you switched it on in Settings → Agent.
 function usageRun({ key, argv = [] }) {
   const c = chatByKey(key);
   if (!c) return { code: 1, stdout: '', stderr: 'Clearsky: this chat is closed.\n' };
   if (c.agentName !== 'copilot') return { code: 1, stdout: '', stderr: `Clearsky: usage is only counted for Copilot chats so far, not ${backend(c.agentName).label}; leave the line out.\n` };
-  if (process.env.COPILOT_DISCLOSE !== 'on') return { code: 1, stdout: '', stderr: 'Clearsky: saying what did the work is off (Settings → Copilot); leave the line out.\n' };
+  if (process.env.COPILOT_DISCLOSE !== 'on') return { code: 1, stdout: '', stderr: 'Clearsky: saying what did the work is off (Settings → Agent); leave the line out.\n' };
   const split = chatCredits(c.id, c.model);
   return { code: 0, stdout: `${argv.includes('--fields') ? disclosureFields(split) : disclosureLine(split)}\n`, stderr: '' };
 }
@@ -2180,7 +2180,7 @@ function foldersHint() {
     + 'If you need something outside these folders, say what and why first. '
     + `For temporary files use $TMPDIR (${tilde(copilotTmp())}), not /tmp.`;
 }
-// Where a sandboxed chat runs builds and tests (Settings → Copilot → Run builds in): the chat's
+// Where a sandboxed chat runs builds and tests (Settings → Agent → Run builds in): the chat's
 // VM when this machine has one, so a full build doesn't take your laptop's CPU; or the sandbox,
 // with the VM only for tests that need Docker. The sandbox fences files and network, not CPU: a
 // build in it runs on this machine, as you, and the VMs view only sees it as sandbox load.
@@ -2492,7 +2492,7 @@ function toolDetail(call = {}) {
 }
 
 // Folders Copilot chats may use without asking: Settings, else your code folders (~/dev).
-// Commands the sandbox's doors run without asking, like a Jira transition (Settings → Copilot).
+// Commands the sandbox's doors run without asking, like a Jira transition (Settings → Agent).
 const assistedAllow = () => list(process.env.COPILOT_ASSISTED_ALLOW);
 const copilotFolders = () => (process.env.COPILOT_FOLDERS ? list(process.env.COPILOT_FOLDERS) : codeDirs());
 
@@ -2547,7 +2547,7 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, s
     || chatAgent(chat, { cwd, repos: scope.filter((x) => x.repo).map((x) => x.repo) });
   const b = backend(name);
   const args = b.args({ ...options, folders: dirs });
-  // Sandboxed mode always runs in srt; the others when Settings → Copilot → Sandbox says so.
+  // Sandboxed mode always runs in srt; the others when Settings → Agent → Sandbox says so.
   const sandbox = !!copilot.PERMISSIONS[options.permission]?.sandbox || process.env.COPILOT_SANDBOX === 'srt';
   const sig = JSON.stringify([b.name, args, dirs, options.permission, options.model, sandbox, process.env.COPILOT_DOMAINS, process.env.COPILOT_FOLDERS]);
   let c = acpChats.get(chat);
@@ -3080,7 +3080,10 @@ function serve() {
   const ports = [...new Set([config.port, Number(process.env.CLEARSKY_PUBLIC_PORT) || config.port])];
   const origins = new Set(ports.flatMap((p) => [`http://127.0.0.1:${p}`, `http://localhost:${p}`]));
   // What the browser may do with each page (lib/page-security.mjs): only its own scripts, no frames.
-  const html = (res, text) => { res.writeHead(200, htmlHeaders.get(text) || htmlHeaders.set(text, pageHeaders(text)).get(text)); res.end(text); };
+  // Pages name the agent your chats run in ("Copilot", "Claude Code") where they say __AGENT__.
+  const named = new Map();
+  const forAgent = (text) => { const k = `${backend().label}\n${text.length}\n${text.slice(0, 64)}`; return named.get(k) || named.set(k, text.replaceAll('__AGENT__', backend().label)).get(k); };
+  const html = (res, page) => { const text = forAgent(page); res.writeHead(200, htmlHeaders.get(text) || htmlHeaders.set(text, pageHeaders(text)).get(text)); res.end(text); };
   const htmlHeaders = new Map();
   const json = (res, code, body) => {
     res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...COMMON_HEADERS });
@@ -3292,7 +3295,7 @@ function serve() {
           }
           // A new task names its repository: its clone, when the ticket gave none.
           if (!checkout && task?.repo && !body.cwd) checkout = findCheckout(task.repo);
-          // A PR or ticket chat with no clone found starts in your first folder (Settings → Copilot).
+          // A PR or ticket chat with no clone found starts in your first folder (Settings → Agent).
           const cwd = checkout || (body.cwd && isDir(body.cwd) ? body.cwd : (refs.length && !body.resume && copilotFolders().map((d) => d.replace(/^~(?=\/|$)/, homedir())).find(isDir)) || copilotCwd());
           let refText = '';
           if (refs.length) {
@@ -3968,7 +3971,7 @@ async function appCommand() {
     { detached: true, stdio: 'ignore' }).unref();
 }
 
-// `clearsky docker …`: Clearsky's container, with the folders from Settings → Copilot mounted
+// `clearsky docker …`: Clearsky's container, with the folders from Settings → Agent mounted
 // (see lib/docker.mjs). Runs on your machine, not in the container.
 async function dockerCommand([sub = 'up', ...rest]) {
   const { dockerMounts, writeMountsFile } = await import('../lib/docker.mjs');

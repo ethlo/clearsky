@@ -85,12 +85,12 @@ async function renderItem() {
     ${it.data?.own && it.data.own.state !== 'read' ? `<button class="icon-btn" data-own-read="${esc(it.url)}" data-oid="${esc(it.data.own.headOid || '')}" title="I've read it, up to the latest commit">${DONE_ICON} Mark read</button>`
       : it.data?.own?.readOid ? `<button class="icon-btn" data-own-read="${esc(it.url)}" data-oid="" title="You marked it read; mark it not read">Mark not read</button>` : ''}
     ${it.kind === 'pr' && !prClosed.has(it.pr) ? `<button class="icon-btn" data-rv-open="${esc(it.data.repo)}#${it.data.number}">${icon('users', 14)} Request review</button>` : ''}
-    ${refFromUrl(it.url) ? `<button class="icon-btn" data-ask="${esc(it.url)}" data-title="${esc(it.title)}">${icon('spark', 14)} Copilot on this</button>` : ''}
+    ${refFromUrl(it.url) ? `<button class="icon-btn" data-ask="${esc(it.url)}" data-title="${esc(it.title)}">${icon('spark', 14)} ${AGENT} on this</button>` : ''}
 </div>`;
   // Snooze and Done sit in the header, where the list's row actions are too.
   $('#it-acts').innerHTML = it.kind === 'linked' ? '' : `<button class="icon-btn small" data-mute="${esc(it.k)}" title="Snooze (H)">${MUTE_ICON} Snooze</button>
     <button class="icon-btn small" data-done="${esc(it.k)}" data-stamp="${esc(it.stamp ?? '')}" data-back-after title="Done: hide until there's something new (E)">${DONE_ICON} Done</button>`;
-  const cps = sessions.length ? `<h3>Copilot on this</h3><div class="cps">${sessions.map(chip).join('')}</div>` : '';
+  const cps = sessions.length ? `<h3>${AGENT} on this</h3><div class="cps">${sessions.map(chip).join('')}</div>` : '';
   // A Jira comment comes as HTML the server built from Jira's own format (lib/jira-rich.mjs).
   const quote = it.quoteHtml ? `<h3>Latest mention</h3><div class="quote desc rich">${it.quoteHtml}</div>`
     : it.quote ? `<h3>${esc(it.data?.quoteLabel || 'Latest mention')}</h3><div class="quote">${esc(it.quote)}</div>` : '';
@@ -130,7 +130,7 @@ let lastActs = {};
 // The latest thing done on an item: by you from Clearsky, or by Copilot in a linked session.
 function lastActLine(it) {
   const mine = lastActs[it.url], cp = cpLinks.actions?.[itemKey(it.url || '')];
-  const a = mine && (!cp || mine.at >= cp.at) ? { who: 'You', ...mine } : cp ? { who: 'Copilot', ...cp } : null;
+  const a = mine && (!cp || mine.at >= cp.at) ? { who: 'You', ...mine } : cp ? { who: `${AGENT}`, ...cp } : null;
   return a ? `<div class="last-act">${a.who}: ${esc(a.text)}, ${esc(ago(a.at))}.</div>` : '';
 }
 const loadActs = () => fetch('/api/actions').then((r) => r.json()).then((d) => { lastActs = d.actions || {}; }).catch(() => {});
@@ -200,7 +200,7 @@ async function renderNotes() {
 // What Copilot changed as you (GitHub and Jira show it as you; this tells it apart), newest first.
 const DECIDED = { auto: 'went through', allowed: 'you allowed', 'allowed with a step': 'with a step you allowed', declined: 'you declined', read: 'read', 'vpn off': 'VPN off', failed: 'failed' };
 function changeRows(list, { chats = true } = {}) {
-  const name = (id) => recentChats.find((r) => r.id === id)?.title || 'a Copilot chat';
+  const name = (id) => recentChats.find((r) => r.id === id)?.title || `a ${AGENT} chat`;
   return `<ul class="notes changes">${list.map((w) => `<li class="d-${esc(w.decided.split(' ')[0])}">
       <span class="when" title="${esc(new Date(w.at).toLocaleString())}">${esc(ago(w.at))}</span>
       <span class="what"><b>${esc({ jira: 'Jira', grafana: 'Grafana (read)', build: w.kind === 'test' ? 'Tests' : 'Build', review: 'Self-review' }[w.where] || (w.door ? w.where : 'GitHub'))}${w.repo || w.target ? ` · ${esc(w.repo || w.target)}` : ''}</b><small title="${esc(w.what)}">${esc(w.what)}${w.removed ? ` · ${w.removed} secret${w.removed > 1 ? 's' : ''} removed` : ''}</small>
@@ -217,7 +217,7 @@ async function renderChanges() {
   el.innerHTML = skeleton(4);
   let d;
   try { d = await getJson('/api/agent-log'); } catch (e) { el.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
-  el.innerHTML = d.writes.length ? changeRows(d.writes) : '<div class="empty">Nothing yet. Comments, pushes, PR edits and Jira changes Copilot makes from its sandbox show up here.</div>';
+  el.innerHTML = d.writes.length ? changeRows(d.writes) : `<div class="empty">Nothing yet. Comments, pushes, PR edits and Jira changes ${AGENT} makes from its sandbox show up here.</div>`;
 }
 
 // The agent map (lib/map.mjs): per chat, each repo, ticket and environment it worked on, with what
@@ -244,7 +244,7 @@ function mapNode(n, jira) {
     ${acts.length ? `<div class="acts">${acts.map((a) => `<span class="act ${actTone(a)}" title="${esc([new Date(a.at).toLocaleString(), ...new Set(a.details.filter(Boolean))].join('\n'))}">${esc(a.label)}${a.n > 1 ? ` ×${a.n}` : ''}</span>`).join('<i>›</i>')}</div>` : ''}</div></li>`;
 }
 function mapChat(ch, jira, { head = true } = {}) {
-  const name = ch.title || recentChats.find((r) => r.id === ch.id)?.title || 'A Copilot chat';
+  const name = ch.title || recentChats.find((r) => r.id === ch.id)?.title || `A ${AGENT} chat`;
   return `<div class="mapc">${head ? `<div class="mh"><a href="#copilot" data-sid="${esc(ch.id)}">${esc(name)}</a><small>${ch.live ? 'open · ' : ''}${ch.at ? `last ${esc(ago(ch.at))}` : ''}${ch.shared ? ` · ${ch.shared} change${ch.shared > 1 ? 's' : ''} could have been another working chat's` : ''}</small></div>` : ''}
     <ul class="mapn">${ch.nodes.map((n) => mapNode(n, jira)).join('')}</ul></div>`;
 }
@@ -261,7 +261,7 @@ async function renderMap() {
   let d;
   try { d = await getJson('/api/copilot/map'); } catch (e) { el.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
   el.innerHTML = d.chats.length ? `${d.chats.map((ch) => mapChat(ch, d.jira)).join('')}`
-    : '<div class="empty">Nothing yet. As Copilot builds, tests, reviews, pushes, comments and moves tickets from its sandbox, each chat\'s map shows here.</div>';
+    : `<div class="empty">Nothing yet. As ${AGENT} builds, tests, reviews, pushes, comments and moves tickets from its sandbox, each chat\'s map shows here.</div>`;
 }
 
 // Done or snoozed from the item page: back to the list.
@@ -542,11 +542,11 @@ function renderStandup() {
   // What to say, in a few sentences (Copilot writes it from the lists below; Generate asks it).
   const say = `<section class="card su-card su-say"><h2>Say this</h2>
     <div id="su-say">${sayData?.text ? sayHtml(sayData.text) : sayData?.error ? `<div class="err">${esc(sayData.error)}</div>` : sayData?.loading ? skeleton(3) : ''}</div>
-    <div class="acts-row"><button class="icon-btn${sayData?.text ? '' : ' primary'}" data-say="${sayData?.text ? 'refresh' : 'go'}" ${sayData?.loading ? 'disabled' : ''} title="Copilot writes a few sentences from the lists below, grouped by what the work is for">${icon('spark', 14)} ${sayData?.text ? 'Write it again' : 'Write it with Copilot'}</button>${sayData?.text ? '<button class="icon-btn" data-say="copy">Copy</button>' : ''}</div></section>`;
+    <div class="acts-row"><button class="icon-btn${sayData?.text ? '' : ' primary'}" data-say="${sayData?.text ? 'refresh' : 'go'}" ${sayData?.loading ? 'disabled' : ''} title="${AGENT} writes a few sentences from the lists below, grouped by what the work is for">${icon('spark', 14)} ${sayData?.text ? 'Write it again' : `Write it with ${AGENT}`}</button>${sayData?.text ? '<button class="icon-btn" data-say="copy">Copy</button>' : ''}</div></section>`;
   // Every PR, Copilot chat and commit count, for when someone asks; folded away by default.
   const more = g.details.length ? `<details class="su-more"${suMoreOpen ? ' open' : ''}><summary>All activity (${g.details.length})</summary>${list(g.details)}</details>` : '';
   $('#su-body').innerHTML = say + (errs.length ? `<div class="err">${esc(errs.join(' · '))}</div>` : '') +
-    card('Yesterday', g.yesterday, 'Nothing recorded on GitHub, Jira or Copilot.') +
+    card('Yesterday', g.yesterday, `Nothing recorded on GitHub, Jira or ${AGENT}.`) +
     card('Today', g.today, 'Pick up the next item from the queue.') +
     card('Blockers', g.blockers, 'None') + more;
   $('#su-body .su-more')?.addEventListener('toggle', (e) => { suMoreOpen = e.target.open; });
@@ -665,7 +665,7 @@ async function loadRestart() {
   if (el.hidden) return;
   const list = busy.length ? `<ul>${busy.map((c) => `<li>${esc(c.title)} (${c.status === 'needs-you' ? 'waiting for your OK' : 'working'})</li>`).join('')}</ul>` : '';
   el.innerHTML = pending
-    ? `<div><b>Restart waiting</b> for ${busy.length ? `${busy.length} Copilot chat${busy.length > 1 ? 's' : ''} to finish:` : 'a moment…'}</div>${list}
+    ? `<div><b>Restart waiting</b> for ${busy.length ? `${busy.length} ${AGENT} chat${busy.length > 1 ? 's' : ''} to finish:` : 'a moment…'}</div>${list}
        <div class="acts"><button class="primary" data-restart="now">Restart now</button></div>`
     : `<div><b>Update ready.</b> Restart to use it${busy.length ? ` (waits for ${busy.length} busy chat${busy.length > 1 ? 's' : ''})` : ''}.</div>${list}
        <div class="acts"><button class="primary" data-restart="idle">Restart</button>${busy.length ? '<button data-restart="now">Restart now</button>' : ''}</div>`;
