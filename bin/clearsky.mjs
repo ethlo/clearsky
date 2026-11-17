@@ -66,6 +66,7 @@ import { NEW_TASK_HINT, cleanNewTask, newTaskPrompt } from '../lib/new-task.mjs'
 import { trackerName, TRACKERS, trackerHint, ghIssue } from '../lib/tracker.mjs';
 import { reviewGate } from '../lib/review-gate.mjs';
 import { SAFE_GIT, SAFE_DIFF, localPrograms } from '../lib/safe-git.mjs';
+import * as chatScope from '../lib/chat-scope.mjs';
 import { pageHeaders, COMMON_HEADERS, crossSite } from '../lib/page-security.mjs';
 import { agentName, agentFor, AGENTS, AGENT_NAMES } from '../lib/agents.mjs';
 import { readHandoffs, saveHandoffs, addHandoff, nextHandoff, settleAfterRestart, handoffPrompt, handoffResult, updateHandoff } from '../lib/handoff.mjs';
@@ -93,6 +94,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 export const userEnvFile = join(homedir(), '.config', 'clearsky', '.env');
 const stateFile = process.env.CLEARSKY_STATE || join(homedir(), '.config', 'clearsky', 'state.json');
 const agentLogFile = join(dirname(stateFile), 'agent-writes.jsonl');
+const scopesFile = join(dirname(stateFile), 'chat-scopes.json'); // each chat's repos, as they were when it started (lib/chat-scope.mjs)
 // Files a chat wrote or you attached to it, for its Outputs (see chatOutputs).
 const agentFilesFile = join(dirname(stateFile), 'agent-files.jsonl');
 
@@ -1410,7 +1412,7 @@ async function githubAsk(what, { repo, nodes = [], why = null } = {}) {
       for (const c of chats) { c.waiting.delete(id); c.pending.delete(id); c.shared.delete(id); c.emit({ type: 'permission-done', id }); }
       const target = repo || (what.match(/^git push to (\S+)/) || [])[1] || null;
       // Allowed in the one chat it came from: that repo is part of this chat's work from now on.
-      if (ok && !shared && target && why?.startsWith('goes to ')) chats[0].repos.add(target.toLowerCase());
+      if (ok && !shared && target && why?.startsWith('goes to ')) { chats[0].repos.add(target.toLowerCase()); chatScope.addScopeRepo(scopesFile, chats[0].id, target); }
       logWrite(agentLogFile, { where: 'github', what, target, chats: chats.map(chatRef), decided: ok ? 'allowed' : expired ? 'expired' : 'declined' });
       done(ok);
     };
@@ -1553,8 +1555,9 @@ async function nodesRepo(ids) {
 }
 // The GitHub repos a chat works on: those of its folder's git remotes (or, when it started in a
 // folder of clones, those whose branch is named after one of its tickets), the PRs it was started
-// about, and the ones you allowed in it. Looked up again after a minute: Copilot may clone or
-// switch branches while it works.
+// about, and the ones you allowed in it. The remotes are the ones the folder had when the chat
+// started (lib/chat-scope.mjs): the chat can write there, so a remote or clone it adds later
+// asks first. Which branch a clone is on is looked up again after a minute.
 export const remoteRepo = (url) => (/github/i.test(url) && (url.match(/[:/]([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/) || [])[1]?.toLowerCase()) || null;
 function gitRepos(dir) {
   try {
@@ -1562,36 +1565,22 @@ function gitRepos(dir) {
     return out.split('\n').map((l) => remoteRepo(l.split(/\s+/)[1] || '')).filter(Boolean);
   } catch { return null; }
 }
+const gitReposLater = (dir) => execFileP('git', ['-C', dir, 'remote', '-v'], { timeout: 5000 })
+  .then((r) => String(r.stdout).split('\n').map((l) => remoteRepo(l.split(/\s+/)[1] || '')).filter(Boolean), () => null);
 // Clones of a repo where a push's commits may be: working chats' folders, and the clones (and
 // worktrees) in your code folders (Settings → Copilot), since a chat may cd into one to push.
 function cloneDirs(repo) {
   const r = repo?.toLowerCase(), out = [];
-  const sub = (d) => { try { return readdirSync(d, { withFileTypes: true }).filter((e) => e.isDirectory() && !e.name.startsWith('.')).map((e) => join(d, e.name)); } catch { return []; } };
-  const clones = (root) => (existsSync(join(root, '.git')) ? [root] : sub(root).flatMap((d) => (existsSync(join(d, '.git')) ? [d] : sub(d).slice(0, 50))).slice(0, 300));
   const roots = [...[...acpChats.values()].filter((c) => c.busy).flatMap((c) => [c.cwd, ...chatFolders(c.id)]), ...copilotFolders().map((d) => d.replace(/^~(?=\/|$)/, homedir()))];
-  for (const root of new Set(roots)) for (const d of clones(root)) if ((gitRepos(d) || []).includes(r)) out.push(d);
+  for (const root of new Set(roots)) for (const d of chatScope.clonesIn(root)) if ((gitRepos(d) || []).includes(r)) out.push(d);
   return [...new Set(out)];
 }
 function chatRepos(c) {
   if (!c.known || Date.now() - c.known.at > 60_000) {
-    const set = new Set(gitRepos(c.cwd) || []);
     const refs = localState.sessionRefs(stateFile)[c.id] || [];
-    for (const k of refs) { const m = k.match(/^(?:pr|gh):([\w.-]+\/[\w.-]+)#/); if (m) set.add(m[1].toLowerCase()); }
     const tickets = new Set([...c.tickets, ...refs.filter((k) => k.startsWith('issue:')).map((k) => k.slice(6))]);
-    if (!existsSync(join(c.cwd, '.git')) && tickets.size) {
-      const sub = (d) => { try { return readdirSync(d, { withFileTypes: true }).filter((e) => e.isDirectory() && !e.name.startsWith('.')).map((e) => join(d, e.name)); } catch { return []; } };
-      const branch = (d) => {
-        try {
-          // A worktree's .git is a file pointing at its own folder in the main clone.
-          const git = statSync(join(d, '.git')).isFile() ? resolve(d, readFileSync(join(d, '.git'), 'utf8').match(/^gitdir: (.+)$/m)[1].trim()) : join(d, '.git');
-          return (readFileSync(join(git, 'HEAD'), 'utf8').match(/^ref: refs\/heads\/(.+)/) || [])[1]?.toUpperCase() || '';
-        } catch { return ''; }
-      };
-      const named = (b) => [...tickets].some((t) => new RegExp(`(^|[^A-Z0-9])${t}([^0-9]|$)`).test(b));
-      for (const d of sub(c.cwd).flatMap((d) => (existsSync(join(d, '.git')) ? [d] : sub(d).slice(0, 50))).slice(0, 300)) {
-        if (named(branch(d))) for (const r of gitRepos(d) || []) set.add(r);
-      }
-    }
+    const set = chatScope.scopeRepos(c.scope, { tickets, branch: (path) => chatScope.headBranch(join(c.cwd, path)) });
+    for (const k of refs) { const m = k.match(/^(?:pr|gh):([\w.-]+\/[\w.-]+)#/); if (m) set.add(m[1].toLowerCase()); }
     c.known = { at: Date.now(), repos: set };
   }
   return new Set([...c.known.repos, ...c.repos]);
@@ -2573,6 +2562,9 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, s
     bindVm(c);
     const id = await agent.start(cwd, resumeId);
     c.id = id;
+    // Its repos are the ones its folder has now, before its first turn; a chat seen before keeps its list.
+    c.scope = chatScope.scopeOf(scopesFile, id) || chatScope.saveScope(scopesFile, id, await chatScope.scopeSnapshot(cwd, gitReposLater));
+    for (const r of c.scope['+'] || []) c.repos.add(r);
     acpChats.set(id, c);
     localState.setSessionAgent(stateFile, id, b.name);
     // A new chat gets Copilot's own session id; the panel keeps using that from now on.
