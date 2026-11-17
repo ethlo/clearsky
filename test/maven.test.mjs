@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { mavenServers, serverHosts, sandboxSettingsXml, mavenSandbox, withSandboxProxy, PROXY_TOKEN_ENV } from '../lib/maven.mjs';
+import { mavenServers, serverHosts, sandboxSettingsXml, mavenSandbox, withSandboxProxy, pomHosts, forgetHosts, PROXY_TOKEN_ENV } from '../lib/maven.mjs';
+import { mavenSettings, mavenExports } from '../lib/vm.mjs';
+import { vmMaven } from '../bin/clearsky.mjs';
 import { srtSettings } from '../lib/sandbox.mjs';
 
 const XML = `<settings>
@@ -84,4 +86,80 @@ test("the copy with logins also gets srt's proxy, still without the password", (
   assert.match(m.javaOptions, /-Djavax\.net\.ssl\.trustStore=/);
   const copy = withSandboxProxy(readFileSync(m.settings, 'utf8'), { port: 3128 });
   assert.ok(!copy.includes('s3cret') && copy.includes('CLEARSKY_M2_0') && copy.includes('clearsky-sandbox'));
+});
+
+// The recurring one: settings.xml has only the login (under the repository's id) and the project's
+// pom names the repository. Then the sandbox had no login, the host wasn't allowed (the host door
+// asked), and the VM's Maven had nothing but the proxy.
+const LOGIN_ONLY = `<settings>
+  <localRepository>/var/cache/m2/repository</localRepository>
+  <servers><server><id>acme-releases</id><username>alex</username><password>\${env.ACME_PW}</password></server></servers>
+  <mirrors><mirror><id>central-mirror</id><mirrorOf>central</mirrorOf><url>https://mirror.example.net/maven2</url></mirror></mirrors>
+</settings>`;
+const POM = `<project><repositories><repository><id>acme-releases</id><url>https://artifacts.acme.example/releases</url></repository></repositories>
+  <distributionManagement><snapshotRepository><id>acme-snapshots</id><url>https://snapshots.acme.example/s</url></snapshotRepository></distributionManagement></project>`;
+const fakeRun = (cmd, args) => { const i = args.indexOf('-out'); if (i >= 0) { writeFileSync(args[i + 1], 'cert'); writeFileSync(args[args.indexOf('-keyout') + 1], 'key'); } const k = args.indexOf('-keystore'); if (k >= 0) writeFileSync(args[k + 1], 'p12'); };
+function loginOnlyHome() {
+  forgetHosts();
+  const home = mkdtempSync(join(tmpdir(), 'm2-'));
+  mkdirSync(join(home, '.m2'));
+  writeFileSync(join(home, '.m2', 'settings.xml'), LOGIN_ONLY);
+  const repo = join(home, 'repo');
+  mkdirSync(join(repo, 'module', 'target'), { recursive: true });
+  writeFileSync(join(repo, 'module', 'pom.xml'), POM);
+  writeFileSync(join(repo, 'module', 'target', 'pom.xml'), POM.replace(/artifacts\.acme\.example/g, 'stale.example'));
+  return { home, repo };
+}
+
+test("a login whose repository is in the project's pom gets its host (allowed, read, login added)", () => {
+  const { home, repo } = loginOnlyHome();
+  assert.deepEqual(pomHosts([repo]).get('acme-releases'), ['artifacts.acme.example']);
+  const m = mavenSandbox({ home, out: join(home, 'out'), keep: join(home, 'keep'), run: fakeRun, dirs: [repo], env: { ACME_PW: 'pw' } });
+  assert.deepEqual(m.hosts, ['artifacts.acme.example']);
+  assert.deepEqual(m.unmatched, []);
+  // ${env.…} in the login is what Maven would send.
+  assert.equal(Buffer.from(m.env.CLEARSKY_M2_0, 'base64').toString(), 'alex:pw');
+  const r = srtSettings({ cwd: repo, home, maven: m, exists: () => true });
+  assert.ok(r.network.allowedDomains.includes('artifacts.acme.example'));
+  assert.ok(!r.network.tlsTerminate.excludeDomains.includes('artifacts.acme.example'));
+  assert.deepEqual(r.credentials.envVars, [{ name: 'CLEARSKY_M2_0', mode: 'mask', injectHosts: ['artifacts.acme.example'] }]);
+  // A chat started elsewhere later keeps that host (srt has one config for all chats).
+  const again = mavenSandbox({ home, out: join(home, 'out'), keep: join(home, 'keep'), run: fakeRun, dirs: [join(home, 'elsewhere')] });
+  assert.deepEqual(again.hosts, ['artifacts.acme.example']);
+});
+
+test('a login with no host anywhere is reported, not silently dropped', () => {
+  const { home } = loginOnlyHome();
+  const m = mavenSandbox({ home, out: join(home, 'out'), keep: join(home, 'keep'), run: fakeRun });
+  assert.deepEqual(m.unmatched, ['acme-releases']);
+  assert.deepEqual(m.credentials, []);
+});
+
+test("the VM's Maven gets your settings with the logins, the VM's proxy and the settings in MAVEN_ARGS", () => {
+  const { home, repo } = loginOnlyHome();
+  const m = mavenSandbox({ home, out: join(home, 'out'), keep: join(home, 'keep'), run: fakeRun, dirs: [repo], env: { ACME_PW: 'pw' } });
+  // As the sandbox's copy is after Clearsky added srt's proxy to it.
+  writeFileSync(m.settings, withSandboxProxy(readFileSync(m.settings, 'utf8'), { port: 3128 }));
+  const masked = (creds) => Object.fromEntries(creds.map((c) => [c.name, `fake_value_${c.name}`]));
+  const v = vmMaven(m, { masked });
+  assert.deepEqual(v.env, { CLEARSKY_M2_0: 'fake_value_CLEARSKY_M2_0' });
+  assert.equal(String(v.trust), 'p12');
+  const xml = mavenSettings({ port: 1, url: 'http://' }, v.xml);
+  // The login as a header with the variable, never the password; the mirror kept.
+  assert.match(xml, /<id>acme-releases<\/id><configuration><httpHeaders><property><name>Authorization<\/name><value>Basic \$\{env\.CLEARSKY_M2_0\}<\/value>/);
+  assert.ok(!xml.includes('pw') && !xml.includes('ACME_PW') && xml.includes('mirror.example.net'));
+  // Only the VM's proxy (not the sandbox's), and not this machine's local repository path.
+  assert.equal(xml.match(/<proxy>/g).length, 1);
+  assert.match(xml, /<host>10\.0\.2\.100<\/host><port>3128<\/port><nonProxyHosts>/);
+  assert.ok(!xml.includes('CLEARSKY_PROXY_TOKEN') && !xml.includes('<localRepository>'));
+  // The command: settings named in MAVEN_ARGS, the stand-ins, and the CA trusted.
+  const ex = mavenExports({ env: { ...v.env, PATH: '/x', CLEARSKY_M2_1: '' }, trust: true });
+  assert.match(ex, /MAVEN_ARGS="\$\{MAVEN_ARGS:\+\$MAVEN_ARGS \}--settings \/home\/clearsky\/\.m2\/settings\.xml -Dmaven\.repo\.local\.tail=\/host\/m2"/);
+  assert.match(ex, / CLEARSKY_M2_0='fake_value_CLEARSKY_M2_0'/);
+  assert.ok(!ex.includes('PATH=') && !ex.includes('CLEARSKY_M2_1'));
+  assert.match(ex, /MAVEN_OPTS="[^"]*-Djavax\.net\.ssl\.trustStore=\/home\/clearsky\/\.m2\/clearsky-truststore\.p12/);
+  assert.doesNotMatch(mavenExports({}), /MAVEN_OPTS|CLEARSKY_M2/);
+  // No settings of yours: the VM still gets one, with just the proxy.
+  assert.equal(vmMaven(null), null);
+  assert.match(mavenSettings({ port: 1, url: 'http://' }), /^<settings>\n  <proxies>/);
 });
