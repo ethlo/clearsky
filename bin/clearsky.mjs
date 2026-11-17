@@ -65,6 +65,8 @@ import { scaffoldPack, writeScaffold, nextSteps } from '../lib/team-scaffold.mjs
 import { NEW_TASK_HINT, cleanNewTask, newTaskPrompt } from '../lib/new-task.mjs';
 import { trackerName, TRACKERS, trackerHint, ghIssue } from '../lib/tracker.mjs';
 import { reviewGate } from '../lib/review-gate.mjs';
+import { SAFE_GIT, SAFE_DIFF, localPrograms } from '../lib/safe-git.mjs';
+import { pageHeaders, COMMON_HEADERS, crossSite } from '../lib/page-security.mjs';
 import { agentName, agentFor, AGENTS, AGENT_NAMES } from '../lib/agents.mjs';
 import { readHandoffs, saveHandoffs, addHandoff, nextHandoff, settleAfterRestart, handoffPrompt, handoffResult, updateHandoff } from '../lib/handoff.mjs';
 import { srtInstalled } from '../lib/doctor.mjs';
@@ -886,12 +888,17 @@ function chatFile(id, pth) {
 }
 // What changed in a file on its branch: against where the branch left the default branch
 // (origin/HEAD, main or master), uncommitted changes included. Empty outside a git clone.
-async function fileDiff(pth) {
-  const git = (...a) => execFileP('git', ['-C', dirname(pth), ...a], { timeout: 10_000, maxBuffer: 8 * 1024 * 1024 }).then((r) => r.stdout.trim(), () => '');
+// The folder is the chat's to write, so git runs in the chat's sandbox while it is up, and
+// otherwise never in a repo whose own settings name a program to run (lib/safe-git.mjs).
+async function fileDiff(pth, c = null) {
+  const dir = dirname(pth);
+  const run = c?.agent?.inSandbox && !c.agent.closed ? sandboxRun(c) : execFileP;
+  if (run === execFileP && (await localPrograms(dir)).length) return { diff: '', base: null, unsafe: true };
+  const git = (...a) => run('git', ['-C', dir, ...SAFE_GIT, ...a], { timeout: 10_000, maxBuffer: 8 * 1024 * 1024 }).then((r) => String(r.stdout).trim(), () => '');
   if (!await git('rev-parse', '--is-inside-work-tree')) return { diff: '', base: null };
   let base = '';
   for (const ref of ['origin/HEAD', 'origin/main', 'origin/master', 'main', 'master']) if ((base = await git('merge-base', 'HEAD', ref))) break;
-  const diff = await git('diff', '--no-color', '--no-ext-diff', base || 'HEAD', '--', basename(pth));
+  const diff = await git('diff', '--no-color', ...SAFE_DIFF, base || 'HEAD', '--', basename(pth));
   const untracked = !diff && await git('ls-files', '--others', '--exclude-standard', '--', basename(pth));
   return { diff: diff.slice(0, 2_000_000), base: base ? base.slice(0, 8) : 'HEAD', new: !!untracked };
 }
@@ -1665,6 +1672,14 @@ function spawnJob(bin, args, { cwd, env, signal, hours = 4, onPid = null }, out,
     child.on('close', (code) => { clearTimeout(timer); jobGroups.delete(child.pid); done(code ?? 1); });
   });
 }
+// A short command (git) in a chat's sandbox, with execFile's shape: for what Clearsky runs in a
+// folder the chat can write, where git would run programs the chat names (lib/safe-git.mjs).
+const sandboxRun = (c) => async (bin, args, opts = {}) => {
+  if (!c?.agent?.inSandbox || c.agent.closed) throw new Error('this chat\'s sandbox has stopped');
+  const dir = args[0] === '-C' && isDir(args[1]) ? args[1] : c.cwd;
+  const s = await c.agent.inSandbox([bin, ...args], dir);
+  try { return await execFileP(s.bin, s.args, { ...opts, env: s.env, cwd: dir }); } finally { sandboxEnded(); }
+};
 // Background jobs running in a chat's sandbox: pid → chat, for the VMs view's sandbox load.
 const sandboxJobs = new Map();
 // Where a job runs is the fence of the chat that started it.
@@ -1966,11 +1981,14 @@ async function reviewRun({ key, argv, cwd, signal }, out, err) {
   const o = parseReviewArgs(argv);
   if (o.help) { out(`${REVIEW_USAGE}\n`); return 0; }
   if (o.error) { err(`review: ${o.error}\n\n${REVIEW_USAGE}\n`); return 2; }
-  const root = (await execFileP('git', ['-C', cwd, 'rev-parse', '--show-toplevel']).catch(() => ({ stdout: '' }))).stdout.trim();
+  // git reads the chat's repo inside the chat's sandbox: the repo's settings are the chat's to
+  // write, and a diff runs the programs they name (lib/safe-git.mjs).
+  const run = sandboxRun(c);
+  const root = String((await run('git', ['-C', cwd, 'rev-parse', '--show-toplevel'], { timeout: 10_000 }).catch(() => ({ stdout: '' }))).stdout).trim();
   if (!root) { err('review: not in a git repository\n'); return 1; }
   const log = (decided, extra = {}) => logWrite(agentLogFile, { where: 'review', what: ['review', ...argv].join(' '), target: root.replace(homedir(), '~'), repo: [...(gitRepos(root) || [])][0] || null, chats: [chatRef(c)], decided, ...extra });
   let change, ticket = null;
-  try { change = await changeOf(root, o.base); } catch (e) { err(`review: ${e.message}\n`); return 1; }
+  try { change = await changeOf(root, o.base, { run }); } catch (e) { err(`review: ${e.message}\n`); return 1; }
   if (o.ticket) {
     try { ticket = await ticketGoal(o.ticket); } catch (e) { err(`review: couldn't read ${o.ticket} (${e.message}); use --goal instead\n`); return 1; }
   }
@@ -1982,7 +2000,7 @@ async function reviewRun({ key, argv, cwd, signal }, out, err) {
   const args = rb.args({ permission: 'read', model, deny: ['url'] });
   // The changed files as they were before, in a folder the reviewer's sandbox can read.
   const baseDir = join(copilotTmp(), 'review', randomBytes(6).toString('hex'));
-  const baseFiles = await writeBaseFiles(root, change, baseDir).catch(() => []);
+  const baseFiles = await writeBaseFiles(root, change, baseDir, { run }).catch(() => []);
   const roots = [root, ...(baseFiles.length ? [baseDir] : [])];
   const agent = await startAgent(null, args, root, { sandbox: true, permission: 'read', model, agent: rb.name });
   const tally = { allowed: 0, denied: 0 };
@@ -3069,8 +3087,11 @@ function serve() {
   // browser then names that port.
   const ports = [...new Set([config.port, Number(process.env.CLEARSKY_PUBLIC_PORT) || config.port])];
   const origins = new Set(ports.flatMap((p) => [`http://127.0.0.1:${p}`, `http://localhost:${p}`]));
+  // What the browser may do with each page (lib/page-security.mjs): only its own scripts, no frames.
+  const html = (res, text) => { res.writeHead(200, htmlHeaders.get(text) || htmlHeaders.set(text, pageHeaders(text)).get(text)); res.end(text); };
+  const htmlHeaders = new Map();
   const json = (res, code, body) => {
-    res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...COMMON_HEADERS });
     res.end(JSON.stringify(body));
   };
 
@@ -3081,6 +3102,9 @@ function serve() {
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
     if (!hosts.has(req.headers.host)) return json(res, 421, { error: 'wrong host' });
+    // The API answers this page, a command line and Clearsky itself: not another site's request
+    // from your browser (lib/page-security.mjs).
+    if (crossSite(req, url.pathname)) return json(res, 403, { error: 'forbidden' });
     try {
       if (req.method === 'POST') {
         if (req.headers['x-clearsky-token'] !== csrf || (req.headers.origin && !origins.has(req.headers.origin))) {
@@ -3482,15 +3506,9 @@ function serve() {
       }
       if (url.pathname === '/api/settings') return json(res, 200, await settingsStatus());
       if (url.pathname === '/api/vpn') return json(res, 200, await vpn.check(url.searchParams.has('now')));
-      if (url.pathname === '/settings') {
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-        return res.end(settingsPage);
-      }
+      if (url.pathname === '/settings') return html(res, settingsPage);
       // The first-run welcome: what this machine has, the logins, and your work, in three steps.
-      if (url.pathname === '/welcome') {
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-        return res.end(welcomePage);
-      }
+      if (url.pathname === '/welcome') return html(res, welcomePage);
       if (url.pathname === '/api/handoffs') return json(res, 200, { handoffs: readHandoffs(handoffFile()), sandbox: isDemo() || await srtInstalled() });
       if (url.pathname === '/api/team') return json(res, 200, { team: readTeam(dirname(userEnvFile)) });
       if (url.pathname === '/api/doctor') {
@@ -3627,7 +3645,7 @@ function serve() {
         const id = url.searchParams.get('chat') || '', pth = url.searchParams.get('path') || '';
         const file = /^[\w-]{8,64}$/.test(id) && chatFile(id, pth);
         if (!file) return json(res, 404, { error: 'not one of this chat\'s files' });
-        if (url.searchParams.has('diff')) return json(res, 200, await fileDiff(pth));
+        if (url.searchParams.has('diff')) return json(res, 200, await fileDiff(pth, acpChats.get(id)));
         return sendFile(res, file);
       }
       if (url.pathname === '/api/links') return json(res, 200, readLinks(linksFile()));
@@ -3790,14 +3808,12 @@ function serve() {
       if (url.pathname === '/api/actions') return json(res, 200, { actions: localState.actions(stateFile) });
       if (url.pathname === '/api/work') {
         const data = await collect(url.searchParams.has('refresh'));
-        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-        return res.end(JSON.stringify(data));
+        return json(res, 200, data);
       }
       if (url.pathname === '/' || url.pathname === '/index.html') {
         // The very first start, with nothing set up yet: the welcome page first.
         if (firstRun()) { res.writeHead(302, { Location: '/welcome' }); return res.end(); }
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        return res.end(page);
+        return html(res, page);
       }
       res.writeHead(404).end('Not found');
     } catch (e) {

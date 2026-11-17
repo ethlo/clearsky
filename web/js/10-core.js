@@ -20,6 +20,14 @@ function applyTracker(t) {
     pick.title = TRACKER.name === 'github' ? 'Star the repos whose milestones you follow' : 'Star the Jira projects you follow';
   }
 }
+// A link from outside (a plugin's item, a calendar invite, a chat's answer) opens only as a web
+// link, mail or VS Code: never `javascript:` or another program's own scheme.
+for (const ev of ['click', 'auxclick']) {
+  document.addEventListener(ev, (e) => {
+    const a = e.target.closest?.('a[href]');
+    if (a && !['http:', 'https:', 'mailto:', 'vscode:'].includes(a.protocol)) e.preventDefault();
+  }, true);
+}
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
