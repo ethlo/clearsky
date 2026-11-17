@@ -67,6 +67,7 @@ import { trackerName, TRACKERS, trackerHint, ghIssue } from '../lib/tracker.mjs'
 import { reviewGate } from '../lib/review-gate.mjs';
 import { SAFE_GIT, SAFE_DIFF, localPrograms } from '../lib/safe-git.mjs';
 import * as chatScope from '../lib/chat-scope.mjs';
+import { untilde } from '../lib/util.mjs';
 import { pageHeaders, COMMON_HEADERS, crossSite } from '../lib/page-security.mjs';
 import { agentName, agentFor, AGENTS, AGENT_NAMES } from '../lib/agents.mjs';
 import { readHandoffs, saveHandoffs, addHandoff, nextHandoff, settleAfterRestart, handoffPrompt, handoffResult, updateHandoff } from '../lib/handoff.mjs';
@@ -1048,7 +1049,7 @@ async function loginStatus() {
 const teamKey = (k) => !!settings.FIELDS[k]?.team;
 const teamIo = () => ({
   readEnv: () => Object.fromEntries([...TEAM_KEYS, ...Object.keys(settings.FIELDS).filter(teamKey)].map((k) => [k, process.env[k] || ''])),
-  writeEnv: (v) => { settings.writeEnvFile(userEnvFile, v); applySettings(v); },
+  writeEnv: (v) => { settings.writeEnvFile(userEnvFile, v); applySettings(v); }, // already checked by the caller
   validate: (w) => settings.validate(Object.fromEntries(Object.entries(w).filter(([k]) => settings.FIELDS[k]))),
 });
 function joinTeam(from) {
@@ -1092,21 +1093,15 @@ function startSourceLogin(p) {
   Promise.resolve().then(() => p.login.start(makeContext(p).env)).then((r) => {
     // Only the source's own settings, e.g. a school key learned from the login.
     const own = Object.fromEntries(Object.entries(r?.settings || {}).filter(([k, v]) => Object.hasOwn(p.settings || {}, k) && v));
-    if (Object.keys(own).length) {
-      const values = settings.validate(own);
-      settings.writeEnvFile(userEnvFile, values);
-      applySettings(values);
-    }
+    if (Object.keys(own).length) saveSettings(own);
     sourceLogins.delete(p.name);
     sourceCache.delete(p.name);
   }).catch((e) => sourceLogins.set(p.name, { state: 'error', message: e.message }));
 }
 
+const setEnv = (values) => { for (const [k, v] of Object.entries(values)) { if (v) process.env[k] = v; else delete process.env[k]; } };
 function applySettings(values) {
-  for (const [k, v] of Object.entries(values)) {
-    if (v) process.env[k] = v;
-    else delete process.env[k];
-  }
+  setEnv(values);
   Object.assign(config, buildConfig());
   trackerMemo = null;
   if (agentMemo && agentMemo !== agentName(process.env)) { agentMemo = null; sessionsCache = null; }
@@ -1116,10 +1111,20 @@ function applySettings(values) {
   standupCache = { at: 0, data: null };
 }
 
+// A setting changed from the page or a card: checked, written to your settings file, and in use
+// at once. `quiet`: only the value changes and nothing is loaded again, for small switches like
+// a star.
+function saveSettings(raw, { quiet = false } = {}) {
+  const values = settings.validate(raw);
+  settings.writeEnvFile(userEnvFile, values);
+  if (quiet) setEnv(values); else applySettings(values);
+  return values;
+}
+
 // ---------------------------------------------------------------- Copilot chat
 
 const copilotCwd = () => {
-  const d = (process.env.COPILOT_CWD || '').replace(/^~(?=\/|$)/, homedir());
+  const d = untilde(process.env.COPILOT_CWD || '');
   try { if (d && statSync(d).isDirectory()) return d; } catch { /* gone: use Clearsky's folder */ }
   return join(here, '..');
 };
@@ -1344,9 +1349,7 @@ const hostDoor = new HostDoor({
   addAlways: (rule) => {
     const hosts = parseDomains(process.env.COPILOT_READ_HOSTS);
     if (hosts.includes(rule)) return;
-    const values = settings.validate({ COPILOT_READ_HOSTS: [...hosts, rule].join(', ') });
-    settings.writeEnvFile(userEnvFile, values);
-    applySettings(values);
+    saveSettings({ COPILOT_READ_HOSTS: [...hosts, rule].join(', ') });
   },
   readable: () => sandboxNetwork().readsHttps,
   // You answered after the request gave up (or long enough that it may have): the chat goes on.
@@ -1432,9 +1435,7 @@ function addGateRule(rule) {
   const rules = gateRules();
   if (rules.has(rule)) return;
   rules.add(rule);
-  const values = settings.validate({ COPILOT_GATE_RULES: [...rules].join(', ') });
-  settings.writeEnvFile(userEnvFile, values);
-  applySettings(values);
+  saveSettings({ COPILOT_GATE_RULES: [...rules].join(', ') });
 }
 // The card's "always" button: offered when the advice names a kind of change and, for merges and
 // branch deletes, only when this one looks fine (the rule only ever lets fine ones through).
@@ -1571,7 +1572,7 @@ const gitReposLater = (dir) => execFileP('git', ['-C', dir, 'remote', '-v'], { t
 // worktrees) in your code folders (Settings → Agent), since a chat may cd into one to push.
 function cloneDirs(repo) {
   const r = repo?.toLowerCase(), out = [];
-  const roots = [...[...acpChats.values()].filter((c) => c.busy).flatMap((c) => [c.cwd, ...chatFolders(c.id)]), ...copilotFolders().map((d) => d.replace(/^~(?=\/|$)/, homedir()))];
+  const roots = [...[...acpChats.values()].filter((c) => c.busy).flatMap((c) => [c.cwd, ...chatFolders(c.id)]), ...copilotFolders().map((d) => untilde(d))];
   for (const root of new Set(roots)) for (const d of chatScope.clonesIn(root)) if ((gitRepos(d) || []).includes(r)) out.push(d);
   return [...new Set(out)];
 }
@@ -1879,7 +1880,7 @@ function chatJira(c) {
 const chatByKey = (key) => typeof key === 'string' && key ? [...acpChats.values()].find((c) => c.agent.brokerKey === key) : null;
 function brokerWhere(key) {
   const c = chatByKey(key);
-  return c && [c.cwd, ...copilotFolders().map((d) => d.replace(/^~(?=\/|$)/, homedir())), ...chatFolders(c.id)];
+  return c && [c.cwd, ...copilotFolders().map((d) => untilde(d)), ...chatFolders(c.id)];
 }
 // Ask in the chat, as for any step Copilot wants to take, and wait for your answer.
 function brokerAsk({ key, tool, argv, cwd, vm = false, background = false }) {
@@ -2541,7 +2542,7 @@ async function acpTurn({ chat, options, prompt, resumeId, cwd, emit, res, bin, s
   // Changing the folders in Settings starts the chat's Copilot again (resuming it) on its next turn.
   // Changing a chat's own folders (its side panel) does the same.
   const extra = chatFolders(chat);
-  const dirs = [...copilotFolders(), ...extra, copilotTmp(), memory.memoryDir()].map((f) => f.replace(/^~(?=\/|$)/, homedir())).filter(isDir);
+  const dirs = [...copilotFolders(), ...extra, copilotTmp(), memory.memoryDir()].map((f) => untilde(f)).filter(isDir);
   // The chat's agent: the one it runs in already, else your pick for a new chat, else the rules.
   const name = acpChats.get(chat)?.agentName || (resumeId && sessionAgent(resumeId)) || (AGENTS[agentPick] ? agentPick : null)
     || chatAgent(chat, { cwd, repos: scope.filter((x) => x.repo).map((x) => x.repo) });
@@ -3189,7 +3190,7 @@ function serve() {
               folderNotes.set(id, `I added ${r.path.replace(homedir(), '~')} to this chat: you can read and change files there now, and review, vm and outside work there too.`);
             }
           }
-          if (remove) list = list.filter((f) => f !== String(remove).replace(/^~(?=\/|$)/, homedir()));
+          if (remove) list = list.filter((f) => f !== untilde(remove));
           localState.setSessionFolders(stateFile, id, list);
           return json(res, 200, { folders: list.map((f) => f.replace(homedir(), '~')) });
         }
@@ -3296,7 +3297,7 @@ function serve() {
           // A new task names its repository: its clone, when the ticket gave none.
           if (!checkout && task?.repo && !body.cwd) checkout = findCheckout(task.repo);
           // A PR or ticket chat with no clone found starts in your first folder (Settings → Agent).
-          const cwd = checkout || (body.cwd && isDir(body.cwd) ? body.cwd : (refs.length && !body.resume && copilotFolders().map((d) => d.replace(/^~(?=\/|$)/, homedir())).find(isDir)) || copilotCwd());
+          const cwd = checkout || (body.cwd && isDir(body.cwd) ? body.cwd : (refs.length && !body.resume && copilotFolders().map((d) => untilde(d)).find(isDir)) || copilotCwd());
           let refText = '';
           if (refs.length) {
             const parts = await Promise.all(refs.map((r) => referenceText(r).catch((e) => `## ${r.key || `${r.repo}#${r.number}`}\n(couldn't load: ${e.message})`)));
@@ -3399,9 +3400,7 @@ function serve() {
           return json(res, 200, { dismissed: localState.setDismissed(stateFile, await readJson(req)) });
         }
         if (url.pathname === '/api/settings') {
-          const values = settings.validate(await readJson(req));
-          settings.writeEnvFile(userEnvFile, values);
-          applySettings(values);
+          saveSettings(await readJson(req));
           vmQueue.pump(); // more VMs at once: whoever waits starts now
           return json(res, 200, await settingsStatus());
         }
@@ -3411,9 +3410,7 @@ function serve() {
           if (!REPO_NAME.test(key || '')) return json(res, 400, { error: 'bad repo (owner/name)' });
           const now = starredRepos().filter((k) => k !== key);
           if (starred) now.push(key);
-          const values = settings.validate({ GITHUB_STARRED_REPOS: now.join(',') });
-          settings.writeEnvFile(userEnvFile, values);
-          if (values.GITHUB_STARRED_REPOS) process.env.GITHUB_STARRED_REPOS = values.GITHUB_STARRED_REPOS; else delete process.env.GITHUB_STARRED_REPOS;
+          saveSettings({ GITHUB_STARRED_REPOS: now.join(',') }, { quiet: true });
           return json(res, 200, { starred: starredRepos() });
         }
         if (url.pathname === '/api/jira/star') {
@@ -3421,9 +3418,7 @@ function serve() {
           if (!PROJECT_KEY.test(key || '')) return json(res, 400, { error: 'bad project key' });
           const now = starredProjects(process.env.JIRA_STARRED_PROJECTS).filter((k) => k !== key);
           if (starred) now.push(key);
-          const values = settings.validate({ JIRA_STARRED_PROJECTS: now.join(',') });
-          settings.writeEnvFile(userEnvFile, values);
-          if (values.JIRA_STARRED_PROJECTS) process.env.JIRA_STARRED_PROJECTS = values.JIRA_STARRED_PROJECTS; else delete process.env.JIRA_STARRED_PROJECTS;
+          saveSettings({ JIRA_STARRED_PROJECTS: now.join(',') }, { quiet: true });
           return json(res, 200, { starred: starredProjects(process.env.JIRA_STARRED_PROJECTS) });
         }
         // Show or hide one calendar's events; saved like a setting, without refetching everything.
@@ -3432,9 +3427,7 @@ function serve() {
           if (typeof name !== 'string' || !name.trim() || /[,\r\n]/.test(name)) return json(res, 400, { error: 'bad calendar name' });
           const now = hiddenCalendars();
           if (hidden) now.add(name.trim().toLowerCase()); else now.delete(name.trim().toLowerCase());
-          const values = settings.validate({ CALENDAR_HIDDEN: [...now].join(',') });
-          settings.writeEnvFile(userEnvFile, values);
-          if (values.CALENDAR_HIDDEN) process.env.CALENDAR_HIDDEN = values.CALENDAR_HIDDEN; else delete process.env.CALENDAR_HIDDEN;
+          saveSettings({ CALENDAR_HIDDEN: [...now].join(',') }, { quiet: true });
           return json(res, 200, { hidden: [...now] });
         }
         // Hand-offs: add one (now, or from a time such as your next meeting), start one now, cancel.
