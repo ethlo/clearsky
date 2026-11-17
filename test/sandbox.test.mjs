@@ -4,7 +4,7 @@ import { mkdtempSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
-import { srtSettings, githubLogin, parseDomains, checkDomains, DEFAULT_DOMAINS, repoGuards, gitFolder } from '../lib/sandbox.mjs';
+import { srtSettings, githubLogin, parseDomains, checkDomains, DEFAULT_DOMAINS, repoGuards, gitFolder, tmpSockets } from '../lib/sandbox.mjs';
 
 test('the sandbox lets Copilot write only in its folders and hides secrets', () => {
   const s = srtSettings({ cwd: '/home/me/dev/acme/abc', folders: ['~/dev/acme', '/home/me/dev/acme'], home: '/home/me' });
@@ -39,6 +39,27 @@ test('on Linux, srt runs without its socket filter and hides the session bus ins
   assert.equal(s.network.allowAllUnixSockets, true);
   assert.ok(s.filesystem.denyRead.includes('/run/user/1000'));
   assert.equal(srtSettings({ cwd: '/h/x', home: '/h', platform: 'darwin', uid: 501 }).network.allowAllUnixSockets, undefined);
+  // Other programs' sockets in /tmp are hidden as well; Clearsky's own folders are named to be kept.
+  let asked = null;
+  const sockets = (o) => { asked = o; return ['/tmp/tmux-1000']; };
+  assert.ok(srtSettings({ cwd: '/h/dev/x', home: '/h', platform: 'linux', uid: 1000, run: '/tmp/clearsky-1000', sockets }).filesystem.denyRead.includes('/tmp/tmux-1000'));
+  assert.equal(asked.uid, 1000);
+  assert.ok(asked.keep.includes('/tmp/clearsky-1000') && asked.keep.includes('/h/dev/x'));
+  // macOS keeps srt's own socket filter, so nothing is looked up there.
+  assert.ok(!srtSettings({ cwd: '/h/x', home: '/h', platform: 'darwin', uid: 501, sockets: () => ['/tmp/x'] }).filesystem.denyRead.includes('/tmp/x'));
+});
+
+test('sockets other programs keep in /tmp: their usual folders, and every socket there when the chat starts', () => {
+  const tree = { '.X11-unix': { X0: 'socket' }, 'tmux-1000': {}, 'ssh-abc': { 'agent.1': 'socket' }, 'straight.sock': 'socket', notes: { 'a.txt': 'file' }, 'a.txt': 'file',
+    'claude-http-1.sock': 'socket', 'srt-obs-1': { s: 'socket' }, 'clearsky-1000': { 'broker.sock': 'socket' }, chat: { work: { 's.sock': 'socket' } }, link: 'link' };
+  const at = (p) => p.split('/').slice(2).reduce((n, k) => (n && typeof n === 'object' ? n[k] : undefined), tree);
+  const kind = (p) => { const n = at(p); return n === 'socket' ? 'socket' : n && typeof n === 'object' ? 'folder' : ''; };
+  const ls = (d) => Object.keys((d === '/tmp' ? tree : at(d)) || {});
+  const found = tmpSockets({ uid: 1000, user: 'ada', keep: ['/tmp/clearsky-1000', '/tmp/chat/work'], ls, kind });
+  assert.deepEqual(found.sort(), ['/tmp/.X11-unix', '/tmp/ssh-abc', '/tmp/straight.sock', '/tmp/tmux-1000']);
+  assert.ok(found.includes('/tmp/tmux-1000'), 'its usual folder is hidden even while empty: a socket that comes later stays hidden');
+  // Not hidden: srt's own sockets, Clearsky's run folder, a folder the chat works in, plain files and folders, links.
+  assert.deepEqual(tmpSockets({ uid: 1, user: 'x', ls: () => [], kind: () => '' }), []);
 });
 
 // The real srt, in Clearsky's process: only where its tools are installed (bubblewrap on Linux).
@@ -136,13 +157,19 @@ test('in the real sandbox: work is written, hooks, git settings and the agent\'s
   writeFileSync(join(home, '.copilot', 'mcp-config.json'), '{}');
   // Clearsky's run folder is outside your home folder (which the sandbox can't read), in /tmp.
   const run = mkdtempSync(join(tmpdir(), 'clearsky-run-')); writeFileSync(join(run, 'settings.xml'), '<settings/>');
-  const tries = { work: 'echo x > file.txt', commit: 'git add -A && git -c user.name=x -c user.email=x@x commit -q -m x', hook: 'echo x > .git/hooks/pre-commit',
+  // Another program's socket in /tmp, and Clearsky's own in its run folder. (Connecting needs no accept.)
+  const net = await import('node:net');
+  const other = mkdtempSync(join(tmpdir(), 'other-program-'));
+  const servers = [join(other, 's.sock'), join(run, 'broker.sock')].map((p) => net.createServer().listen(p));
+  await Promise.all(servers.map((sv) => new Promise((ok) => { sv.once('listening', ok); })));
+  const connect = (p) => `${process.execPath} -e "require('net').connect('${p}').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"`;
+  const tries = { otherSocket: connect(join(other, 's.sock')), door: connect(join(run, 'broker.sock')), tmp: 'echo x > /tmp/clearsky-test-$$ && rm /tmp/clearsky-test-$$', work: 'echo x > file.txt', commit: 'git add -A && git -c user.name=x -c user.email=x@x commit -q -m x', hook: 'echo x > .git/hooks/pre-commit',
     config: 'git config core.fsmonitor /tmp/x', mcp: `echo x >> ${join(home, '.copilot', 'mcp-config.json')}`, skill: `mkdir ${join(home, '.copilot', 'skills', 'new')}`, newHook: `echo x > ${join(home, '.copilot', 'hooks', 'x.json')}`,
     state: `echo x > ${join(home, '.copilot', 'session.json')}`, run: `echo x > ${join(run, 'planted')}`, readRun: `cat ${join(run, 'settings.xml')}` };
   const script = Object.entries(tries).map(([k, c]) => `if (${c}) >/dev/null 2>&1; then echo ${k}=yes; else echo ${k}=no; fi`).join('\n');
   try {
     const s = await sandboxedCommand('/bin/sh', ['-c', script], { cwd: api, folders: [join(home, 'dev')], home, protect: ['~/.copilot/mcp-config.json', '~/.copilot/skills/', '~/.copilot/hooks/'], run, nice: 0 });
     const out = Object.fromEntries(execFileSync(s.bin, s.args, { cwd: api, encoding: 'utf8', env }).trim().split('\n').map((l) => l.split('=')));
-    assert.deepEqual(out, { work: 'yes', commit: 'yes', hook: 'no', config: 'no', mcp: 'no', skill: 'no', newHook: 'no', state: 'yes', run: 'no', readRun: 'yes' });
-  } finally { await stopSandbox(); }
+    assert.deepEqual(out, { otherSocket: 'no', door: 'yes', tmp: 'yes', work: 'yes', commit: 'yes', hook: 'no', config: 'no', mcp: 'no', skill: 'no', newHook: 'no', state: 'yes', run: 'no', readRun: 'yes' });
+  } finally { for (const sv of servers) sv.close(); await stopSandbox(); }
 });
