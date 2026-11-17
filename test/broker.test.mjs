@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtempSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -106,5 +106,37 @@ test('acli text in a file from the chat or its scratch folder goes to Jira as an
     assert.equal(t, 0);
     assert.deepEqual(seen[2][0].slice(0, 6), ['jira', 'workitem', 'comment', 'create', '--key', 'ABC-1']);
     assert.equal(JSON.parse(seen[2][1]).content[1].type, 'bulletList');
+  } finally { server.close(); }
+});
+
+test('the acli door is for Jira, and reads files only from the chat\'s folders', async () => {
+  assert.equal(needs('acli', ['rovodev', 'run', 'list the status of my files']), 'no', 'acli\'s own agent would run outside the sandbox');
+  assert.equal(needs('acli', ['admin', 'user', 'list']), 'no');
+  assert.equal(needs('acli', ['--help']), 'run');
+  assert.equal(needs('acli', ['jira', 'workitem', 'search', '--jql', 'project = ABC']), 'run');
+  const { acliFiles } = await import('../lib/broker.mjs');
+  assert.deepEqual(acliFiles(['jira', 'workitem', 'create', '--from-file', 'a.txt', '--from-json=b.json', '-f', 'c.txt']), ['a.txt', 'b.json', 'c.txt']);
+  assert.deepEqual(acliFiles(['jira', 'workitem', 'search', '-f', 'key,summary']), [], '-f is --fields on a search');
+
+  const dir = mkdtempSync(join(tmpdir(), 'broker-files-'));
+  const path = join(dir, 's', 'broker.sock');
+  const work = join(dir, 'work'); mkdirSync(work);
+  writeFileSync(join(work, 'ticket.txt'), 'Summary\n\nText');
+  writeFileSync(join(dir, 'secret.txt'), 'not the chat\'s');
+  const seen = [];
+  const run = (bin, argv, opts, cb) => { seen.push(argv.join(' ')); cb(null, 'ok\n', ''); };
+  const server = serveBroker({ path, run, where: (key) => (key === 'k1' ? [work] : null), ask: async () => true });
+  await new Promise((r) => server.once('listening', r));
+  const bin = fileURLToPath(new URL('../scripts/sandbox-bin/acli', import.meta.url));
+  const go = (args) => new Promise((r) => execFile(process.execPath, [bin, ...args],
+    { cwd: work, env: { ...process.env, CLEARSKY_BROKER_SOCKET: path, CLEARSKY_BROKER_KEY: 'k1' } }, (e, out, err) => r({ code: e ? e.code : 0, out, err })));
+  try {
+    const out = await go(['jira', 'workitem', 'create', '--project', 'ABC', '--type', 'Task', '--from-file', join(dir, 'secret.txt')]);
+    assert.equal(out.code, 1); assert.match(out.err, /only from this chat's folders/);
+    assert.equal((await go(['jira', 'workitem', 'create', '--project', 'ABC', '--type', 'Task', '--from-file', '../secret.txt'])).code, 1);
+    assert.equal((await go(['jira', 'workitem', 'create', '--project', 'ABC', '--type', 'Task', '--from-file', 'ticket.txt'])).code, 0);
+    const agent = await go(['rovodev', 'run', 'view this']);
+    assert.equal(agent.code, 1); assert.match(agent.err, /acli jira/);
+    assert.equal(seen.length, 1, 'only the chat\'s own file reached acli');
   } finally { server.close(); }
 });
