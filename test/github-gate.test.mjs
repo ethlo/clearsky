@@ -218,3 +218,46 @@ test('a file committed through the API is a push to its branch', async () => {
   assert.equal(await risky(put({ message: 'm', content: 'eA==', branch: 'release/1.x' }), 'PUT acme/api/contents/README.md', look), null, 'GitHub\'s protection decides');
   assert.equal(await risky(put({ message: 'm', content: 'eA==', branch: 'feature/abc-1' }), 'PUT acme/api/contents/README.md', look), null);
 });
+
+test('everyday work goes through; your approval, check results and calls nobody listed ask', async () => {
+  const api = (method, path, body = {}) => { const r = req(method, `https://api.github.com/repos/acme/api/${path}`, body); return githubWrite(r.clone()).then((what) => risky(r, what)); };
+  // Everyday: PRs, issues, comments, labels, review requests, reruns
+  for (const [m, p, b] of [['POST', 'pulls'], ['PATCH', 'pulls/7'], ['POST', 'issues/7/comments'], ['POST', 'issues/7/labels'], ['POST', 'pulls/7/requested_reviewers'],
+    ['POST', 'pulls/7/comments'], ['PUT', 'pulls/7/update-branch'], ['POST', 'labels'], ['POST', 'git/blobs'], ['POST', 'actions/runs/9/cancel'],
+    ['POST', 'pulls/7/reviews', { event: 'COMMENT', body: 'I can\'t approve this yet' }], ['POST', 'pulls/7/reviews', { event: 'REQUEST_CHANGES', body: 'x' }]]) {
+    assert.equal(await api(m, p, b), null, `${m} ${p}`);
+  }
+  // Your approval, by either way of sending a review
+  assert.equal(await api('POST', 'pulls/7/reviews', { event: 'APPROVE' }), 'approves a pull request');
+  assert.equal(await api('POST', 'pulls/7/reviews/3/events', { event: 'APPROVE', body: 'ok' }), 'approves a pull request');
+  assert.equal(await api('PUT', 'pulls/7/reviews/3/dismissals', { message: 'x' }), 'dismisses a review');
+  assert.match(await risky(new Request('https://api.github.com/repos/acme/api/pulls/7/reviews', { method: 'POST', body: 'not json' }), 'POST acme/api/pulls/7/reviews'), /couldn't read/);
+  // A green check that CI didn't give, and an OK for a run that waits for one
+  assert.equal(await api('POST', 'statuses/0123abc', { state: 'success' }), 'sets a check result on a commit');
+  assert.equal(await api('POST', 'check-runs', { conclusion: 'success' }), 'sets a check result on a commit');
+  assert.match(await api('POST', 'actions/runs/9/pending_deployments', {}), /^approves a CI run or deployment/);
+  assert.match(await api('POST', 'actions/runs/9/approve', {}), /^approves a CI run or deployment/);
+  assert.equal(await api('POST', 'actions/runners/registration-token'), 'changes how CI runs');
+  assert.equal(await api('POST', 'dispatches', { event_type: 'x' }), 'starts workflows with its own input');
+  assert.equal(await api('POST', 'forks'), 'makes a new repo from this one');
+  assert.equal(await api('PATCH', 'secret-scanning/alerts/1', { state: 'resolved' }), 'changes security alerts');
+  // A call nobody listed asks, instead of slipping through
+  assert.match(await api('PUT', 'interaction-limits', {}), /not everyday work/);
+  assert.match(await api('POST', 'some/new/endpoint', {}), /not everyday work/);
+  assert.equal(await risky(req('POST', 'https://api.github.com/markdown', { text: '# x' }), 'POST markdown'), null);
+});
+
+test('GraphQL: an approval asks, a review that only comments doesn\'t, an unlisted change asks', async () => {
+  const why = async (query, variables) => { const r = req('POST', 'https://api.github.com/graphql', { query, variables }); return risky(r, await githubWrite(r)); };
+  const review = 'mutation($input: AddPullRequestReviewInput!) { addPullRequestReview(input: $input) { clientMutationId } }';
+  assert.equal(await why(review, { input: { pullRequestId: 'PR_kwDOabc123', event: 'COMMENT', body: 'approved? not yet' } }), null);
+  assert.equal(await why(review, { input: { pullRequestId: 'PR_kwDOabc123', event: 'APPROVE' } }), 'approves a pull request');
+  // Whatever the variable is called, and written into the query too
+  assert.equal(await why('mutation($e: PullRequestReviewEvent!) { submitPullRequestReview(input: {pullRequestReviewId: "PRR_kwDOabc123", event: $e}) { clientMutationId } }', { e: 'APPROVE' }), 'approves a pull request');
+  assert.equal(await why('mutation { addPullRequestReview(input: {pullRequestId: "PR_kwDOabc123", event: APPROVE}) { clientMutationId } }'), 'approves a pull request');
+  assert.equal(await why('mutation { dismissPullRequestReview(input: {}) { clientMutationId } }'), 'dismissPullRequestReview');
+  assert.equal(await why('mutation { approveDeployments(input: {}) { clientMutationId } }'), 'approveDeployments');
+  assert.equal(await why('mutation { enqueuePullRequest(input: {}) { clientMutationId } }'), 'enqueuePullRequest');
+  assert.equal(await why('mutation { addComment(input: {}) { clientMutationId } }'), null);
+  assert.match(await why('mutation { followUser(input: {}) { clientMutationId } }'), /^followUser: not everyday work/);
+});
