@@ -21,7 +21,7 @@ import * as copilot from '../lib/copilot.mjs';
 import { AcpAgent, chatEvent } from '../lib/acp.mjs';
 import { sessionEvents, sessionUsage } from '../lib/copilot-events.mjs';
 import { branchesFor } from '../lib/branches.mjs';
-import { sandboxedCommand, sandboxEnded, stopSandbox, sandboxProxy, sandboxProxyLogin, sandboxNetwork, githubLogin, DEFAULT_DOMAINS, READ_DEFAULT, parseDomains } from '../lib/sandbox.mjs';
+import { sandboxedCommand, sandboxEnded, stopSandbox, sandboxProxy, sandboxProxyLogin, sandboxNetwork, githubLogin, maskedEnv, DEFAULT_DOMAINS, READ_DEFAULT, parseDomains } from '../lib/sandbox.mjs';
 import { HostDoor, ruleMatches } from '../lib/host-door.mjs';
 import { closeCards } from '../lib/chat-cards.mjs';
 import { VmImage, ChatVm, vmSupport, VM_DOMAINS, reapOrphans, vmsLoad } from '../lib/vm.mjs';
@@ -1255,7 +1255,8 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   // Logins stay out here; srt adds them on the way out. srt reads them from Clearsky's own
   // environment, and the sandbox gets stand-ins: Maven's (lib/maven.mjs) and your gh login.
   let maven = null;
-  try { maven = mavenSandbox({ home: homedir(), out: join(dirname(brokerSocket()), 'maven'), keep }); } catch (e) {
+  // The chat's folders' poms name the repositories that settings.xml has only logins for.
+  try { maven = mavenSandbox({ home: homedir(), out: join(dirname(brokerSocket()), 'maven'), keep, dirs: [cwd, ...folders] }); } catch (e) {
     console.error(`clearsky: Maven logins for the sandbox: ${e.message}`);
     // Without the logins, Maven still runs from your local repository with a copy minus secrets.
     try { maven = plainMaven(readFileSync(join(homedir(), '.m2', 'settings.xml'), 'utf8'), join(dirname(brokerSocket()), 'maven')); } catch { /* no settings */ }
@@ -1263,6 +1264,7 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   // No settings.xml of yours: Maven still needs one, to find srt's proxy (below).
   if (!maven) try { maven = plainMaven('<settings>\n</settings>\n', join(dirname(brokerSocket()), 'maven')); } catch { /* can't write it */ }
   if (maven) Object.assign(process.env, maven.env);
+  if (maven?.unmatched?.length) console.error(`clearsky: Maven logins with no repository host found (in settings.xml or the poms under ${cwd}): ${maven.unmatched.join(', ')}`);
   const env = { ...own(), ...b.sandboxEnv() };
   const n = Number(env.GIT_CONFIG_COUNT) || 0;
   // A token from Settings → Copilot if you made one, else your gh login.
@@ -1311,7 +1313,7 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   agent.inSandbox = async (argv, dir) => ({ env, ...await sandboxedCommand(argv[0], argv.slice(1), { ...sandboxOpts(dir, folders), state: b.state, domains, maven, github, ca: sandboxCa(keep),
     inspect: [...(github ? GITHUB_LOG_HOSTS : []), ...(vmSupport().ok ? REGISTRY_HOSTS : [])] },
   sandboxGate()) });
-  return Object.assign(agent, { sandboxed: true, brokerKey: key,
+  return Object.assign(agent, { sandboxed: true, brokerKey: key, maven,
     github: github ? `${process.env.COPILOT_SANDBOX_TOKEN ? 'your sandbox token' : 'your gh login'}, added on the way out; changes ask you` : 'not signed in (gh auth login)',
     hosts: [...new Set([...domains, ...(maven?.hosts || []), ...(github?.read || [])])] });
 }
@@ -1352,7 +1354,13 @@ function hostAsk(card, chats, { rule, write = false }) {
         for (const o of chats) { o.waiting.delete(id); o.pending.delete(id); o.shared.delete(id); o.emit({ type: 'permission-done', id }); }
         // Not answered before the turn ended (lib/chat-cards.mjs): taken down, not denied.
         if (answer.expired) { log('expired'); return done(write ? 'deny' : 'expired'); }
-        const choice = answer.optionId || 'deny';
+        // You stopped the turn: no answer, not a Deny (it would show as one, and count as one).
+        if (!answer.optionId) {
+          log('stopped');
+          for (const o of chats) o.emit({ type: 'note', text: `Network: ${write ? card.detail.split('\n')[0] : rule}: not answered (turn stopped)` });
+          return done(write ? 'deny' : 'expired');
+        }
+        const choice = answer.optionId;
         const name = card.options.find((o) => o.id === choice)?.name || 'Deny';
         log(choice === 'deny' ? 'declined' : choice);
         for (const o of chats) o.emit({ type: 'note', text: `Network: ${write ? card.detail.split('\n')[0] : rule}: ${name}` });
@@ -1599,7 +1607,7 @@ async function vmRun({ key, argv, cwd, java, signal }, out, err) {
     try { root = execFileSync('git', ['-C', cwd, 'rev-parse', '--show-toplevel'], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] }).trim() || cwd; } catch {}
     vmImage ||= new VmImage({ log: console.log });
     const old = c.vm?.events || [];
-    c.vm = new ChatVm({ id: randomBytes(4).toString('hex'), cwd: root, image: vmImage, proxy, hosts: sandboxHosts(), log: console.log });
+    c.vm = new ChatVm({ id: randomBytes(4).toString('hex'), cwd: root, image: vmImage, proxy, hosts: sandboxHosts(), maven: () => vmMaven(c.agent.maven), log: console.log });
     c.vm.images = () => list(process.env.COPILOT_VM_IMAGES);
     c.vm.events.push(...old);
     bindVm(c);
@@ -1624,6 +1632,16 @@ async function vmRun({ key, argv, cwd, java, signal }, out, err) {
   } finally { vmQueue.leave(vm); }
 }
 const vmQueue = new VmQueue();
+// Maven's settings for a chat's VM: the sandbox's copy of yours (mirrors, repositories, logins as
+// srt's stand-ins), which srt's proxy completes on the way out, as it does for the sandbox.
+export function vmMaven(maven, { masked = maskedEnv } = {}) {
+  if (!maven?.settings) return null;
+  let xml;
+  try { xml = readFileSync(maven.settings, 'utf8'); } catch { return null; }
+  let trust = null;
+  if (maven.trust && maven.credentials?.length) { try { trust = readFileSync(maven.trust); } catch { /* no CA: logins can't be added */ } }
+  return { xml, env: masked(maven.credentials || []), trust, unmatched: maven.unmatched || [] };
+}
 
 // ---------------------------------------------------------------- background jobs and the watchdog
 // Chats stopped on long tasks: a turn that waits on a 20-minute build or a CI run runs into its
@@ -2194,7 +2212,9 @@ const SANDBOX_HINT = 'You run in a sandbox: everything inside it runs without as
   + 'Only hosts on the sandbox\'s list are reachable. A request to any other host waits while Clearsky asks me; if it fails as '
   + '"blocked by network allowlist" or "declined", don\'t carry on from memory or guesses: say which host you need and why, and end your turn. '
   + 'When I allow it, Clearsky tells you here and you try again. Sending data to a host I allowed asks me again. '
-  + 'Maven finds the proxy and your repository logins in the settings Clearsky passes in MAVEN_ARGS: keep them (no `-s` or proxy flags of your own). '
+  + 'Maven finds the proxy and my repository logins in the settings Clearsky passes in MAVEN_ARGS, in the sandbox and in the VM: keep them (no `-s` or proxy flags of your own). '
+  + 'The logins are never visible to you (the settings hold a stand-in that the proxy swaps on the way out), so don\'t look for them or copy artifacts around; '
+  + 'if a private repository still answers 401 or 403, or its host asks to be allowed, say which host and stop. '
   + 'A 407 from the proxy means a tool skipped the proxy\'s login: say so and which host, don\'t work around it. '
   + 'If you stop before the task is done, Clearsky nudges you to go on; when you are done, or need me, say so plainly.';
 const sandboxHintFor = (permission) => (process.env.COPILOT_SANDBOX === 'srt' || permission === 'sandboxed'
