@@ -27,20 +27,29 @@
       <a class="ni" href="#mentions" data-nav="mentions"><span class="ico" data-i="at"></span><span class="lab">Mentions</span><b id="n-mentions"></b></a>
       <a class="ni" href="#tickets" data-nav="tickets"><span class="ico" data-i="ticket"></span><span class="lab">Tickets</span><b id="n-tickets"></b></a>
     </nav>
-    <a class="ni" href="#versions" data-nav="versions" title="How far a fix version of your starred Jira projects is"><span class="ico" data-i="version"></span><span class="lab">Versions</span></a>
-    <a class="ni" href="#builds" data-nav="builds"><span class="ico" data-i="build"></span><span class="lab">Builds</span><b id="n-builds"></b></a>
-    <a class="ni" href="#servers" data-nav="servers"><span class="ico" data-i="server"></span><span class="lab">Servers</span><b id="n-servers"></b></a>
-    <a class="ni" href="#vms" data-nav="vms" title="Copilot's VMs for builds with Docker: what runs in them and who waits for one"><span class="ico" data-i="vm"></span><span class="lab">VMs</span><b id="n-vms"></b></a>
-    <a class="ni" href="#calendar" data-nav="calendar"><span class="ico" data-i="calendar"></span><span class="lab">Calendar</span><b id="n-calendar"></b></a>
-    <a class="ni" href="#links" data-nav="links"><span class="ico" data-i="link"></span><span class="lab">Links</span></a>
-    <a class="ni" href="#standup" data-nav="standup"><span class="ico" data-i="standup"></span><span class="lab">Stand-up</span></a>
-    <a class="ni" href="#notifications" data-nav="notifications"><span class="ico" data-i="bell"></span><span class="lab">Notifications</span></a>
-    <a class="ni" href="#handoffs" data-nav="handoffs" title="PRs and tickets you handed to Copilot to work on by itself"><span class="ico" data-i="handoff"></span><span class="lab">Hand-offs</span><b id="n-handoffs"></b></a>
-    <a class="ni" href="#changes" data-nav="changes"><span class="ico" data-i="spark"></span><span class="lab">Copilot's changes</span></a>
-    <a class="ni" href="#usage" data-nav="usage" title="AI credits Copilot used, and what they cost"><span class="ico" data-i="usage"></span><span class="lab">Usage</span><b id="n-usage"></b></a>
-    <a class="ni" href="#map" data-nav="map"><span class="ico" data-i="map"></span><span class="lab">Agent map</span></a>
+    <div class="grp" data-grp="project">
+      <button type="button" class="sg" title="Hide or show these pages">Project</button>
+      <a class="ni" href="#versions" data-nav="versions" title="How far a fix version of your starred Jira projects is"><span class="ico" data-i="version"></span><span class="lab">Versions</span></a>
+      <a class="ni" href="#builds" data-nav="builds"><span class="ico" data-i="build"></span><span class="lab">Builds</span><b id="n-builds"></b></a>
+      <a class="ni" href="#servers" data-nav="servers"><span class="ico" data-i="server"></span><span class="lab">Servers</span><b id="n-servers"></b></a>
+      <a class="ni" href="#links" data-nav="links"><span class="ico" data-i="link"></span><span class="lab">Links</span></a>
+    </div>
+    <div class="grp" data-grp="day">
+      <button type="button" class="sg" title="Hide or show these pages">Day</button>
+      <a class="ni" href="#calendar" data-nav="calendar"><span class="ico" data-i="calendar"></span><span class="lab">Calendar</span><b id="n-calendar"></b></a>
+      <a class="ni" href="#standup" data-nav="standup"><span class="ico" data-i="standup"></span><span class="lab">Stand-up</span></a>
+      <a class="ni" href="#notifications" data-nav="notifications"><span class="ico" data-i="bell"></span><span class="lab">Notifications</span></a>
+    </div>
+    <div class="grp" data-grp="agent">
+      <button type="button" class="sg" title="Hide or show these pages">Agent</button>
+      <a class="ni" href="#handoffs" data-nav="handoffs" title="PRs and tickets you handed to the agent to work on by itself"><span class="ico" data-i="handoff"></span><span class="lab">Hand-offs</span><b id="n-handoffs"></b></a>
+      <a class="ni" href="#changes" data-nav="changes" title="What the agent changed as you on GitHub and Jira, from its sandbox"><span class="ico" data-i="spark"></span><span class="lab">Changes</span></a>
+      <a class="ni" href="#usage" data-nav="usage" title="AI credits the agent used, and what they cost"><span class="ico" data-i="usage"></span><span class="lab">Usage</span><b id="n-usage"></b></a>
+      <a class="ni" href="#vms" data-nav="vms" title="The VMs for builds with Docker: what runs in them and who waits for one"><span class="ico" data-i="vm"></span><span class="lab">VMs</span><b id="n-vms"></b></a>
+      <a class="ni" href="#map" data-nav="map" title="Per chat: every repo, ticket and environment the agent worked on"><span class="ico" data-i="map"></span><span class="lab">Map</span></a>
+    </div>
   </nav>
-  <div class="sg">Copilot <button type="button" id="cp-new-side" title="New chat (Alt+N)" aria-label="New chat"><span data-i="plus" data-size="14"></span></button></div>
+  <div class="sg">Chats <button type="button" id="cp-new-side" title="New chat (Alt+N)" aria-label="New chat"><span data-i="plus" data-size="14"></span></button></div>
   <div id="side-cp"></div>
   <div class="sg" id="side-personal-h" hidden>Personal</div>
   <nav id="side-personal"><a class="ni" href="#links-personal" data-nav="links-personal" id="nav-links-personal" hidden><span class="ico" data-i="link"></span><span class="lab">Links</span></a></nav>
@@ -119,7 +128,7 @@
     <div class="view-b"><div class="page" id="usage"></div></div>
   </section>
   <section class="view" id="v-changes" hidden>
-    <header class="vh"><h1 title="What Copilot changed as you on GitHub and Jira, and what it read in Grafana, from its sandbox">Copilot's changes</h1><span class="spacer"></span></header>
+    <header class="vh"><h1 title="What Copilot changed as you on GitHub and Jira, and what it read in Grafana, from its sandbox">Agent's changes</h1><span class="spacer"></span></header>
     <div class="view-b"><div id="changes"></div></div>
   </section>
   <div class="fview" id="fview" hidden><div class="fv-box"><header><b id="fv-name"></b><span class="spacer"></span><span class="fv-tabs" id="fv-tabs" hidden><button type="button" data-fv-tab="diff">Changes</button><button type="button" data-fv-tab="file">File</button></span><a id="fv-code" title="Open in VS Code">VS Code</a><a id="fv-open" target="_blank" rel="noopener">Raw</a><button type="button" id="fv-close" aria-label="Close">✕</button></header><div id="fv-body"></div></div></div>

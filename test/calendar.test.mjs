@@ -12,7 +12,10 @@ import { DatabaseSync } from 'node:sqlite';
 process.env.HOME = mkdtempSync(join(tmpdir(), 'clearsky-home-'));
 
 const ics = (uid, title, hour) => `BEGIN:VEVENT\r\nUID:${uid}\r\nDTSTART:${today(hour)}\r\nDTEND:${today(hour + 1)}\r\nSUMMARY:${title}\r\nEND:VEVENT`;
-const today = (h) => { const d = new Date(); return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}T${String(h).padStart(2, '0')}0000`; };
+// Today in the time zone the calendar is loaded in below, not this process's: in the last hour
+// of the UTC day it's already tomorrow there, and "today's" events would be yesterday's.
+const TZ = 'Europe/Oslo';
+const today = (h) => `${new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()).replaceAll('-', '')}T${String(h).padStart(2, '0')}0000`;
 
 function gnomeHome() {
   const home = mkdtempSync(join(tmpdir(), 'clearsky-cal-'));
@@ -33,7 +36,7 @@ function gnomeHome() {
 function calendar(env) {
   const script = `const m = await import(${JSON.stringify(new URL('../bin/clearsky.mjs', import.meta.url).href)}); console.log(JSON.stringify(await m.source('calendar')));`;
   return new Promise((resolve, reject) => execFile(process.execPath, ['--no-warnings', '--input-type=module', '-e', script],
-    { cwd: tmpdir(), env: { PATH: process.env.PATH, TZ: 'Europe/Oslo', ...env } },
+    { cwd: tmpdir(), env: { PATH: process.env.PATH, TZ, ...env } },
     (err, out) => (err ? reject(err) : resolve(JSON.parse(out)))));
 }
 
