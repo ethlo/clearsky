@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { githubWrite, githubFilter, graphqlNodeIds, graphqlRepo, repoFromNodes, pushedRefs, GITHUB_LOG_HOSTS } from '../lib/github-gate.mjs';
+import { githubWrite, githubFilter, operations, graphqlChanges, risky, graphqlNodeIds, graphqlRepo, repoFromNodes, pushedRefs, GITHUB_LOG_HOSTS } from '../lib/github-gate.mjs';
 
 const req = (method, url, body) => new Request(url, { method, body: body == null ? undefined : JSON.stringify(body) });
 
@@ -181,4 +181,40 @@ test('branches and tags through the API say what they do', async () => {
   await f(req('POST', 'https://api.github.com/repos/acme/api/git/refs', { ref: 'refs/heads/main', sha: 'a' }));
   await f(req('PATCH', 'https://api.github.com/repos/acme/api/git/refs/heads/abc-2', { sha: 'b', force: true }));
   assert.deepEqual(asked, ['create tag v2.0 in acme/api (creates tag v2.0)', 'create branch main in acme/api (creates main)', 'move branch abc-2 in acme/api (force-moves abc-2)']);
+});
+
+test('one mutation with several changes: each is named, a risky one after an everyday one still asks', async () => {
+  const gql = (query) => req('POST', 'https://api.github.com/graphql', { query });
+  const two = 'mutation { addComment(input: {subjectId: "PR_kwDOabc999", body: "x"}) { clientMutationId } mergePullRequest(input: {pullRequestId: "PR_kwDOabc999"}) { clientMutationId } }';
+  assert.deepEqual(graphqlChanges(operations(two)), ['addComment', 'mergePullRequest']);
+  assert.equal(await githubWrite(gql(two)), 'GitHub change (addComment, mergePullRequest)');
+  assert.equal(await risky(gql(two), 'GitHub change (addComment, mergePullRequest)'), 'mergePullRequest');
+  // Aliases, directives and default values with braces don't hide the field.
+  assert.deepEqual(graphqlChanges(operations('mutation M($i: X = {a: 1}) @live { gone: deleteRef(input: $i) @include(if: true) { clientMutationId } }')), ['deleteRef']);
+  // Two everyday changes may be for two repos: asked, since only one target is looked up.
+  assert.equal(await risky(gql('x'), 'GitHub change (addComment, addReaction)'), '2 changes in one request');
+  assert.equal(await risky(gql('x'), 'GitHub change (addComment)'), null);
+  // A batch: the change in the second document counts as well as the first's.
+  assert.equal(await githubWrite(req('POST', 'https://api.github.com/graphql', [{ query: 'mutation { addStar(input: {}) { x } }' }, { query: 'mutation { deleteRef(input: {}) { x } }' }])), 'GitHub change (addStar, deleteRef)');
+});
+
+test('a mutation that takes its fields from a fragment can\'t be told, so it asks', async () => {
+  const spread = 'mutation { ...F }\nfragment F on Mutation { mergePullRequest(input: {pullRequestId: "PR_kwDOabc999"}) { clientMutationId } }';
+  assert.deepEqual(graphqlChanges(operations(spread)), ['fragment']);
+  assert.deepEqual(graphqlChanges(operations('mutation { ... on Mutation { deleteRef(input: {}) { x } } }')), ['fragment']);
+  const asked = [];
+  const r = await githubFilter(async (what) => { asked.push(what); return false; }, { scope: async () => null })(req('POST', 'https://api.github.com/graphql', { query: spread }));
+  assert.equal(r.action, 'deny');
+  assert.match(asked[0], /couldn't read/);
+  // A fragment used further in (what a change gives back) is everyday.
+  assert.deepEqual(graphqlChanges(operations('fragment pr on PullRequest { id }\nmutation { createPullRequest(input: {}) { pullRequest { ...pr } } }')), ['createPullRequest']);
+});
+
+test('a file committed through the API is a push to its branch', async () => {
+  const put = (body) => req('PUT', 'https://api.github.com/repos/acme/api/contents/README.md', body);
+  const look = { defaultBranch: async () => 'main', protected: async (repo, b) => b === 'release/1.x' };
+  assert.equal(await risky(put({ message: 'm', content: 'eA==' }), 'PUT acme/api/contents/README.md', look), 'pushes to main');
+  assert.equal(await risky(put({ message: 'm', content: 'eA==', branch: 'develop' }), 'PUT acme/api/contents/README.md', look), 'pushes to develop');
+  assert.equal(await risky(put({ message: 'm', content: 'eA==', branch: 'release/1.x' }), 'PUT acme/api/contents/README.md', look), null, 'GitHub\'s protection decides');
+  assert.equal(await risky(put({ message: 'm', content: 'eA==', branch: 'feature/abc-1' }), 'PUT acme/api/contents/README.md', look), null);
 });
