@@ -19,7 +19,7 @@ The chat next to it runs in GitHub Copilot CLI or Claude Code ([The agent behind
 | Part | Where | What it does |
 |---|---|---|
 | Server | `bin/clearsky.mjs` | HTTP on 127.0.0.1, caches sources, plans Now / Next, polls for notifications, talks to Copilot |
-| The server's parts | `lib/app/*.mjs` | what the server is made of, one job each: `config.mjs` (the settings in use, the plugins you added, the hours of your day), `services.mjs` (GitHub, Jira and the calendar set up with those settings), `work.mjs` (each source fetched and cached, the day plan, the Markdown summary) |
+| The server's parts | `lib/app/*.mjs` | what the server is made of, one job each: `config.mjs` (the settings in use, the plugins you added, the hours of your day), `services.mjs` (GitHub, Jira and the calendar set up with those settings), `work.mjs` (each source fetched and cached, the day plan, the Markdown summary), `chat-env.mjs` (what a chat runs with: the agent, its folders, repos and environment), `chat-hints.mjs` (what a chat is told when it starts) |
 | Modules | `lib/modules/*.mjs` | GitHub, Jira (through acli) and Calendar: each fetches its service, turns it into work items, and declares what it holds and reaches |
 | Item model | `lib/items.mjs` | the one kind of row every list draws, with the next step on each item |
 | Page | `web/index.html`, `web/css/app.css`, `web/js/*.js` | A menu and one work area: the Work list, an item in full, Copilot chats, Calendar, Stand-up and a page per extra source; the server puts the CSS and scripts inline, so there's no build step |
