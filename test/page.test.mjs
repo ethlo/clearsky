@@ -200,6 +200,7 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
   assert.equal(await page.locator('#plug-list').isHidden(), true);
   // A list is edited as a list: a row per item, saved as the settings file keeps it.
   const orgs = page.locator('#GITHUB_ORGS + .ed');
+  await page.waitForFunction(() => document.querySelector('#GITHUB_ORGS').value === 'acme' && document.querySelectorAll('#GITHUB_ORGS + .ed .ed-row').length === 1); // the saved value is in before typing
   await orgs.locator('.ed-add').click();
   await page.keyboard.type('acme-labs');
   await page.keyboard.press('Enter');

@@ -10,8 +10,8 @@ import { createServer } from 'node:http';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, realpathSync, statSync, readdirSync, rmSync } from 'node:fs';
 import { join, dirname, resolve, basename } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { homedir, availableParallelism, totalmem } from 'node:os';
-import { execFile, execFileSync, spawn } from 'node:child_process';
+import { homedir } from 'node:os';
+import { spawn } from 'node:child_process';
 import { delimiter, sep } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import * as settings from '../lib/settings.mjs';
@@ -20,13 +20,11 @@ import * as copilot from '../lib/copilot.mjs';
 import { AcpAgent, chatEvent } from '../lib/acp.mjs';
 import { sessionEvents, sessionUsage } from '../lib/copilot-events.mjs';
 import { branchesFor } from '../lib/branches.mjs';
-import { sandboxedCommand, sandboxEnded, stopSandbox, sandboxProxy, sandboxProxyLogin, sandboxNetwork, githubLogin, maskedEnv, DEFAULT_DOMAINS, parseDomains } from '../lib/sandbox.mjs';
+import { sandboxedCommand, sandboxEnded, stopSandbox, sandboxProxyLogin, sandboxNetwork, githubLogin, DEFAULT_DOMAINS, parseDomains } from '../lib/sandbox.mjs';
 import { HostDoor, ruleMatches } from '../lib/host-door.mjs';
 import { closeCards } from '../lib/chat-cards.mjs';
-import { VmImage, ChatVm, vmSupport, VM_DOMAINS, reapOrphans, vmsLoad } from '../lib/vm.mjs';
-import { mirrorStats, pruneMirror, cacheCapBytes } from '../lib/registry-mirror.mjs';
-import { VmQueue } from '../lib/vm-queue.mjs';
-import { TreeLoad } from '../lib/proc-load.mjs';
+import { vmSupport, VM_DOMAINS, reapOrphans, vmsLoad } from '../lib/vm.mjs';
+import { pruneMirror } from '../lib/registry-mirror.mjs';
 import { Jobs, jobReport, jobView, shellLine, tailOf } from '../lib/jobs.mjs';
 import { Watchdog, watchdogSettings, nudgeText, REASONS as NUDGE_REASONS, AUTO_MARK } from '../lib/watchdog.mjs';
 import { logWrite, readWrites } from '../lib/agent-log.mjs';
@@ -42,8 +40,7 @@ import { parseReviewArgs, changeOf, reviewPrompt, writeBaseFiles, reviewDecision
 import { buildMap, buildKind } from '../lib/map.mjs';
 import { serveBroker, brokerSocket } from '../lib/broker.mjs';
 import { mavenSandbox, sandboxCa, plainMaven, withSandboxProxy, PROXY_TOKEN_ENV } from '../lib/maven.mjs';
-import { githubFilter, REGISTRY_HOSTS, GITHUB_LOG_HOSTS, SHARED_BRANCH, NODES_REPO_QUERY, repoFromNodes } from '../lib/github-gate.mjs';
-import { githubAdvice, jiraAdvice, outsideAdvice, parseRules, ruleLabel } from '../lib/advice.mjs';
+import { githubFilter, REGISTRY_HOSTS, GITHUB_LOG_HOSTS } from '../lib/github-gate.mjs';
 import { attentionItems, diffAttention, desktopNotify, DbusNotifier } from '../lib/notify.mjs';
 import { makeContext, hook, asList } from '../lib/sources.mjs';
 import { listPlugins, preparePlugin, removePlugin, updatePlugin, checkPlugin, readRegistry, withRef, changesText, catalogEntry, bundledDir, codeDir, retiredText } from '../lib/plugins.mjs';
@@ -68,19 +65,23 @@ import { AGENTS } from '../lib/agents.mjs';
 import { readHandoffs, saveHandoffs, addHandoff, nextHandoff, settleAfterRestart, handoffPrompt, handoffResult, updateHandoff } from '../lib/handoff.mjs';
 import { srtInstalled } from '../lib/doctor.mjs';
 import { groupStandup } from '../lib/standup.mjs';
-import { ciState, isBot, openThreads, myPrStatus } from '../lib/modules/github.mjs';
+import { isBot, openThreads, myPrStatus } from '../lib/modules/github.mjs';
 import { sortVersions } from '../lib/modules/jira.mjs';
 import { fieldsOf, nameOf, PROJECT_KEY, starredProjects, versionSummary } from '../lib/modules/jira.mjs';
 import { appDir, userEnvFile, stateFile, agentLogFile, scopesFile, agentFilesFile, vpn, list, config, tracker, backend, installedAgents, whenSettingsChange, applySettings, saveSettings, pluginDirs, plugins, clock, atLocalTime, isWorkday, sameDay, standupOn, nextStandup, previousStandup } from '../lib/app/config.mjs';
-import { http, execFileP, settle, ghModule, gql, reviewerOptions, requestReviews, mergePr, ghCliToken, jiraModule, REPO_NAME, starredRepos, jiraSearch, jiraSite, browseUrl, jiraDebug, issuePreview, ticketGoal } from '../lib/app/services.mjs';
+import { execFileP, settle, ghModule, gql, reviewerOptions, requestReviews, mergePr, ghCliToken, jiraModule, REPO_NAME, starredRepos, jiraSearch, jiraSite, browseUrl, jiraDebug, issuePreview, ticketGoal } from '../lib/app/services.mjs';
 import { hiddenCalendars, SOURCES, BUILTIN_MANIFESTS, linksFile, moduleManifests, workItemsOf, pluginData, sourceCache, STALE_MAX, dataVersion, source, loadSourceCache, withOwn, collect, toMarkdown } from '../lib/app/work.mjs';
-import { sessionAgent, chatAgent, workspaceInfo, copilotCwd, copilotInfo, copilotTmp, copilotEnv, copilotHome, acpChats, SANDBOX_GIT, folderNotes, chatFolders, chatReadRoots, sandboxOpts, ghToken, chatRef, gitRepos, gitReposLater, cloneDirs, chatRepos, tildeHome, chatByKey, sessionsCache, keepSessions, forgetSessions, codeDirs, findCheckout, worktreeFor, prBranch, isDir, assistedAllow, copilotFolders } from '../lib/app/chat-env.mjs';
-import { doorsByName, CONTEXT_INTRO, UPDATE_INTRO, PR_HINT, trackerHints, CHOICES_HINT, memoryHint, foldersHint, buildsWhere, sandboxHintFor, MSG_MARK, typedPart, REFS_INTRO, referenceText, validRefs, copilotContext } from '../lib/app/chat-hints.mjs';
+import { sessionAgent, chatAgent, workspaceInfo, copilotCwd, copilotInfo, copilotTmp, copilotEnv, copilotHome, acpChats, SANDBOX_GIT, folderNotes, chatFolders, chatReadRoots, sandboxOpts, ghToken, chatRef, gitRepos, gitReposLater, chatRepos, tildeHome, chatByKey, sessionsCache, keepSessions, forgetSessions, codeDirs, findCheckout, worktreeFor, prBranch, isDir, assistedAllow, copilotFolders } from '../lib/app/chat-env.mjs';
+import { doorsByName, CONTEXT_INTRO, UPDATE_INTRO, PR_HINT, trackerHints, CHOICES_HINT, memoryHint, foldersHint, sandboxHintFor, MSG_MARK, typedPart, REFS_INTRO, referenceText, validRefs, copilotContext } from '../lib/app/chat-hints.mjs';
+import { hostAsk, githubAsk, askingChats, githubLook, githubTold, githubScope, brokerWhere, brokerAsk, askInChat } from '../lib/app/chat-gate.mjs';
+import { vmRun, vmQueue, sandboxRun, runJob, vmsOverview, IMAGE_CACHE_DIR, imageCacheView, bindVm } from '../lib/app/chat-builds.mjs';
 export { userEnvFile, parseWorkdays, tracker, backend, clock, nextStandup, previousStandup } from '../lib/app/config.mjs';
 export { issuePreview } from '../lib/app/services.mjs';
 export { hiddenCalendars, planNow, moduleManifests, source, prReadKey, collect, toMarkdown } from '../lib/app/work.mjs';
 export { remoteRepo, findCheckout, worktreeFor } from '../lib/app/chat-env.mjs';
 export { JIRA_HINT, buildsWhere, buildsHint, typedPart, validRefs } from '../lib/app/chat-hints.mjs';
+export { jiraTargets } from '../lib/app/chat-gate.mjs';
+export { vmMaven } from '../lib/app/chat-builds.mjs';
 export { isBot, openThreads, myPrStatus };
 let jiraProjectsCache = { at: 0, data: null }; // every Jira project you can see, for starring (Versions page)
 let ghReposCache = { at: 0, data: null }; // the same with GitHub Issues: repos you can star
@@ -701,299 +702,12 @@ const hostDoor = new HostDoor({
   // You answered after the request gave up (or long enough that it may have): the chat goes on.
   late: (chats, rule) => { for (const c of chats) tellChat(c.id, `Clearsky: ${rule} is allowed now. If a request there failed while you waited, try it again and go on.`); },
 });
-function hostAsk(card, chats, { rule, write = false }) {
-  const shared = chats.length > 1;
-  const log = (decided) => logWrite(agentLogFile, { where: 'network', what: write ? card.detail.split('\n')[0] : `reach ${rule}`, target: rule, chats: chats.map(chatRef), decided });
-  return new Promise((done) => {
-    const id = randomBytes(6).toString('hex');
-    const ev = { type: 'permission', id, kind: 'fetch', ...card };
-    for (const c of chats) {
-      c.waiting.set(id, (answer) => {
-        for (const o of chats) { o.waiting.delete(id); o.pending.delete(id); o.shared.delete(id); o.emit({ type: 'permission-done', id }); }
-        // Not answered before the turn ended (lib/chat-cards.mjs): taken down, not denied.
-        if (answer.expired) { log('expired'); return done(write ? 'deny' : 'expired'); }
-        // You stopped the turn: no answer, not a Deny (it would show as one, and count as one).
-        if (!answer.optionId) {
-          log('stopped');
-          for (const o of chats) o.emit({ type: 'note', text: `Network: ${write ? card.detail.split('\n')[0] : rule}: not answered (turn stopped)` });
-          return done(write ? 'deny' : 'expired');
-        }
-        const choice = answer.optionId;
-        const name = card.options.find((o) => o.id === choice)?.name || 'Deny';
-        log(choice === 'deny' ? 'declined' : choice);
-        for (const o of chats) o.emit({ type: 'note', text: `Network: ${write ? card.detail.split('\n')[0] : rule}: ${name}` });
-        done(choice);
-      });
-      if (shared) c.shared.add(id); // may not be this chat's: it doesn't mark the chat as needing you
-      c.pending.set(id, ev);
-      c.emit(ev);
-    }
-  });
-}
-
-// A GitHub change from a sandbox, held at srt's proxy (lib/github-gate.mjs). The proxy can't tell
-// which chat sent it, so every sandboxed chat that's working asks; the first answer counts.
-// When the only working chat is running a step you just allowed (say `gh pr create`), its
-// GitHub changes are part of what you allowed and go through. With two chats working, it asks.
-async function githubAsk(what, { repo, nodes = [], why = null } = {}) {
-  repo ||= (what.match(/^git push to (\S+)/) || [])[1] || await nodesRepo(nodes);
-  const chats = askingChats(repo);
-  if (!chats.length) return false;
-  const shared = chats.length > 1;
-  const advice = await githubCardAdvice(what, repo, nodes, why, chats).catch(() => null);
-  // A kind of change you said to let through from now on (Settings), when it looks fine.
-  if (advice?.rule && advice.level === 'fine' && gateRules().has(advice.rule)) {
-    logWrite(agentLogFile, { where: 'github', what, target: repo, chats: chats.map(chatRef), decided: `auto (rule ${advice.rule})` });
-    for (const c of chats) c.emit({ type: 'note', text: `GitHub: ${what} (let through: ${ruleLabel(advice.rule)})` });
-    return true;
-  }
-  if (chats.length === 1 && chats[0].approved.size) {
-    logWrite(agentLogFile, { where: 'github', what, target: repo, chats: chats.map(chatRef), decided: 'allowed with a step' });
-    return Promise.resolve(true);
-  }
-  return new Promise((done) => {
-    const id = randomBytes(6).toString('hex');
-    const title = /\/actions\/(workflows\/[^/]+\/dispatches|runs\/\d+\/rerun)/.test(what) ? 'Start a CI run as you' : 'Change GitHub as you';
-    const ev = { type: 'permission', id, title, kind: 'execute', detail: what, advice,
-      options: [{ id: 'allow', name: 'Allow', kind: 'allow_once' }, ...ruleOption(advice), { id: 'deny', name: 'Deny', kind: 'reject_once' }] };
-    const finish = (ok, rule = false, expired = false) => {
-      if (ok && rule && advice?.rule) addGateRule(advice.rule);
-      for (const c of chats) { c.waiting.delete(id); c.pending.delete(id); c.shared.delete(id); c.emit({ type: 'permission-done', id }); }
-      const target = repo || (what.match(/^git push to (\S+)/) || [])[1] || null;
-      // Allowed in the one chat it came from: that repo is part of this chat's work from now on.
-      if (ok && !shared && target && why?.startsWith('goes to ')) { chats[0].repos.add(target.toLowerCase()); chatScope.addScopeRepo(scopesFile, chats[0].id, target); }
-      logWrite(agentLogFile, { where: 'github', what, target, chats: chats.map(chatRef), decided: ok ? 'allowed' : expired ? 'expired' : 'declined' });
-      done(ok);
-    };
-    for (const c of chats) {
-      if (c.mode === 'full') return finish(true); // Full: you allowed everything (logged as allowed)
-      c.waiting.set(id, (answer) => finish(answer.optionId === 'allow' || answer.optionId === 'rule', answer.optionId === 'rule', !!answer.expired));
-      if (shared) c.shared.add(id); // may not be this chat's: it doesn't mark the chat as needing you
-      c.pending.set(id, ev);
-      c.emit(ev);
-    }
-  });
-}
-
-// Kinds of change you let through from now on, from a card's "always" button (Settings → Agent).
-const gateRules = () => parseRules(process.env.AGENT_GATE_RULES);
-function addGateRule(rule) {
-  const rules = gateRules();
-  if (rules.has(rule)) return;
-  rules.add(rule);
-  saveSettings({ AGENT_GATE_RULES: [...rules].join(', ') });
-}
-// The card's "always" button: offered when the advice names a kind of change and, for merges and
-// branch deletes, only when this one looks fine (the rule only ever lets fine ones through).
-const ruleOption = (a) => (a?.rule && (a.level === 'fine' || /^(repo|jira):/.test(a.rule))
-  ? [{ id: 'rule', name: `Allow, and always for ${ruleLabel(a.rule)}`, kind: 'allow_always' }] : []);
-
-// What Clearsky reads from GitHub (as you, read only) to advise on a card (lib/advice.mjs): the
-// PR a merge merges, the branch a delete deletes. Only states and names, never PR text.
-async function githubCardAdvice(what, repo, nodes, why, chats) {
-  const facts = { chatRepos: new Set(chats.flatMap((c) => [...chatRepos(c)])) };
-  let number = Number(what.match(/\/pulls\/(\d+)\/merge\b/)?.[1]) || null;
-  if (!number && /\(mergePullRequest\)$/.test(what)) {
-    const d = await gql('query($ids: [ID!]!) { nodes(ids: $ids) { ... on PullRequest { number repository { nameWithOwner } } } }', { ids: nodes }, { partial: true }).catch(() => null);
-    const pr = (d?.nodes || []).find((n) => n?.number);
-    if (pr) { number = pr.number; repo ||= pr.repository.nameWithOwner; }
-    facts.merge = null;
-  }
-  if (number && repo) facts.merge = await prFacts(repo, number, chats).catch(() => null);
-  const branch = why?.match(/^deletes (\S+)$/)?.[1] || what.match(/^DELETE \S+?\/git\/refs\/heads\/(.+)$/)?.[1];
-  if (branch && repo) facts.branch = await branchFacts(repo, decodeURIComponent(branch)).catch(() => null);
-  return githubAdvice(why || '', facts);
-}
-async function prFacts(repo, number, chats) {
-  const [pr, reviews] = await Promise.all([ghGet(`/repos/${repo}/pulls/${number}`), ghGet(`/repos/${repo}/pulls/${number}/reviews?per_page=100`)]);
-  const latest = new Map();
-  for (const r of reviews || []) if (r.user?.login && r.user.login !== pr.user?.login && ['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'].includes(r.state)) latest.set(r.user.login, r.state);
-  const byState = (st) => [...latest].filter(([, v]) => v === st).map(([k]) => k);
-  const r = repo.toLowerCase(), head = String(pr.head?.ref || '').toUpperCase();
-  const ours = chats.some((c) => (localState.sessionRefs(stateFile)[c.id] || []).some((k) => k.toLowerCase() === `pr:${r}#${number}`)
-    || [...c.tickets].some((t) => new RegExp(`(^|[^A-Z0-9])${t}([^0-9]|$)`).test(head))
-    || currentBranch(c.cwd) === pr.head?.ref) && chats.some((c) => chatRepos(c).has(r));
-  return { number, ours, ci: await prCi(repo, number).catch(() => null), draft: !!pr.draft, mergeable: pr.mergeable, base: pr.base?.ref,
-    approvals: byState('APPROVED'), changesRequested: byState('CHANGES_REQUESTED') };
-}
-// CI on the PR's latest commit, as the review queue sees it (ciState in lib/modules/github.mjs).
-async function prCi(repo, number) {
-  const [owner, name] = repo.split('/');
-  const d = await gql(`query($owner: String!, $name: String!, $number: Int!) { repository(owner: $owner, name: $name) { pullRequest(number: $number) {
-    commits(last: 1) { nodes { commit { statusCheckRollup { state } checkSuites(first: 20) { nodes { status conclusion workflowRun { event url workflow { name } } } } } } } } } }`,
-  { owner, name, number });
-  return ciState(d.repository.pullRequest);
-}
-async function branchFacts(repo, name) {
-  const owner = repo.split('/')[0];
-  const prs = await ghGet(`/repos/${repo}/pulls?state=all&per_page=10&head=${encodeURIComponent(`${owner}:${name}`)}`);
-  return { name, shared: SHARED_BRANCH.test(name), open: (prs || []).find((p) => p.state === 'open')?.number || null,
-    merged: (prs || []).find((p) => p.merged_at)?.number || null };
-}
-function currentBranch(dir) {
-  try { return execFileSync('git', ['-C', dir, 'branch', '--show-current'], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null; } catch { return null; }
-}
-
-// Which working chat a GitHub change came from. srt's proxy can't tell, so narrow it down: chats
-// running a step right now, then those whose folder is a clone of the repo it goes to. Only
-// when that leaves several does every one of them ask (the first answer counts).
-function askingChats(repo) {
-  let chats = [...acpChats.values()].filter((c) => c.agent.sandboxed && c.busy);
-  const narrow = (f) => { const n = chats.filter(f); if (n.length) chats = n; };
-  narrow((c) => c.running.size);
-  if (repo) narrow((c) => chatRepos(c).has(repo.toLowerCase()));
-  return chats;
-}
-// Reading GitHub as you, for the gate's checks (lib/github-gate.mjs).
-async function ghGet(path) {
-  config.github.token ||= await ghCliToken();
-  return http(`${config.github.api}${path}`, { headers: { Authorization: `Bearer ${config.github.token}` } });
-}
-const defaultBranches = new Map();
-const githubLook = {
-  // Whether a push only adds commits (old is an ancestor of new), asked of a working chat's clone
-  // of the repo, where the pushed commits are; null when none of them has both.
-  async fastForward(repo, oldSha, newSha) {
-    if (!/^[0-9a-f]{40}$/.test(oldSha) || !/^[0-9a-f]{40}$/.test(newSha)) return null;
-    for (const dir of cloneDirs(repo)) {
-      const code = await new Promise((done) => execFile('git', ['-C', dir, 'merge-base', '--is-ancestor', oldSha, newSha], { timeout: 5000 }, (e) => done(e ? e.code : 0)));
-      if (code === 0) return true;
-      if (code === 1) return false;
-    }
-    return null;
-  },
-  compare: (repo, base, head) => ghGet(`/repos/${repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`),
-  run: (repo, id) => ghGet(`/repos/${repo}/actions/runs/${id}`),
-  protected: async (repo, branch) => !!(await ghGet(`/repos/${repo}/branches/${encodeURIComponent(branch)}`)).protected,
-  async defaultBranch(repo) {
-    if (!defaultBranches.has(repo)) defaultBranches.set(repo, (await ghGet(`/repos/${repo}`)).default_branch);
-    return defaultBranches.get(repo);
-  },
-};
-
-// An everyday GitHub change that went through without asking: a line in the chat that made it.
-async function githubTold(what, { repo, nodes = [] } = {}) {
-  repo ||= await nodesRepo(nodes);
-  const chats = askingChats(repo);
-  console.log(`clearsky: GitHub change let through: ${what}`);
-  logWrite(agentLogFile, { where: 'github', what, target: repo, chats: chats.map(chatRef), decided: 'auto' });
-  for (const c of chats) c.emit({ type: 'note', text: `GitHub: ${what}${chats.length > 1 ? ' (from one of your working chats)' : ''}` });
-}
-
-// A GitHub write goes through only to a repo a working chat is on: its clone's remote, the PRs
-// it was started about, or one you allowed in it. Others ask.
-async function githubScope({ repo, nodes = [] }) {
-  repo ||= await nodesRepo(nodes);
-  if (!repo) return 'Clearsky couldn\'t tell which repo it changes';
-  const r = repo.toLowerCase();
-  const chats = [...acpChats.values()].filter((c) => c.agent.sandboxed && c.busy);
-  if (gateRules().has(`repo:${r}`)) return null; // you let this repo's everyday changes through (Settings)
-  return chats.some((c) => chatRepos(c).has(r)) ? null : `goes to ${repo}, not a repo this chat works on`;
-}
-
-// The repo of a GraphQL change, from the ids it names (looked up as you, read only).
-async function nodesRepo(ids) {
-  if (!ids.length) return null;
-  try {
-    config.github.token ||= await ghCliToken();
-    return repoFromNodes(await gql(NODES_REPO_QUERY, { ids }, { partial: true }));
-  } catch { return null; }
-}
-
-// Each sandboxed chat's VM (lib/vm.mjs), for `vm <command>`: started on first use, in the git
-// checkout (or folder) the command runs in, and stopped with the chat.
-let vmImage = null;
-async function vmRun({ key, argv, cwd, java, signal }, out, err) {
-  const c = chatByKey(key);
-  if (!c) throw new Error('this chat is closed');
-  const proxy = await sandboxProxy();
-  if (!proxy) throw new Error('the sandbox\'s proxy isn\'t running');
-  proxy.ca = readFileSync(sandboxCa(join(dirname(stateFile), 'sandbox')).cert, 'utf8'); // the VM trusts it: the proxy reads Docker Hub's HTTPS
-  if (c.vm && c.vm.state !== 'off' && cwd !== c.vm.cwd && !cwd.startsWith(`${c.vm.cwd}/`)) {
-    c.vm.event(`Moving the VM to ${cwd}`); c.vm.stop(); c.vm = null;
-  }
-  if (!c.vm || c.vm.state === 'off') {
-    let root = cwd;
-    try { root = execFileSync('git', ['-C', cwd, 'rev-parse', '--show-toplevel'], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] }).trim() || cwd; } catch {}
-    vmImage ||= new VmImage({ log: console.log });
-    const old = c.vm?.events || [];
-    c.vm = new ChatVm({ id: randomBytes(4).toString('hex'), cwd: root, image: vmImage, proxy, hosts: sandboxHosts(), maven: () => vmMaven(c.agent.maven), log: console.log });
-    c.vm.images = () => list(process.env.AGENT_VM_IMAGES);
-    c.vm.events.push(...old);
-    bindVm(c);
-  }
-  // In line for a VM when other chats' VMs fill the places (Settings → Agent → VMs at the same
-  // time): the command, the chat and the VM's view all say where it is.
-  const vm = c.vm;
-  vm.onStop ||= () => vmQueue.drop(vm, 'this chat\'s VM was stopped while it waited');
-  vm.queue ||= () => vmQueue.view(vm);
-  const { waited, ms } = await vmQueue.enter(vm, {
-    signal,
-    evict: () => { vm.event('Stopping the VM: another chat is waiting for one. It starts again on the next vm command'); vm.stop(); },
-    notify: ({ position, limit }) => {
-      const text = `Waiting for a VM: ${ordinal(position)} in line (${limit} at a time)`;
-      vm.event(text);
-      err(`Clearsky: ${text}. Other chats' builds run first; this command starts on its own.\n`);
-    },
-  });
-  if (waited) vm.event(`Got a VM after ${Math.round(ms / 1000)}s in line`);
-  try {
-    return await vm.exec(argv, cwd, out, err, { signal, java: java?.startsWith('/usr/lib/jvm/') ? java : hostJava() });
-  } finally { vmQueue.leave(vm); }
-}
-const vmQueue = new VmQueue();
-// Maven's settings for a chat's VM: the sandbox's copy of yours (mirrors, repositories, logins as
-// srt's stand-ins), which srt's proxy completes on the way out, as it does for the sandbox.
-export function vmMaven(maven, { masked = maskedEnv } = {}) {
-  if (!maven?.settings) return null;
-  let xml;
-  try { xml = readFileSync(maven.settings, 'utf8'); } catch { return null; }
-  let trust = null;
-  if (maven.trust && maven.credentials?.length) { try { trust = readFileSync(maven.trust); } catch { /* no CA: logins can't be added */ } }
-  return { xml, env: masked(maven.credentials || []), trust, unmatched: maven.unmatched || [] };
-}
 
 // ---------------------------------------------------------------- background jobs and the watchdog
 // Chats stopped on long tasks: a turn that waits on a 20-minute build or a CI run runs into its
 // limits, or Copilot gives up on the wait. So a long command runs as a background job
 // (lib/jobs.mjs, `bg <command>`), the chat ends its turn, and Clearsky wakes it with the result.
 // And a chat that stops before its task is done gets a nudge to go on (lib/watchdog.mjs).
-const jobGroups = new Set(); // process groups of jobs running here, ended with Clearsky
-process.on('exit', () => { for (const pid of jobGroups) { try { process.kill(-pid, 'SIGTERM'); } catch {} } });
-// Run a command in its own process group, its output to out/err, until it ends or `signal` stops it.
-function spawnJob(bin, args, { cwd, env, signal, hours = 4, onPid = null }, out, err) {
-  return new Promise((done) => {
-    const child = spawn(bin, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
-    if (child.pid) { jobGroups.add(child.pid); onPid?.(child.pid); }
-    const kill = () => { try { if (process.platform !== 'win32') process.kill(-child.pid, 'SIGTERM'); else child.kill('SIGTERM'); } catch {} };
-    const timer = setTimeout(() => { err(`\nClearsky: stopped after ${hours} hours.\n`); kill(); }, hours * 36e5);
-    signal?.addEventListener('abort', () => { err('\nClearsky: stopped.\n'); kill(); }, { once: true });
-    child.stdout.on('data', (d) => out(d));
-    child.stderr.on('data', (d) => err(d));
-    child.on('error', (e) => { err(`${e.message}\n`); });
-    child.on('close', (code) => { clearTimeout(timer); jobGroups.delete(child.pid); done(code ?? 1); });
-  });
-}
-// A short command (git) in a chat's sandbox, with execFile's shape: for what Clearsky runs in a
-// folder the chat can write, where git would run programs the chat names (lib/safe-git.mjs).
-const sandboxRun = (c) => async (bin, args, opts = {}) => {
-  if (!c?.agent?.inSandbox || c.agent.closed) throw new Error('this chat\'s sandbox has stopped');
-  const dir = args[0] === '-C' && isDir(args[1]) ? args[1] : c.cwd;
-  const s = await c.agent.inSandbox([bin, ...args], dir);
-  try { return await execFileP(s.bin, s.args, { ...opts, env: s.env, cwd: dir }); } finally { sandboxEnded(); }
-};
-// Background jobs running in a chat's sandbox: pid → chat, for the VMs view's sandbox load.
-const sandboxJobs = new Map();
-// Where a job runs is the fence of the chat that started it.
-async function runJob(job, out, err, signal) {
-  const c = acpChats.get(job.chat);
-  if (job.where === 'vm') return vmRun({ key: c?.agent.brokerKey, argv: job.argv, cwd: job.cwd, java: job.java, signal }, out, err);
-  if (job.where === 'outside') return spawnJob(job.argv[0], job.argv.slice(1), { cwd: job.cwd, env: copilotEnv(), signal }, out, err);
-  if (!c?.agent.inSandbox) throw new Error('this chat\'s sandbox has stopped');
-  const s = await c.agent.inSandbox(job.argv, job.cwd);
-  let pid = null;
-  try { return await spawnJob(s.bin, s.args, { cwd: job.cwd, env: s.env, signal, onPid: (p) => { pid = p; sandboxJobs.set(p, job.chat); } }, out, err); } finally { sandboxJobs.delete(pid); sandboxEnded(); }
-}
 const jobs = new Jobs({ file: join(dirname(stateFile), 'jobs.json'), logDir: () => join(copilotTmp(), 'jobs'), run: runJob, onEnd: jobEnded });
 function jobEnded(job) {
   console.log(`clearsky: background job ${job.where} -> ${job.state}${job.code != null ? ` (exit ${job.code})` : ''}`);
@@ -1092,145 +806,6 @@ setInterval(() => {
     tellChat(id, nudgeText(reason, n, max));
   }
 }, 15_000).unref();
-// Every chat's VM that runs or waits, running ones first (oldest first), then the line in order.
-async function vmsOverview({ look = true } = {}) {
-  const snap = vmQueue.snapshot();
-  const names = localState.sessionNames(stateFile), titles = new Map((sessionsCache?.data || []).map((x) => [x.id, x.title]));
-  const tilde = (p) => (p && p.startsWith(homedir()) ? `~${p.slice(homedir().length)}` : p);
-  const held = new Map(snap.holders.map((h) => [h.holder, h])), line = new Map(snap.line.map((w) => [w.holder, w]));
-  const chats = [...acpChats].filter(([, c]) => c.vm && (c.vm.state !== 'off' || held.has(c.vm) || line.has(c.vm)));
-  if (look) await Promise.all(chats.map(([, c]) => c.vm.refresh())); // ssh into each: only while the view is open
-  const vms = chats.map(([id, c]) => {
-    const v = c.vm.view(), h = held.get(c.vm), w = line.get(c.vm);
-    return { chat: id, title: names[id] || titles.get(id) || null, state: v.state, place: w ? 'waiting' : h ? 'running' : v.state === 'off' ? 'off' : 'running',
-      position: w?.position ?? null, busy: !!h?.active, since: new Date(w?.since ?? h?.since ?? (Date.parse(v.startedAt) || Date.now())).toISOString(),
-      startedAt: v.startedAt, cwd: tilde(v.cwd), commands: v.commands, vcpus: v.vcpus, memMb: v.memMb, diskBytes: v.diskBytes, system: v.system, containers: v.containers };
-  }).sort((a, b) => (a.place === 'waiting') - (b.place === 'waiting') || (a.position ?? 0) - (b.position ?? 0) || Date.parse(a.since) - Date.parse(b.since));
-  return { limit: snap.limit, running: snap.holders.length, waiting: snap.line.length, vms, sandboxes: sandboxesLoad(names, titles), builds: buildsWhere(),
-    imageCache: imageCacheView(), host: { cpus: availableParallelism(), memMb: Math.floor(totalmem() / 1048576) } };
-}
-// The VMs' Docker Hub image cache (lib/registry-mirror.mjs): what's in it, looked at most every
-// 15 seconds (the VMs view asks every 3).
-const IMAGE_CACHE_DIR = join(homedir(), '.cache', 'clearsky', 'vm', 'registry');
-let imageCacheSeen = null;
-function imageCacheView(fresh = false) {
-  if (fresh || !imageCacheSeen || Date.now() - imageCacheSeen.at > 15_000) imageCacheSeen = { at: Date.now(), ...mirrorStats(IMAGE_CACHE_DIR) };
-  const { at, ...s } = imageCacheSeen;
-  return { ...s, capBytes: cacheCapBytes() };
-}
-// What chats' sandboxes run on this machine itself (Linux): the sandbox fences files and network,
-// not CPU, so a build run there instead of in the VM shows here, with its busiest process.
-const treeLoad = new TreeLoad();
-function sandboxesLoad(names, titles) {
-  if (process.platform !== 'linux') return [];
-  const roots = new Map();
-  for (const [id, c] of acpChats) if (c.agent?.sandboxed && !c.agent.closed && c.agent.child?.pid) roots.set(`${id}\t${c.agent.child.pid}`, c.agent.child.pid);
-  for (const [pid, id] of sandboxJobs) roots.set(`${id}\t${pid}`, pid);
-  const per = new Map();
-  for (const [key, l] of treeLoad.sample(roots)) {
-    const id = key.split('\t')[0], a = per.get(id) || { chat: id, title: names[id] || titles.get(id) || null, cpuPct: null, memMb: 0, procs: 0, top: null, jobs: 0 };
-    if (l.cpuPct != null) a.cpuPct = (a.cpuPct || 0) + l.cpuPct;
-    a.memMb += l.memMb; a.procs += l.procs;
-    if (l.top && (!a.top || l.top.cpuPct > a.top.cpuPct)) a.top = l.top;
-    if (sandboxJobs.has(Number(key.split('\t')[1]))) a.jobs++;
-    per.set(id, a);
-  }
-  return [...per.values()].sort((a, b) => (b.cpuPct || 0) - (a.cpuPct || 0));
-}
-const ordinal = (n) => `${n}${[, 'st', 'nd', 'rd'][n % 100 >> 3 ^ 1 && n % 10] || 'th'}`;
-// VM events show in the chat as they happen (commands and containers; the rest is in its view).
-function bindVm(c) {
-  const shown = { vm: /^(VM up|Docker ready|Stopping|The VM stopped|Preparing|Downloading|VM image|Waiting for a VM|Got a VM)/, docker: /^(start|die|oom) /, run: /^(done|failed|Stopped)/ };
-  // Containers stopped after the tests (Testcontainers kills them: exit 137, its reaper exits 0)
-  // are cleanup, not a crash: one quiet line for them all. Other exits show as they happen.
-  let stopped = 0, timer = null;
-  const cleanup = () => { if (stopped) c.emit({ type: 'note', text: `VM: ${stopped} test container${stopped > 1 ? 's' : ''} stopped` }); stopped = 0; timer = null; };
-  if (c.vm) c.vm.onEvent = (e) => {
-    if (e.kind === 'docker' && /^die .*, exit (137|143)$|^die [^,]*$|^die .*, exit 0$/.test(e.text)) { stopped++; clearTimeout(timer); timer = setTimeout(cleanup, 2000); return; }
-    if (shown[e.kind]?.test(e.text)) c.emit({ type: 'note', text: `VM: ${e.text}` });
-  };
-}
-// Your default JDK (what `java` is here) for the VM, which has your /usr/lib/jvm in place of its
-// own; else the newest one in there.
-let defaultJava;
-function hostJava() {
-  if (defaultJava === undefined) {
-    try { defaultJava = realpathSync(execFileSync('sh', ['-c', 'command -v java'], { encoding: 'utf8', timeout: 3000 }).trim()).replace(/\/bin\/java$/, ''); } catch { defaultJava = null; }
-    if (!defaultJava?.startsWith('/usr/lib/jvm/')) {
-      try { defaultJava = readdirSync('/usr/lib/jvm').filter((d) => existsSync(`/usr/lib/jvm/${d}/bin/java`)).sort((a, b) => a.localeCompare(b, 'en', { numeric: true })).map((d) => `/usr/lib/jvm/${d}`).pop() || null; } catch { defaultJava = null; }
-    }
-  }
-  return defaultJava;
-}
-const sandboxHosts = () => [...new Set([...(process.env.AGENT_DOMAINS ? parseDomains(process.env.AGENT_DOMAINS) : DEFAULT_DOMAINS), ...VM_DOMAINS])];
-
-// Which Jira tickets and projects an acli command changes; `bulk` when it picks them by a query.
-export function jiraTargets(argv) {
-  const keys = new Set(), projects = new Set();
-  let bulk = false;
-  argv.forEach((a, i) => {
-    if (/^--(jql|filter)(=|$)/.test(a)) bulk = true;
-    const v = a.includes('=') && a.startsWith('--') ? a.slice(a.indexOf('=') + 1) : a;
-    const flag = a.startsWith('--') ? a.split('=')[0] : argv[i - 1];
-    if (/^(--project|-p)$/.test(flag) && /^[A-Z][A-Z0-9_]+$/.test(v)) projects.add(v);
-    for (const k of v.split(',')) if (/^[A-Z][A-Z0-9_]+-\d+$/.test(k.trim())) { keys.add(k.trim()); projects.add(k.trim().split('-')[0]); }
-  });
-  return { keys: [...keys], projects: [...projects], bulk };
-}
-// The Jira projects this chat works in: its tickets, and the one its branch is named after.
-function chatJira(c) {
-  const set = new Set(c.jira);
-  for (const k of localState.sessionRefs(stateFile)[c.id] || []) if (k.startsWith('issue:')) set.add(k.slice(6).split('-')[0]);
-  try {
-    const branch = execFileSync('git', ['-C', c.cwd, 'branch', '--show-current'], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] });
-    for (const m of branch.toUpperCase().matchAll(/\b([A-Z][A-Z0-9_]+)-\d+\b/g)) set.add(m[1]);
-  } catch {}
-  return set;
-}
-
-function brokerWhere(key) {
-  const c = chatByKey(key);
-  return c && [c.cwd, ...copilotFolders().map((d) => untilde(d)), ...chatFolders(c.id)];
-}
-// Ask in the chat, as for any step Copilot wants to take, and wait for your answer.
-function brokerAsk({ key, tool, argv, cwd, vm = false, background = false }) {
-  const c = chatByKey(key);
-  if (!c) return Promise.resolve(false);
-  const line = [tool, ...argv].map((a) => (/^[\w@%+=:,./-]+$/.test(a) ? a : `'${a.replace(/'/g, `'\\''`)}'`)).join(' ');
-  const jira = tool === 'acli' ? jiraTargets(argv) : null;
-  const log = (decided) => jira && logWrite(agentLogFile, { where: 'jira', what: line, target: jira.keys.join(', ') || jira.projects.join(', ') || null, chats: [chatRef(c)], decided });
-  if (c.mode === 'full') { log('allowed'); return Promise.resolve(true); } // Full: you allowed everything
-  // A Jira change to the tickets of this chat's project goes through, and shows in the chat.
-  if (jira && !jira.bulk && jira.projects.length && jira.projects.every((p) => chatJira(c).has(p) || gateRules().has(`jira:${p}`))) {
-    log('auto');
-    c.emit({ type: 'note', text: `Jira: ${line}` });
-    return Promise.resolve(true);
-  }
-  const title = { git: 'Push from your machine', gh: 'Change GitHub as you', acli: 'Change Jira as you', outside: `Run on your machine, outside the sandbox${background ? ', in the background' : ''}` }[tool];
-  return new Promise((done) => {
-    const id = randomBytes(6).toString('hex');
-    // The same command again (a test run after a fix) can be allowed for the rest of this chat.
-    const same = `${cwd}\n${line}`;
-    if (c.allowedRuns?.has(same)) return done(true);
-    const advice = jira ? jiraAdvice(jira, chatJira(c)) : tool === 'outside' ? outsideAdvice({ vm }) : null;
-    const ev = { type: 'permission', id, title, kind: 'execute', detail: `${line}\n(in ${cwd.replace(homedir(), '~')})`, advice,
-      options: [...(vm ? [{ id: 'vm', name: 'Run in the VM instead', kind: 'allow_once' }] : []), { id: 'allow', name: 'Allow', kind: 'allow_once' },
-        ...(jira ? ruleOption(advice) : [{ id: 'chat', name: 'Allow this command again in this chat', kind: 'allow_always' }]), { id: 'deny', name: 'Deny', kind: 'reject_once' }] };
-    c.waiting.set(id, (answer) => {
-      c.pending.delete(id);
-      if (answer.optionId === 'rule' && advice?.rule) { addGateRule(advice.rule); answer = { ...answer, optionId: 'allow' }; }
-      if (answer.optionId === 'chat') (c.allowedRuns ||= new Set()).add(same);
-      if (answer.optionId === 'vm') return done('vm');
-      const ok = answer.optionId === 'allow' || answer.optionId === 'chat';
-      log(ok ? 'allowed' : 'declined');
-      // Allowed here: that ticket's project is part of this chat's work from now on.
-      if (ok && jira && !jira.bulk) for (const p of jira.projects) c.jira.add(p);
-      done(ok);
-    });
-    c.pending.set(id, ev);
-    c.emit(ev);
-  });
-}
 
 function pluginDoor(name) {
   const found = doorsByName().get(name);
@@ -1378,18 +953,6 @@ function usageRun({ key, argv = [] }) {
   if (process.env.AGENT_DISCLOSE !== 'on') return { code: 1, stdout: '', stderr: 'Clearsky: saying what did the work is off (Settings → Agent); leave the line out.\n' };
   const split = chatCredits(c.id, c.model);
   return { code: 0, stdout: `${argv.includes('--fields') ? disclosureFields(split) : disclosureLine(split)}\n`, stderr: '' };
-}
-
-// A question in a chat with Allow and Deny only (asked every time).
-function askInChat(c, { title, detail, advice = null }) {
-  return new Promise((done) => {
-    const id = randomBytes(6).toString('hex');
-    const ev = { type: 'permission', id, title, kind: 'execute', detail, advice,
-      options: [{ id: 'allow', name: 'Allow', kind: 'allow_once' }, { id: 'deny', name: 'Deny', kind: 'reject_once' }] };
-    c.waiting.set(id, (answer) => { c.pending.delete(id); done(answer.optionId === 'allow'); });
-    c.pending.set(id, ev);
-    c.emit(ev);
-  });
 }
 
 // One prompt and its answer, changing nothing: the stand-up summary with Claude Code (Copilot
