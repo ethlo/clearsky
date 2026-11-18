@@ -1243,8 +1243,6 @@ const chatFolders = (id) => (id ? (localState.sessionFolders(stateFile)[id] || [
 // Settings → Agent's folders (read-write and read only) and the folders added to it.
 const chatReadRoots = (id, cwd) => fileRoots([cwd || acpChats.get(id)?.cwd || copilotCwd(), ...copilotFolders(), ...list(process.env.COPILOT_READ), ...chatFolders(id)], homedir());
 // Copilot's memory (lib/memory.mjs) is readable in the sandbox, not writable: notes go in through your Save.
-// srt's own TMPDIR when it isn't given one (kept readable for acli's text files, lib/broker.mjs).
-const SRT_TMP = '/tmp/claude';
 const sandboxOpts = (cwd, extra = []) => ({ cwd, folders: [...copilotFolders(), ...extra, copilotTmp()], home: homedir(), read: [...list(process.env.COPILOT_READ), join(here, '..'), memory.memoryDir()] });
 let broker = null;
 function ghToken() {
@@ -1301,7 +1299,7 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.COPILOT_SANDBO
   // asks you in this chat. The key tells Clearsky which chat a request comes from.
   const key = randomBytes(16).toString('hex');
   if (process.platform === 'linux') {
-    broker ||= serveBroker({ bins: { acli: config.jira.acli }, gate: ({ argv }) => reviewGate(argv, (k) => ghModule.ticketPrs(k, { fresh: true })), allow: assistedAllow, ask: brokerAsk, where: brokerWhere, vm: vmSupport().ok ? vmRun : null, doors: pluginDoor, review: reviewRun, usage: usageRun, jobs: jobsDoor, reads: () => [copilotTmp(), SRT_TMP], log: console.log });
+    broker ||= serveBroker({ bins: { acli: config.jira.acli }, gate: ({ argv }) => reviewGate(argv, (k) => ghModule.ticketPrs(k, { fresh: true })), allow: assistedAllow, ask: brokerAsk, where: brokerWhere, vm: vmSupport().ok ? vmRun : null, doors: pluginDoor, review: reviewRun, usage: usageRun, jobs: jobsDoor, reads: () => [copilotTmp()], log: console.log });
     Object.assign(env, { CLEARSKY_BROKER_SOCKET: brokerSocket(), CLEARSKY_BROKER_KEY: key });
     env.PATH = `${join(here, '..', 'scripts', 'sandbox-bin')}${delimiter}${env.PATH}`;
   }
@@ -2178,11 +2176,11 @@ const memoryHint = () => { const f = memory.memoryFile(); return memory.memoryHi
 function foldersHint() {
   const tilde = (p) => (p.startsWith(homedir()) ? `~${p.slice(homedir().length)}` : p);
   const rw = copilotFolders().map(tilde), ro = list(process.env.COPILOT_READ).map(tilde);
-  if (!rw.length && !ro.length) return `For temporary files use $TMPDIR (${tilde(copilotTmp())}), not /tmp.`;
+  if (!rw.length && !ro.length) return `For temporary files use $TMPDIR (${tilde(copilotTmp())}), not /tmp: /tmp here is this chat's own, kept in memory, and nothing outside the sandbox sees it.`;
   return `My code is in ${rw.join(', ') || 'this folder'}${ro.length ? ` (and, read only, ${ro.join(', ')})` : ''}. `
     + 'Find repos and files there or in the current folder; don\'t list or search the rest of my home. '
     + 'If you need something outside these folders, say what and why first. '
-    + `For temporary files use $TMPDIR (${tilde(copilotTmp())}), not /tmp.`;
+    + `For temporary files use $TMPDIR (${tilde(copilotTmp())}), not /tmp: /tmp here is this chat's own, kept in memory, and nothing outside the sandbox sees it.`;
 }
 // Where a sandboxed chat runs builds and tests (Settings → Agent → Run builds in): the chat's
 // VM when this machine has one, so a full build doesn't take your laptop's CPU; or the sandbox,
