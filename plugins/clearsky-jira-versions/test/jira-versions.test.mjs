@@ -9,7 +9,7 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseCommand, pickTool, fixVersionsOf, change, jiraScopes, createVersions, sitesOf, REDIRECT } from '../lib/jira-versions.mjs';
+import { parseCommand, pickTool, fixVersionsOf, change, jiraScopes, createVersions, sitesOf, shapeOf, argsFor, REDIRECT } from '../lib/jira-versions.mjs';
 import makePlugin from '../source.mjs';
 import { core } from './core.mjs';
 
@@ -47,6 +47,48 @@ test('the change keeps the other versions and matches names as Jira does', () =>
   assert.equal(pickTool([{ name: 'getJiraIssue' }, { name: 'editJiraIssue' }], 'edit').name, 'editJiraIssue');
   assert.equal(jiraScopes(['read:me', 'offline_access', 'read:jira-work', 'write:jira-work', 'manage:jira-configuration', 'read:confluence:agent-interface', 'read:jira:agent-interface', 'write:jira:agent-interface']),
     'read:me offline_access read:jira-work write:jira-work read:jira:agent-interface write:jira:agent-interface');
+});
+
+test('fix versions are found in the shapes a server may send, and never guessed', () => {
+  const text = (t) => ({ content: [{ type: 'text', text: typeof t === 'string' ? t : JSON.stringify(t) }] });
+  const v = [{ id: 1, name: '1.6.0', released: true }];
+  assert.deepEqual(fixVersionsOf(text({ issues: [{ key: 'A-1', fields: { fixVersions: v } }] })), [{ id: '1', name: '1.6.0' }]);
+  assert.deepEqual(fixVersionsOf(text({ data: { issue: { fields: { fixVersions: v } } } })), [{ id: '1', name: '1.6.0' }]);
+  assert.deepEqual(fixVersionsOf(text(`Here is the issue:\n\n\`\`\`json\n${JSON.stringify({ fields: { fixVersions: v } })}\n\`\`\`\n`)), [{ id: '1', name: '1.6.0' }]);
+  assert.deepEqual(fixVersionsOf(text(`Issue A-1 ${JSON.stringify({ fields: { fixVersions: [] } })} done`)), []);
+  assert.deepEqual(fixVersionsOf(text({ fields: { fixVersions: ['1.6.0', '1.7.0'] } })), [{ name: '1.6.0' }, { name: '1.7.0' }]);
+  assert.deepEqual(fixVersionsOf(text('# A-1: Title\n\n- **Status:** Done\n- **Fix versions:** 1.6.0, 1.7.0\n')), [{ name: '1.6.0' }, { name: '1.7.0' }]);
+  assert.deepEqual(fixVersionsOf(text('| Field | Value |\n| Fix Versions | None |\n')), []);
+  assert.equal(fixVersionsOf(text('# A-1: Title\n\n- **Status:** Done\n')), null);
+  assert.equal(shapeOf(text({ key: 'A-1', fields: { summary: 's', status: {} } })), 'JSON with keys key, fields; fields has keys summary, status');
+  assert.equal(shapeOf(text('# A-1\nline')), 'text (not JSON), 2 lines');
+  const tool = { inputSchema: { properties: { cloudId: {}, issueIdOrKey: {}, fields: { type: 'string' }, responseContentFormat: { enum: ['markdown', 'json'] } } } };
+  assert.deepEqual(argsFor(tool, { cloudId: 'c', key: 'A-1', fields: ['fixVersions'], json: true }), { cloudId: 'c', issueIdOrKey: 'A-1', fields: 'fixVersions', responseContentFormat: 'json' });
+  assert.deepEqual(parseCommand(['raw', 'a-1']), { cmd: 'raw', keys: ['A-1'] });
+  assert.match(parseCommand(['raw', 'A-1', 'A-2']).error, /one ticket/);
+});
+
+test('a ticket whose fix versions it can\'t read: tries the whole ticket, then says what came back and writes nothing', async () => {
+  const calls = [];
+  const tools = [{ name: 'getJiraIssue', inputSchema: { properties: { cloudId: {}, issueIdOrKey: {}, fields: {} } } }, { name: 'editJiraIssue', inputSchema: { properties: { cloudId: {}, issueIdOrKey: {}, fields: {} } } }];
+  const answers = { narrow: { content: [{ type: 'text', text: '{"key":"A-1","fields":{}}' }] }, whole: { content: [{ type: 'text', text: '# A-1\n- Fix versions: 1.6.0' }] } };
+  let whole = answers.whole;
+  const client = { listTools: async () => tools, callTool: async (n, a) => { calls.push({ n, a }); return n === 'getJiraIssue' ? (a.fields ? answers.narrow : whole) : { content: [] }; } };
+  const v = createVersions({ client, site: () => 'https://acme.atlassian.net' });
+  const ok = await v.run(parseCommand(['add', '1.7.0', 'A-1']), async () => true);
+  assert.equal(ok.code, 0, ok.stdout);
+  assert.deepEqual(calls.find((c) => c.n === 'editJiraIssue').a.fields, { fixVersions: [{ name: '1.6.0' }, { name: '1.7.0' }] });
+
+  calls.length = 0;
+  whole = { content: [{ type: 'text', text: '# A-1\nno versions here' }] };
+  let asked = 0;
+  const no = await v.run(parseCommand(['add', '1.7.0', 'A-1']), async () => { asked++; return true; });
+  assert.equal(no.code, 1);
+  assert.equal(asked, 0);
+  assert.match(no.stdout, /A-1: couldn't find its fix versions in what Jira sent \(text \(not JSON\), 2 lines\); `jira-versions raw A-1` shows it/);
+  assert.ok(!calls.some((c) => c.n === 'editJiraIssue'));
+  const raw = await v.run(parseCommand(['raw', 'A-1']), async () => { throw new Error('raw never asks'); });
+  assert.match(raw.stdout, /^getJiraIssue \["cloudId","issueIdOrKey","fields"\]\n\{"key":"A-1","fields":\{\}\}/);
 });
 
 // An in-memory Jira behind Atlassian-shaped tools.

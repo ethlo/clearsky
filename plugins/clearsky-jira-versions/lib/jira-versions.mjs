@@ -15,6 +15,7 @@
 export const USAGE = `jira-versions show KEY…                  each ticket's fix versions
 jira-versions add VERSION KEY…           add a fix version, keeping the others
 jira-versions remove VERSION KEY…        take a fix version off
+jira-versions raw KEY                    what Jira's server sends for a ticket, as it is
 Several versions: VERSION can be "1.7.0,1.7.1". Changes ask in the chat first, one question
 for the whole command, showing each ticket before and after. Status moves stay with acli:
 acli jira workitem transition --key KEY --status "Done".`;
@@ -29,6 +30,11 @@ export function parseCommand(argv) {
   if (rest.some((a) => a.startsWith('--'))) return { error: `unknown option ${rest.find((a) => a.startsWith('--'))}` };
   switch (cmd) {
     case 'help': case '--help': case '-h': return { cmd: 'help' };
+    case 'raw': {
+      const k = String(rest[0] || '').trim().toUpperCase();
+      if (rest.length !== 1 || !KEY.test(k)) return { error: 'raw needs one ticket, like ABC-12' };
+      return { cmd, keys: [k] };
+    }
     case 'show': {
       const keys = [...new Set(rest.flatMap((a) => a.split(',')).map((k) => k.trim().toUpperCase()).filter(Boolean))];
       if (!keys.length) return { error: 'show needs one or more tickets, like ABC-12' };
@@ -75,7 +81,13 @@ export function argsFor(tool, want) {
   const put = (names, v) => { if (v === undefined || v === null) return; const k = names.find(has); if (k) out[k] = v; };
   put(['cloudId'], want.cloudId);
   put(['issueIdOrKey', 'issueKey', 'key'], want.key);
-  put(['fields'], want.fields);
+  // fields as the schema wants it: a list, or one comma-separated string.
+  if (want.fields && has('fields')) out.fields = Array.isArray(want.fields) && props.fields?.type === 'string' ? want.fields.join(',') : want.fields;
+  // JSON rather than Markdown, where the tool lets us pick.
+  for (const k of ['responseContentFormat', 'responseFormat', 'contentFormat', 'format']) {
+    const e = props[k]?.enum;
+    if (want.json && has(k) && Array.isArray(e)) { const pick = e.find((x) => /^json$/i.test(x)) || e.find((x) => /json|adf|raw/i.test(x)); if (pick) out[k] = pick; break; }
+  }
   return out;
 }
 
@@ -85,15 +97,54 @@ export function resultText(r) {
   return parts.length ? parts.join('\n') : r?.structuredContent ? JSON.stringify(r.structuredContent) : '';
 }
 
-// A ticket's fix versions from what the server gave back: [{ id, name }]. null if it has none we
-// can read (not JSON, no fields), so the door doesn't guess and write over them.
+// JSON in a tool's answer: the whole text, a ```json block in it, or the outermost {…} or […].
+export function jsonIn(text) {
+  const t = String(text || '').trim();
+  const tries = [t, (t.match(/```(?:json)?\s*\n([\s\S]*?)```/) || [])[1]];
+  for (const [open, close] of [['{', '}'], ['[', ']']]) { const i = t.indexOf(open), j = t.lastIndexOf(close); if (i > -1 && j > i) tries.push(t.slice(i, j + 1)); }
+  for (const x of tries) { if (!x) continue; try { return JSON.parse(x); } catch { /* next */ } }
+  return undefined;
+}
+
+// The first `fixVersions` anywhere in a JSON value ({ fields }, { issue: { fields } }, a list…).
+function findFixVersions(v, depth = 0) {
+  if (!v || typeof v !== 'object' || depth > 6) return undefined;
+  if (!Array.isArray(v) && Object.prototype.hasOwnProperty.call(v, 'fixVersions')) return v.fixVersions;
+  for (const x of Array.isArray(v) ? v : Object.values(v)) { const f = findFixVersions(x, depth + 1); if (f !== undefined) return f; }
+  return undefined;
+}
+const versionList = (list) => list.map((v) => (typeof v === 'string' ? { name: v } : v)).filter((v) => v && typeof v.name === 'string' && v.name.trim())
+  .map((v) => ({ ...(v.id != null && { id: String(v.id) }), name: v.name.trim() }));
+
+// A ticket's fix versions from what the server gave back: [{ id?, name }]. From JSON in any
+// wrapper, else a "Fix versions: 1.6.0, 1.7.0" line in Markdown. null when neither is there, so
+// the door doesn't guess and write over them.
 export function fixVersionsOf(r) {
-  let j = r?.structuredContent;
-  if (!j) { try { j = JSON.parse(resultText(r)); } catch { return null; } }
-  const f = j?.fields || j?.issue?.fields || j;
-  if (!f || !Object.prototype.hasOwnProperty.call(f, 'fixVersions')) return null;
-  if (!Array.isArray(f.fixVersions)) return f.fixVersions == null ? [] : null;
-  return f.fixVersions.filter((v) => v && typeof v.name === 'string').map((v) => ({ ...(v.id && { id: String(v.id) }), name: v.name }));
+  for (const j of [r?.structuredContent, jsonIn(resultText(r))]) {
+    const f = findFixVersions(j);
+    if (f === undefined) continue;
+    if (f == null) return [];
+    if (Array.isArray(f)) return versionList(f);
+    if (typeof f === 'string') return versionList(f.split(',').map((x) => x.trim()));
+    return null;
+  }
+  const m = resultText(r).match(/^[\s>*|-]*\**\s*fix\s*versions?\s*\**\s*[:|]\s*\**\s*(.*?)\s*\|?\s*$/im);
+  if (!m) return null;
+  const line = m[1].replace(/\*\*/g, '').replace(/`/g, '').trim();
+  if (!line || /^(none|-|—|n\/a|\[\]|\(none\))$/i.test(line)) return [];
+  return versionList(line.split(',').map((x) => x.trim()));
+}
+
+// What an answer looks like, with no values in it: for an error, so a chat can say what came back.
+export function shapeOf(r) {
+  const j = r?.structuredContent ?? jsonIn(resultText(r));
+  if (j && typeof j === 'object') {
+    const keys = (o) => (Array.isArray(o) ? `a list of ${o.length}` : `keys ${Object.keys(o).slice(0, 15).join(', ')}`);
+    const f = j.fields || j.issue?.fields;
+    return `JSON with ${keys(j)}${f && typeof f === 'object' ? `; fields has ${keys(f)}` : ''}`;
+  }
+  const text = resultText(r);
+  return text ? `text (not JSON), ${text.split('\n').length} lines` : 'nothing';
 }
 
 // The fix versions after the change, and whether anything changed. Names match as Jira's do,
@@ -177,17 +228,28 @@ export function createVersions({ client, site = () => null, clearskySite = () =>
       if (c.cmd === 'help') return { code: 0, stdout: USAGE, stderr: '', decided: 'read' };
       const ts = await list();
       const read = need(ts, 'read');
-      const edit = c.cmd === 'show' ? null : need(ts, 'edit');
+      const edit = c.cmd === 'show' || c.cmd === 'raw' ? null : need(ts, 'edit');
       const id = read.inputSchema?.properties?.cloudId || edit?.inputSchema?.properties?.cloudId ? await cloudId(ts) : null;
       // Each ticket as it is now.
       const now = [];
-      for (const key of c.keys) {
-        const r = await client.callTool(read.name, argsFor(read, { cloudId: id, key, fields: ['fixVersions'] }));
-        if (r?.isError) { now.push({ key, error: `Jira said: ${said(r)}` }); continue; }
-        const had = fixVersionsOf(r);
-        now.push(had ? { key, had } : { key, error: 'couldn\'t read its fix versions from what Jira sent' });
-      }
       const target = c.keys.join(', ');
+      // What the server sends for one ticket, as it is: to see why a read fails.
+      if (c.cmd === 'raw') {
+        const r = await client.callTool(read.name, argsFor(read, { cloudId: id, key: c.keys[0], fields: ['fixVersions'], json: true }));
+        const text = resultText(r) || JSON.stringify(r?.structuredContent ?? r ?? null);
+        return { code: r?.isError ? 1 : 0, stdout: `${read.name} ${JSON.stringify(Object.keys(read.inputSchema?.properties || {}))}\n${text.length > 20_000 ? `${text.slice(0, 20_000)}\n… (cut)` : text}`, stderr: '', decided: 'read', target };
+      }
+      for (const key of c.keys) {
+        // Asked for just fixVersions, as JSON; if that has none we can read, the whole ticket.
+        let r = await client.callTool(read.name, argsFor(read, { cloudId: id, key, fields: ['fixVersions'], json: true }));
+        if (r?.isError) { now.push({ key, error: `Jira said: ${said(r)}` }); continue; }
+        let had = fixVersionsOf(r);
+        if (!had && read.inputSchema?.properties?.fields) {
+          const whole = await client.callTool(read.name, argsFor(read, { cloudId: id, key, json: true }));
+          if (!whole?.isError) { had = fixVersionsOf(whole); r = whole; }
+        }
+        now.push(had ? { key, had } : { key, error: `couldn't find its fix versions in what Jira sent (${shapeOf(r)}); \`jira-versions raw ${key}\` shows it` });
+      }
       if (c.cmd === 'show') {
         const out = now.map((t) => (t.error ? `${t.key}: ${t.error}` : `${t.key}: ${names(t.had)}`)).join('\n');
         return { code: now.some((t) => t.error) ? 1 : 0, stdout: out, stderr: '', decided: 'read', target };
