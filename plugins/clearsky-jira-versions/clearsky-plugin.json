@@ -1,7 +1,7 @@
 {
   "name": "jira-versions",
   "label": "Jira versions",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Lets Copilot chats add and remove Jira fix versions with `jira-versions …`, which acli can't, through Atlassian's MCP server and your own login. Each change asks you first.",
   "clearsky": 1,
   "entry": "source.mjs",

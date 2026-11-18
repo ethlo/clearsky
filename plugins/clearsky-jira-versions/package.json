@@ -1,6 +1,6 @@
 {
   "name": "clearsky-jira-versions",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Clearsky plugin: Copilot chats add and remove Jira fix versions, after you OK it, through Atlassian's MCP server",
   "type": "module",
   "scripts": {
