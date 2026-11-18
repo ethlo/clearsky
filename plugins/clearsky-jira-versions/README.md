@@ -17,4 +17,4 @@ What it does with that login is narrow: it reads a ticket's fix versions and wri
 
 Status moves don't need this: `acli jira workitem transition --key ABC-1 --status "Done"` already works through Clearsky's acli door.
 
-It uses the Jira site Clearsky already knows (`JIRA_URL`, else the site acli is logged in to). Set **Jira site** (like `acme.atlassian.net`) only to use another one. Your organization's admin may need to allow the Rovo MCP server before the login works.
+It uses the Jira site Clearsky already knows (`JIRA_URL`, else the site acli is logged in to). Set **Jira site** (like `acme.atlassian.net`) only to use another one. Your organization's admin may need to allow the Rovo MCP server before the login works, and to allow writes through it: a login that comes back read only says so under Settings, with what it asked for and what Atlassian granted.
