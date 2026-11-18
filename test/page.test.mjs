@@ -60,6 +60,7 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
 
   // Your PR and the ticket in its branch are one task: one row in Work, the PR's, with the
   // ticket and where it stands beside the title.
+  await page.waitForFunction(() => /OPS-1 · in progress/i.test(document.querySelector('#list')?.innerText || '')); // tickets come in after the PRs
   assert.match(await page.locator('#list li.r', { hasText: 'ABC-5' }).first().locator('.xref').innerText(), /OPS-1 · in progress/i);
   assert.equal(await page.locator('#list li.r', { hasText: 'Rotate certs' }).count(), 0, 'the ticket has no row of its own');
   // In Tickets they link to each other, and the link opens the other here.
