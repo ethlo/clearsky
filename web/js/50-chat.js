@@ -55,6 +55,10 @@ function remember(id, cwd, title) {
   else recentChats = [{ id, cwd: cwd || null, title: title || null }, ...recentChats].slice(0, 8);
   saveRecent();
 }
+// Hot: its conversation is at hand (in this page, or kept by the server and still current), so
+// it opens at once. Cold: opening it starts the agent to replay it, which takes a few seconds.
+const isHot = (id) => histCache.has(id) || (cpLinks.cached || []).includes(id);
+const hotMark = (hot) => (hot ? `<span class="hot" title="Cached: opens instantly">${icon('bolt', 10)}</span>` : '');
 function chatTabs() {
   const live = new Map((cpLinks.live || []).map((x) => [x.id, x]));
   const known = new Map(Object.values(cpLinks.links || {}).flat().map((x) => [x.id, x]));
@@ -65,7 +69,7 @@ function chatTabs() {
     const current = id === chat.session && (chat.turns || chat.stop);
     const status = current && chat.stop ? ($('#chat-log .perm-b button') ? 'needs-you' : 'working') : live.get(id)?.status || 'closed';
     const key = Object.entries(cpLinks.links || {}).find(([, list]) => list.some((x) => x.id === id))?.[0];
-    return { id, cwd: l?.cwd || r?.cwd, title: (current && chat.title) || (r?.title?.startsWith('/') && l?.title) || r?.title || l?.title || `${agentNow()} chat`, status, live: live.has(id), pr: prStateOf(key) };
+    return { id, hot: isHot(id), cwd: l?.cwd || r?.cwd, title: (current && chat.title) || (r?.title?.startsWith('/') && l?.title) || r?.title || l?.title || `${agentNow()} chat`, status, live: live.has(id), pr: prStateOf(key) };
   }).sort((a, b) => (b.live - a.live)).slice(0, 8);
 }
 function drawTabs() {
@@ -74,7 +78,7 @@ function drawTabs() {
   const folder = (d) => (d || '').split('/').filter(Boolean).pop() || '';
   $('#side-cp').innerHTML = tabs.map((t, i) => `<a class="ni cp${onChat && t.id === chat.session && !isNew ? ' on' : ''}" href="#copilot"
       data-tab="${esc(t.id)}" data-cwd="${esc(t.cwd || '')}" title="${esc(t.title)}${STATUS_TEXT[t.status] ? ` · ${STATUS_TEXT[t.status]}` : ''}${i < 9 ? ` (Alt+${i + 1})` : ''}">
-      <span class="live s-${esc(t.status)}"></span><span class="lab">${esc(t.title)}<small>${esc([STATUS_TEXT[t.status] || (t.live ? 'open' : ''), t.pr, folder(t.cwd)].filter(Boolean).join(' · '))}</small></span>
+      <span class="live s-${esc(t.status)}"></span><span class="lab">${esc(t.title)}<small>${hotMark(t.hot)}${esc([STATUS_TEXT[t.status] || (t.live ? 'open' : ''), t.pr, folder(t.cwd)].filter(Boolean).join(' · '))}</small></span>
       ${t.status === 'working' || t.status === 'needs-you' ? '' : `<span class="x" data-nudge-tab="${esc(t.id)}" title="Nudge: send ${agentNow()} “Try again.”" aria-label="Nudge">${icon('refresh', 12)}</span>`}
       ${t.live ? '' : `<span class="x" data-forget="${esc(t.id)}" title="Remove from this list" aria-label="Remove">✕</span>`}</a>`).join('')
     + (onChat && isNew ? '<a class="ni cp on" href="#copilot"><span class="live"></span><span class="lab">New chat</span></a>' : '');
@@ -981,6 +985,7 @@ function keepHistory(h) {
   histCache.delete(h.id);
   histCache.set(h.id, h);
   while (histCache.size > HIST_KEEP) histCache.delete(histCache.keys().next().value);
+  drawTabs();
 }
 // Draw a chat's conversation (what openSession fetched, or what it had already).
 function showSession(h) {
@@ -1077,7 +1082,7 @@ function drawSessions() {
   const folder = (d) => (d || '').split('/').filter(Boolean).pop() || d || '';
   $('#hist-list').innerHTML = list.map((x) => `<button class="hs${x.id === chat.session ? ' cur' : ''}" data-sid="${esc(x.id)}" data-cwd="${esc(x.cwd || '')}">
       <b>${esc(x.title || 'Untitled session')}</b>${x.agent && (chat.info?.agents || []).filter((a) => a.available).length > 1 ? `<span class="hbadge agent" title="Runs in ${esc((chat.info.agents.find((a) => a.name === x.agent) || {}).label || x.agent)}">${esc(x.agent === 'claude' ? 'Claude' : 'Copilot')}</span>` : ''}
-      <small>${x.updatedAt ? esc(ago(x.updatedAt)) : ''}${x.cwd ? ` · ${esc(folder(x.cwd))}` : ''}${x.limit ? ` · <span class="${x.context / x.limit >= TRIM.compact ? 'full' : ''}" title="How full its context is: ${Math.round(x.context / 1000)}k of ${Math.round(x.limit / 1000)}k tokens">${Math.round(100 * x.context / x.limit)}% full</span>` : ''}</small>${x.working ? '<span class="hbadge work">working</span>' : x.open ? '<span class="hbadge" title="Open in a terminal or editor">open</span>' : ''}${x.here ? '<span class="hbadge">live here</span>' : ''}
+      <small>${x.updatedAt ? esc(ago(x.updatedAt)) : ''}${x.cwd ? ` · ${esc(folder(x.cwd))}` : ''}${x.limit ? ` · <span class="${x.context / x.limit >= TRIM.compact ? 'full' : ''}" title="How full its context is: ${Math.round(x.context / 1000)}k of ${Math.round(x.limit / 1000)}k tokens">${Math.round(100 * x.context / x.limit)}% full</span>` : ''}</small>${x.working ? '<span class="hbadge work">working</span>' : x.open ? '<span class="hbadge" title="Open in a terminal or editor">open</span>' : ''}${x.here ? '<span class="hbadge">live here</span>' : ''}${x.cached || histCache.has(x.id) ? `<span class="hbadge hot" title="Cached: opens instantly">${icon('bolt', 10)} cached</span>` : ''}
     </button>`).join('') || '<div class="chat-empty">No sessions match.</div>';
 }
 function showHistory(open = $('#chat-hist').hidden) {

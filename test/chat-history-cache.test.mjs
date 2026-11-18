@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, appendFileSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { copilotHistory, historyStamp, forgetHistories } from '../lib/app/chat-sessions.mjs';
+import { copilotHistory, historyStamp, forgetHistories, cachedHistories } from '../lib/app/chat-sessions.mjs';
 
 test('a chat is read once until its stamp changes', async () => {
   forgetHistories();
@@ -62,4 +62,14 @@ test('the stamp follows the agent’s log', () => {
   writeFileSync(join(home, '.claude', 'projects', '-home-me-dev-x', 'cl-22222222.jsonl'), '{}\n');
   assert.ok(historyStamp('cl-22222222', 'claude', { home, cpHome }));
   if (prev != null) process.env.CLAUDE_CONFIG_DIR = prev;
+});
+
+test('a chat counts as cached only while its kept copy is current', async () => {
+  forgetHistories();
+  // No log and not listed: no stamp, so nothing is kept and nothing is hot.
+  await copilotHistory(null, 'chat-dddd', '', { stamp: null, load: async () => [] });
+  assert.deepEqual(cachedHistories(), []);
+  // Kept under a stamp that is no longer the chat's own: cold.
+  await copilotHistory(null, 'chat-eeee', '', { stamp: 'old', load: async () => [] });
+  assert.deepEqual(cachedHistories(), []);
 });

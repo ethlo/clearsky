@@ -1257,3 +1257,8 @@ a.u-row:hover { background: var(--accent-soft); }
 .talk-mic:hover { background: var(--surface); color: var(--text); }
 .talk-mic.on { color: var(--red); background: var(--red-soft); animation: pulse 1.2s ease-in-out infinite; }
 .talk-mic.err { color: var(--amber); }
+
+/* A chat whose conversation is cached (opens instantly): a small bolt before its line. */
+.ni.cp .hot { color: var(--accent); display: inline-flex; vertical-align: -1px; margin-right: 3px; }
+.ni.cp .hot svg { fill: currentColor; stroke: none; }
+.hbadge.hot svg { fill: currentColor; stroke: none; vertical-align: -1px; }
