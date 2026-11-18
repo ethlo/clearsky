@@ -247,7 +247,7 @@ test('every plugin in the catalog has its folder here, a valid manifest, a pin o
   assert.deepEqual(errors, []);
   assert.equal(sources.get('flyt').panel.title, 'School');
   assert.ok(treeHash(bundledDir('flyt')).startsWith('sha256-'));
-  assert.deepEqual(listPlugins({ paths: p }).available, []);
+  assert.deepEqual(listPlugins({ paths: p }).available.map((a) => [a.name, a.kind]), [['jira-versions', 'bundled']], 'only the folder that has no repo yet');
 });
 
 test('a plugin added from its folder here moves to its own repo; once the folder is gone it says so', async () => {
