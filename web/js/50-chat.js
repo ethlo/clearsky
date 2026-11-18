@@ -972,44 +972,96 @@ function tilde(dir = '') {
   const home = chat.home || (dir.match(/^(\/home\/[^/]+|\/Users\/[^/]+|[A-Za-z]:\\Users\\[^\\]+)/) || [])[1];
   return home && (dir === home || dir.startsWith(home + '/') || dir.startsWith(home + '\\')) ? `~${dir.slice(home.length)}` : dir;
 }
+// Chats opened since the page loaded, newest last: going back to one shows it straight away,
+// and the server then only says whether it changed (its log's stamp) before it is drawn again.
+const HIST_KEEP = 30;
+const histCache = new Map();
+function keepHistory(h) {
+  if (!h.stamp) return;
+  histCache.delete(h.id);
+  histCache.set(h.id, h);
+  while (histCache.size > HIST_KEEP) histCache.delete(histCache.keys().next().value);
+}
+// Draw a chat's conversation (what openSession fetched, or what it had already).
+function showSession(h) {
+  chat.session = h.id; chat.cwd = h.cwd; chat.home = h.home; chat.turns = h.messages.filter((m) => m.role === 'me').length || 1;
+  chat.agent = h.agent || null;
+  drawAgent();
+  restoreMode(h.id);
+  chat.items = [];
+  chat.title = h.title || h.messages.find((m) => m.role === 'me')?.text.trim().split('\n')[0].slice(0, 120) || null;
+  const log = $('#chat-log');
+  log.innerHTML = '';
+  const frag = document.createDocumentFragment();
+  for (const m of h.messages) {
+    const el = document.createElement('div');
+    if (m.role === 'me') {
+      if (isAuto(m.text)) { log.append(frag); autoMsg(m.text); continue; } // in order: autoMsg adds to the log itself
+      el.className = 'msg me'; el.innerHTML = esc(m.text);
+    } else { el.className = 'msg cp'; el.innerHTML = renderAnswer(m.segs); el.segs = m.segs; }
+    frag.append(el);
+  }
+  log.append(frag);
+  log.scrollTop = log.scrollHeight;
+  if (!h.messages.length && !h.busy) addMsg('cp', '<span class="perm-done">Nothing said in this session yet. Carry on below.</span>');
+  rememberChat();
+  remember(h.id, h.cwd);
+  jobsAt = 0; drawJobs();
+  return log.childElementCount;
+}
 async function openSession(id, cwd) {
   detach();
   cpWide(false);
   const view = chat.view;
   chat.session = id; chat.turns = 1; // the list shows it as picked while it loads
-  // Nothing of the chat you were on carries over while this one loads (a real session can
-  // take seconds): its own name if we know it, and an empty side pane.
-  chat.title = recentChats.find((r) => r.id === id)?.title || (cpLinks.live || []).find((x) => x.id === id)?.title || null;
-  chat.items = []; chat.cwd = cwd || null;
-  chatSub();
   showHistory(false);
-  $('#chat-log').innerHTML = '<span class="typing">Opening session</span>';
+  const had = histCache.get(id);
+  const fits = had && (!cwd || had.cwd === cwd);
+  // Seen already: show it now, then ask whether it changed.
+  let drawn = fits ? showSession(had) : -1;
+  if (!fits) {
+    // Nothing of the chat you were on carries over while this one loads (a real session can
+    // take seconds): its own name if we know it, and an empty side pane.
+    chat.title = recentChats.find((r) => r.id === id)?.title || (cpLinks.live || []).find((x) => x.id === id)?.title || null;
+    chat.items = []; chat.cwd = cwd || null;
+    $('#chat-log').innerHTML = '<span class="typing">Opening session</span>';
+  }
+  chatSub();
   try {
-    const q = cwd ? `?cwd=${encodeURIComponent(cwd)}` : '';
-    const h = await getJson(`/api/copilot/sessions/${encodeURIComponent(id)}${q}`);
+    const q = new URLSearchParams();
+    if (cwd) q.set('cwd', cwd);
+    if (fits) q.set('have', had.stamp);
+    const h = await getJson(`/api/copilot/sessions/${encodeURIComponent(id)}${q.size ? `?${q}` : ''}`);
     if (chat.view !== view) return; // you picked another chat meanwhile
-    chat.session = h.id; chat.cwd = h.cwd; chat.home = h.home; chat.turns = h.messages.filter((m) => m.role === 'me').length || 1;
-    chat.agent = h.agent || null;
-    drawAgent();
-    restoreMode(h.id);
-    chat.items = [];
-    chat.title = h.title || h.messages.find((m) => m.role === 'me')?.text.trim().split('\n')[0].slice(0, 120) || null;
-    $('#chat-log').innerHTML = '';
-    for (const m of h.messages) {
-      if (m.role === 'me') { if (isAuto(m.text)) autoMsg(m.text); else addMsg('me', esc(m.text)); }
-      else { const el = addMsg('cp', renderAnswer(m.segs)); el.segs = m.segs; }
-    }
-    if (!h.messages.length && !h.busy) addMsg('cp', '<span class="perm-done">Nothing said in this session yet. Carry on below.</span>');
-    rememberChat();
-    remember(h.id, h.cwd);
-    jobsAt = 0; drawJobs();
-    if (h.busy) attachLive(h.id);
+    // Unchanged: keep what's on screen (and its scroll), with what's live about it now.
+    const fresh = h.same ? { ...had, ...h, messages: had.messages } : h;
+    delete fresh.same;
+    keepHistory(fresh);
+    // Changed, and you haven't started a turn on the old one meanwhile: draw it again.
+    if (!h.same && (drawn < 0 || (!chat.stop && $('#chat-log').childElementCount === drawn))) drawn = showSession(fresh);
+    else if (h.same) chat.title = fresh.title || chat.title;
+    if (fresh.busy && !chat.stop) attachLive(fresh.id);
   } catch (e) {
     if (chat.view !== view) return;
+    if (fits) { chatSub(); return; } // still showing what it had
     newChat();
     addMsg('cp', `<div class="err">Couldn't open that session: ${esc(e.message)}</div>`);
   }
   chatSub();
+}
+
+// The chats you're most likely to switch to (those working or waiting now), read ahead one at a
+// time while the page is idle, so the first switch to each is quick too.
+let warming = false;
+async function warmHistories(list = []) {
+  if (warming) return;
+  warming = true;
+  try {
+    for (const x of list.filter((x) => x.id !== chat.session && !histCache.has(x.id)).slice(0, 6)) {
+      await new Promise((r) => (window.requestIdleCallback || setTimeout)(r, { timeout: 2000 }));
+      try { const h = await getJson(`/api/copilot/sessions/${encodeURIComponent(x.id)}${x.cwd ? `?cwd=${encodeURIComponent(x.cwd)}` : ''}`); if (!histCache.has(h.id)) keepHistory(h); } catch {}
+    }
+  } finally { warming = false; }
 }
 
 let sessions = null;

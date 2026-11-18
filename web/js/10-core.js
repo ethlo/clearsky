@@ -196,6 +196,7 @@ async function loadLinks() {
   renderToday();
   drawCtx();
   followAutoTurn();
+  warmHistories(cpLinks.live);
 }
 document.addEventListener('click', (e) => {
   const c = e.target.closest('.cp-chip');
