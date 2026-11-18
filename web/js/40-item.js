@@ -654,20 +654,22 @@ document.addEventListener('focusout', (e) => { if (e.target.closest('[data-issue
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideCard(); });
 
 // ---------------------------------------------------------------- restarting Clearsky
-// After an update (or `clearsky restart`), Clearsky restarts once no chat started here is
-// mid-answer or waiting on your Allow/Deny. This note says what it waits for, and Restart now
-// stops those chats (they can be continued afterwards).
+// When a restart is needed (newer code on disk after a pull, a plugin added, removed or updated,
+// a setting only read at start), this note says why. Clearsky restarts once no chat started here
+// is mid-answer or waiting on your Allow/Deny; Restart now stops those chats (they can be
+// continued afterwards). Restart and Restart now are also always in Settings → System.
 let restartInfo = null;
 async function loadRestart() {
   try { restartInfo = await getJson('/api/restart'); } catch { return; }
-  const { pending, busy = [], updateReady } = restartInfo, el = $('#restart-note');
-  el.hidden = !pending && !updateReady;
+  const { pending, busy = [], reasons = [] } = restartInfo, el = $('#restart-note');
+  el.hidden = !pending && !reasons.length;
   if (el.hidden) return;
   const list = busy.length ? `<ul>${busy.map((c) => `<li>${esc(c.title)} (${c.status === 'needs-you' ? 'waiting for your OK' : 'working'})</li>`).join('')}</ul>` : '';
+  const why = reasons.slice(0, 4).map((r) => esc(r.text)).join(', ') + (reasons.length > 4 ? ` and ${reasons.length - 4} more` : '');
   el.innerHTML = pending
     ? `<div><b>Restart waiting</b> for ${busy.length ? `${busy.length} ${AGENT} chat${busy.length > 1 ? 's' : ''} to finish:` : 'a moment…'}</div>${list}
        <div class="acts"><button class="primary" data-restart="now">Restart now</button></div>`
-    : `<div><b>Update ready.</b> Restart to use it${busy.length ? ` (waits for ${busy.length} busy chat${busy.length > 1 ? 's' : ''})` : ''}.</div>${list}
+    : `<div><b>Restart needed.</b> <span title="A restart loads these">${why}</span>${busy.length ? ` (waits for ${busy.length} busy chat${busy.length > 1 ? 's' : ''})` : ''}.</div>${list}
        <div class="acts"><button class="primary" data-restart="idle">Restart</button>${busy.length ? '<button data-restart="now">Restart now</button>' : ''}</div>`;
 }
 document.addEventListener('click', async (e) => {
@@ -682,7 +684,10 @@ document.addEventListener('click', async (e) => {
   const started = Date.now();
   let wentDown = false;
   const poll = async () => {
-    try { await fetch('/api/restart', { cache: 'no-store' }); if (wentDown || Date.now() - started > 60_000) return location.reload(); } catch { wentDown = true; }
+    try {
+      const r = await (await fetch('/api/restart', { cache: 'no-store' })).json();
+      if (wentDown || (r.startedAt && r.startedAt !== restartInfo?.startedAt) || Date.now() - started > 60_000) return location.reload(); // a new Clearsky answers
+    } catch { wentDown = true; }
     setTimeout(poll, 1000);
   };
   setTimeout(poll, 1000);

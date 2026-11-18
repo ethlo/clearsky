@@ -13,7 +13,7 @@ clearsky add ./my-plugin                          # a folder here
 clearsky add visma-flyt                               # one from the catalog: its repo, at the pinned tag
 ```
 
-Settings → Plugins does the same: paste where it comes from, **Look at it**, then **Add**. Either way Clearsky first fetches it and shows its manifest (hosts, programs, files, settings, and whether it runs in the sandbox), and nothing of the plugin has run yet: a git clone brings no hooks, and npm packages are fetched with `--ignore-scripts`. What you add is what you looked at. Clearsky loads plugins when it starts, so restart after adding one (Settings has the button).
+Settings → Plugins does the same: paste where it comes from, **Look at it**, then **Add**. Either way Clearsky first fetches it and shows its manifest (hosts, programs, files, settings, and whether it runs in the sandbox), and nothing of the plugin has run yet: a git clone brings no hooks, and npm packages are fetched with `--ignore-scripts`. What you add is what you looked at. Clearsky loads plugins when it starts, so restart after adding, removing or updating one: a **Restart needed** bar says so, with the button (also in Settings → System).
 
 Settings → Plugins lists every plugin the same way, Clearsky's own GitHub, Jira, Calendar and Links included. Each has a page with how it's doing, its logins and settings, and what it holds and reaches.
 
@@ -98,7 +98,7 @@ clearsky-weather/
 | `entry` | Its module, inside the folder. |
 | `area` | `work` or `personal` (default): which tab its page is on. |
 | `panel` | Its page: `title`, `zone` (`needs` puts its rows with what needs you, `track` keeps them on its page), `view: "table"` for an inbox, and `page: false` for a `needs` plugin whose rows need no page of their own (Slack's are in Mentions). |
-| `settings` | Fields on its page under Settings → Plugins, saved to `.env`. Only these reach the plugin. `"team": true` lets a [team pack](team-pack.md) set one (never a secret). A field can have a `pattern` (a regular expression Settings checks) with a `patternHint`, a `link` (`{ "label", "url" }`) to where you get the value, and a `type`: `"list"` or `"map"` get a row per item (a map's rows are a name and a value), saved as `a, b` and `a=x, b=y`. `item` and `valueItem` are examples shown in an empty row, and `empty` says what an empty list means. |
+| `settings` | Fields on its page under Settings → Plugins, saved to `.env`. Only these reach the plugin. `"team": true` lets a [team pack](team-pack.md) set one (never a secret). A field can have a `pattern` (a regular expression Settings checks) with a `patternHint`, a `link` (`{ "label", "url" }`) to where you get the value, and a `type`: `"list"` or `"map"` get a row per item (a map's rows are a name and a value), saved as `a, b` and `a=x, b=y`. `item` and `valueItem` are examples shown in an empty row, and `empty` says what an empty list means. `"restart": true` marks a setting your plugin reads only when Clearsky starts: changing it shows the **Restart needed** bar. |
 | `enabledWhen` | Settings that must be filled in before Clearsky fetches anything. |
 | `hosts` | All it may reach. `*.example.com` covers the subdomains. |
 | `clis` | Programs it may run through `ctx.run`. |
