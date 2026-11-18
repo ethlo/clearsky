@@ -88,6 +88,7 @@ The welcome page (`/welcome`) shows what this machine has (Node, git, gh, the CL
 - **Agent:** GitHub Copilot CLI or Claude Code, each logged in with its own login (Settings → Agent → Agent; see [The agent behind your chats](docs/agents.md)). Clearsky passes no tokens to either.
 - **Slack (optional, no token):** `clearsky add slack-mcp --trust` talks to Slack's own MCP server read only. You log in from Settings in your browser, agent chats read Slack with `door slack …`, and mentions show under Needs you. See [clearsky-slack-mcp](plugins/clearsky-slack-mcp/README.md).
 - **Confluence (optional, no token):** `clearsky add confluence` lets agent chats search and read Confluence with `confluence …`, read only, through Atlassian's MCP server. You log in from Settings in your browser; Clearsky registers itself as a client, so there's no app or token to create. Jira stays on `acli`. See [clearsky-confluence](plugins/clearsky-confluence/README.md).
+- **Jira fix versions (optional, no token):** acli can't set a ticket's fix versions, so `clearsky add jira-versions --trust` gives chats `jira-versions add 1.7.0 ABC-1 ABC-2` and `jira-versions remove …`, through Atlassian's MCP server with your browser login. Each command asks you once in the chat, showing every ticket before and after; it writes nothing else in Jira. See [clearsky-jira-versions](plugins/clearsky-jira-versions/README.md).
 
 The Settings page (`/settings`) runs `gh auth login --web` and `acli jira auth login --web` for you. Pasted tokens and URLs are written to `~/.config/clearsky/.env` (mode 600) and never shown back. The page only listens on 127.0.0.1, and changes need a per-run token, so other websites can't use it. The config is read from `./.env`, then the repo's `.env`, then `~/.config/clearsky/.env`. Real environment variables override all of them.
 
@@ -134,6 +135,12 @@ Clearsky's core is GitHub, your tracker (Jira or GitHub Issues), your calendars,
 | `visma-flyt` | Messages, forms and weekly plans from Visma Flyt Skole | [clearsky-visma-flyt](plugins/clearsky-visma-flyt/) |
 | `slack-mcp` | Slack through Slack's MCP server: mentions and read-only `door slack …` for chats, no token | [clearsky-slack-mcp](plugins/clearsky-slack-mcp/) |
 | `confluence` | Read-only Confluence search and pages for chats, through Atlassian's MCP server | [clearsky-confluence](plugins/clearsky-confluence/) |
+
+Not in the catalog yet (add it from its folder here until it has a repo):
+
+| Name | What it does | Folder |
+| --- | --- | --- |
+| `jira-versions` | Adds and removes Jira fix versions for chats, after your OK, through Atlassian's MCP server | [clearsky-jira-versions](plugins/clearsky-jira-versions/) |
 
 ```
 clearsky add slack-mcp                           # from the catalog: its repo, at the pinned tag

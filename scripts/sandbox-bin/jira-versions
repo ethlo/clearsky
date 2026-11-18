@@ -1,0 +1,4 @@
+#!/usr/bin/env node
+// `jira-versions …` in Clearsky's sandbox: the Jira versions plugin's door (plugins/clearsky-jira-versions),
+// which adds and removes fix versions through Clearsky, which holds the Atlassian login. Asks you first.
+require('./shim.js').viaClearsky('jira-versions', process.argv.slice(2));
