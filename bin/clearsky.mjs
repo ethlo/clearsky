@@ -32,12 +32,12 @@ import { Watchdog, watchdogSettings, nudgeText, REASONS as NUDGE_REASONS, AUTO_M
 import { logWrite, readWrites } from '../lib/agent-log.mjs';
 import { redact } from '../lib/redact.mjs';
 import { checkFolder } from '../lib/chat-folders.mjs';
-import { fileRoots, checkFileRef, findFiles, fileRefLine } from '../lib/file-refs.mjs';
+import { checkFileRef, findFiles, fileRefLine } from '../lib/file-refs.mjs';
 import * as memory from '../lib/memory.mjs';
 import { sshHosts } from '../lib/ssh-hosts.mjs';
 import { buildRepos } from '../lib/builds.mjs';
 import { allCreditRecords, creditTotals, costRates, costOf, liveRate } from '../lib/credit-usage.mjs';
-import { disclosureLine, disclosureFields, creditSplit, DISCLOSE_HINT } from '../lib/disclosure.mjs';
+import { disclosureLine, disclosureFields, creditSplit } from '../lib/disclosure.mjs';
 import { parseReviewArgs, changeOf, reviewPrompt, writeBaseFiles, reviewDecision, USAGE as REVIEW_USAGE } from '../lib/review.mjs';
 import { buildMap, buildKind } from '../lib/map.mjs';
 import { serveBroker, brokerSocket } from '../lib/broker.mjs';
@@ -58,30 +58,29 @@ import { edsCalendars } from '../lib/eds.mjs';
 import { joinPack, joinSummary, readTeam, exportPack, TEAM_KEYS, applyWaiting, pluginOffers } from '../lib/team.mjs';
 import { scaffoldPack, writeScaffold, nextSteps } from '../lib/team-scaffold.mjs';
 import { NEW_TASK_HINT, cleanNewTask, newTaskPrompt } from '../lib/new-task.mjs';
-import { TRACKERS, trackerHint, ghIssue } from '../lib/tracker.mjs';
+import { TRACKERS } from '../lib/tracker.mjs';
 import { reviewGate } from '../lib/review-gate.mjs';
 import { SAFE_GIT, SAFE_DIFF, localPrograms } from '../lib/safe-git.mjs';
 import * as chatScope from '../lib/chat-scope.mjs';
 import { untilde } from '../lib/util.mjs';
 import { pageHeaders, COMMON_HEADERS, crossSite } from '../lib/page-security.mjs';
-import { agentFor, AGENTS, AGENT_NAMES } from '../lib/agents.mjs';
+import { AGENTS } from '../lib/agents.mjs';
 import { readHandoffs, saveHandoffs, addHandoff, nextHandoff, settleAfterRestart, handoffPrompt, handoffResult, updateHandoff } from '../lib/handoff.mjs';
 import { srtInstalled } from '../lib/doctor.mjs';
 import { groupStandup } from '../lib/standup.mjs';
 import { ciState, isBot, openThreads, myPrStatus } from '../lib/modules/github.mjs';
 import { sortVersions } from '../lib/modules/jira.mjs';
-import { fieldsOf, nameOf, commentInfo, excerpt, PROJECT_KEY, starredProjects, versionSummary } from '../lib/modules/jira.mjs';
-import { appDir, userEnvFile, stateFile, agentLogFile, scopesFile, agentFilesFile, vpn, list, config, tracker, backend, installedAgents, reloadConfig, pluginDirs, plugins, clock, atLocalTime, isWorkday, sameDay, standupOn, nextStandup, previousStandup } from '../lib/app/config.mjs';
-import { http, execFileP, settle, ghModule, gql, reviewerOptions, requestReviews, mergePr, ghCliToken, jiraModule, REPO_NAME, starredRepos, acli, jiraSearch, jiraComments, jiraSite, browseUrl, jiraDebug, issuePreview } from '../lib/app/services.mjs';
+import { fieldsOf, nameOf, PROJECT_KEY, starredProjects, versionSummary } from '../lib/modules/jira.mjs';
+import { appDir, userEnvFile, stateFile, agentLogFile, scopesFile, agentFilesFile, vpn, list, config, tracker, backend, installedAgents, whenSettingsChange, applySettings, saveSettings, pluginDirs, plugins, clock, atLocalTime, isWorkday, sameDay, standupOn, nextStandup, previousStandup } from '../lib/app/config.mjs';
+import { http, execFileP, settle, ghModule, gql, reviewerOptions, requestReviews, mergePr, ghCliToken, jiraModule, REPO_NAME, starredRepos, jiraSearch, jiraSite, browseUrl, jiraDebug, issuePreview, ticketGoal } from '../lib/app/services.mjs';
 import { hiddenCalendars, SOURCES, BUILTIN_MANIFESTS, linksFile, moduleManifests, workItemsOf, pluginData, sourceCache, STALE_MAX, dataVersion, source, loadSourceCache, withOwn, collect, toMarkdown } from '../lib/app/work.mjs';
+import { sessionAgent, chatAgent, workspaceInfo, copilotCwd, copilotInfo, copilotTmp, copilotEnv, copilotHome, acpChats, SANDBOX_GIT, folderNotes, chatFolders, chatReadRoots, sandboxOpts, ghToken, chatRef, gitRepos, gitReposLater, cloneDirs, chatRepos, tildeHome, chatByKey, sessionsCache, keepSessions, forgetSessions, codeDirs, findCheckout, worktreeFor, prBranch, isDir, assistedAllow, copilotFolders } from '../lib/app/chat-env.mjs';
+import { doorsByName, CONTEXT_INTRO, UPDATE_INTRO, PR_HINT, trackerHints, CHOICES_HINT, memoryHint, foldersHint, buildsWhere, sandboxHintFor, MSG_MARK, typedPart, REFS_INTRO, referenceText, validRefs, copilotContext } from '../lib/app/chat-hints.mjs';
 export { userEnvFile, parseWorkdays, tracker, backend, clock, nextStandup, previousStandup } from '../lib/app/config.mjs';
 export { issuePreview } from '../lib/app/services.mjs';
 export { hiddenCalendars, planNow, moduleManifests, source, prReadKey, collect, toMarkdown } from '../lib/app/work.mjs';
-
-// The agent a chat runs in: the one it started in, else the one its rule picks.
-const sessionAgent = (id) => localState.sessionAgents(stateFile)[id] || sessionsCache?.data.find((x) => x.id === id)?.agent || null;
-const chatAgent = (id, { cwd, repos = [] } = {}) => sessionAgent(id) || agentFor({ cwd, repos: [...repos, ...(cwd ? gitRepos(cwd) || [] : [])] }, process.env);
-
+export { remoteRepo, findCheckout, worktreeFor } from '../lib/app/chat-env.mjs';
+export { JIRA_HINT, buildsWhere, buildsHint, typedPart, validRefs } from '../lib/app/chat-hints.mjs';
 export { isBot, openThreads, myPrStatus };
 let jiraProjectsCache = { at: 0, data: null }; // every Jira project you can see, for starring (Versions page)
 let ghReposCache = { at: 0, data: null }; // the same with GitHub Issues: repos you can star
@@ -246,25 +245,6 @@ async function standupCopilot(since) {
   };
 }
 
-// Where a session works: Copilot's own session folder says; for Claude Code, the session's folder.
-function workspaceInfo(id, cwd) {
-  const out = {};
-  if (sessionAgent(id) && sessionAgent(id) !== 'copilot') {
-    if (!cwd) return out;
-    const repo = gitRepos(cwd)?.[0];
-    let branch = null;
-    try { branch = execFileSync('git', ['-C', cwd, 'branch', '--show-current'], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null; } catch { /* not a repo */ }
-    return { ...(repo && { repository: repo }), ...(branch && { branch }) };
-  }
-  try {
-    for (const line of readFileSync(join(copilotHome(), 'session-state', id, 'workspace.yaml'), 'utf8').split('\n')) {
-      const m = line.match(/^(repository|branch|client_name):\s*["']?([^"'\s]+)["']?\s*$/);
-      if (m) out[m[1]] = m[2];
-    }
-  } catch { /* no workspace file */ }
-  return out;
-}
-
 // `since` overrides the start of the window (used by tests).
 export async function standup(work, since = previousStandup()) {
   const next = nextStandup();
@@ -317,22 +297,6 @@ export async function standup(work, since = previousStandup()) {
   s.summary = groupStandup(s, { clock });
   s.text = standupText(s);
   return s;
-}
-
-// A ticket's goal for `review --ticket`: its title and whole description, nothing else. A Jira
-// key, or a GitHub issue (owner/name#12).
-async function ticketGoal(ref) {
-  const gi = ghIssue(ref);
-  if (!gi) return jiraModule.ticketGoal(ref);
-  config.github.token ||= await ghCliToken();
-  const [owner, name] = gi.repo.split('/');
-  const { repository } = await gql(`query($owner: String!, $name: String!, $number: Int!) {
-    repository(owner: $owner, name: $name) { issue(number: $number) { title body issueType { name } } } }`, { owner, name, number: gi.number })
-    .catch(() => gql(`query($owner: String!, $name: String!, $number: Int!) {
-      repository(owner: $owner, name: $name) { issue(number: $number) { title body } } }`, { owner, name, number: gi.number }));
-  const i = repository?.issue;
-  if (!i) throw new Error(`${ref} not found`);
-  return { key: ref, type: i.issueType?.name || 'Issue', summary: i.title || '', description: String(i.body || '').slice(0, 12_000) };
 }
 
 // ---------------------------------------------------------------- chat outputs
@@ -470,6 +434,7 @@ function sourceDetail(p, key, data, force) {
 
 let standupCache = { at: 0, data: null };
 let buildsCache = { at: 0, data: null };
+whenSettingsChange(() => { detailCache.clear(); standupCache = { at: 0, data: null }; });
 
 // Hover-card details for one pull request.
 const prCache = new Map();
@@ -602,113 +567,12 @@ function startSourceLogin(p) {
   }).catch((e) => sourceLogins.set(p.name, { state: 'error', message: e.message }));
 }
 
-const setEnv = (values) => { for (const [k, v] of Object.entries(values)) { if (v) process.env[k] = v; else delete process.env[k]; } };
-function applySettings(values) {
-  setEnv(values);
-  if (reloadConfig()) sessionsCache = null;
-  sourceCache.clear();
-  detailCache.clear();
-  copilotInfoCache = null;
-  standupCache = { at: 0, data: null };
-}
-
-// A setting changed from the page or a card: checked, written to your settings file, and in use
-// at once. `quiet`: only the value changes and nothing is loaded again, for small switches like
-// a star.
-function saveSettings(raw, { quiet = false } = {}) {
-  const values = settings.validate(raw);
-  settings.writeEnvFile(userEnvFile, values);
-  if (quiet) setEnv(values); else applySettings(values);
-  return values;
-}
-
 // ---------------------------------------------------------------- Copilot chat
-
-const copilotCwd = () => {
-  const d = untilde(process.env.AGENT_CWD || '');
-  try { if (d && statSync(d).isDirectory()) return d; } catch { /* gone: use Clearsky's folder */ }
-  return appDir;
-};
-let copilotInfoCache = null;
-
-async function copilotInfo(force) {
-  if (!force && copilotInfoCache && Date.now() - copilotInfoCache.at < 10 * 6e4) return copilotInfoCache.data;
-  const b = backend();
-  const bin = b.find();
-  let skills = [];
-  if (bin && b.name === 'copilot') {
-    try {
-      const { stdout } = await execFileP(bin, ['skill', 'list'], { cwd: copilotCwd(), timeout: 20_000, env: copilotEnv() });
-      skills = copilot.parseSkillList(stdout);
-    } catch { /* fall back to the files below */ }
-  }
-  // Copilot lists its own; the other agents' come from their folders, as a chat may run in any.
-  const listed = skills.length ? ['copilot'] : [];
-  for (const x of copilot.listSkills(installedAgents().filter((n) => !listed.includes(n)).flatMap((n) => AGENTS[n].skillsDirs(copilotCwd())))) if (!skills.some((y) => y.name === x.name)) skills.push(x);
-  const about = (a) => ({ name: a.name, label: a.label, product: a.product, install: a.install, usage: a.usage, available: !!a.find(), models: a.models(), efforts: a.efforts });
-  const data = {
-    // Any agent will do: a chat goes to the one installed when its rule names that one.
-    available: AGENT_NAMES.some((n) => AGENTS[n].find()), bin, cwd: copilotCwd(), skills,
-    agent: about(b),
-    // Every agent, for the chat's agent picker; `rules`: whether Settings sends some chats to another.
-    agents: AGENT_NAMES.map((n) => about(AGENTS[n])),
-    rules: AGENT_NAMES.some((n) => process.env[`AGENT_${n.toUpperCase()}_FOR`]),
-    models: b.models(),
-    efforts: b.efforts,
-    permissions: Object.fromEntries(Object.entries(copilot.PERMISSIONS).map(([k, v]) => [k, v.label])),
-    permissionHints: Object.fromEntries(Object.entries(copilot.PERMISSIONS).map(([k, v]) => [k, v.hint || ''])),
-    // What a new chat starts with (Settings → Agent); the chat's pickers override them.
-    defaults: { model: process.env.AGENT_MODEL || '', effort: process.env.AGENT_EFFORT || '', permission: process.env.AGENT_PERMISSION || '' },
-  };
-  copilotInfoCache = { at: Date.now(), data };
-  return data;
-}
-
-// Copilot signs in on its own; don't hand it Clearsky's tokens.
-// copilot and srt start with `#!/usr/bin/env node`, and the app menu's PATH has no nvm Node:
-// put this Node and copilot's own folder (often another nvm version) first.
-// Copilot's own scratch folder, instead of /tmp: inside its sandbox and its trusted folders, so
-// a temporary file doesn't ask. Files older than a week go at startup.
-let scratch = null;
-function copilotTmp() {
-  if (scratch) return scratch;
-  scratch = process.env.AGENT_TMP || join(homedir(), '.cache', 'clearsky', 'tmp');
-  mkdirSync(scratch, { recursive: true, mode: 0o700 });
-  for (const f of readdirSync(scratch)) {
-    try { if (Date.now() - statSync(join(scratch, f)).mtimeMs > 7 * 864e5) rmSync(join(scratch, f), { recursive: true, force: true }); } catch { /* in use or gone */ }
-  }
-  return scratch;
-}
-
-function copilotEnv(b = backend()) {
-  const env = { ...process.env };
-  env.TMPDIR = env.TMP = env.TEMP = copilotTmp();
-  // Java ignores TMPDIR (Maven, Gradle, tests)
-  env.JAVA_TOOL_OPTIONS = `${env.JAVA_TOOL_OPTIONS ? `${env.JAVA_TOOL_OPTIONS} ` : ''}-Djava.io.tmpdir=${copilotTmp()}`;
-  for (const k of ['GITHUB_TOKEN', 'GH_TOKEN', 'SLACK_TOKEN', 'GOOGLE_CALENDAR_ICS', 'CALENDAR_ICS_URL']) delete env[k];
-  for (const p of plugins.sources.values()) for (const [k, f] of Object.entries(p.settings || {})) if (f.secret) delete env[k];
-  const bin = b.find();
-  const dirs = [bin?.includes('/') && dirname(bin), dirname(process.execPath)].filter(Boolean);
-  // acli that sends Jira text as ADF, so a description in wiki markup or Markdown shows formatted
-  // (scripts/acli-bin; in the sandbox, the broker does it).
-  const acliBin = join(appDir, 'scripts', 'acli-bin');
-  env.CLEARSKY_ACLI = config.jira.acli;
-  // Where the wrapper asks whether a ticket's PR has a reviewer before it goes to review (lib/review-gate.mjs).
-  env.CLEARSKY_URL = `http://127.0.0.1:${config.port}`;
-  // `ticket …` for any tracker (scripts/ticket-bin, lib/tracker.mjs).
-  env.CLEARSKY_TRACKER = tracker();
-  env.PATH = [...new Set([acliBin, join(appDir, 'scripts', 'ticket-bin'), ...dirs, ...(env.PATH || '').split(delimiter).filter(Boolean)])].join(delimiter);
-  return env;
-}
-
-const copilotHome = () => process.env.CLEARSKY_COPILOT_HOME || join(homedir(), '.copilot');
 
 // Slash commands Copilot last offered (its built-ins and your skills).
 let copilotCommands = null;
 const hintOwed = new Set(); // resumed chats whose first message was a command: the hint goes with the next one
 
-// Ask-mode chats keep a Copilot process running between turns, keyed by Copilot's session id.
-const acpChats = new Map();
 setInterval(() => {
   // Not one with a background job running (its VM runs it) or a nudge due (lib/watchdog.mjs).
   for (const [id, c] of acpChats) if (!c.busy && !c.waiting.size && Date.now() - c.lastUsed > 20 * 6e4 && !jobs.running(id).length && !watchdog.view(id).due) { c.agent.close(); c.vm?.stop(); acpChats.delete(id); }
@@ -728,27 +592,7 @@ function stopCopilot(chat) {
   return !!c;
 }
 
-// Inside the sandbox ssh can't get out, so git talks to GitHub over https, sending the login
-// header srt fills in (lib/sandbox.mjs, githubLogin) instead of asking a credential helper.
-// A clone's git settings can't be written in the sandbox (lib/sandbox.mjs, repoGuards), so a
-// branch's upstream isn't saved: a plain `git push` pushes the branch you're on, by its name, and
-// a new branch doesn't try to save one (which would only print an error).
-const SANDBOX_GIT = [['url.https://github.com/.insteadOf', 'git@github.com:'], ['url.https://github.com/.insteadOf', 'ssh://git@github.com/'],
-  ['credential.https://github.com.helper', ''], ['push.default', 'current'], ['branch.autoSetupMerge', 'false']];
-// What the sandbox may read besides your folders: Settings → Agent → Also readable, and
-// Clearsky's own folder (its acli for the sandbox).
-// Folders added to one chat in its side panel (lib/chat-folders.mjs), as absolute paths.
-const folderNotes = new Map(); // chat → what to tell its Copilot about a folder you added
-const chatFolders = (id) => (id ? (localState.sessionFolders(stateFile)[id] || []).filter(isDir) : []);
-// What a chat can read, for the files you point it at with @ (lib/file-refs.mjs): its folder,
-// Settings → Agent's folders (read-write and read only) and the folders added to it.
-const chatReadRoots = (id, cwd) => fileRoots([cwd || acpChats.get(id)?.cwd || copilotCwd(), ...copilotFolders(), ...list(process.env.AGENT_READ), ...chatFolders(id)], homedir());
-// Copilot's memory (lib/memory.mjs) is readable in the sandbox, not writable: notes go in through your Save.
-const sandboxOpts = (cwd, extra = []) => ({ cwd, folders: [...copilotFolders(), ...extra, copilotTmp()], home: homedir(), read: [...list(process.env.AGENT_READ), appDir, memory.memoryDir()] });
 let broker = null;
-function ghToken() {
-  try { return execFileSync('gh', ['auth', 'token'], { timeout: 10_000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null; } catch { return null; }
-}
 // Start Copilot, inside the sandbox (srt, run by Clearsky itself) when the mode or Settings →
 // Copilot says so.
 // `permission` and `model` are the chat's (Claude Code takes them as a session mode and an
@@ -1046,7 +890,6 @@ async function githubScope({ repo, nodes = [] }) {
   if (gateRules().has(`repo:${r}`)) return null; // you let this repo's everyday changes through (Settings)
   return chats.some((c) => chatRepos(c).has(r)) ? null : `goes to ${repo}, not a repo this chat works on`;
 }
-const chatRef = (c) => ({ id: c.id });
 
 // The repo of a GraphQL change, from the ids it names (looked up as you, read only).
 async function nodesRepo(ids) {
@@ -1055,38 +898,6 @@ async function nodesRepo(ids) {
     config.github.token ||= await ghCliToken();
     return repoFromNodes(await gql(NODES_REPO_QUERY, { ids }, { partial: true }));
   } catch { return null; }
-}
-// The GitHub repos a chat works on: those of its folder's git remotes (or, when it started in a
-// folder of clones, those whose branch is named after one of its tickets), the PRs it was started
-// about, and the ones you allowed in it. The remotes are the ones the folder had when the chat
-// started (lib/chat-scope.mjs): the chat can write there, so a remote or clone it adds later
-// asks first. Which branch a clone is on is looked up again after a minute.
-export const remoteRepo = (url) => (/github/i.test(url) && (url.match(/[:/]([\w.-]+\/[\w.-]+?)(?:\.git)?\/?$/) || [])[1]?.toLowerCase()) || null;
-function gitRepos(dir) {
-  try {
-    const out = execFileSync('git', ['-C', dir, 'remote', '-v'], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] });
-    return out.split('\n').map((l) => remoteRepo(l.split(/\s+/)[1] || '')).filter(Boolean);
-  } catch { return null; }
-}
-const gitReposLater = (dir) => execFileP('git', ['-C', dir, 'remote', '-v'], { timeout: 5000 })
-  .then((r) => String(r.stdout).split('\n').map((l) => remoteRepo(l.split(/\s+/)[1] || '')).filter(Boolean), () => null);
-// Clones of a repo where a push's commits may be: working chats' folders, and the clones (and
-// worktrees) in your code folders (Settings → Agent), since a chat may cd into one to push.
-function cloneDirs(repo) {
-  const r = repo?.toLowerCase(), out = [];
-  const roots = [...[...acpChats.values()].filter((c) => c.busy).flatMap((c) => [c.cwd, ...chatFolders(c.id)]), ...copilotFolders().map((d) => untilde(d))];
-  for (const root of new Set(roots)) for (const d of chatScope.clonesIn(root)) if ((gitRepos(d) || []).includes(r)) out.push(d);
-  return [...new Set(out)];
-}
-function chatRepos(c) {
-  if (!c.known || Date.now() - c.known.at > 60_000) {
-    const refs = localState.sessionRefs(stateFile)[c.id] || [];
-    const tickets = new Set([...c.tickets, ...refs.filter((k) => k.startsWith('issue:')).map((k) => k.slice(6))]);
-    const set = chatScope.scopeRepos(c.scope, { tickets, branch: (path) => chatScope.headBranch(join(c.cwd, path)) });
-    for (const k of refs) { const m = k.match(/^(?:pr|gh):([\w.-]+\/[\w.-]+)#/); if (m) set.add(m[1].toLowerCase()); }
-    c.known = { at: Date.now(), repos: set };
-  }
-  return new Set([...c.known.repos, ...c.repos]);
 }
 
 // Each sandboxed chat's VM (lib/vm.mjs), for `vm <command>`: started on first use, in the git
@@ -1147,7 +958,6 @@ export function vmMaven(maven, { masked = maskedEnv } = {}) {
 // limits, or Copilot gives up on the wait. So a long command runs as a background job
 // (lib/jobs.mjs, `bg <command>`), the chat ends its turn, and Clearsky wakes it with the result.
 // And a chat that stops before its task is done gets a nudge to go on (lib/watchdog.mjs).
-const tildeHome = (p) => (p && p.startsWith(homedir()) ? `~${p.slice(homedir().length)}` : p);
 const jobGroups = new Set(); // process groups of jobs running here, ended with Clearsky
 process.on('exit', () => { for (const pid of jobGroups) { try { process.kill(-pid, 'SIGTERM'); } catch {} } });
 // Run a command in its own process group, its output to out/err, until it ends or `signal` stops it.
@@ -1242,7 +1052,7 @@ async function pumpChat(id) {
     hintOwed.delete(id);
     const message = q.map((x) => x.text).join('\n\n');
     const prompt = owed ? `${UPDATE_INTRO}${hint}${MSG_MARK}${message}` : message;
-    sessionsCache = null;
+    forgetSessions();
     // Nobody watches yet: an open page sees the chat working and follows it (attachCopilot).
     await acpTurn({ chat: id, options, prompt, resumeId: id, cwd, emit: () => {}, res: { on() {} }, bin: info.bin, auto: true });
     for (const x of q) x.ctx.onSent?.();
@@ -1378,8 +1188,6 @@ function chatJira(c) {
   return set;
 }
 
-// The chat a sandbox door request comes from, by the key its Copilot was given.
-const chatByKey = (key) => typeof key === 'string' && key ? [...acpChats.values()].find((c) => c.agent.brokerKey === key) : null;
 function brokerWhere(key) {
   const c = chatByKey(key);
   return c && [c.cwd, ...copilotFolders().map((d) => untilde(d)), ...chatFolders(c.id)];
@@ -1424,18 +1232,6 @@ function brokerAsk({ key, tool, argv, cwd, vm = false, background = false }) {
   });
 }
 
-// Plugins' doors (lib/broker.mjs): commands chats call through Clearsky, such as `grafana …`.
-// Only from plugins that run inside Clearsky and list the door in their manifest. The door
-// decides what to ask (with the chat's card); Clearsky removes secrets from what goes back, cuts
-// it to size, and puts every call in the agent log (reads too: they're as you).
-function doorsByName() {
-  const out = new Map();
-  for (const p of plugins.sources.values()) {
-    if (p.sandboxed || !p.doors) continue;
-    for (const d of p.pluginManifest?.doors || []) if (typeof p.doors[d.name]?.run === 'function' && !out.has(d.name)) out.set(d.name, { p, door: p.doors[d.name] });
-  }
-  return out;
-}
 function pluginDoor(name) {
   const found = doorsByName().get(name);
   return found ? (req) => doorRun(found, req) : null;
@@ -1522,7 +1318,7 @@ async function reviewRun({ key, argv, cwd, signal }, out, err) {
     const id = await agent.start(root);
     reviewer = id;
     localState.setSessionName(stateFile, id, `Review: ${change.branch || 'change'} against ${change.base}`);
-    sessionsCache = null;
+    forgetSessions();
     await agent.prompt(reviewPrompt({ goal: o.goal, ticket, change, baseDir, baseFiles }));
     // Cut short by a refusal: tell it what it can read and let it finish, at most twice.
     for (let round = 0; round < 2 && !verdictOf(text) && refused.length && !agent.closed && !signal?.aborted; round++) {
@@ -1595,11 +1391,6 @@ function askInChat(c, { title, detail, advice = null }) {
     c.emit(ev);
   });
 }
-// What a sandboxed chat is told about plugins' doors (Grafana's says which environments ask).
-const doorHints = () => [...doorsByName().values()].map(({ p, door }) => {
-  if (p.enabled && !p.enabled(process.env)) return '';
-  try { const h = door.hint?.(makeContext(p).env); return h ? ` ${h}` : ''; } catch { return ''; }
-}).join('');
 
 // One prompt and its answer, changing nothing: the stand-up summary with Claude Code (Copilot
 // has `-p` for that).
@@ -1647,100 +1438,6 @@ function openCopilotSessions() {
   return open;
 }
 
-const CONTEXT_INTRO = 'You are helping me with my work. This is my work dashboard right now:';
-// A chat that goes on in a new Copilot (after a restart of Clearsky) gets the sandbox's current rules again.
-const UPDATE_INTRO = 'How the sandbox works now (this replaces what I said about it before):';
-// Clearsky shows a ```choices block as buttons (web/js/50-chat.js); a click sends the option.
-// PR descriptions are for the human reviewer: after Copilot's review rounds, theirs should be quick.
-const PR_HINT = 'When you open a PR or finish a round of work on one, write (or update with `gh api -X PATCH repos/<owner>/<repo>/pulls/<n> -F body=@<file>`; `gh pr edit` can silently drop the edit) its description '
-  + 'for the human reviewer, short and in this shape: "## What and why" (the change and the reason, with the ticket key); '
-  + '"## How it was checked" (tests you ran and their result, Copilot review rounds so far and that their findings are addressed, '
-  + 'and the CI build: once Copilot has no more findings, run the branch\'s CI build with tests, e.g. `gh workflow run <workflow> --ref <branch>` '
-  + 'or the run for the latest commit, follow it to the end with `gh run watch`, fix and rerun if it fails, and link the run); '
-  + '"## For the reviewer" (anything still open, decisions worth a second look, where the risk is; "Nothing open" if so). '
-  + 'Facts only, no filler; keep any PR template\'s headings and fill them the same way.';
-// Jira Cloud shows wiki markup sent as text literally ("h3. Goal"); Clearsky's acli turns the
-// text into ADF (lib/to-adf.mjs), so Copilot writes plain Markdown and leaves the format to it.
-export const JIRA_HINT = 'When you write a Jira description or comment with `acli`, write it in Markdown (`## Heading`, `- item`, `1. step`, '
-  + '`**bold**`, `` `code` ``, ``` fences, `[text](url)`), not Jira wiki markup (`h3.`, `{{code}}`), and don\'t build ADF JSON yourself. Pass it with `--description` or '
-  + '`--body`; for longer text, write it to a file in this folder or in $TMPDIR (not /tmp) and use `--description-file` or `--body-file` (also to edit one: `ticket comment <KEY> --edit <id> --body-file <file>`, or `comment update … --body-file`).'
-  + ' Clearsky turns the text into ADF and hands acli the file and flag it needs, with the path made absolute, so the headings and lists '
-  + 'show as such. If a ticket still shows raw Markdown, say so instead of working around it.';
-// Where tickets live, for every chat, and for Jira how to write to it.
-const trackerHints = (t = tracker()) => (t === 'jira' ? `${trackerHint('jira')} ${JIRA_HINT}` : trackerHint(t));
-const CHOICES_HINT = 'When you need me to choose (an approach, a next step, yes or no), ask once, at the end of your answer, as a block I can click:\n'
-  + '```choices\nThe question, in one line\n- First option (recommended) | what happens if I pick it\n- Second option | what happens\n```\n'
-  + 'Two to four options, the one you recommend first. Then stop and wait for my pick.';
-// Long-term memory: where it is, and how to suggest a note (a ```remember block, saved only by you).
-const memoryHint = () => { const f = memory.memoryFile(); return memory.memoryHint(f, memory.readMemory(f)); };
-// Where my code is, so Copilot looks there first instead of listing my home and asking for it.
-function foldersHint() {
-  const tilde = (p) => (p.startsWith(homedir()) ? `~${p.slice(homedir().length)}` : p);
-  const rw = copilotFolders().map(tilde), ro = list(process.env.AGENT_READ).map(tilde);
-  if (!rw.length && !ro.length) return `For temporary files use $TMPDIR (${tilde(copilotTmp())}), not /tmp: /tmp here is this chat's own, kept in memory, and nothing outside the sandbox sees it.`;
-  return `My code is in ${rw.join(', ') || 'this folder'}${ro.length ? ` (and, read only, ${ro.join(', ')})` : ''}. `
-    + 'Find repos and files there or in the current folder; don\'t list or search the rest of my home. '
-    + 'If you need something outside these folders, say what and why first. '
-    + `For temporary files use $TMPDIR (${tilde(copilotTmp())}), not /tmp: /tmp here is this chat's own, kept in memory, and nothing outside the sandbox sees it.`;
-}
-// Where a sandboxed chat runs builds and tests (Settings → Agent → Run builds in): the chat's
-// VM when this machine has one, so a full build doesn't take your laptop's CPU; or the sandbox,
-// with the VM only for tests that need Docker. The sandbox fences files and network, not CPU: a
-// build in it runs on this machine, as you, and the VMs view only sees it as sandbox load.
-export const buildsWhere = (setting = process.env.AGENT_BUILDS, vmOk = vmSupport().ok) => (vmOk && setting !== 'sandbox' ? 'vm' : 'sandbox');
-const VM_ABOUT = 'It runs in this chat\'s own VM, in the same folder, with Docker and without asking me; the first one starts the VM, and it '
-  + 'stays up for the next ones. If other chats use the VMs, it waits in line for one and says so: let it wait. Images named in Settings (my private ones) are copied in from my own Docker before each `vm` command; if a test needs a private image the VM can\'t pull, tell me which instead of working around it. It sees only this repo (read-write), my JDKs, and my Maven repository and wrapper downloads (read only: the repository at /host/m2, already Maven\'s fallback repository, and ~/.m2/wrapper; don\'t copy them). If a `vm` run fails for another reason, tell me what failed instead of working around the VM. ';
-export function buildsHint(where = buildsWhere()) {
-  if (where === 'vm') {
-    return 'Run every build and test in this chat\'s VM, never directly in the sandbox: `vm <command>` (for example `vm ./mvnw verify -pl core`), '
-      + 'or `bg vm <command>` when it takes more than a few minutes. That covers compiling, `mvn`/`./mvnw`, Gradle, `npm test`/`npm run build`, '
-      + '`make` and the like. The sandbox runs on my laptop and shares its CPU, so a build there slows down everything I do; the VM has its own cores, and Docker, so Testcontainers work there too. '
-      + VM_ABOUT
-      + 'Only if `vm` says there is no VM, run the build in the sandbox instead. Never use `outside` for builds or for failures (fix those, or ask me), and don\'t quote arguments you don\'t need to. ';
-  }
-  return 'There is no Docker in the sandbox. Tests that need it (Testcontainers) fail with errors like "Ryuk is unreachable" or '
-    + '"Could not find a valid Docker environment": run that test command as `vm <command>` (for example `vm ./mvnw verify -pl core`). '
-    + VM_ABOUT
-    + 'If `vm` says there is no VM, use `outside <command>` instead, which runs it on my machine after '
-    + 'I OK it. Builds and tests run fine in the sandbox (Maven, its repository and your JDKs are there): always run them normally '
-    + 'first, and use `vm` only after a run in the sandbox failed with one of those Docker errors. Never use `outside` for other '
-    + 'failures (fix those, or ask me), and don\'t quote arguments you don\'t need to. ';
-}
-// How the sandbox works for Copilot, and its doors out (lib/broker.mjs).
-const SANDBOX_HINT = 'You run in a sandbox: everything inside it runs without asking me. git and gh work as usual, except that a clone\'s '
-  + 'git settings and hooks can\'t be changed here (no `git config`, no `git remote add`, no saved upstream): push and pull by name, like '
-  + '`git push origin HEAD`, and use `outside git config …` if a setting has to change. Reading GitHub '
-  + 'goes through, while a push or any GitHub change (a PR, a comment, a review) waits at the sandbox\'s network until I click Allow, '
-  + 'and fails with "declined" if I don\'t.{{trackerDoor}} Your built-in GitHub tools are off here. '
-  + '{{builds}}'
-  + 'Before you open a pull request, run `review --ticket <ticket>` (or `review --goal "<what it is for>"` without a ticket; `--base <branch>` '
-  + 'when it doesn\'t go to the default branch): a fresh reviewer that sees only the goal and the code reviews your change. Give it the goal only, '
-  + 'never your reasoning. Fix what holds up, say why you skip the rest, and run it again until it says "VERDICT: ready" (three rounds at most). '
-  + 'Anything that takes more than a few minutes (a full build, a `vm` test run, waiting for CI with `gh run watch <id> --exit-status`) '
-  + 'runs as a background job: `bg <command>` in the sandbox, `bg vm <command>` in the VM, `bg outside <command>` on my machine after my OK. '
-  + 'It answers at once with the job\'s id; then end your turn, saying what you wait for. Clearsky wakes you here with the result and the end of '
-  + 'its output when it ends, so a long wait never ends your work. `jobs` lists this chat\'s jobs, `jobs log <id>` shows output so far, '
-  + '`jobs stop <id>` stops one. Never wait with sleep loops. '
-  + 'Only hosts on the sandbox\'s list are reachable. A request to any other host waits while Clearsky asks me; if it fails as '
-  + '"blocked by network allowlist" or "declined", don\'t carry on from memory or guesses: say which host you need and why, and end your turn. '
-  + 'When I allow it, Clearsky tells you here and you try again. Sending data to a host I allowed asks me again. '
-  + 'Maven finds the proxy and my repository logins in the settings Clearsky passes in MAVEN_ARGS, in the sandbox and in the VM: keep them (no `-s` or proxy flags of your own). '
-  + 'The logins are never visible to you (the settings hold a stand-in that the proxy swaps on the way out), so don\'t look for them or copy artifacts around; '
-  + 'if a private repository still answers 401 or 403, or its host asks to be allowed, say which host and stop. '
-  + 'A 407 from the proxy means a tool skipped the proxy\'s login: say so and which host, don\'t work around it. '
-  + 'If you stop before the task is done, Clearsky nudges you to go on; when you are done, or need me, say so plainly.';
-const sandboxHintFor = (permission) => (process.env.AGENT_SANDBOX === 'srt' || permission === 'sandboxed'
-  ? `\n\n${SANDBOX_HINT.replace('{{builds}}', buildsHint()).replace('{{trackerDoor}}', tracker() === 'jira' ? ' Jira changes with `acli` (or `ticket`) ask me the same way.' : '')}${doorHints()}${process.env.AGENT_DISCLOSE === 'on' ? ` ${DISCLOSE_HINT}` : ''}` : '');
-// What you typed, without the dashboard and references Clearsky added in front.
-const MSG_MARK = '\n\n---\nMy message:\n';
-export function typedPart(text) {
-  const at = text.lastIndexOf(MSG_MARK);
-  if (at >= 0 && (text.startsWith(CONTEXT_INTRO) || text.startsWith(REFS_INTRO) || text.startsWith(UPDATE_INTRO))) return text.slice(at + MSG_MARK.length);
-  if (text.startsWith(CONTEXT_INTRO)) return text.slice(text.lastIndexOf('\n\n---\n\n') + 7); // chats from before the marker
-  return text;
-}
-
-let sessionsCache = null;
 // A session started here is named after the dashboard and items Clearsky put in front of
 // your message; show what you typed instead (and never match PRs or tickets on the rest).
 export function sessionTitle(title, typed) {
@@ -1760,7 +1457,7 @@ async function copilotSessions(_bin, force) {
   const titles = localState.sessionTitles(stateFile), names = localState.sessionNames(stateFile);
   const data = list.map((x) => ({ id: x.sessionId, agent: x.agent, title: names[x.sessionId] || sessionTitle(x.title, titles[x.sessionId]), cwd: x.cwd || null, updatedAt: x.updatedAt || null }))
     .sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0));
-  sessionsCache = { at: Date.now(), data };
+  keepSessions(data);
   return withStatus(data);
 }
 
@@ -1889,117 +1586,12 @@ async function copilotHistory(_bin, id, cwd) {
   return messages;
 }
 
-// The local clone of a GitHub repository, so Copilot can work in it: a folder under
-// CLEARSKY_CODE_DIRS (default ~/dev), up to three levels down, whose origin is that repo.
-const codeDirs = () => (process.env.CLEARSKY_CODE_DIRS || join(homedir(), 'dev')).split(':').filter(Boolean);
-export function findCheckout(repo, roots = codeDirs()) {
-  const name = repo.split('/')[1]?.toLowerCase();
-  const matches = (dir) => {
-    try { return new RegExp(`[:/]${repo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\.git)?\\s*$`, 'im').test(readFileSync(join(dir, '.git', 'config'), 'utf8')); } catch { return false; }
-  };
-  const walk = (dir, depth) => {
-    let entries = [];
-    try { entries = readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory() && !e.name.startsWith('.') && e.name !== 'node_modules'); } catch { return null; }
-    for (const e of entries) if (e.name.toLowerCase() === name && matches(join(dir, e.name))) return join(dir, e.name);
-    if (depth > 0) for (const e of entries) { const hit = walk(join(dir, e.name), depth - 1); if (hit) return hit; }
-    return null;
-  };
-  for (const root of roots) { const hit = walk(root, 2); if (hit) return hit; }
-  return null;
-}
-
-// The worktree of a clone that has this branch checked out, if there is one
-// (read from .git/worktrees/*/HEAD and gitdir, so no git process is needed).
-export function worktreeFor(clone, branch) {
-  if (!branch) return null;
-  const base = join(clone, '.git', 'worktrees');
-  let names = [];
-  try { names = readdirSync(base); } catch { return null; }
-  for (const n of names) {
-    try {
-      if (readFileSync(join(base, n, 'HEAD'), 'utf8').trim() !== `ref: refs/heads/${branch}`) continue;
-      const dir = dirname(resolve(base, n, readFileSync(join(base, n, 'gitdir'), 'utf8').trim()));
-      if (statSync(dir).isDirectory()) return dir;
-    } catch { /* a stale worktree entry */ }
-  }
-  return null;
-}
-
-// The head branch of a PR, from what the GitHub source last fetched.
-function prBranch(ref) {
-  if (ref.branch) return ref.branch;
-  const gh = sourceCache.get('github')?.data || {};
-  return [...(gh.myPrs || []), ...(gh.reviewRequested || [])].find((p) => p.repo === ref.repo && p.number === ref.number)?.branch || null;
-}
-
-const isDir = (d) => { try { return typeof d === 'string' && d.startsWith('/') && statSync(d).isDirectory(); } catch { return false; } };
-
-// Fuller details of the PRs and tickets you attach to a Copilot message.
-const REFS_INTRO = 'I am asking about these items:';
-async function referenceText(ref) {
-  if (ref.kind === 'issue') {
-    await jiraSite();
-    const [out, comments] = await Promise.all([
-      acli(['workitem', 'view', ref.key, '--fields', 'summary,status,assignee,reporter,priority,issuetype,description,labels', '--json']),
-      jiraComments(ref.key).catch(() => []),
-    ]);
-    const f = out?.fields || out || {};
-    const desc = f.description ? excerpt(commentInfo(f.description).text, null, 4000) : '';
-    return [`## Jira ${ref.key}: ${f.summary || ''}`, browseUrl({ key: ref.key, self: out?.self }),
-      `Type: ${nameOf(f.issuetype) || '?'} · Status: ${nameOf(f.status) || '?'} · Priority: ${nameOf(f.priority) || '-'} · Assignee: ${f.assignee?.displayName || 'unassigned'} · Reporter: ${f.reporter?.displayName || '?'}`,
-      desc && `Description: ${desc}`,
-      comments.length && `Latest comments:\n${comments.slice(-5).map((c) => `- ${c.author?.displayName || '?'} (${String(c.created || '').slice(0, 10)}): ${excerpt(commentInfo(c.body).text, null, 600)}`).join('\n')}`,
-    ].filter(Boolean).join('\n');
-  }
-  config.github.token ||= await ghCliToken();
-  const [owner, name] = ref.repo.split('/');
-  if (ref.kind === 'gh') {
-    const { repository } = await gql(`query($owner: String!, $name: String!, $number: Int!) {
-      repository(owner: $owner, name: $name) { issue(number: $number) {
-        title url state bodyText author { login } assignees(first: 5) { nodes { login } } labels(first: 10) { nodes { name } }
-        comments(last: 5) { nodes { author { login } createdAt bodyText } } } } }`, { owner, name, number: Number(ref.number) });
-    const i = repository?.issue;
-    if (!i) throw new Error(`${ref.repo}#${ref.number} not found`);
-    return [`## GitHub issue ${ref.repo}#${ref.number}: ${i.title}`, i.url,
-      `By ${i.author?.login || '?'} · ${i.state.toLowerCase()} · assignees: ${i.assignees.nodes.map((a) => a.login).join(', ') || 'none'}${i.labels.nodes.length ? ` · labels: ${i.labels.nodes.map((l) => l.name).join(', ')}` : ''}`,
-      i.bodyText && `Description: ${i.bodyText.trim().slice(0, 4000)}`,
-      i.comments.nodes.length && `Latest comments:\n${i.comments.nodes.map((c) => `- ${c.author?.login || '?'} (${String(c.createdAt).slice(0, 10)}): ${c.bodyText.replace(/\s+/g, ' ').slice(0, 600)}`).join('\n')}`,
-    ].filter(Boolean).join('\n');
-  }
-  const { repository } = await gql(`query($owner: String!, $name: String!, $number: Int!) {
-    repository(owner: $owner, name: $name) { pullRequest(number: $number) {
-      title url state isDraft reviewDecision bodyText headRefName baseRefName author { login }
-      files(first: 60) { nodes { path additions deletions } }
-      latestReviews(first: 10) { nodes { author { login } state bodyText } } } } }`,
-  { owner, name, number: Number(ref.number) });
-  const pr = repository?.pullRequest;
-  if (!pr) throw new Error(`${ref.repo}#${ref.number} not found`);
-  return [`## Pull request ${ref.repo}#${ref.number}: ${pr.title}`, pr.url,
-    `By ${pr.author?.login || '?'} · ${pr.isDraft ? 'draft' : pr.state.toLowerCase()} · review: ${(pr.reviewDecision || 'none').toLowerCase().replace(/_/g, ' ')} · ${pr.headRefName} → ${pr.baseRefName}`,
-    pr.bodyText && `Description: ${pr.bodyText.trim().slice(0, 4000)}`,
-    pr.files?.nodes?.length && `Files:\n${pr.files.nodes.map((x) => `- ${x.path} (+${x.additions} -${x.deletions})`).join('\n')}`,
-    pr.latestReviews?.nodes?.length && `Reviews:\n${pr.latestReviews.nodes.map((r) => `- ${r.author?.login}: ${r.state.toLowerCase()}${r.bodyText ? ` "${r.bodyText.replace(/\s+/g, ' ').slice(0, 300)}"` : ''}`).join('\n')}`,
-  ].filter(Boolean).join('\n');
-}
-
-export function validRefs(refs) {
-  return (Array.isArray(refs) ? refs : []).slice(0, 8).map((r) => (
-    r?.kind === 'issue' && /^[A-Z][A-Z0-9_]+-\d+$/.test(r.key) ? { kind: 'issue', key: r.key }
-      : (r?.kind === 'pr' || r?.kind === 'gh') && /^[\w.-]+\/[\w.-]+$/.test(r.repo) && /^\d+$/.test(String(r.number)) ? { kind: r.kind, repo: r.repo, number: Number(r.number) }
-        : null)).filter(Boolean);
-}
-
 function toolDetail(call = {}) {
   const input = call.rawInput;
   if (!input || typeof input !== 'object') return '';
   const text = input.command || input.path || input.url || JSON.stringify(input);
   return String(text).slice(0, 400);
 }
-
-// Folders Copilot chats may use without asking: Settings, else your code folders (~/dev).
-// Commands the sandbox's doors run without asking, like a Jira transition (Settings → Agent).
-const assistedAllow = () => list(process.env.AGENT_ASSISTED_ALLOW);
-const copilotFolders = () => (process.env.AGENT_FOLDERS ? list(process.env.AGENT_FOLDERS) : codeDirs());
 
 // Files a chat creates or edits, for its Outputs: the paths only, when the step went through.
 function noteFiles(c, u) {
@@ -2210,22 +1802,6 @@ function attachCopilot(chat, req, res) {
   const emit = (e) => { send(e); if (e.type === 'done') res.end(); };
   c.emit = emit;
   res.on('close', () => { if (c.emit === emit) c.emit = () => {}; });
-}
-
-// A compact view of what's on the dashboard right now, from the cache (no new fetches).
-function copilotContext() {
-  const get = (n) => sourceCache.get(n)?.data || {};
-  const g = get('github'), j = get('jira'), jm = get('jiraMentions'), cal = get('calendar');
-  const pr = (p) => `${p.repo}#${p.number} ${p.title}`;
-  const lines = [
-    `Now: ${new Date().toString()}`,
-    g.reviewRequested?.length && `Reviews requested from me:\n${g.reviewRequested.map((p) => `- ${pr(p)} (by ${p.author}, ${p.url})`).join('\n')}`,
-    g.myPrs?.length && `My open PRs:\n${g.myPrs.map((p) => `- ${pr(p)}: ${p.status.label} (${p.url})`).join('\n')}`,
-    jm.tickets?.length && `Jira tickets where I was mentioned:\n${jm.tickets.map((t) => `- ${t.key} ${t.summary}: ${t.people.join(', ')} said "${t.excerpt}"`).join('\n')}`,
-    j.assigned?.length && `My Jira issues:\n${j.assigned.slice(0, 40).map((i) => `- ${i.key} ${i.summary} [${i.status}${i.priority ? `, ${i.priority}` : ''}]`).join('\n')}`,
-    cal.events?.length && `Calendar (today and tomorrow):\n${cal.events.map((e) => `- ${e.start} to ${e.end} ${e.title}`).join('\n')}`,
-  ].filter(Boolean);
-  return lines.join('\n\n');
 }
 
 // "1h", "3h", "tomorrow" (the next workday's stand-up), "week", a YYYY-MM-DD date (that
@@ -2702,7 +2278,7 @@ function serve() {
           const { id, title } = await readJson(req);
           if (!/^[\w-]{8,64}$/.test(String(id || '')) || typeof title !== 'string' || !title.trim()) return json(res, 400, { error: 'bad session or title' });
           localState.setSessionName(stateFile, id, title.trim().split('\n')[0]);
-          sessionsCache = null;
+          forgetSessions();
           return json(res, 200, { ok: true });
         }
         // Ask people to review one of your PRs, as you (through your GitHub login).
@@ -2849,7 +2425,7 @@ function serve() {
           res.on('close', linkRefs);
           if (cwd !== (body.cwd || copilotCwd())) emit({ type: 'cwd', cwd });
           if (itemName) emit({ type: 'title', title: itemName });
-          sessionsCache = null;
+          forgetSessions();
           try {
             const named = [...String(message).matchAll(/\b([A-Z][A-Z0-9_]+)-\d+\b/g)].map((m) => ({ kind: 'issue', key: m[0] }));
             watchdog.userMessage(body.session); // a message from you: a new task, so a fresh count of nudges
