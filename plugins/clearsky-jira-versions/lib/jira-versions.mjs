@@ -64,6 +64,7 @@ const PICK = {
   sites: [/^getAccessibleAtlassianResources$/, /accessible.*resources|atlassian.*(sites|resources)/i],
   read: [/^getJiraIssue$/, /^get.*jira.*issue$/i],
   edit: [/^editJiraIssue$/, /^(edit|update).*jira.*issue$/i],
+  search: [/^searchJiraIssuesUsingJql$/, /^search.*jira.*jql$/i],
 };
 export function pickTool(tools = [], step) {
   for (const re of PICK[step] || []) {
@@ -144,24 +145,54 @@ export function shapeOf(r) {
   const j = r?.structuredContent ?? jsonIn(resultText(r));
   if (j && typeof j === 'object') {
     const keys = (o) => (Array.isArray(o) ? `a list of ${o.length}` : `keys ${Object.keys(o).slice(0, 15).join(', ')}`);
-    const f = j.fields || j.issue?.fields;
-    return `JSON with ${keys(j)}${f && typeof f === 'object' ? `; fields has ${keys(f)}` : ''}`;
+    const f = j.fields || j.issue?.fields || j.data?.fields;
+    return `JSON with ${keys(j)}${j.data && typeof j.data === 'object' && !Array.isArray(j.data) ? `; data has ${keys(j.data)}` : ''}${f && typeof f === 'object' ? `; fields has ${keys(f)}` : ''}`;
   }
   const text = resultText(r);
   return text ? `text (not JSON), ${text.split('\n').length} lines` : 'nothing';
 }
 
-// The ways to ask for a ticket's fix versions, tried in turn until one gives them: the first
-// that works is used from then on. Atlassian's server answers in Markdown by default and then
-// leaves fixVersions out of `fields`.
-export const READS = [
-  { fields: ['fixVersions'], json: true },
-  { fields: ['fixVersions'], json: true, asString: true },
-  { fields: ['fixVersions'], json: true, byKeys: true },
-  { json: true },
-  { fields: ['*all'], json: true },
-  { fields: ['fixVersions'] },
-];
+// The ways to ask for a ticket's fix versions, built from the tools' schemas and tried in turn
+// until one gives them; the first that works is used from then on. Atlassian's server answers in
+// Markdown by default and then sends `fields` empty, so each response format the schema lists
+// (Markdown last) is tried, with each `view` it lists, then JQL search for the one ticket.
+// Each way: { tool, args, key(args, key) } with the ticket key put in last.
+const enumOf = (tool, k) => (Array.isArray(tool?.inputSchema?.properties?.[k]?.enum) ? tool.inputSchema.properties[k].enum.map(String) : null);
+const FORMAT_KEYS = ['responseContentFormat', 'responseFormat', 'contentFormat', 'format'];
+export function waysFor(read, search = null, { cloudId = null, max = 16 } = {}) {
+  const ways = [], seen = new Set();
+  const add = (tool, args, key) => {
+    if (!tool) return;
+    const props = tool.inputSchema?.properties || {};
+    const clean = Object.fromEntries(Object.entries(args).filter(([k, v]) => v !== undefined && Object.prototype.hasOwnProperty.call(props, k)));
+    const id = `${tool.name} ${JSON.stringify(clean)}`;
+    if (seen.has(id) || ways.length >= max) return;
+    seen.add(id);
+    ways.push({ tool, args: clean, key });
+  };
+  const formats = (tool) => {
+    const k = FORMAT_KEYS.find((x) => Object.prototype.hasOwnProperty.call(tool?.inputSchema?.properties || {}, x));
+    if (!k) return [{}];
+    const e = enumOf(tool, k);
+    const vals = e ? [...e.filter((x) => !/markdown/i.test(x)).sort((x, y) => (/json/i.test(y) - /json/i.test(x)) || (/adf/i.test(y) - /adf/i.test(x))), ...e.filter((x) => /markdown/i.test(x))] : ['adf', 'json'];
+    return [...vals.map((v) => ({ [k]: v })), {}];
+  };
+  const views = (tool) => [...(enumOf(tool, 'view') || []).map((v) => ({ view: v })), {}];
+  const fieldsAs = (tool, list) => (tool?.inputSchema?.properties?.fields?.type === 'string' ? list.join(',') : list);
+  const only = (tool, o) => Object.fromEntries(Object.entries(o).filter(([k]) => Object.prototype.hasOwnProperty.call(tool.inputSchema?.properties || {}, k)));
+  const inRead = (args, k) => ({ ...args, ...only(read, { issueIdOrKey: k, issueKey: k, key: k }) });
+  const base = { cloudId: cloudId ?? undefined };
+  for (const f of formats(read)) add(read, { ...base, fields: fieldsAs(read, ['fixVersions']), ...f }, inRead);
+  for (const v of views(read)) for (const f of formats(read)) add(read, { ...base, fields: fieldsAs(read, ['fixVersions']), ...v, ...f }, inRead);
+  for (const f of formats(read)) add(read, { ...base, fields: fieldsAs(read, ['fixVersions']), fieldsByKeys: true, ...f }, inRead);
+  for (const f of formats(read)) add(read, { ...base, ...f }, inRead);
+  for (const f of formats(read)) add(read, { ...base, fields: fieldsAs(read, ['*all']), ...f }, inRead);
+  // Search by JQL for just that ticket: some servers send more fields there. Always tried, cap or not.
+  const reads = ways.splice(0);
+  const inSearch = (args, k) => ({ ...args, jql: `key = ${k}` });
+  for (const f of formats(search)) add(search, { ...base, fields: fieldsAs(search, ['fixVersions']), maxResults: 1, ...f }, inSearch);
+  return [...reads.slice(0, Math.max(1, max - ways.length)), ...ways];
+}
 
 // The fix versions after the change, and whether anything changed. Names match as Jira's do,
 // ignoring case and spaces around them; versions kept are sent by id, new ones by name.
@@ -209,7 +240,7 @@ export function sitesOf(r) {
 
 // Runs a checked command with an MCP client ({ listTools(), callTool(name, args) }).
 // `ask(detail)` resolves true when you allowed the change in the chat.
-export function createVersions({ client, site = () => null, clearskySite = () => null, keepSite = () => {}, memo = { read: 0 } }) {
+export function createVersions({ client, site = () => null, clearskySite = () => null, keepSite = () => {}, memo = { read: null }, scope = () => '' }) {
   let toolsAt = 0, tools = null;
   const list = async () => {
     if (!tools || Date.now() - toolsAt > 10 * 60_000) { tools = await client.listTools(); toolsAt = Date.now(); }
@@ -249,37 +280,40 @@ export function createVersions({ client, site = () => null, clearskySite = () =>
       // Each ticket as it is now.
       const now = [];
       const target = c.keys.join(', ');
-      // What the server sends for one ticket, as it is: to see why a read fails.
-      // Each way of asking that the tool's schema makes different, the one that worked last first.
-      const seen = new Set();
-      const ways = [READS[memo.read] || READS[0], ...READS].map((w) => ({ w, args: argsFor(read, { cloudId: id, key: '', ...w }) }))
-        .filter(({ args }) => { const k = JSON.stringify(args); return !seen.has(k) && seen.add(k); });
-      const readOne = (key, args) => client.callTool(read.name, { ...args, ...argsFor(read, { key }) });
+      const search = pickTool(ts, 'search');
+      const ways = waysFor(read, search, { cloudId: id });
+      for (const w of ways) w.id = `${w.tool.name} ${JSON.stringify(w.args)}`;
+      // The way that worked last goes first (kept as you go, ticket by ticket).
+      const ordered = () => (memo.read ? [...ways.filter((w) => w.id === memo.read), ...ways.filter((w) => w.id !== memo.read)] : ways);
+      const readOne = (w, key) => client.callTool(w.tool.name, w.key(w.args, key));
+      const label = (w) => `${w.tool.name} ${JSON.stringify({ ...w.args, cloudId: undefined })}`;
+      // What the server sends for one ticket, each way it can be asked: to see why a read fails.
       if (c.cmd === 'raw') {
-        const out = [`${read.name} takes ${Object.keys(read.inputSchema?.properties || {}).join(', ')}`];
+        const schema = (t) => `${t.name} takes ${Object.entries(t.inputSchema?.properties || {}).map(([k, v]) => `${k}${v?.type ? `:${v.type}` : ''}${Array.isArray(v?.enum) ? `(${v.enum.join('|')})` : ''}`).join(', ')}`;
+        const out = [schema(read), ...(search ? [schema(search)] : []), `login scopes: ${scope() || '(not recorded)'}`, ''];
         let first = null;
-        for (const { args } of ways) {
-          const r = await readOne(c.keys[0], args);
+        for (const w of ways) {
+          const r = await readOne(w, c.keys[0]);
           const f = r?.isError ? null : fixVersionsOf(r);
-          out.push(`${JSON.stringify({ ...args, cloudId: undefined, issueIdOrKey: undefined })} → ${r?.isError ? `error: ${said(r).slice(0, 200)}` : f ? `fix versions: ${names(f)}` : `none found (${shapeOf(r)})`}`);
+          out.push(`${label(w)} → ${r?.isError ? `error: ${said(r).slice(0, 200)}` : f ? `fix versions: ${names(f)}` : `none found (${shapeOf(r)})`}`);
           if (!first && f) first = r;
         }
-        const r = first || await readOne(c.keys[0], ways[0].args);
+        const r = first || await readOne(ways[0], c.keys[0]);
         const text = resultText(r) || JSON.stringify(r?.structuredContent ?? r ?? null);
         return { code: 0, stdout: `${out.join('\n')}\n\n${text.length > 20_000 ? `${text.slice(0, 20_000)}\n… (cut)` : text}`, stderr: '', decided: 'read', target };
       }
       for (const key of c.keys) {
         let r = null, had = null, answered = null, failed = null;
-        for (const { w, args } of ways) {
-          r = await readOne(key, args);
+        for (const w of ordered()) {
+          r = await readOne(w, key);
           if (r?.isError) { failed ||= r; continue; }
           answered = r;
           had = fixVersionsOf(r);
-          if (had) { memo.read = READS.indexOf(w); break; }
+          if (had) { memo.read = w.id; break; }
         }
         if (!answered) { now.push({ key, error: `Jira said: ${said(failed)}` }); continue; }
         r = had ? r : answered;
-        now.push(had ? { key, had } : { key, error: `couldn't find its fix versions in what Jira sent (${shapeOf(r)}); \`jira-versions raw ${key}\` shows each way it asked` });
+        now.push(had ? { key, had } : { key, error: `couldn't find its fix versions in what Jira sent, asked ${ways.length} ways (${shapeOf(r)}); \`jira-versions raw ${key}\` shows each` });
       }
       if (c.cmd === 'show') {
         const out = now.map((t) => (t.error ? `${t.key}: ${t.error}` : `${t.key}: ${names(t.had)}`)).join('\n');
@@ -348,8 +382,8 @@ export function createJiraVersionsMcp({ lends, store, open = (u) => lends.openUr
     }
     return { listTools: () => client.tools(), callTool: (n, a) => client.callTool(n, a) };
   }
-  const memo = { read: 0 }; // the way of reading that worked, kept while Clearsky runs
-  const versions = () => createVersions({ client: mcp(), memo, site: () => opts.site || store.get()?.site || null, clearskySite: () => lends.jiraSite?.(), keepSite: (site) => { const t = store.get(); if (t) store.set({ ...t, site }); } });
+  const memo = { read: null }; // the way of reading that worked, kept while Clearsky runs
+  const versions = () => createVersions({ client: mcp(), memo, scope: () => store.get()?.scope || '', site: () => opts.site || store.get()?.site || null, clearskySite: () => lends.jiraSite?.(), keepSite: (site) => { const t = store.get(); if (t) store.set({ ...t, site }); } });
 
   return {
     use,

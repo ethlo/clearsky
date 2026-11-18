@@ -9,7 +9,7 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseCommand, pickTool, fixVersionsOf, change, jiraScopes, createVersions, sitesOf, shapeOf, argsFor, REDIRECT } from '../lib/jira-versions.mjs';
+import { parseCommand, pickTool, fixVersionsOf, change, jiraScopes, createVersions, sitesOf, shapeOf, argsFor, waysFor, REDIRECT } from '../lib/jira-versions.mjs';
 import makePlugin from '../source.mjs';
 import { core } from './core.mjs';
 
@@ -85,12 +85,11 @@ test('a ticket whose fix versions it can\'t read: tries the whole ticket, then s
   const no = await v.run(parseCommand(['add', '1.7.0', 'A-1']), async () => { asked++; return true; });
   assert.equal(no.code, 1);
   assert.equal(asked, 0);
-  assert.match(no.stdout, /A-1: couldn't find its fix versions in what Jira sent \(JSON with keys key, fields; fields has keys \); `jira-versions raw A-1` shows each way it asked/);
+  assert.match(no.stdout, /A-1: couldn't find its fix versions in what Jira sent, asked 3 ways \(JSON with keys key, fields; fields has keys \); `jira-versions raw A-1` shows each/);
   assert.ok(!calls.some((c) => c.n === 'editJiraIssue'));
   const raw = await v.run(parseCommand(['raw', 'A-1']), async () => { throw new Error('raw never asks'); });
-  assert.match(raw.stdout, /^getJiraIssue takes cloudId, issueIdOrKey, fields\n\{\} → none found/, 'the way that worked last goes first');
-  assert.match(raw.stdout, /\n\{"fields":\["fixVersions"\]\} → none found \(JSON with keys key, fields; fields has keys \)\n\{"fields":"fixVersions"\} → none found/);
-  assert.match(raw.stdout, /\{\} → none found \(text \(not JSON\), 2 lines\)/);
+  assert.match(raw.stdout, /^getJiraIssue takes cloudId, issueIdOrKey, fields\nlogin scopes: \(not recorded\)\n\n/);
+  assert.match(raw.stdout, /\ngetJiraIssue \{"fields":\["fixVersions"\]\} → none found \(JSON with keys key, fields; fields has keys \)\ngetJiraIssue \{\} → none found \(text \(not JSON\), 2 lines\)\ngetJiraIssue \{"fields":\["\*all"\]\} → none found/);
 });
 
 test('Atlassian\'s server: asks for ADF when Markdown leaves fixVersions out, and keeps that way', async () => {
@@ -108,6 +107,31 @@ test('Atlassian\'s server: asks for ADF when Markdown leaves fixVersions out, an
   assert.equal(r.stdout, 'ACME-1: 1.6.7\nACME-2: 1.6.7');
   assert.deepEqual(calls[0], { cloudId: 'https://acme.atlassian.net', issueIdOrKey: 'ACME-1', fields: ['fixVersions'], responseContentFormat: 'adf' });
   assert.equal(calls.length, 2, 'one read per ticket');
+});
+
+test('the ways it asks come from the schema: each format (Markdown last), each view, then JQL search', async () => {
+  const read = { name: 'getJiraIssue', inputSchema: { properties: { cloudId: {}, issueIdOrKey: {}, fields: { type: 'array' }, fieldsByKeys: {}, view: { enum: ['basic', 'full'] }, responseContentFormat: { enum: ['markdown', 'adf'] } } } };
+  const search = { name: 'searchJiraIssuesUsingJql', inputSchema: { properties: { cloudId: {}, jql: {}, fields: {}, maxResults: {} } } };
+  const ways = waysFor(read, search, { cloudId: 'c', max: 40 });
+  const shown = ways.map((w) => `${w.tool.name === read.name ? 'get' : 'search'} ${JSON.stringify({ ...w.args, cloudId: undefined })}`);
+  assert.deepEqual(shown.slice(0, 3), ['get {"fields":["fixVersions"],"responseContentFormat":"adf"}', 'get {"fields":["fixVersions"],"responseContentFormat":"markdown"}', 'get {"fields":["fixVersions"]}']);
+  assert.ok(shown.includes('get {"fields":["fixVersions"],"view":"full","responseContentFormat":"adf"}'));
+  assert.ok(shown.includes('get {"fields":["fixVersions"],"fieldsByKeys":true,"responseContentFormat":"adf"}'));
+  assert.equal(shown.at(-1), 'search {"fields":["fixVersions"],"maxResults":1}');
+  assert.equal(new Set(shown).size, shown.length, 'each way once');
+  assert.deepEqual(ways[0].key(ways[0].args, 'ACME-1'), { cloudId: 'c', fields: ['fixVersions'], responseContentFormat: 'adf', issueIdOrKey: 'ACME-1' });
+  assert.deepEqual(ways.at(-1).key(ways.at(-1).args, 'ACME-1'), { cloudId: 'c', fields: ['fixVersions'], maxResults: 1, jql: 'key = ACME-1' });
+  assert.ok(waysFor(read, search).length <= 16, 'capped');
+
+  // Every read comes back empty, the search has them: found there, and that way is kept.
+  const calls = [];
+  const client = { listTools: async () => [read, search, { name: 'editJiraIssue', inputSchema: { properties: { cloudId: {}, issueIdOrKey: {}, fields: {} } } }],
+    callTool: async (n, a) => { calls.push(n); return { content: [{ type: 'text', text: JSON.stringify(n === search.name ? { issues: [{ key: 'ACME-1', fields: { fixVersions: [{ id: '5', name: '1.6.7' }] } }] } : { data: { key: a.issueIdOrKey, fields: {} } }) }] }; } };
+  const v = createVersions({ client, site: () => 'c', memo: { read: null } });
+  assert.equal((await v.run(parseCommand(['show', 'ACME-1', 'ACME-2']), async () => true)).stdout, 'ACME-1: 1.6.7\nACME-2: 1.6.7');
+  assert.equal(calls.filter((n) => n === search.name).length, 2);
+  assert.equal(calls.at(-1), search.name);
+  assert.equal(calls.at(-2), search.name, 'the second ticket goes straight to the way that worked');
 });
 
 // An in-memory Jira behind Atlassian-shaped tools.
