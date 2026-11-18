@@ -13,7 +13,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { homedir, availableParallelism, totalmem } from 'node:os';
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { delimiter, sep } from 'node:path';
-import { promisify } from 'node:util';
 import { randomBytes } from 'node:crypto';
 import * as settings from '../lib/settings.mjs';
 import * as localState from '../lib/state.mjs';
@@ -21,7 +20,7 @@ import * as copilot from '../lib/copilot.mjs';
 import { AcpAgent, chatEvent } from '../lib/acp.mjs';
 import { sessionEvents, sessionUsage } from '../lib/copilot-events.mjs';
 import { branchesFor } from '../lib/branches.mjs';
-import { sandboxedCommand, sandboxEnded, stopSandbox, sandboxProxy, sandboxProxyLogin, sandboxNetwork, githubLogin, maskedEnv, DEFAULT_DOMAINS, READ_DEFAULT, parseDomains } from '../lib/sandbox.mjs';
+import { sandboxedCommand, sandboxEnded, stopSandbox, sandboxProxy, sandboxProxyLogin, sandboxNetwork, githubLogin, maskedEnv, DEFAULT_DOMAINS, parseDomains } from '../lib/sandbox.mjs';
 import { HostDoor, ruleMatches } from '../lib/host-door.mjs';
 import { closeCards } from '../lib/chat-cards.mjs';
 import { VmImage, ChatVm, vmSupport, VM_DOMAINS, reapOrphans, vmsLoad } from '../lib/vm.mjs';
@@ -31,9 +30,7 @@ import { TreeLoad } from '../lib/proc-load.mjs';
 import { Jobs, jobReport, jobView, shellLine, tailOf } from '../lib/jobs.mjs';
 import { Watchdog, watchdogSettings, nudgeText, REASONS as NUDGE_REASONS, AUTO_MARK } from '../lib/watchdog.mjs';
 import { logWrite, readWrites } from '../lib/agent-log.mjs';
-import { cookieLogin } from '../lib/browser-login.mjs';
 import { redact } from '../lib/redact.mjs';
-import { vpnWatch, checkTarget } from '../lib/vpn.mjs';
 import { checkFolder } from '../lib/chat-folders.mjs';
 import { fileRoots, checkFileRef, findFiles, fileRefLine } from '../lib/file-refs.mjs';
 import * as memory from '../lib/memory.mjs';
@@ -48,13 +45,13 @@ import { mavenSandbox, sandboxCa, plainMaven, withSandboxProxy, PROXY_TOKEN_ENV 
 import { githubFilter, REGISTRY_HOSTS, GITHUB_LOG_HOSTS, SHARED_BRANCH, NODES_REPO_QUERY, repoFromNodes } from '../lib/github-gate.mjs';
 import { githubAdvice, jiraAdvice, outsideAdvice, parseRules, ruleLabel } from '../lib/advice.mjs';
 import { attentionItems, diffAttention, desktopNotify, DbusNotifier } from '../lib/notify.mjs';
-import { loadSources, makeContext, hook, asList } from '../lib/sources.mjs';
-import { loadPlugins, migrateBundled, pluginPaths, listPlugins, preparePlugin, removePlugin, updatePlugin, checkPlugin, readRegistry, withRef, changesText, catalogEntry, bundledDir, codeDir, retiredText } from '../lib/plugins.mjs';
-import { sandboxedSource, srtCli } from '../lib/plugin-sandbox.mjs';
+import { makeContext, hook, asList } from '../lib/sources.mjs';
+import { listPlugins, preparePlugin, removePlugin, updatePlugin, checkPlugin, readRegistry, withRef, changesText, catalogEntry, bundledDir, codeDir, retiredText } from '../lib/plugins.mjs';
+import { srtCli } from '../lib/plugin-sandbox.mjs';
 import { pluginItems } from '../lib/items.mjs';
 import { findBrowser, BROWSERS, openCommand } from '../lib/browser.mjs';
 import { wslInfo, isWindowsExe, windowsProfileDir, loginEnv } from '../lib/wsl.mjs';
-import { manifest as calendarManifest, createCalendar } from '../lib/modules/calendar.mjs';
+import { manifest as calendarManifest } from '../lib/modules/calendar.mjs';
 import { readLinks, saveLinks, parseBookmarks, mergeLinks } from '../lib/links.mjs';
 import { logEvent } from '../lib/event-log.mjs';
 import { startDemo, demoPort, isDemo } from '../lib/demo.mjs';
@@ -63,192 +60,36 @@ import { edsCalendars } from '../lib/eds.mjs';
 import { joinPack, joinSummary, readTeam, exportPack, TEAM_KEYS, applyWaiting, pluginOffers } from '../lib/team.mjs';
 import { scaffoldPack, writeScaffold, nextSteps } from '../lib/team-scaffold.mjs';
 import { NEW_TASK_HINT, cleanNewTask, newTaskPrompt } from '../lib/new-task.mjs';
-import { trackerName, TRACKERS, trackerHint, ghIssue } from '../lib/tracker.mjs';
+import { TRACKERS, trackerHint, ghIssue } from '../lib/tracker.mjs';
 import { reviewGate } from '../lib/review-gate.mjs';
 import { SAFE_GIT, SAFE_DIFF, localPrograms } from '../lib/safe-git.mjs';
 import * as chatScope from '../lib/chat-scope.mjs';
 import { untilde } from '../lib/util.mjs';
 import { pageHeaders, COMMON_HEADERS, crossSite } from '../lib/page-security.mjs';
-import { agentName, agentFor, AGENTS, AGENT_NAMES } from '../lib/agents.mjs';
+import { agentFor, AGENTS, AGENT_NAMES } from '../lib/agents.mjs';
 import { readHandoffs, saveHandoffs, addHandoff, nextHandoff, settleAfterRestart, handoffPrompt, handoffResult, updateHandoff } from '../lib/handoff.mjs';
 import { srtInstalled } from '../lib/doctor.mjs';
 import { ownRead, chatPushes } from '../lib/own-read.mjs';
 import { groupStandup } from '../lib/standup.mjs';
-import { manifest as githubManifest, createGitHub, workItems as githubItems, PR_FIELDS, ITEM_FIELDS, ciState, isBot, latestReviewsByUser, openThreads, humanReviewers, myPrStatus, reviewerName } from '../lib/modules/github.mjs';
+import { manifest as githubManifest, workItems as githubItems, ciState, isBot, openThreads, myPrStatus } from '../lib/modules/github.mjs';
 import { sortVersions } from '../lib/modules/jira.mjs';
-import { manifest as jiraManifest, createJira, workItems as jiraItems, mentionItems as jiraMentionItems, listOf, fieldsOf, nameOf, commentInfo, excerpt, userId, mapLimit, JIRA_WAITING, jiraMentionsByTicket, mergeJira, PROJECT_KEY, starredProjects, versionSummary } from '../lib/modules/jira.mjs';
+import { manifest as jiraManifest, workItems as jiraItems, mentionItems as jiraMentionItems, fieldsOf, nameOf, commentInfo, excerpt, jiraMentionsByTicket, mergeJira, PROJECT_KEY, starredProjects, versionSummary } from '../lib/modules/jira.mjs';
+import { appDir, userEnvFile, stateFile, agentLogFile, scopesFile, agentFilesFile, vpn, needsVpn, list, config, tracker, backend, installedAgents, reloadConfig, pluginDirs, plugins, clock, atLocalTime, isWorkday, sameDay, standupOn, nextStandup, previousStandup } from '../lib/app/config.mjs';
+import { http, execFileP, settle, ghModule, gql, reviewerOptions, requestReviews, mergePr, ghCliToken, fetchGitHub, jiraModule, REPO_NAME, starredRepos, acli, jiraSearch, jiraComments, jiraSite, browseUrl, jiraDebug, fetchJiraWork, fetchJiraMentions, issuePreview, fetchCalendar } from '../lib/app/services.mjs';
+export { issuePreview } from '../lib/app/services.mjs';
+export { userEnvFile, parseWorkdays, tracker, backend, clock, nextStandup, previousStandup } from '../lib/app/config.mjs';
 
-// ---------------------------------------------------------------- config
-
-function loadEnvFile(path) {
-  if (!existsSync(path)) return;
-  for (const line of readFileSync(path, 'utf8').split(/\r?\n/)) {
-    const m = line.match(/^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
-    if (!m || line.trim().startsWith('#')) continue;
-    let value = m[2];
-    if (/^(['"]).*\1$/.test(value)) value = value.slice(1, -1);
-    if (process.env[m[1]] === undefined) process.env[m[1]] = value;
-  }
-}
-
-const here = dirname(fileURLToPath(import.meta.url));
-export const userEnvFile = join(homedir(), '.config', 'clearsky', '.env');
-const stateFile = process.env.CLEARSKY_STATE || join(homedir(), '.config', 'clearsky', 'state.json');
-const agentLogFile = join(dirname(stateFile), 'agent-writes.jsonl');
-const scopesFile = join(dirname(stateFile), 'chat-scopes.json'); // each chat's repos, as they were when it started (lib/chat-scope.mjs)
-// Files a chat wrote or you attached to it, for its Outputs (see chatOutputs).
-const agentFilesFile = join(dirname(stateFile), 'agent-files.jsonl');
-
-// The VPN (lib/vpn.mjs): noticed, never managed. Modules listed in VPN_NEEDED_BY pause while
-// it's off, and plugins' doors (Grafana) say so. Checked against VPN_CHECK, else the first address
-// a plugin names (its vpnTargets() hook, such as your first Grafana).
-const pluginVpnTargets = () => [...(globalThis.clearskyPlugins?.sources.values() || [])].flatMap((p) => asList(hook(p, 'vpnTargets', makeContext(p).env)).filter((u) => typeof u === 'string'));
-const vpn = vpnWatch({ target: () => checkTarget(process.env, pluginVpnTargets()) });
-const needsVpn = (name) => String(process.env.VPN_NEEDED_BY || '').split(/[\s,]+/).includes(name);
-loadEnvFile(join(process.cwd(), '.env'));
-loadEnvFile(join(here, '..', '.env'));
-loadEnvFile(userEnvFile);
-
-const DAY_NAMES = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
-
-// "Mon-Fri", "Sun-Thu" or "Mon,Tue,Thu" -> set of JS weekday numbers.
-export function parseWorkdays(spec) {
-  const days = new Set();
-  for (const part of spec.toLowerCase().split(',').map((p) => p.trim()).filter(Boolean)) {
-    const [a, b] = part.split('-').map((x) => DAY_NAMES.indexOf(x.slice(0, 3)));
-    if (a < 0 || (b !== undefined && b < 0)) throw new Error(`bad workday "${part}"`);
-    if (b === undefined) { days.add(a); continue; }
-    for (let d = a; ; d = (d + 1) % 7) { days.add(d); if (d === b) break; }
-  }
-  return days;
-}
-
-const list = (v) => (v || '').split(',').map((s) => s.trim()).filter(Boolean);
-
-// Built from the environment; rebuilt when settings are saved from the page.
-const buildConfig = (env = process.env) => ({
-  days: Number(env.CLEARSKY_MENTION_DAYS || 14),
-  cacheSeconds: Number(env.CLEARSKY_CACHE_SECONDS || 120),
-  port: Number(env.CLEARSKY_PORT || 7777),
-  // Where it listens: this machine only. A container sets 0.0.0.0 and publishes the port to
-  // the host's 127.0.0.1 (see Dockerfile).
-  bind: env.CLEARSKY_BIND || '127.0.0.1',
-  github: {
-    token: env.GITHUB_TOKEN,
-    api: (env.GITHUB_API_URL || 'https://api.github.com').replace(/\/$/, ''),
-    orgs: list(env.GITHUB_ORGS),
-    ignoreAuthors: list(env.CLEARSKY_IGNORE_AUTHORS),
-    myPrsEverywhere: env.GITHUB_MY_PRS === 'all',
-  },
-  jira: {
-    acli: env.ACLI_BIN || 'acli',
-    url: (env.JIRA_URL || '').replace(/\/$/, ''), // optional: base for browse links
-    accountId: env.JIRA_ACCOUNT_ID, // optional: skips the lookup of your account id
-    assignedJql: env.JIRA_ASSIGNED_JQL ||
-      'assignee = currentUser() AND statusCategory != Done ORDER BY priority DESC, updated DESC',
-    mentionsJql: env.JIRA_MENTIONS_JQL,
-  },
-  calendar: {
-    icsUrl: env.CALENDAR_ICS_URL || env.GOOGLE_CALENDAR_ICS, // optional; Google Calendar "secret address in iCal format"
-    email: env.CALENDAR_EMAIL, // used to drop events you declined, and to find your Evolution calendar
-    evolution: env.EVOLUTION_CALENDARS, // optional; Evolution calendar names or uids to read
-  },
-  workdayEnd: env.CLEARSKY_WORKDAY_END || '17:00',
-  standupTime: env.CLEARSKY_STANDUP_TIME || '09:45', // daily stand-up (local time)
-  workdays: parseWorkdays(env.CLEARSKY_WORKDAYS || 'Mon-Fri'),
-});
-const config = buildConfig();
-// Where your tickets live (lib/tracker.mjs): 'jira', 'github' or 'none'. Worked out again when
-// settings are saved.
-let trackerMemo = null;
-export const tracker = () => (trackerMemo ||= trackerName(process.env));
-// The coding agent behind chats: Copilot or Claude Code (lib/agents.mjs). `backend()` is the
-// default one; `backend(name)` a chat's own (Settings → Agent → Use … for).
-let agentMemo = null;
-export const backend = (name) => AGENTS[name] || AGENTS[agentMemo ||= agentName(process.env)];
-// The agents installed here (the default one even when it isn't, so its error shows).
-const installedAgents = () => AGENT_NAMES.filter((n) => n === backend().name || AGENTS[n].find());
 // The agent a chat runs in: the one it started in, else the one its rule picks.
 const sessionAgent = (id) => localState.sessionAgents(stateFile)[id] || sessionsCache?.data.find((x) => x.id === id)?.agent || null;
 const chatAgent = (id, { cwd, repos = [] } = {}) => sessionAgent(id) || agentFor({ cwd, repos: [...repos, ...(cwd ? gitRepos(cwd) || [] : [])] }, process.env);
 
-// Extra sources: the plugins you added (lib/plugins.mjs; `clearsky add`, or Settings → Plugins),
-// and your own single-file ones in ~/.config/clearsky/sources/*.mjs.
-const pluginDirs = pluginPaths();
-const migrated = migrateBundled(process.env, { paths: pluginDirs });
-if (migrated.length) console.error(`clearsky: ${migrated.join(', ')} ${migrated.length === 1 ? 'is a plugin' : 'are plugins'} now, and added for you since ${migrated.length === 1 ? 'it was' : 'they were'} set up`);
-const plugins = await loadSources([process.env.CLEARSKY_SOURCES_DIR || join(homedir(), '.config', 'clearsky', 'sources')]);
-{
-  const added = await loadPlugins({ paths: pluginDirs, makeSandboxed: sandboxedSource({ root: pluginDirs.root, standupSince: () => previousStandup() }) });
-  for (const [n, p] of added.sources) {
-    if (plugins.sources.has(n)) plugins.errors.push(`plugin ${n}: a source called "${n}" is already loaded from ~/.config/clearsky/sources`);
-    else plugins.sources.set(n, p);
-  }
-  plugins.errors.push(...added.errors);
-  // A retired plugin still loads if you have its code, but says what to use instead.
-  for (const n of added.sources.keys()) { const t = retiredText(n); if (t) plugins.errors.push(t); }
-}
-for (const e of plugins.errors) console.error(`clearsky: ${e}`);
-globalThis.clearskyPlugins = plugins;
-for (const p of plugins.sources.values()) settings.addFields(p.settings, p.label, p.name);
-
-// ---------------------------------------------------------------- helpers
-
-const daysAgoIso = (d) => new Date(Date.now() - d * 864e5).toISOString().slice(0, 10);
-
-async function http(url, { headers = {}, body, method } = {}) {
-  const res = await fetch(url, {
-    method: method || (body ? 'POST' : 'GET'),
-    headers: { Accept: 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}), ...headers },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const text = await res.text();
-  if (!res.ok) {
-    // An HTML error page (a gateway's 502) says nothing more than its status.
-    const body = /^\s*</.test(text) ? '' : `: ${text.slice(0, 300)}`;
-    const err = new Error(res.status >= 500 && !body ? `${new URL(url).host} didn't answer (${res.status} ${res.statusText}); trying again at the next refresh` : `${res.status} ${res.statusText} from ${new URL(url).host}${body}`);
-    err.status = res.status;
-    throw err;
-  }
-  return text ? JSON.parse(text) : null;
-}
-
-// ---------------------------------------------------------------- GitHub and Jira (lib/modules)
-
-const execFileP = promisify(execFile);
-// A source that fails gives { error } instead of taking the others down.
-const settle = (p) => p.catch((e) => ({ error: e.message, ...(e.auth && { needsLogin: true }) }));
-
-const ghModule = createGitHub({ config, http, execFileP, daysAgoIso });
-const { gql, reviewerOptions, requestReviews, mergePr, ghCliToken } = ghModule;
-const fetchGitHub = ghModule.fetch;
 export { isBot, openThreads, myPrStatus };
-
-const jiraModule = createJira({ config, execFileP, settle });
 let jiraProjectsCache = { at: 0, data: null }; // every Jira project you can see, for starring (Versions page)
 let ghReposCache = { at: 0, data: null }; // the same with GitHub Issues: repos you can star
-const REPO_NAME = /^[\w-][\w.-]*\/[\w-][\w.-]*$/;
-const starredRepos = () => [...new Set(list(process.env.GITHUB_STARRED_REPOS).filter((r) => REPO_NAME.test(r)))];
-const { acli, jiraSearch, jiraComments, jiraSite, browseUrl, jiraDebug } = jiraModule;
-const fetchJiraWork = jiraModule.fetchWork, fetchJiraMentions = jiraModule.fetchMentions;
-export const issuePreview = (key) => jiraModule.issuePreview(key);
-
-// ---------------------------------------------------------------- Calendar (lib/modules)
-
-const fetchCalendar = createCalendar({ config }).fetch;
 
 // ---------------------------------------------------------------- Now / Next
 
 export const hiddenCalendars = () => new Set((process.env.CALENDAR_HIDDEN || '').split(',').map((n) => n.trim().toLowerCase()).filter(Boolean));
-
-// Clock times in 24-hour format unless CLEARSKY_TIME_FORMAT=12.
-export const clock = (d) => new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: process.env.CLEARSKY_TIME_FORMAT === '12' ? 'h12' : 'h23' });
-
-function atLocalTime(base, hhmm) {
-  const [h, m] = hhmm.split(':').map(Number);
-  const d = new Date(base); d.setHours(h, m || 0, 0, 0);
-  return d.getTime();
-}
 
 function reviewMinutes(p) {
   if (p.rerequested) return 15;
@@ -502,30 +343,6 @@ export async function collect(force) {
 }
 
 // ---------------------------------------------------------------- Stand-up
-
-const isWorkday = (d) => config.workdays.has(d.getDay());
-const sameDay = (a, b) => a.toDateString() === b.toDateString();
-
-function standupOn(day) {
-  const [h, m] = config.standupTime.split(':').map(Number);
-  const d = new Date(day); d.setHours(h, m || 0, 0, 0);
-  return d;
-}
-
-// The next stand-up: today's if it hasn't started more than 15 minutes ago, else the next workday's.
-export function nextStandup(now = new Date()) {
-  let d = standupOn(now);
-  if (!config.workdays.size) return d;
-  while (!isWorkday(d) || +d + 15 * 6e4 <= +now) { d.setDate(d.getDate() + 1); d = standupOn(d); }
-  return d;
-}
-
-// The stand-up before the next one; the summary covers everything since then.
-export function previousStandup(now = new Date()) {
-  const d = nextStandup(now);
-  do d.setDate(d.getDate() - 1); while (!isWorkday(d));
-  return standupOn(d);
-}
 
 async function standupGitHub(since) {
   config.github.token ||= await ghCliToken();
@@ -1078,7 +895,7 @@ const teamPlugins = () => { const t = readTeam(dirname(userEnvFile)); return t?.
 // `clearsky doctor` and the welcome page: what this machine has for Clearsky.
 const machineChecks = () => doctorChecks({ acliBin: config.jira.acli, tracker: tracker(), agent: backend(), copilotBin: backend().find(),
   calendars: () => (process.platform === 'linux' && !wslInfo() ? edsCalendars() : []), browser: () => { try { return findBrowser(process.env, { windows: true }); } catch { return null; } },
-  vm: () => vmSupport(), folders: [join(here, '..'), ...copilotFolders()] });
+  vm: () => vmSupport(), folders: [appDir, ...copilotFolders()] });
 // Nothing set up yet: no settings file of your own and no organizations from anywhere else.
 const firstRun = () => !existsSync(userEnvFile) && !process.env.GITHUB_ORGS && !isDemo();
 
@@ -1102,9 +919,7 @@ function startSourceLogin(p) {
 const setEnv = (values) => { for (const [k, v] of Object.entries(values)) { if (v) process.env[k] = v; else delete process.env[k]; } };
 function applySettings(values) {
   setEnv(values);
-  Object.assign(config, buildConfig());
-  trackerMemo = null;
-  if (agentMemo && agentMemo !== agentName(process.env)) { agentMemo = null; sessionsCache = null; }
+  if (reloadConfig()) sessionsCache = null;
   sourceCache.clear();
   detailCache.clear();
   copilotInfoCache = null;
@@ -1126,7 +941,7 @@ function saveSettings(raw, { quiet = false } = {}) {
 const copilotCwd = () => {
   const d = untilde(process.env.AGENT_CWD || '');
   try { if (d && statSync(d).isDirectory()) return d; } catch { /* gone: use Clearsky's folder */ }
-  return join(here, '..');
+  return appDir;
 };
 let copilotInfoCache = null;
 
@@ -1190,13 +1005,13 @@ function copilotEnv(b = backend()) {
   const dirs = [bin?.includes('/') && dirname(bin), dirname(process.execPath)].filter(Boolean);
   // acli that sends Jira text as ADF, so a description in wiki markup or Markdown shows formatted
   // (scripts/acli-bin; in the sandbox, the broker does it).
-  const acliBin = join(here, '..', 'scripts', 'acli-bin');
+  const acliBin = join(appDir, 'scripts', 'acli-bin');
   env.CLEARSKY_ACLI = config.jira.acli;
   // Where the wrapper asks whether a ticket's PR has a reviewer before it goes to review (lib/review-gate.mjs).
   env.CLEARSKY_URL = `http://127.0.0.1:${config.port}`;
   // `ticket …` for any tracker (scripts/ticket-bin, lib/tracker.mjs).
   env.CLEARSKY_TRACKER = tracker();
-  env.PATH = [...new Set([acliBin, join(here, '..', 'scripts', 'ticket-bin'), ...dirs, ...(env.PATH || '').split(delimiter).filter(Boolean)])].join(delimiter);
+  env.PATH = [...new Set([acliBin, join(appDir, 'scripts', 'ticket-bin'), ...dirs, ...(env.PATH || '').split(delimiter).filter(Boolean)])].join(delimiter);
   return env;
 }
 
@@ -1243,7 +1058,7 @@ const chatFolders = (id) => (id ? (localState.sessionFolders(stateFile)[id] || [
 // Settings → Agent's folders (read-write and read only) and the folders added to it.
 const chatReadRoots = (id, cwd) => fileRoots([cwd || acpChats.get(id)?.cwd || copilotCwd(), ...copilotFolders(), ...list(process.env.AGENT_READ), ...chatFolders(id)], homedir());
 // Copilot's memory (lib/memory.mjs) is readable in the sandbox, not writable: notes go in through your Save.
-const sandboxOpts = (cwd, extra = []) => ({ cwd, folders: [...copilotFolders(), ...extra, copilotTmp()], home: homedir(), read: [...list(process.env.AGENT_READ), join(here, '..'), memory.memoryDir()] });
+const sandboxOpts = (cwd, extra = []) => ({ cwd, folders: [...copilotFolders(), ...extra, copilotTmp()], home: homedir(), read: [...list(process.env.AGENT_READ), appDir, memory.memoryDir()] });
 let broker = null;
 function ghToken() {
   try { return execFileSync('gh', ['auth', 'token'], { timeout: 10_000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null; } catch { return null; }
@@ -1301,7 +1116,7 @@ async function startAgent(bin, args, cwd, { sandbox = process.env.AGENT_SANDBOX 
   if (process.platform === 'linux') {
     broker ||= serveBroker({ bins: { acli: config.jira.acli }, gate: ({ argv }) => reviewGate(argv, (k) => ghModule.ticketPrs(k, { fresh: true })), allow: assistedAllow, ask: brokerAsk, where: brokerWhere, vm: vmSupport().ok ? vmRun : null, doors: pluginDoor, review: reviewRun, usage: usageRun, jobs: jobsDoor, reads: () => [copilotTmp()], log: console.log });
     Object.assign(env, { CLEARSKY_BROKER_SOCKET: brokerSocket(), CLEARSKY_BROKER_KEY: key });
-    env.PATH = `${join(here, '..', 'scripts', 'sandbox-bin')}${delimiter}${env.PATH}`;
+    env.PATH = `${join(appDir, 'scripts', 'sandbox-bin')}${delimiter}${env.PATH}`;
   }
   // srt hands the sandbox TMPDIR=/tmp/claude unless told otherwise, so $TMPDIR in a chat wasn't
   // the scratch folder Clearsky reads acli's text files from (lib/broker.mjs): its Markdown went
@@ -2850,7 +2665,7 @@ function busyChats() {
 // The demo's pages say so: a "Demo data" badge with Leave demo, so nobody takes it for real.
 const demoMark = (html) => (isDemo() ? html.replace('<meta name="theme-color"', '<meta name="demo" content="1">\n<meta name="theme-color"') : html);
 
-export function buildPage(csrf, web = join(here, '..', 'web')) {
+export function buildPage(csrf, web = join(appDir, 'web')) {
   const css = readFileSync(join(web, 'css', 'app.css'), 'utf8');
   const js = readdirSync(join(web, 'js')).filter((n) => n.endsWith('.js')).sort()
     .map((n) => readFileSync(join(web, 'js', n), 'utf8')).join('\n');
@@ -2861,7 +2676,7 @@ export function buildPage(csrf, web = join(here, '..', 'web')) {
 // Whether Clearsky's files changed since this process started (a pull), so a restart would update it.
 const startedAt = Date.now();
 function updateReady() {
-  const root = join(here, '..');
+  const root = appDir;
   let bundled = [];
   try { bundled = readdirSync(join(root, 'plugins')).flatMap((n) => [`plugins/${n}`, `plugins/${n}/lib`]); } catch { /* none */ }
   for (const dir of ['bin', 'lib', 'lib/modules', 'web', 'web/js', 'web/css', ...bundled]) {
@@ -3074,11 +2889,11 @@ function serve() {
   // Copilot's memory folder exists from the start, so every chat can read the file once you save a note.
   try { mkdirSync(memory.memoryDir(), { recursive: true, mode: 0o700 }); } catch { /* read-only home: no memory */ }
   const page = buildPage(csrf);
-  const welcomePage = demoMark(readFileSync(join(here, '..', 'web', 'welcome.html'), 'utf8')).replaceAll('__CSRF__', csrf)
-    .replace('/*__CSS__*/', () => readFileSync(join(here, '..', 'web', 'css', 'app.css'), 'utf8'));
-  const settingsPage = demoMark(readFileSync(join(here, '..', 'web', 'settings.html'), 'utf8')).replace('__CSRF__', csrf)
-    .replace('/*__CSS__*/', () => readFileSync(join(here, '..', 'web', 'css', 'app.css'), 'utf8'))
-    .replace('/*__TALK__*/', () => readFileSync(join(here, '..', 'web', 'js', '12-talk.js'), 'utf8')); // 🎤 on its text boxes
+  const welcomePage = demoMark(readFileSync(join(appDir, 'web', 'welcome.html'), 'utf8')).replaceAll('__CSRF__', csrf)
+    .replace('/*__CSS__*/', () => readFileSync(join(appDir, 'web', 'css', 'app.css'), 'utf8'));
+  const settingsPage = demoMark(readFileSync(join(appDir, 'web', 'settings.html'), 'utf8')).replace('__CSRF__', csrf)
+    .replace('/*__CSS__*/', () => readFileSync(join(appDir, 'web', 'css', 'app.css'), 'utf8'))
+    .replace('/*__TALK__*/', () => readFileSync(join(appDir, 'web', 'js', '12-talk.js'), 'utf8')); // 🎤 on its text boxes
   // A container publishes its port to another one on the host (CLEARSKY_PUBLIC_PORT), and the
   // browser then names that port.
   const ports = [...new Set([config.port, Number(process.env.CLEARSKY_PUBLIC_PORT) || config.port])];
@@ -3549,7 +3364,7 @@ function serve() {
       const asset = { '/manifest.webmanifest': 'application/manifest+json', '/icon.svg': 'image/svg+xml', '/icon-192.png': 'image/png', '/icon-512.png': 'image/png' }[url.pathname];
       if (asset) {
         res.writeHead(200, { 'Content-Type': asset, 'Cache-Control': 'max-age=3600' });
-        return res.end(readFileSync(join(here, '..', 'web', url.pathname.slice(1))));
+        return res.end(readFileSync(join(appDir, 'web', url.pathname.slice(1))));
       }
       if (url.pathname === '/favicon.ico') { res.writeHead(302, { Location: '/icon.svg' }); return res.end(); }
       if (url.pathname === '/api/modules') return json(res, 200, { modules: moduleManifests() });
@@ -3946,7 +3761,7 @@ async function appCommand() {
     // Clearsky runs in Docker once `clearsky docker up` has run (until `clearsky docker down`):
     // start that container, else Clearsky here.
     if (existsSync(join(dirname(userEnvFile), 'docker-mounts.yml'))) await dockerCommand(['start']);
-    else spawn(process.execPath, [fileURLToPath(import.meta.url), 'serve', '--port', String(config.port)], { detached: true, stdio: 'ignore', env: process.env, cwd: join(here, '..') }).unref();
+    else spawn(process.execPath, [join(appDir, 'bin', 'clearsky.mjs'), 'serve', '--port', String(config.port)], { detached: true, stdio: 'ignore', env: process.env, cwd: appDir }).unref();
     for (let i = 0; i < 50 && !(await up()); i++) await new Promise((r) => setTimeout(r, 200));
   }
   // Under WSL2 a Windows browser (Edge, Chrome): WSL forwards 127.0.0.1 to Windows.
@@ -3972,7 +3787,7 @@ async function appCommand() {
 async function dockerCommand([sub = 'up', ...rest]) {
   const { dockerMounts, writeMountsFile } = await import('../lib/docker.mjs');
   if (process.env.CLEARSKY_IN_CONTAINER === '1') { console.error('Run this on your machine, not in the container.'); process.exitCode = 1; return; }
-  const repo = join(here, '..');
+  const repo = appDir;
   for (const d of [dirname(userEnvFile), join(homedir(), '.copilot')]) mkdirSync(d, { recursive: true, mode: 0o700 });
   const mounts = dockerMounts({ folders: copilotFolders(), cwd: process.env.AGENT_CWD, home: homedir() });
   const file = writeMountsFile(join(dirname(userEnvFile), 'docker-mounts.yml'), mounts);
