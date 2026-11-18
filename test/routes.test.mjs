@@ -1,11 +1,11 @@
 // Every route of the server, against the demo (made-up data, its own port and home folder):
 // each page and read answers with what the page expects, and nothing is changed without the
-// page's token. The lists below name every route in bin/clearsky.mjs; a route that isn't in
+// page's token. The lists below name every route in lib/app/routes; a route that isn't in
 // them fails the last test, so a new one gets a line here and a moved one is noticed.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { waitUp } from '../lib/demo.mjs';
@@ -112,9 +112,11 @@ test('nothing is changed without the page\'s token, or from another site', async
 });
 
 test('every route in the server is named above', () => {
-  const src = readFileSync(bin, 'utf8');
-  const handler = src.slice(src.indexOf('const server = createServer(async (req, res) => {'));
-  const inSource = new Set([...handler.matchAll(/url\.pathname === '([^']+)'/g)].map((m) => m[1]));
+  const dir = join(dirname(bin), '..', 'lib', 'app', 'routes');
+  const src = readdirSync(dir).filter((f) => f.endsWith('.mjs')).map((f) => readFileSync(join(dir, f), 'utf8')).join('\n');
+  const inSource = new Set([...src.matchAll(/url\.pathname === '([^']+)'/g)].map((m) => m[1]));
+  // Routes live only there: the server hands every request to those groups, and the main file has none.
+  for (const f of [bin, join(dir, '..', 'server.mjs')]) assert.doesNotMatch(readFileSync(f, 'utf8'), /url\.pathname ===/, f);
   const named = new Set([...Object.keys(PAGES), ...Object.keys(READS), ...Object.keys(NEEDS), ...WRITES, '/favicon.ico']);
   assert.deepEqual([...inSource].filter((p) => !named.has(p)).sort(), [], 'routes with no line in test/routes.test.mjs');
   assert.ok(inSource.size > 70, 'the routes were found in the source');
