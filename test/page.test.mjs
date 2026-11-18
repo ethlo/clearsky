@@ -212,10 +212,19 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
   await page.goto(`${base}/settings#extra`);
   await page.waitForFunction(() => location.hash === '#plugins' && !document.querySelector('#plug-list').hidden);
 
+  // Nothing set and nothing picked yet: a new chat starts Sandboxed where the sandbox can run, else in Ask.
+  const fallback = (await (await fetch(`${base}/api/copilot`)).json()).defaults.fallbackPermission;
+  assert.ok(['sandboxed', 'ask'].includes(fallback));
+  await page.goto(`${base}/#copilot`);
+  await page.waitForFunction((f) => document.querySelector('#cp-perm').value === f, fallback, { timeout: 5000 });
+
   // Settings → Agent: defaults for new chats, with Copilot's own choices; a saved default is used by a new chat.
   await page.goto(`${base}/settings#copilot`);
   await page.waitForSelector('#AGENT_PERMISSION option[value="full"]', { state: 'attached' });
   if (process.env.SHOT) await page.screenshot({ path: `${process.env.SHOT}/settings.png` });
+  // Empty is the default (Sandboxed where the sandbox can run, else Ask); Ask is a choice of its own.
+  assert.match(await page.locator('#AGENT_PERMISSION option[value=""]').textContent(), /^Default: (Sandboxed|Ask \(the sandbox can't run here\))$/);
+  assert.equal(await page.locator('#AGENT_PERMISSION option[value="ask"]').count(), 1);
   await page.selectOption('#AGENT_PERMISSION', 'read');
   await page.click('button.save[data-keys^="AGENT_"]');
   await page.waitForFunction(() => /saved/i.test(document.querySelector('button.save[data-keys^="AGENT_"]').nextElementSibling.textContent), null, { timeout: 5000 });

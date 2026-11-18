@@ -549,7 +549,10 @@ function render(s) {
     // Claude Code has no effort setting here.
     $('#AGENT_EFFORT').hidden = $('label[for="AGENT_EFFORT"]').hidden = !(i.efforts || []).length;
     $('#AGENT_EFFORT').innerHTML = `<option value="">Copilot's default</option>${(i.efforts || []).map((e) => `<option>${esc(e)}</option>`).join('')}`;
-    $('#AGENT_PERMISSION').innerHTML = Object.entries(i.permissions || {}).map(([k, l]) => `<option value="${k === 'ask' ? '' : esc(k)}">${esc(l)}${i.permissionHints?.[k] ? ` · ${esc(i.permissionHints[k])}` : ''}</option>`).join('');
+    // Empty: Sandboxed where the sandbox can run here, else Ask.
+    const fallback = i.defaults?.fallbackPermission || 'ask';
+    $('#AGENT_PERMISSION').innerHTML = `<option value="">Default: ${esc(i.permissions?.[fallback] || fallback)}${fallback === 'ask' ? ' (the sandbox can\'t run here)' : ''}</option>`
+      + Object.entries(i.permissions || {}).map(([k, l]) => `<option value="${esc(k)}">${esc(l)}${i.permissionHints?.[k] ? ` · ${esc(i.permissionHints[k])}` : ''}</option>`).join('');
     $('#AGENT_EFFORT').value = cp.effort || '';
     $('#AGENT_PERMISSION').value = cp.permission || '';
   }).catch(() => {});
