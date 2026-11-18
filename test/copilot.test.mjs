@@ -196,7 +196,7 @@ test('lets Copilot use your code folders without asking', async () => {
   const home = mkdtempSync(join(tmpdir(), 'clearsky-home-'));
   mkdirSync(join(home, 'dev', 'acme'), { recursive: true });
   assert.deepEqual(folderArgs(['~/dev/acme', '~/dev/gone', '/nope'], home), ['--add-dir', join(home, 'dev', 'acme')]);
-  assert.equal(validate({ COPILOT_FOLDERS: '~/dev/acme, /home/m/dev/mine' }).COPILOT_FOLDERS, '~/dev/acme, /home/m/dev/mine');
-  assert.throws(() => validate({ COPILOT_FOLDERS: 'dev/acme' }), /full paths/);
-  assert.throws(() => validate({ COPILOT_FOLDERS: '~/dev/../..' }), /full paths/);
+  assert.equal(validate({ AGENT_FOLDERS: '~/dev/acme, /home/m/dev/mine' }).AGENT_FOLDERS, '~/dev/acme, /home/m/dev/mine');
+  assert.throws(() => validate({ AGENT_FOLDERS: 'dev/acme' }), /full paths/);
+  assert.throws(() => validate({ AGENT_FOLDERS: '~/dev/../..' }), /full paths/);
 });

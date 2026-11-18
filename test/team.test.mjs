@@ -11,7 +11,7 @@ import { readLinks, saveLinks } from '../lib/links.mjs';
 
 const PACK = {
   name: 'Payments team',
-  settings: { GITHUB_ORGS: 'acme', CLEARSKY_STANDUP_TIME: '09:30', COPILOT_DOMAINS: 'repo.acme.example', GITHUB_TOKEN: 'nope', COPILOT_ASSISTED_ALLOW: 'git push' },
+  settings: { GITHUB_ORGS: 'acme', CLEARSKY_STANDUP_TIME: '09:30', AGENT_DOMAINS: 'repo.acme.example', GITHUB_TOKEN: 'nope', AGENT_ASSISTED_ALLOW: 'git push' },
   links: [{ name: 'Team', links: [{ title: 'Board', url: 'https://acme.atlassian.net/jira/boards/1' }, { title: 'bad', url: 'javascript:alert(1)' }] }],
   skills: 'skills',
 };
@@ -26,8 +26,8 @@ test('where a pack comes from', () => {
 
 test('a pack never carries tokens or the sandbox doors, and only safe links', () => {
   const p = parsePack(JSON.stringify(PACK));
-  assert.deepEqual(Object.keys(p.settings).sort(), ['CLEARSKY_STANDUP_TIME', 'COPILOT_DOMAINS', 'GITHUB_ORGS']);
-  assert.deepEqual(p.ignored.sort(), ['COPILOT_ASSISTED_ALLOW', 'GITHUB_TOKEN']);
+  assert.deepEqual(Object.keys(p.settings).sort(), ['AGENT_DOMAINS', 'CLEARSKY_STANDUP_TIME', 'GITHUB_ORGS']);
+  assert.deepEqual(p.ignored.sort(), ['AGENT_ASSISTED_ALLOW', 'GITHUB_TOKEN']);
   assert.equal(p.links.groups[0].links.length, 1);
 });
 
@@ -126,10 +126,10 @@ test('a plugin\'s team settings: set when you join if you have it, else once you
 });
 
 test('a pack can\'t make chats run with Full access or switch the sandbox off', () => {
-  const p = parsePack(JSON.stringify({ name: 'T', settings: { COPILOT_PERMISSION: 'full', COPILOT_SANDBOX: 'off', COPILOT_MODEL: 'auto' } }));
-  assert.deepEqual(p.settings, { COPILOT_MODEL: 'auto' });
-  assert.deepEqual(p.ignored.sort(), ['COPILOT_PERMISSION', 'COPILOT_SANDBOX']);
-  const tight = parsePack(JSON.stringify({ name: 'T', settings: { COPILOT_PERMISSION: 'sandboxed', COPILOT_SANDBOX: 'srt' } }));
-  assert.deepEqual(tight.settings, { COPILOT_PERMISSION: 'sandboxed', COPILOT_SANDBOX: 'srt' });
-  assert.match(joinSummary({ written: ['COPILOT_FOLDERS'], kept: [], links: 0, skills: { installed: [], skipped: [] }, widens: [], ignored: [], write: { COPILOT_FOLDERS: '~/dev/acme' } }), /change files in ~\/dev\/acme without asking/);
+  const p = parsePack(JSON.stringify({ name: 'T', settings: { AGENT_PERMISSION: 'full', AGENT_SANDBOX: 'off', AGENT_MODEL: 'auto' } }));
+  assert.deepEqual(p.settings, { AGENT_MODEL: 'auto' });
+  assert.deepEqual(p.ignored.sort(), ['AGENT_PERMISSION', 'AGENT_SANDBOX']);
+  const tight = parsePack(JSON.stringify({ name: 'T', settings: { AGENT_PERMISSION: 'sandboxed', AGENT_SANDBOX: 'srt' } }));
+  assert.deepEqual(tight.settings, { AGENT_PERMISSION: 'sandboxed', AGENT_SANDBOX: 'srt' });
+  assert.match(joinSummary({ written: ['AGENT_FOLDERS'], kept: [], links: 0, skills: { installed: [], skipped: [] }, widens: [], ignored: [], write: { AGENT_FOLDERS: '~/dev/acme' } }), /change files in ~\/dev\/acme without asking/);
 });

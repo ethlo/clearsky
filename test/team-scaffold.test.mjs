@@ -9,9 +9,9 @@ import { parsePack, joinPack, joinSummary, readTeam, TEAM_KEYS } from '../lib/te
 
 const tmp = (p) => mkdtempSync(join(tmpdir(), `clearsky-${p}-`));
 const env = {
-  GITHUB_ORGS: 'acme', CLEARSKY_STANDUP_TIME: '09:45', COPILOT_DOMAINS: 'repo.acme.example', GRAFANA_INSTANCES: 'test=https://grafana.test.acme.example',
+  GITHUB_ORGS: 'acme', CLEARSKY_STANDUP_TIME: '09:45', AGENT_DOMAINS: 'repo.acme.example', GRAFANA_INSTANCES: 'test=https://grafana.test.acme.example',
   GITHUB_TOKEN: 'ghp_abcdefghijneverleavesthismachine0000', SLACK_TOKEN: 'xoxp-1-2', CALENDAR_EMAIL: 'me@acme.example',
-  COPILOT_GATE_RULES: 'merge-ready, repo:acme/docs, repo:someone/hobby, jira:PAY',
+  AGENT_GATE_RULES: 'merge-ready, repo:acme/docs, repo:someone/hobby, jira:PAY',
   DEPLOYS_URL: 'https://deploys.acme.example', VPN_CHECK: 'https://u:hunter2@vpn.acme.example',
 };
 const registry = {
@@ -24,7 +24,7 @@ const registry = {
 test('a team pack from your settings: team settings only, no secrets, pinned plugins, your rules as suggestions', () => {
   const { pack, files, warnings } = scaffoldPack({ name: 'Payments team', repo: 'https://github.com/acme/clearsky-team', jiraSite: 'https://acme.atlassian.net/', env,
     teamKeys: ['DEPLOYS_URL', 'GRAFANA_INSTANCES'], registry, catalogFrom: (n) => (n === 'slack' ? 'github:ethlo/clearsky-slack-mcp#v1.0.0' : null) });
-  assert.deepEqual(Object.keys(pack.settings).sort(), ['CLEARSKY_STANDUP_TIME', 'COPILOT_DOMAINS', 'DEPLOYS_URL', 'GITHUB_ORGS', 'GRAFANA_INSTANCES']);
+  assert.deepEqual(Object.keys(pack.settings).sort(), ['AGENT_DOMAINS', 'CLEARSKY_STANDUP_TIME', 'DEPLOYS_URL', 'GITHUB_ORGS', 'GRAFANA_INSTANCES']);
   const all = Object.values(files).join('\n');
   for (const secret of ['ghp_', 'xoxp-', 'me@acme.example', 'hunter2']) assert.ok(!all.includes(secret), `${secret} stays out`);
   assert.ok(warnings.some((w) => /left out VPN_CHECK/.test(w)), 'a value with a password in it is named, not written');
@@ -60,10 +60,10 @@ test('written to a new folder only, then joined: suggestions are offered, never 
   assert.ok(writeScaffold(dir, files, { force: true }).written.length);
 
   const conf = tmp('conf');
-  let mine = { COPILOT_GATE_RULES: '' };
+  let mine = { AGENT_GATE_RULES: '' };
   const r = await joinPack(dir, { confDir: conf, skillsDir: join(conf, 'skills'), readEnv: () => mine, writeEnv: (v) => { mine = { ...mine, ...v }; }, validate: (x) => x,
     readLinks: () => ({ groups: [] }), saveLinks: () => {} });
-  assert.equal(mine.COPILOT_GATE_RULES, '', 'the gate is never set by a pack');
+  assert.equal(mine.AGENT_GATE_RULES, '', 'the gate is never set by a pack');
   assert.deepEqual(readTeam(conf).gate.suggest, ['merge-ready', 'repo:acme/docs', 'jira:PAY']);
   assert.match(joinSummary(r), /suggests letting merge-ready, repo:acme\/docs, jira:PAY through without asking/);
 });

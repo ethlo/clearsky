@@ -123,7 +123,7 @@ test('the cache keeps under its size cap by dropping the layers used longest ago
   assert.equal(r.removed, 2);
   assert.deepEqual(readdirSync(join(dir, 'blobs')).sort(), ['mid', 'new']);
   assert.equal(cacheCapBytes({}), 20 * 1024 ** 3);
-  assert.equal(cacheCapBytes({ COPILOT_VM_IMAGE_CACHE_GB: '2,5' }), 2.5 * 1024 ** 3);
+  assert.equal(cacheCapBytes({ AGENT_VM_IMAGE_CACHE_GB: '2,5' }), 2.5 * 1024 ** 3);
   // Purge: all of it, except a download running now.
   pruneMirror(dir, { all: true });
   assert.deepEqual(readdirSync(join(dir, 'blobs')), []);
