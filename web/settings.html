@@ -111,6 +111,10 @@
   button:disabled { opacity: .6; cursor: default; }
   .msg { font-size: 13px; color: var(--text-2); }
   .code { font: 600 20px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; }
+  .rs-bar { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 6px 12px; margin: 12px 24px 0; max-width: 712px; font-size: 13px; }
+  .rs-bar > div:first-child { flex: 1; min-width: 200px; }
+  @media (max-width: 520px) { .rs-bar { margin: 10px 12px 0; } }
+  ul#sys-why { margin: 4px 0 0; padding-left: 18px; }
   section a { color: var(--accent); }
   section a:hover { text-decoration: underline; }
 </style>
@@ -119,6 +123,7 @@
 <div class="set">
 <header class="vh"><button class="back" id="back" title="Back (Esc)" aria-label="Back"><svg class="i" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg></button><h1>Settings</h1><span class="sub" id="file"></span></header>
 <nav class="tabs" id="tabs" aria-label="Settings"></nav>
+<div class="restart-note rs-bar" id="rs-bar" role="status" hidden></div>
 <div class="set-b">
 <main>
   <section>
@@ -168,7 +173,6 @@
     <div id="plug-list">
       <p class="hint">Everything Clearsky reads from. Open one to set it up.<span class="more">Each page also shows what the plugin holds and reaches. One you add from a git repo, npm or a folder runs in a sandbox of its own: it reaches only the hosts it lists, keeps files only in its own folder, and gets only its own settings. You see what it reaches before any of its code runs.</span></p>
       <div class="plugs" id="plugs"></div>
-      <div class="row" id="plug-restart" hidden><button id="plug-restart-btn">Restart to load</button><span class="msg">Clearsky loads plugins when it starts.</span></div>
       <div id="plug-team"></div>
       <label for="plug-from">Add a plugin<span class="more">Add <code>#v1.2.0</code> (a tag) or <code>#</code> and a commit to stay on that version; without one it follows the repo's default branch. A private repo on github.com is fetched with your gh login.</span></label>
       <div class="plug-from"><input id="plug-from" spellcheck="false" placeholder="github:owner/repo, https://…/repo.git, npm:package or a folder">
@@ -312,6 +316,14 @@
     <div class="reach" id="copilot-reach"></div>
   </section>
 
+  <section id="system">
+    <h2>System <span class="state" id="sys-state"></span></h2>
+    <h3>Restart<span class="more">A restart loads newer code on disk (after a <code>git pull</code>), plugins you added, removed or updated, and settings Clearsky reads only when it starts. <b>Restart</b> waits until no chat started here is mid-answer or waiting for your OK; background jobs hold it up too. <b>Restart now</b> stops them: chats carry on with your next message, and cut-short jobs tell their chat. In a terminal: <code>clearsky restart</code> or <code>clearsky restart --now</code>.</span></h3>
+    <p class="hint" id="sys-now">Loading…</p>
+    <ul class="hint" id="sys-why" hidden></ul>
+    <div class="row"><button data-sys-restart="idle">Restart</button><button class="secondary" data-sys-restart="now">Restart now</button><span class="msg" id="sys-msg"></span></div>
+  </section>
+
   <section>
     <h2>VPN <span class="state" id="vpn-state"></span></h2>
     <label for="VPN_CHECK">VPN check<span class="more">A host or URL. Off the VPN it either can't be reached or refuses you with 403, as many work sites do at their load balancer. Then the menu says <b>VPN off</b>, the plugins ticked below pause instead of failing, plugins' doors (Grafana) say so, and the agent is told to ask you to connect. Clearsky never runs the VPN itself.</span></label>
@@ -373,8 +385,61 @@ async function post(path, body) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || res.statusText);
+  if (path !== '/api/restart') setTimeout(() => loadRestart(), 0); // a plugin or setting may need a restart now
   return data;
 }
+
+// ---------------------------------------------------------------- restart
+// The bar at the top says when a restart is needed and why; Settings → System always has
+// Restart (waits for busy chats) and Restart now. Saving anything here checks again.
+let restartInfo = null, restarting = false;
+const busyText = (busy) => `${busy.length} busy chat${busy.length > 1 ? 's' : ''}`;
+async function loadRestart() {
+  if (restarting) return;
+  try { restartInfo = await (await fetch('/api/restart', { cache: 'no-store' })).json(); } catch { return; }
+  if (restarting) return; // Restart was pressed while this was on its way
+  const { pending, busy = [], reasons = [], startedAt } = restartInfo, bar = $('#rs-bar');
+  const since = startedAt ? new Date(startedAt).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+  bar.hidden = !pending && !reasons.length;
+  if (!bar.hidden) {
+    bar.innerHTML = pending
+      ? `<div><b>Restart waiting</b> for ${busy.length ? `${busyText(busy)} to finish: ${busy.map((c) => esc(c.title)).join(', ')}` : 'a moment…'}</div><div class="acts"><button class="primary" data-sys-restart="now">Restart now</button></div>`
+      : `<div><b>Restart needed.</b> ${reasons.map((r) => esc(r.text)).join(', ')}.${busy.length ? ` Waits for ${busyText(busy)}.` : ''}</div>
+         <div class="acts"><button class="primary" data-sys-restart="idle">Restart</button>${busy.length ? '<button data-sys-restart="now">Restart now</button>' : ''}</div>`;
+  }
+  $('#sys-state').textContent = pending ? 'restarting' : reasons.length ? 'restart needed' : '';
+  $('#sys-state').className = `state ${pending || reasons.length ? 'bad' : ''}`;
+  $('#sys-now').textContent = pending ? `Restart waiting for ${busy.length ? busyText(busy) : 'a moment'}.`
+    : `Running since ${since}. ${reasons.length ? 'A restart loads:' : 'Nothing waits for a restart.'}${busy.length ? ` ${busyText(busy)} now.` : ''}`;
+  $('#sys-why').hidden = !reasons.length;
+  $('#sys-why').innerHTML = reasons.map((r) => `<li>${esc(r.text)}</li>`).join('');
+}
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-sys-restart]');
+  if (!b) return;
+  const now = b.dataset.sysRestart === 'now', busy = restartInfo?.busy || [];
+  if (now && busy.length && !confirm(`Restart now? This stops:\n${busy.map((c) => `• ${c.title}`).join('\n')}\n\nYou can continue them afterwards.`)) return;
+  b.disabled = true;
+  try { await post('/api/restart', { force: now }); } catch (err) { b.disabled = false; $('#sys-msg').textContent = err.message; return; }
+  restarting = true;
+  const was = restartInfo?.startedAt;
+  const say = (t) => { const bar = $('#rs-bar'); bar.hidden = false; bar.innerHTML = `<div><b>${t}</b></div>`; $('#sys-msg').textContent = t; };
+  say(now || !busy.length ? 'Restarting… the page reloads when Clearsky is back.' : `Restarting when ${busyText(busy)} finish… the page reloads when Clearsky is back.`);
+  // Wait for the old server to go away and the new one to answer, then reload.
+  let wentDown = false;
+  const poll = async () => {
+    try {
+      const r = await (await fetch('/api/restart', { cache: 'no-store' })).json();
+      if (wentDown || (r.startedAt && r.startedAt !== was)) return location.reload(); // a new Clearsky answers
+      if (!r.pending) { restarting = false; return loadRestart(); } // it gave up waiting
+    }
+    catch { wentDown = true; }
+    setTimeout(poll, 1000);
+  };
+  setTimeout(poll, 1000);
+});
+loadRestart();
+setInterval(() => { if (!document.hidden) loadRestart(); }, 10_000);
 
 // Try with demo data: the demo opens in a tab of its own (the tab is opened first, so the
 // browser doesn't take it for a pop-up).
@@ -775,7 +840,7 @@ function loginHtml(l) {
 // Its setup: Clearsky's own have theirs in the page; a plugin's comes from its manifest.
 function setupHtml(p, fields) {
   if (!p.added) return `<div class="row"><button data-plug-add="${esc(p.name)}">Add ${esc(p.label)}</button><span class="msg"></span></div><div class="pp-preview"></div>`;
-  if (!p.loaded) return `<div class="row"><button data-restart>Restart to load</button><span class="msg">Clearsky loads plugins when it starts.</span></div>`;
+  if (!p.loaded) return `<div class="row"><button data-sys-restart="idle">Restart to load</button><span class="msg">Clearsky loads plugins when it starts.</span></div>`;
   const kind = (f) => (f.secret ? ' type="password" autocomplete="off"' : f.type === 'list' ? ` data-list data-item="${esc(f.item || '')}" placeholder="${esc(f.empty || '')}"`
     : f.type === 'map' ? ` data-map data-item="${esc(f.item || '')}" data-value="${esc(f.valueItem || '')}" placeholder="${esc(f.empty || '')}"` : '');
   const long = (f) => f.hint.length > 90;
@@ -795,7 +860,6 @@ function drawPlugins() {
     <span class="k">${esc(p.area === 'work' ? 'Work' : 'Personal')}</span>${pill(plugStatus(p))}</a>`).join('');
   const bad = list.filter((p) => plugStatus(p).on === 'bad').length;
   state($('#plug-state'), bad ? 'bad' : null, bad ? `${bad} need${bad === 1 ? 's' : ''} you` : '');
-  $('#plug-restart').hidden = list.every((p) => !p.added || p.loaded) && !renderPlugins.changed;
   const team = $('#plug-team'), tshape = JSON.stringify(S.plugins.team || null);
   if (team.dataset.shape !== tshape) { team.dataset.shape = tshape; team.innerHTML = teamHtml(S.plugins.team); infoButtons(team); }
   const pages = $('#plug-pages');
@@ -875,7 +939,7 @@ async function lookAt(from, where = $('#plug-preview')) {
   } catch (e) { msg.textContent = e.message; msg.className = 'msg bad'; }
 }
 document.addEventListener('click', async (e) => {
-  const b = e.target.closest('#plug-look,[data-plug-add],#plug-add,#plug-cancel,[data-plug-remove],[data-plug-check],#plug-restart-btn,[data-restart]');
+  const b = e.target.closest('#plug-look,[data-plug-add],#plug-add,#plug-cancel,[data-plug-remove],[data-plug-check]');
   if (!b) return;
   if (b.id === 'plug-look') return lookAt($('#plug-from').value.trim());
   if (b.dataset.plugAdd) return lookAt(b.dataset.plugAdd, b.closest('.team-plug, .pp')?.querySelector('.pp-preview'));
@@ -884,11 +948,9 @@ document.addEventListener('click', async (e) => {
   const msg = b.parentElement.querySelector('.msg') || $('#plug-msg');
   b.disabled = true;
   try {
-    if (b.id === 'plug-restart-btn' || 'restart' in b.dataset) { await post('/api/restart', { force: false }); msg.textContent = 'Restarting when no chat is busy…'; return; }
     if (b.dataset.plugRemove && !confirm(`Remove ${b.dataset.plugRemove}? What it kept stays, in case you add it again.`)) { b.disabled = false; return; }
     const r = b.id === 'plug-add' ? await post('/api/plugins/add', { token: b.dataset.token, trust: !!$('#plug-trust')?.checked })
       : await post('/api/plugins/remove', { name: b.dataset.plugRemove });
-    renderPlugins.changed = true;
     if (b.id === 'plug-add') { b.closest('.plug-look').remove(); $('#plug-from').value = ''; }
     if (b.dataset.plugRemove) location.hash = '#plugins';
     renderPlugins(r);

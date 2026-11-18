@@ -250,13 +250,22 @@ writeFileSync(join(conf, 'links.json'), JSON.stringify({ groups: [
   { name: 'Home', area: 'personal', links: [L('Bank', 'https://bank.example.no'), L('Football club', 'https://club.example.no'), L('Recipes', 'https://recipes.example.org')] },
 ] }), { mode: 0o600 });
 
-const app = spawn(process.execPath, [join(here, '..', '..', 'bin', 'clearsky.mjs'), 'serve', '--port', String(port)], {
-  stdio: 'inherit', env: { PATH: process.env.PATH, HOME: home, CLEARSKY_DEMO: '1', CLEARSKY_DEMO_HOME: home, CLEARSKY_COPILOT_HOME: copilotHome, TZ: process.env.TZ, LANG: 'en_GB.UTF-8' },
-});
+// Restart in the demo (Settings → System) exits with 75, as under systemd, and the demo starts
+// it again here, so its made-up home and services stay.
+let app;
+const start = () => {
+  app = spawn(process.execPath, [join(here, '..', '..', 'bin', 'clearsky.mjs'), 'serve', '--port', String(port)], {
+    stdio: 'inherit', env: { PATH: process.env.PATH, HOME: home, CLEARSKY_DEMO: '1', CLEARSKY_DEMO_HOME: home, CLEARSKY_COPILOT_HOME: copilotHome, CLEARSKY_SUPERVISED: '1', TZ: process.env.TZ, LANG: 'en_GB.UTF-8' },
+  });
+  app.on('exit', (code) => {
+    if (code === 75) return start();
+    fake.close(); setTimeout(() => { tidy(); process.exit(0); }, 100);
+  });
+};
+start();
 console.log(`Clearsky demo: http://127.0.0.1:${port}  (made-up data in ${home}; Ctrl+C stops it)`);
 // The made-up home folder goes when the demo does (Ctrl+C, or Leave demo in its menu).
 const tidy = () => { if (MADE) try { rmSync(home, { recursive: true, force: true }); } catch {} };
 const stop = () => { app.kill(); fake.close(); tidy(); process.exit(0); };
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);
-app.on('exit', () => { fake.close(); setTimeout(() => { tidy(); process.exit(0); }, 100); });

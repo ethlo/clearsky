@@ -25,7 +25,7 @@ const READS = {
   '/api/copilot/sessions': ['cwd', 'sessions'], '/api/copilot/usage': ['total', 'today', 'week', 'month'], '/api/dismissed': ['dismissed', 'muted'],
   '/api/doctor': ['checks', 'ready', 'platform', 'tracker'], '/api/handoffs': ['handoffs', 'sandbox'], '/api/jira/projects': ['projects', 'starred'],
   '/api/jira/starred': ['starred'], '/api/links': ['groups'], '/api/modules': ['modules'], '/api/notifications/log': ['log', 'pollMinutes'],
-  '/api/plan': ['plan', 'nextStandup', 'summary'], '/api/plugins': ['all', 'added', 'available'], '/api/restart': ['pending', 'busy', 'updateReady'],
+  '/api/plan': ['plan', 'nextStandup', 'summary'], '/api/plugins': ['all', 'added', 'available'], '/api/restart': ['pending', 'busy', 'updateReady', 'reasons'],
   '/api/servers': ['hosts'], '/api/settings': ['file', 'github', 'jira', 'tracker', 'calendar'], '/api/sources': ['tracker', 'sources', 'errors'],
   '/api/standup': ['generatedAt', 'since', 'nextStandup'], '/api/standup/say': ['text'], '/api/team': ['team'], '/api/vm': ['vm', 'support'],
   '/api/vms': ['limit', 'running', 'waiting', 'vms'], '/api/vpn': ['known', 'up'], '/api/work': ['generatedAt', 'plan', 'summary', 'github', 'jira'],
