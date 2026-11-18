@@ -308,3 +308,11 @@ test('a VM that stops on its own says so in the chat, with a hint when it was ki
   assert.match(vmExitText(null, 'SIGKILL'), /^The VM stopped unexpectedly \(killed by SIGKILL, often this machine running out of memory\): its containers are gone/);
   assert.match(vmExitText(1, null), /\(exit 1\)/);
 });
+
+test('a VM\'s start and stop go to Clearsky\'s log too; its commands don\'t', () => {
+  const lines = [];
+  const vm = new ChatVm({ id: 'ab12', cwd: '/w/repo', image: { dir: '/tmp' }, proxy: null, log: (l) => lines.push(l) });
+  vm.event('VM up in 1.0s'); vm.event('$ mvn verify', 'run'); vm.event(vmExitText(null, 'SIGKILL')); vm.event('Copied the folder in in 1.0s');
+  assert.equal(lines.length, 2);
+  assert.match(lines[1], /^VM ab12 \(\/w\/repo\): The VM stopped unexpectedly \(killed by SIGKILL/);
+});
