@@ -3,7 +3,7 @@
 
 const REFRESH_MS = 5 * 60 * 1000;
 // The agent your chats run in, by name ("Copilot", "Claude Code"): the server writes it into the
-// page (forAgent in bin/clearsky.mjs). agentNow() is the open chat's own agent, which Settings →
+// page (forAgent in lib/app/page.mjs). agentNow() is the open chat's own agent, which Settings →
 // Agent can set per folder or repo.
 const AGENT = '__AGENT__'.startsWith('__') ? 'the agent' : '__AGENT__';
 function agentNow() {
