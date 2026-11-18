@@ -85,10 +85,29 @@ test('a ticket whose fix versions it can\'t read: tries the whole ticket, then s
   const no = await v.run(parseCommand(['add', '1.7.0', 'A-1']), async () => { asked++; return true; });
   assert.equal(no.code, 1);
   assert.equal(asked, 0);
-  assert.match(no.stdout, /A-1: couldn't find its fix versions in what Jira sent \(text \(not JSON\), 2 lines\); `jira-versions raw A-1` shows it/);
+  assert.match(no.stdout, /A-1: couldn't find its fix versions in what Jira sent \(JSON with keys key, fields; fields has keys \); `jira-versions raw A-1` shows each way it asked/);
   assert.ok(!calls.some((c) => c.n === 'editJiraIssue'));
   const raw = await v.run(parseCommand(['raw', 'A-1']), async () => { throw new Error('raw never asks'); });
-  assert.match(raw.stdout, /^getJiraIssue \["cloudId","issueIdOrKey","fields"\]\n\{"key":"A-1","fields":\{\}\}/);
+  assert.match(raw.stdout, /^getJiraIssue takes cloudId, issueIdOrKey, fields\n\{\} → none found/, 'the way that worked last goes first');
+  assert.match(raw.stdout, /\n\{"fields":\["fixVersions"\]\} → none found \(JSON with keys key, fields; fields has keys \)\n\{"fields":"fixVersions"\} → none found/);
+  assert.match(raw.stdout, /\{\} → none found \(text \(not JSON\), 2 lines\)/);
+});
+
+test('Atlassian\'s server: asks for ADF when Markdown leaves fixVersions out, and keeps that way', async () => {
+  const props = { cloudId: {}, issueIdOrKey: {}, fields: {}, includeEditableFields: {}, fieldsByKeys: {}, expand: {}, responseContentFormat: {} };
+  const tools = [{ name: 'getJiraIssue', inputSchema: { properties: props } }, { name: 'editJiraIssue', inputSchema: { properties: { cloudId: {}, issueIdOrKey: {}, fields: {} } } }];
+  const calls = [];
+  const client = { listTools: async () => tools, callTool: async (n, a) => {
+    calls.push(a);
+    const fields = a.responseContentFormat === 'adf' ? { fixVersions: [{ id: '5', name: '1.6.7' }] } : {};
+    return { content: [{ type: 'text', text: JSON.stringify({ data: { appliedContentFormat: a.responseContentFormat || 'markdown', id: '1', key: a.issueIdOrKey, fields } }) }] };
+  } };
+  const memo = { read: 0 };
+  const v = createVersions({ client, site: () => 'https://acme.atlassian.net', memo });
+  const r = await v.run(parseCommand(['show', 'ACME-1', 'ACME-2']), async () => true);
+  assert.equal(r.stdout, 'ACME-1: 1.6.7\nACME-2: 1.6.7');
+  assert.deepEqual(calls[0], { cloudId: 'https://acme.atlassian.net', issueIdOrKey: 'ACME-1', fields: ['fixVersions'], responseContentFormat: 'adf' });
+  assert.equal(calls.length, 2, 'one read per ticket');
 });
 
 // An in-memory Jira behind Atlassian-shaped tools.
