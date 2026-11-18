@@ -240,7 +240,7 @@ export function sitesOf(r) {
 
 // Runs a checked command with an MCP client ({ listTools(), callTool(name, args) }).
 // `ask(detail)` resolves true when you allowed the change in the chat.
-export function createVersions({ client, site = () => null, clearskySite = () => null, keepSite = () => {}, memo = { read: null }, scope = () => '' }) {
+export function createVersions({ client, site = () => null, clearskySite = () => null, keepSite = () => {}, memo = { read: null }, scope = () => '', login = () => ({}) }) {
   let toolsAt = 0, tools = null;
   const list = async () => {
     if (!tools || Date.now() - toolsAt > 10 * 60_000) { tools = await client.listTools(); toolsAt = Date.now(); }
@@ -248,7 +248,7 @@ export function createVersions({ client, site = () => null, clearskySite = () =>
   };
   const need = (ts, step) => {
     const t = pickTool(ts, step);
-    if (!t) throw new Error(`the server offers no tool to ${step === 'edit' ? 'edit' : 'read'} a Jira ticket to this login (does the login have Jira? log in again under Settings → Plugins → Jira versions)`);
+    if (!t) throw new Error(`the server offers no tool to ${step === 'edit' ? 'edit' : 'read'} a Jira ticket to this login${step === 'edit' ? `: ${writeHelp(login())}` : ' (does the login have Jira? log in again under Settings → Plugins → Jira versions)'}`);
     return t;
   };
   // The site: JIRA_MCP_SITE, else the Jira site Clearsky already uses (JIRA_URL, or the one acli
@@ -290,7 +290,7 @@ export function createVersions({ client, site = () => null, clearskySite = () =>
       // What the server sends for one ticket, each way it can be asked: to see why a read fails.
       if (c.cmd === 'raw') {
         const schema = (t) => `${t.name} takes ${Object.entries(t.inputSchema?.properties || {}).map(([k, v]) => `${k}${v?.type ? `:${v.type}` : ''}${Array.isArray(v?.enum) ? `(${v.enum.join('|')})` : ''}`).join(', ')}`;
-        const out = [schema(read), ...(search ? [schema(search)] : []), `login scopes: ${scope() || '(not recorded)'}`, ''];
+        const out = [schema(read), ...(search ? [schema(search)] : []), `login scopes: ${scope() || '(not recorded)'}`, `asked for: ${login().asked || '(not recorded)'}`, `server offers: ${login().offered || '(not recorded)'}`, ''];
         let first = null;
         for (const w of ways) {
           const r = await readOne(w, c.keys[0]);
@@ -341,6 +341,16 @@ export function createVersions({ client, site = () => null, clearskySite = () =>
 
 // ---------------------------------------------------------------- the login
 
+// Why a login can't write, from what it asked for, what the server offers and what it granted.
+export function writeHelp({ asked = '', offered = '', scope = '' } = {}) {
+  const w = (s) => String(s || '').split(/\s+/).filter((x) => /^write:/i.test(x) && /jira/i.test(x));
+  const [a, o, g] = [w(asked), w(offered), w(scope)];
+  if (g.length) return `Atlassian granted ${g.join(' ')}, but offers this login no tool to edit tickets.`;
+  if (a.length) return `Clearsky asked for ${a.join(' ')} and Atlassian granted only ${scope || 'nothing it names'}. Your organization's admin may allow only reads through Atlassian's MCP server (Rovo MCP); ask them to allow Jira writes, then log in again.`;
+  if (o.length) return `the server offers ${o.join(' ')}, but it wasn't asked for: check Scopes (advanced), then log in again.`;
+  return `the server offers no Jira write scope${offered ? ` (it offers ${offered})` : ''}. Try Scopes (advanced) with write:jira:agent-interface added, then log in again.`;
+}
+
 export const DEFAULT_URL = 'https://mcp.atlassian.com/v2/mcp';
 // Fixed, as the client registered for it is kept with the login (Confluence's is 19877).
 export const REDIRECT = 'http://localhost:19878/oauth/callback';
@@ -383,7 +393,7 @@ export function createJiraVersionsMcp({ lends, store, open = (u) => lends.openUr
     return { listTools: () => client.tools(), callTool: (n, a) => client.callTool(n, a) };
   }
   const memo = { read: null }; // the way of reading that worked, kept while Clearsky runs
-  const versions = () => createVersions({ client: mcp(), memo, scope: () => store.get()?.scope || '', site: () => opts.site || store.get()?.site || null, clearskySite: () => lends.jiraSite?.(), keepSite: (site) => { const t = store.get(); if (t) store.set({ ...t, site }); } });
+  const versions = () => createVersions({ client: mcp(), memo, scope: () => store.get()?.scope || '', login: () => store.get() || {}, site: () => opts.site || store.get()?.site || null, clearskySite: () => lends.jiraSite?.(), keepSite: (site) => { const t = store.get(); if (t) store.set({ ...t, site }); } });
 
   return {
     use,
@@ -399,8 +409,8 @@ export function createJiraVersionsMcp({ lends, store, open = (u) => lends.openUr
       store.set({ ...t, site: null });
       client = null;
       const ts = await mcp().listTools();
-      const ok = pickTool(ts, 'read') && pickTool(ts, 'edit');
-      return { detail: ok ? 'Logged in; chats can now change fix versions, after you OK it.' : 'Logged in, but the server offers this login no tool to edit Jira tickets.' };
+      if (pickTool(ts, 'read') && pickTool(ts, 'edit')) return { detail: 'Logged in; chats can now change fix versions, after you OK it.' };
+      return { detail: `Logged in, but read only: ${writeHelp(t)}` };
     },
     // The client registered stays, so the next login doesn't register another.
     logout() { const t = store.get(); store.set(t?.client ? { client: t.client } : null); client = null; },

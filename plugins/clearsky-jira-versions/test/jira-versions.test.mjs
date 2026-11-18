@@ -9,7 +9,7 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseCommand, pickTool, fixVersionsOf, change, jiraScopes, createVersions, sitesOf, shapeOf, argsFor, waysFor, REDIRECT } from '../lib/jira-versions.mjs';
+import { parseCommand, pickTool, fixVersionsOf, change, jiraScopes, createVersions, sitesOf, shapeOf, argsFor, waysFor, writeHelp, REDIRECT } from '../lib/jira-versions.mjs';
 import makePlugin from '../source.mjs';
 import { core } from './core.mjs';
 
@@ -88,7 +88,7 @@ test('a ticket whose fix versions it can\'t read: tries the whole ticket, then s
   assert.match(no.stdout, /A-1: couldn't find its fix versions in what Jira sent, asked 3 ways \(JSON with keys key, fields; fields has keys \); `jira-versions raw A-1` shows each/);
   assert.ok(!calls.some((c) => c.n === 'editJiraIssue'));
   const raw = await v.run(parseCommand(['raw', 'A-1']), async () => { throw new Error('raw never asks'); });
-  assert.match(raw.stdout, /^getJiraIssue takes cloudId, issueIdOrKey, fields\nlogin scopes: \(not recorded\)\n\n/);
+  assert.match(raw.stdout, /^getJiraIssue takes cloudId, issueIdOrKey, fields\nlogin scopes: \(not recorded\)\nasked for: \(not recorded\)\nserver offers: \(not recorded\)\n\n/);
   assert.match(raw.stdout, /\ngetJiraIssue \{"fields":\["fixVersions"\]\} → none found \(JSON with keys key, fields; fields has keys \)\ngetJiraIssue \{\} → none found \(text \(not JSON\), 2 lines\)\ngetJiraIssue \{"fields":\["\*all"\]\} → none found/);
 });
 
@@ -132,6 +132,17 @@ test('the ways it asks come from the schema: each format (Markdown last), each v
   assert.equal(calls.filter((n) => n === search.name).length, 2);
   assert.equal(calls.at(-1), search.name);
   assert.equal(calls.at(-2), search.name, 'the second ticket goes straight to the way that worked');
+});
+
+test('a login that can only read says why, from what it asked for, what is offered and what was granted', async () => {
+  assert.match(writeHelp({ asked: 'read:jira:agent-interface write:jira:agent-interface', offered: 'read:jira:agent-interface write:jira:agent-interface', scope: 'offline_access read:jira:agent-interface' }),
+    /asked for write:jira:agent-interface and Atlassian granted only offline_access read:jira:agent-interface\. Your organization's admin may allow only reads/);
+  assert.match(writeHelp({ asked: 'read:jira:agent-interface', offered: 'read:jira:agent-interface write:jira:agent-interface' }), /offers write:jira:agent-interface, but it wasn't asked for/);
+  assert.match(writeHelp({ offered: 'read:jira:agent-interface' }), /offers no Jira write scope \(it offers read:jira:agent-interface\)/);
+  const read = { name: 'getJiraIssue', inputSchema: { properties: { cloudId: {}, issueIdOrKey: {}, fields: {} } } };
+  const client = { listTools: async () => [read], callTool: async () => ({ content: [{ type: 'text', text: '{"fields":{"fixVersions":[]}}' }] }) };
+  const v = createVersions({ client, site: () => 'c', login: () => ({ asked: 'write:jira:agent-interface', scope: 'read:jira:agent-interface' }) });
+  await assert.rejects(v.run(parseCommand(['add', '1.7.0', 'A-1']), async () => true), /no tool to edit a Jira ticket to this login: Clearsky asked for write:jira:agent-interface/);
 });
 
 // An in-memory Jira behind Atlassian-shaped tools.
