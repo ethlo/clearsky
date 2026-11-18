@@ -182,6 +182,13 @@ test('the chat panel talks to the local Copilot CLI with the chosen options', as
     { role: 'cp', segs: [{ type: 'tool', id: 'x', title: 'Read log', status: 'completed' }, { type: 'text', text: 'The build broke.' }] },
   ]);
   assert.equal(hist.cwd, '/tmp');
+  // Opening it again with the stamp the page has: only "same", no conversation sent again.
+  assert.ok(hist.stamp, 'a listed session has a stamp');
+  const again = await fetch(`${base}/api/copilot/sessions/cli-old-session?cwd=/tmp&have=${encodeURIComponent(hist.stamp)}`);
+  assert.match(again.headers.get('server-timing') || '', /^cached;dur=/);
+  const same = await again.json();
+  assert.equal(same.same, true);
+  assert.equal(same.messages, undefined);
 
   // Attached PRs and tickets go in front of the message.
   const withRef = info0(await events(await ask({ message: 'Summarise', session: 'sess-ref-1', resume: true, permission: 'read',
