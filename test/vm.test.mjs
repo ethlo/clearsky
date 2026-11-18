@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VmImage, ChatVm, reapOrphans, cpuSample, cpuBusy, vmsLoad, vmSize, VM_DEFAULT, loginForwarder, loginHead, folderSync, mavenCacheSync } from '../lib/vm.mjs';
+import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VmImage, ChatVm, reapOrphans, cpuSample, cpuBusy, vmsLoad, vmSize, VM_DEFAULT, loginForwarder, loginHead, folderSync, applyDeletions, mavenCacheSync, vmExitText } from '../lib/vm.mjs';
 import { registryWrite, githubFilter } from '../lib/github-gate.mjs';
 import { srtSettings } from '../lib/sandbox.mjs';
 import { needs, serveBroker } from '../lib/broker.mjs';
@@ -216,11 +216,12 @@ test('the VMs menu item\'s colour follows the busiest running VM', () => {
   assert.deepEqual(vmsLoad([{ chat: 'a', state: 'running', system: null }]), { pct: null, what: 'CPU', chat: 'a', title: null, level: 'ok' });
 });
 
-test('the chat\'s folder is copied into the VM and back: output stays in the VM, nothing overwrites a newer file here', async (t) => {
+test('the chat\'s folder is copied into the VM and back: your folder is the truth, nothing newer here is overwritten or deleted', async (t) => {
   const s = folderSync({ cwd: '/w/repo/', ssh: 'ssh -p 1' });
   assert.deepEqual(s.in.slice(-2), ['/w/repo/', 'clearsky@127.0.0.1:/w/repo/']);
   assert.deepEqual(s.out.slice(-2), ['clearsky@127.0.0.1:/w/repo/', '/w/repo/']);
-  assert.ok(s.in.includes('--exclude=target/') && !folderSync({ cwd: '/w/repo', ssh: 'ssh', first: true }).in.includes('--exclude=target/'));
+  assert.ok(!s.in.some((a) => a.includes('target')), 'target/ goes in like everything else');
+  assert.ok(!s.out.includes('--delete') && s.deletions.includes('--dry-run'));
   const m = mavenCacheSync({ ssh: 'ssh', cache: '/c/m2' });
   assert.equal(m.in.at(-2), '/c/m2/'); assert.ok(m.in.at(-1).startsWith('clearsky@127.0.0.1:/') && m.in.at(-1).endsWith('/.m2/repository/'));
   assert.ok(m.out.includes('--ignore-existing'));
@@ -230,28 +231,80 @@ test('the chat\'s folder is copied into the VM and back: output stays in the VM,
   // The same rsync arguments, with a local folder standing in for the VM's.
   const root = mkdtempSync(join(tmpdir(), 'vmsync-')), host = join(root, 'host'), vm = join(root, 'vm');
   const local = (argv) => argv.filter((a, i) => a !== '-e' && argv[i - 1] !== '-e').map((a) => a.replace('clearsky@127.0.0.1:/w/repo/', `${vm}/`).replace('/w/repo/', `${host}/`));
-  const rsync = (argv) => new Promise((ok, fail) => execFile('rsync', local(argv), (e, o, er) => (e ? fail(new Error(er)) : ok())));
+  const rsync = (argv) => new Promise((ok, fail) => execFile('rsync', local(argv), (e, o, er) => (e ? fail(new Error(er)) : ok(o))));
+  const sync = folderSync({ cwd: '/w/repo', ssh: 'ssh' });
+  const back = async (since) => { await rsync(sync.out); return applyDeletions({ cwd: host, listing: await rsync(sync.deletions), since }); };
+  // The time the copy in starts (a file changed in that same millisecond counts as changed).
+  const start = async () => { await new Promise((r) => setTimeout(r, 5)); return Date.now(); };
   const put = (f, text, at) => { mkdirSync(join(f, '..'), { recursive: true }); writeFileSync(f, text); if (at) utimesSync(f, at, at); };
   const old = new Date(Date.now() - 60_000);
   put(join(host, 'src/A.java'), 'a', old); put(join(host, '.git/HEAD'), 'ref', old); put(join(host, 'target/Old.class'), 'old', old); put(join(host, 'mod/target/x'), 'x', old);
-  await rsync(folderSync({ cwd: '/w/repo', ssh: 'ssh', first: true }).in);
+  let since = await start();
+  await rsync(sync.in);
   assert.equal(readFileSync(join(vm, 'target/Old.class'), 'utf8'), 'old');
-  // The build in the VM: cleans, compiles, edits a source; meanwhile you edit a file here.
+  // The build in the VM: cleans, compiles, edits a source; meanwhile you edit and add files here,
+  // one of them in target/.
   rmSync(join(vm, 'target'), { recursive: true }); rmSync(join(vm, 'mod/target'), { recursive: true });
   put(join(vm, 'target/New.class'), 'new'); put(join(vm, 'src/Gen.java'), 'gen'); put(join(vm, '.git/HEAD'), 'evil');
   put(join(vm, 'README'), 'vm'); put(join(host, 'README'), 'mine', new Date(Date.now() + 60_000)); put(join(host, 'Notes.md'), 'new here');
-  await rsync(folderSync({ cwd: '/w/repo', ssh: 'ssh' }).out);
-  assert.ok(!existsSync(join(host, 'target/Old.class')) && !existsSync(join(host, 'mod/target')));
+  put(join(host, 'mod/target/mine.sql'), 'written here during the command');
+  await back(since);
+  assert.ok(!existsSync(join(host, 'target/Old.class')) && !existsSync(join(host, 'mod/target/x')));
+  assert.equal(readFileSync(join(host, 'mod/target/mine.sql'), 'utf8'), 'written here during the command');
   assert.equal(readFileSync(join(host, 'target/New.class'), 'utf8'), 'new');
   assert.equal(readFileSync(join(host, 'src/Gen.java'), 'utf8'), 'gen');
   assert.equal(readFileSync(join(host, '.git/HEAD'), 'utf8'), 'ref');
   assert.equal(readFileSync(join(host, 'README'), 'utf8'), 'mine');
   assert.ok(existsSync(join(host, 'Notes.md')));
-  // Next command: your edits go in, the VM's own target/ stays (incremental builds).
-  put(join(host, 'src/A.java'), 'a2'); utimesSync(join(vm, 'target/New.class'), old, old); put(join(host, 'target/New.class'), 'stale', new Date(Date.now() - 3600_000));
-  rmSync(join(host, 'src/Gen.java'));
-  await rsync(folderSync({ cwd: '/w/repo', ssh: 'ssh' }).in);
+  // Next command: everything here goes in, target/ too: a script the agent wrote or changed in
+  // target/ between commands is what runs (it used to be the VM's stale copy, then deleted here).
+  put(join(host, 'src/A.java'), 'a2'); rmSync(join(host, 'src/Gen.java'));
+  put(join(host, 'target/exp/run.sh'), 'v1', old);
+  since = await start();
+  await rsync(sync.in);
   assert.equal(readFileSync(join(vm, 'src/A.java'), 'utf8'), 'a2');
   assert.equal(readFileSync(join(vm, 'target/New.class'), 'utf8'), 'new');
+  assert.equal(readFileSync(join(vm, 'target/exp/run.sh'), 'utf8'), 'v1');
+  assert.equal(readFileSync(join(vm, 'mod/target/mine.sql'), 'utf8'), 'written here during the command');
   assert.ok(!existsSync(join(vm, 'src/Gen.java')));
+  await back(since);
+  put(join(host, 'target/exp/run.sh'), 'v2 (same size)'); put(join(host, 'target/exp/views2.sql'), 'new script');
+  since = await start();
+  await rsync(sync.in);
+  assert.equal(readFileSync(join(vm, 'target/exp/run.sh'), 'utf8'), 'v2 (same size)');
+  assert.equal(readFileSync(join(vm, 'target/exp/views2.sql'), 'utf8'), 'new script');
+  assert.deepEqual(await back(since), []);
+  assert.equal(readFileSync(join(host, 'target/exp/views2.sql'), 'utf8'), 'new script');
+  // While a job still builds in the VM: its fresh output stays, a newer file of yours goes in.
+  const busy = folderSync({ cwd: '/w/repo', ssh: 'ssh', busy: true });
+  utimesSync(join(host, 'target/New.class'), old, old); // copied back a while ago
+  put(join(vm, 'target/Job.class'), 'being built'); put(join(vm, 'target/New.class'), 'rebuilt');
+  put(join(host, 'target/exp/run.sh'), 'v3'); put(join(host, 'src/B.java'), 'b');
+  await rsync(busy.in); await rsync(busy.inTarget);
+  assert.equal(readFileSync(join(vm, 'target/Job.class'), 'utf8'), 'being built');
+  assert.equal(readFileSync(join(vm, 'target/New.class'), 'utf8'), 'rebuilt');
+  assert.equal(readFileSync(join(vm, 'target/exp/run.sh'), 'utf8'), 'v3');
+  assert.equal(readFileSync(join(vm, 'src/B.java'), 'utf8'), 'b');
+  await back(await start());
+  // A folder the VM removed goes here too once nothing in it is newer.
+  rmSync(join(vm, 'target/exp'), { recursive: true });
+  assert.deepEqual((await back(Date.now() + 1000)).sort(), ['target/exp', 'target/exp/run.sh', 'target/exp/views2.sql']);
+  assert.ok(!existsSync(join(host, 'target/exp')) && readFileSync(join(host, 'target/Job.class'), 'utf8') === 'being built');
+});
+
+test('deletions from the VM: only inside target/, never out of the folder, never a file newer here', () => {
+  const files = new Map([['/w/target/a', 1], ['/w/target/b', 50], ['/w/src/c', 1], ['/w/target/d', 1]]), dirs = new Set(['/w/target/sub']), removed = [];
+  const fs = {
+    lstatSync: (p) => { if (dirs.has(p)) return { isDirectory: () => true }; if (!files.has(p)) throw new Error('ENOENT'); return { isDirectory: () => false, mtimeMs: files.get(p), ctimeMs: files.get(p) }; },
+    unlinkSync: (p) => removed.push(p), rmdirSync: (p) => removed.push(`${p}/`),
+  };
+  const listing = ['*deleting   target/a', '*deleting   target/b', '*deleting   src/c', '*deleting   ../target/a', '*deleting   target/sub/', '*deleting   target/gone', '.d..t...... target/', '*deleting   target/\\#040d'].join('\n');
+  files.set('/w/target/ d', 1);
+  assert.deepEqual(applyDeletions({ cwd: '/w/', listing, since: 10, fs }), ['target/a', 'target/ d', 'target/sub']);
+  assert.deepEqual(removed, ['/w/target/a', '/w/target/ d', '/w/target/sub/']);
+});
+
+test('a VM that stops on its own says so in the chat, with a hint when it was killed', () => {
+  assert.match(vmExitText(null, 'SIGKILL'), /^The VM stopped unexpectedly \(killed by SIGKILL, often this machine running out of memory\): its containers are gone/);
+  assert.match(vmExitText(1, null), /\(exit 1\)/);
 });

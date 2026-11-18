@@ -110,3 +110,8 @@ test('the VMs view sees who has a place, whether it builds, and the line in orde
   assert.equal(q.snapshot().holders[0].active, 0);
   assert.deepEqual(q.snapshot().line, []);
 });
+
+test('a free place is no wait: only a chat that was told its place in line has waited', async () => {
+  const q = new VmQueue({ limit: () => 1 });
+  assert.equal((await q.enter({})).waited, false);
+});
