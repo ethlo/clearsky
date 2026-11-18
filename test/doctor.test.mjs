@@ -1,7 +1,7 @@
 // `clearsky doctor` and the welcome page: what's there, what's missing and the fix for this OS.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { checks, suggestions, ready, doctorText, installHint } from '../lib/doctor.mjs';
+import { checks, suggestions, ready, doctorText, installHint, canSandbox } from '../lib/doctor.mjs';
 
 const fakeRun = (answers) => async (cmd, args) => answers[`${cmd} ${args.join(' ')}`] || { ok: false, missing: true, out: '' };
 
@@ -41,4 +41,13 @@ test('a logged-out gh offers the login instead of an install', async () => {
 test('organizations and the Jira site come from the gh and acli logins', async () => {
   const s = await suggestions({ run: fakeRun({ 'gh api user/orgs --jq .[].login': { ok: true, out: 'acme\nacme-labs\n' }, 'acli jira auth status': { ok: true, out: 'Site: acme.atlassian.net' } }) });
   assert.deepEqual(s, { orgs: ['acme', 'acme-labs'], jiraSite: 'acme.atlassian.net' });
+});
+
+test('chats start Sandboxed only where srt and what it uses are there', () => {
+  const all = () => true, none = () => false;
+  assert.equal(canSandbox({ platform: 'linux', has: all, srt: all }), true);
+  assert.equal(canSandbox({ platform: 'linux', has: (n) => n !== 'bwrap', srt: all }), false, 'no bubblewrap');
+  assert.equal(canSandbox({ platform: 'linux', has: all, srt: none }), false, 'no srt');
+  assert.equal(canSandbox({ platform: 'darwin', has: (n) => n === 'rg', srt: all }), true);
+  assert.equal(canSandbox({ platform: 'win32', has: all, srt: all }), false, 'Windows only through WSL');
 });

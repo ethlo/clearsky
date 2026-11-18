@@ -860,13 +860,14 @@ function newChat() {
 }
 
 // A new chat starts with the defaults from Settings → Agent, where set, else what you
-// picked last; changing a picker applies to the chat you're in.
+// picked last, else Sandboxed where the sandbox can run; changing a picker applies to the chat
+// you're in.
 function pickDefaults() {
   const i = chat.info || {}, d = i.defaults || {};
   $('#cp-model').value = d.model || cpPrefs.model || '';
   $('#cp-effort').value = d.effort || cpPrefs.effort || '';
-  const perm = d.permission || cpPrefs.permission;
-  $('#cp-perm').value = perm && i.permissions?.[perm] ? perm : 'ask';
+  const perm = [d.permission, cpPrefs.permission, d.fallbackPermission].find((p) => p && i.permissions?.[p]);
+  $('#cp-perm').value = perm || 'ask';
 }
 
 // The chat's agent (lib/agents.mjs): a new chat may pick one (Auto: the rules in Settings →
