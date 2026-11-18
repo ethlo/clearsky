@@ -36,7 +36,7 @@ ENV BROWSER=/usr/local/bin/xdg-open
 
 ENV CLEARSKY_BIND=0.0.0.0 \
     CLEARSKY_SUPERVISED=1 \
-    COPILOT_SANDBOX=off \
+    AGENT_SANDBOX=off \
     CLEARSKY_IN_CONTAINER=1
 EXPOSE 7777
 # Runs Clearsky with a keyring of its own for the logins (see the script).

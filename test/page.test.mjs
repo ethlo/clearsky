@@ -212,11 +212,11 @@ test('every view renders without page errors', { skip: !chromium && 'Playwright 
 
   // Settings → Agent: defaults for new chats, with Copilot's own choices; a saved default is used by a new chat.
   await page.goto(`${base}/settings#copilot`);
-  await page.waitForSelector('#COPILOT_PERMISSION option[value="full"]', { state: 'attached' });
+  await page.waitForSelector('#AGENT_PERMISSION option[value="full"]', { state: 'attached' });
   if (process.env.SHOT) await page.screenshot({ path: `${process.env.SHOT}/settings.png` });
-  await page.selectOption('#COPILOT_PERMISSION', 'read');
-  await page.click('button.save[data-keys^="COPILOT_"]');
-  await page.waitForFunction(() => /saved/i.test(document.querySelector('button.save[data-keys^="COPILOT_"]').nextElementSibling.textContent), null, { timeout: 5000 });
+  await page.selectOption('#AGENT_PERMISSION', 'read');
+  await page.click('button.save[data-keys^="AGENT_"]');
+  await page.waitForFunction(() => /saved/i.test(document.querySelector('button.save[data-keys^="AGENT_"]').nextElementSibling.textContent), null, { timeout: 5000 });
   await page.goto(`${base}/#copilot`);
   await page.waitForFunction(() => document.querySelector('#cp-perm').value === 'read', null, { timeout: 5000 });
 

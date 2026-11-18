@@ -68,6 +68,6 @@ test('review requests: routine or verify, from sizes, paths and CI only', () => 
 test('rules: labels, parsing, and only known kinds are accepted', () => {
   assert.match(ruleLabel('repo:acme/app'), /acme\/app/);
   assert.deepEqual([...parseRules('merge-ready, repo:acme/app jira:ABC')], ['merge-ready', 'repo:acme/app', 'jira:ABC']);
-  assert.equal(validate({ COPILOT_GATE_RULES: 'merge-ready repo:acme/app,jira:ABC' }).COPILOT_GATE_RULES, 'merge-ready, repo:acme/app, jira:ABC');
-  assert.throws(() => validate({ COPILOT_GATE_RULES: 'everything' }), /not a rule/);
+  assert.equal(validate({ AGENT_GATE_RULES: 'merge-ready repo:acme/app,jira:ABC' }).AGENT_GATE_RULES, 'merge-ready, repo:acme/app, jira:ABC');
+  assert.throws(() => validate({ AGENT_GATE_RULES: 'everything' }), /not a rule/);
 });

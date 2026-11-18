@@ -153,12 +153,12 @@ test('Docker Hub is read only: pulls go through, pushes and push logins are refu
 test('vmSize: default, overrides, and kept within the machine', () => {
   const host = { cpus: 20, memMb: 63 * 1024 };
   assert.deepEqual(vmSize({}, host), { cpus: Math.min(20, VM_DEFAULT.cpus), memMb: VM_DEFAULT.memMb });
-  assert.deepEqual(vmSize({ COPILOT_VM_CPUS: '16', COPILOT_VM_MEMORY_GB: '24' }, host), { cpus: 16, memMb: 24576 });
-  assert.deepEqual(vmSize({ COPILOT_VM_CPUS: '64', COPILOT_VM_MEMORY_GB: '500' }, host), { cpus: 20, memMb: 31.5 * 1024 });
-  assert.deepEqual(vmSize({ COPILOT_VM_CPUS: '0', COPILOT_VM_MEMORY_GB: '1' }, host).memMb, 2048);
-  assert.equal(vmSize({ COPILOT_VM_CPUS: '0' }, host).cpus, Math.min(20, VM_DEFAULT.cpus));
-  assert.equal(vmSize({ COPILOT_VM_MEMORY_GB: '6,5' }, host).memMb, 6656);
-  assert.equal(vmSize({ COPILOT_VM_CPUS: 'lots' }, host).cpus, Math.min(20, VM_DEFAULT.cpus));
+  assert.deepEqual(vmSize({ AGENT_VM_CPUS: '16', AGENT_VM_MEMORY_GB: '24' }, host), { cpus: 16, memMb: 24576 });
+  assert.deepEqual(vmSize({ AGENT_VM_CPUS: '64', AGENT_VM_MEMORY_GB: '500' }, host), { cpus: 20, memMb: 31.5 * 1024 });
+  assert.deepEqual(vmSize({ AGENT_VM_CPUS: '0', AGENT_VM_MEMORY_GB: '1' }, host).memMb, 2048);
+  assert.equal(vmSize({ AGENT_VM_CPUS: '0' }, host).cpus, Math.min(20, VM_DEFAULT.cpus));
+  assert.equal(vmSize({ AGENT_VM_MEMORY_GB: '6,5' }, host).memMb, 6656);
+  assert.equal(vmSize({ AGENT_VM_CPUS: 'lots' }, host).cpus, Math.min(20, VM_DEFAULT.cpus));
 });
 
 test('the VM\'s proxy needs no login: Clearsky adds it on the way to srt\'s proxy', async () => {

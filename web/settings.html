@@ -245,57 +245,57 @@
     <label for="AGENT_CLAUDE_FOR">Use Claude Code for<span class="more">The same for Claude Code: say <code>~/dev/private</code> or your own GitHub user, and those chats run in Claude Code while work stays in Copilot.</span></label>
     <input id="AGENT_CLAUDE_FOR" data-key="AGENT_CLAUDE_FOR" data-list data-item="~/dev/private" placeholder="nothing set" spellcheck="false">
     <p class="hint" style="margin:0 0 4px">Defaults for a new chat. A chat's own pickers still change that chat.</p>
-    <label for="COPILOT_MODEL">Model</label>
-    <input id="COPILOT_MODEL" data-key="COPILOT_MODEL" list="cp-models" placeholder="Copilot's default" spellcheck="false">
+    <label for="AGENT_MODEL">Model</label>
+    <input id="AGENT_MODEL" data-key="AGENT_MODEL" list="cp-models" placeholder="Copilot's default" spellcheck="false">
     <datalist id="cp-models"></datalist>
-    <label for="COPILOT_EFFORT">Reasoning effort</label>
-    <select id="COPILOT_EFFORT" data-key="COPILOT_EFFORT"></select>
-    <label for="COPILOT_PERMISSION">Access</label>
-    <select id="COPILOT_PERMISSION" data-key="COPILOT_PERMISSION"></select>
-    <label for="COPILOT_CWD">Folder for general chats<span class="more">Where a chat runs when it isn't about a PR or ticket. Chats about a PR or ticket run in that repo's clone, or the worktree with the PR's branch. Clearsky's own skills (stand-up, triage) work only from the Clearsky folder.</span></label>
-    <input id="COPILOT_CWD" data-key="COPILOT_CWD" placeholder="the Clearsky folder" spellcheck="false">
-    <label for="COPILOT_DISCLOSE">Say what did the work<span class="more">When a sandboxed chat is done, it ends the PR description (and the ticket description, if it wrote that) with a line like <i>Implemented with Copilot (Claude Opus 5.5). 939 credits used.</i> The model and credits come from the chat's own session log. Applies to chats started after you switch it on.</span></label>
-    <select id="COPILOT_DISCLOSE" data-key="COPILOT_DISCLOSE"><option value="">Off</option><option value="on">On: last line of the PR description</option></select>
+    <label for="AGENT_EFFORT">Reasoning effort</label>
+    <select id="AGENT_EFFORT" data-key="AGENT_EFFORT"></select>
+    <label for="AGENT_PERMISSION">Access</label>
+    <select id="AGENT_PERMISSION" data-key="AGENT_PERMISSION"></select>
+    <label for="AGENT_CWD">Folder for general chats<span class="more">Where a chat runs when it isn't about a PR or ticket. Chats about a PR or ticket run in that repo's clone, or the worktree with the PR's branch. Clearsky's own skills (stand-up, triage) work only from the Clearsky folder.</span></label>
+    <input id="AGENT_CWD" data-key="AGENT_CWD" placeholder="the Clearsky folder" spellcheck="false">
+    <label for="AGENT_DISCLOSE">Say what did the work<span class="more">When a sandboxed chat is done, it ends the PR description (and the ticket description, if it wrote that) with a line like <i>Implemented with Copilot (Claude Opus 5.5). 939 credits used.</i> The model and credits come from the chat's own session log. Applies to chats started after you switch it on.</span></label>
+    <select id="AGENT_DISCLOSE" data-key="AGENT_DISCLOSE"><option value="">Off</option><option value="on">On: last line of the PR description</option></select>
     <h3 id="folders" style="margin-top:28px">Folders and sandbox</h3>
-    <label for="COPILOT_FOLDERS">Folders the agent can change (read and write)<span class="more">The agent can read and change files there, including worktrees next to your clones, without the "Access paths outside trusted directories" question. Commands and edits still follow the access mode. Running chats pick changes up on their next message.</span></label>
-    <input id="COPILOT_FOLDERS" data-key="COPILOT_FOLDERS" data-list data-item="~/dev/work" placeholder="~/dev" spellcheck="false">
+    <label for="AGENT_FOLDERS">Folders the agent can change (read and write)<span class="more">The agent can read and change files there, including worktrees next to your clones, without the "Access paths outside trusted directories" question. Commands and edits still follow the access mode. Running chats pick changes up on their next message.</span></label>
+    <input id="AGENT_FOLDERS" data-key="AGENT_FOLDERS" data-list data-item="~/dev/work" placeholder="~/dev" spellcheck="false">
     <p class="hint warn" id="copilot-unmounted" hidden></p>
-    <label for="COPILOT_READ">Folders the agent can only read<span class="more">In the sandbox, the agent can read these but not change them. It can also always read <span id="read-default"></span> (what it needs to run and build) and files outside your home, like <code>/usr/lib/jvm</code>. The rest of your home is hidden from it: mail, documents, browser profiles, shell history and logins. Maven still reaches your repositories: the agent gets a copy of <code>~/.m2/settings.xml</code> without the passwords, and the sandbox adds your login on the way out, only to the hosts that login is for.</span></label>
-    <input id="COPILOT_READ" data-key="COPILOT_READ" data-list data-item="~/notes" placeholder="nothing more" spellcheck="false">
-    <label for="COPILOT_SANDBOX">Sandbox<span class="more">The agent and everything it runs can write only in the chat's folder, the folders above, the agent's own folder (<code>~/.copilot</code> or <code>~/.claude</code>) and <code>/tmp</code>. On Linux that <code>/tmp</code> is the chat's own: empty when its agent starts, kept in memory, and gone when it stops, so the chat sees nothing other programs keep in the machine's <code>/tmp</code> (their files, or the sockets of the X server, tmux or an ssh agent). Some things there can be read but not changed, because they are run later, outside the sandbox: git hooks and git settings of your clones, the agent's own settings (its MCP servers, skills, hooks and instructions), and editor or agent settings in the chat's repo that git doesn't track (<code>.vscode</code>, <code>.idea</code>, <code>.mcp.json</code>). The agent pushes and pulls by name, and asks with <code>outside git config …</code> when a git setting has to change. It reads only the parts of your home listed above (never <code>~/.ssh</code>, keyrings, browser profiles or Clearsky's own settings), and reaches only the hosts below. That holds in every access mode, Full included. The <b>Sandboxed</b> access mode always runs in it, and runs every step inside without asking; only its doors out ask.<br><br>Your GitHub login never enters it: the agent, git and gh inside get stand-ins, and the sandbox's proxy adds your <code>gh</code> login on the way to GitHub. Reading goes through; a push or any change waits until you click Allow in the chat. Hosts are checked by name only, so an allowed host can be written to as well as read.<br><br>srt comes with Clearsky. Linux also needs <code>bubblewrap</code>, <code>socat</code> and <code>ripgrep</code>.</span></label>
-    <select id="COPILOT_SANDBOX" data-key="COPILOT_SANDBOX"><option value="off">Off</option><option value="srt">Anthropic sandbox runtime (srt)</option></select>
+    <label for="AGENT_READ">Folders the agent can only read<span class="more">In the sandbox, the agent can read these but not change them. It can also always read <span id="read-default"></span> (what it needs to run and build) and files outside your home, like <code>/usr/lib/jvm</code>. The rest of your home is hidden from it: mail, documents, browser profiles, shell history and logins. Maven still reaches your repositories: the agent gets a copy of <code>~/.m2/settings.xml</code> without the passwords, and the sandbox adds your login on the way out, only to the hosts that login is for.</span></label>
+    <input id="AGENT_READ" data-key="AGENT_READ" data-list data-item="~/notes" placeholder="nothing more" spellcheck="false">
+    <label for="AGENT_SANDBOX">Sandbox<span class="more">The agent and everything it runs can write only in the chat's folder, the folders above, the agent's own folder (<code>~/.copilot</code> or <code>~/.claude</code>) and <code>/tmp</code>. On Linux that <code>/tmp</code> is the chat's own: empty when its agent starts, kept in memory, and gone when it stops, so the chat sees nothing other programs keep in the machine's <code>/tmp</code> (their files, or the sockets of the X server, tmux or an ssh agent). Some things there can be read but not changed, because they are run later, outside the sandbox: git hooks and git settings of your clones, the agent's own settings (its MCP servers, skills, hooks and instructions), and editor or agent settings in the chat's repo that git doesn't track (<code>.vscode</code>, <code>.idea</code>, <code>.mcp.json</code>). The agent pushes and pulls by name, and asks with <code>outside git config …</code> when a git setting has to change. It reads only the parts of your home listed above (never <code>~/.ssh</code>, keyrings, browser profiles or Clearsky's own settings), and reaches only the hosts below. That holds in every access mode, Full included. The <b>Sandboxed</b> access mode always runs in it, and runs every step inside without asking; only its doors out ask.<br><br>Your GitHub login never enters it: the agent, git and gh inside get stand-ins, and the sandbox's proxy adds your <code>gh</code> login on the way to GitHub. Reading goes through; a push or any change waits until you click Allow in the chat. Hosts are checked by name only, so an allowed host can be written to as well as read.<br><br>srt comes with Clearsky. Linux also needs <code>bubblewrap</code>, <code>socat</code> and <code>ripgrep</code>.</span></label>
+    <select id="AGENT_SANDBOX" data-key="AGENT_SANDBOX"><option value="off">Off</option><option value="srt">Anthropic sandbox runtime (srt)</option></select>
     <p class="hint">Keeps the agent to your folders and the hosts below.</p>
-    <label for="COPILOT_SANDBOX_TOKEN">GitHub token for the sandbox (optional)<span class="more">Not needed: by default the sandbox uses your <code>gh</code> login. A fine-grained token (with <b>Copilot Requests</b>) is used instead if you give one, for example one that can only read your work repos. Either way it stays out of the sandbox, and changes still wait for your Allow.</span></label>
-    <input id="COPILOT_SANDBOX_TOKEN" data-key="COPILOT_SANDBOX_TOKEN" type="password" autocomplete="off" placeholder="leave empty to use your gh login">
+    <label for="AGENT_SANDBOX_TOKEN">GitHub token for the sandbox (optional)<span class="more">Not needed: by default the sandbox uses your <code>gh</code> login. A fine-grained token (with <b>Copilot Requests</b>) is used instead if you give one, for example one that can only read your work repos. Either way it stays out of the sandbox, and changes still wait for your Allow.</span></label>
+    <input id="AGENT_SANDBOX_TOKEN" data-key="AGENT_SANDBOX_TOKEN" type="password" autocomplete="off" placeholder="leave empty to use your gh login">
     <h3 id="network" style="margin-top:28px">Network</h3>
-    <label for="COPILOT_DOMAINS">Hosts a sandboxed agent may reach<span class="more">Wildcards like <code>*.atlassian.net</code> are allowed. Add package registries (say <code>repo.maven.apache.org</code>, <code>registry.npmjs.org</code>) if builds need them.</span></label>
-    <input id="COPILOT_DOMAINS" data-key="COPILOT_DOMAINS" data-list data-words data-item="registry.npmjs.org" spellcheck="false">
-    <label for="COPILOT_READ_HOSTS">Hosts allowed from a chat<span class="more">When the agent asks for a host that isn't on the list above, the chat shows a card and its request waits for your answer. <b>Always allow</b> puts the host here. These are for reading: sending data to one (a POST, say) asks again. Remove one to be asked again.</span></label>
-    <input id="COPILOT_READ_HOSTS" data-key="COPILOT_READ_HOSTS" data-list data-words data-item="www.rfc-editor.org" placeholder="none yet" spellcheck="false">
+    <label for="AGENT_DOMAINS">Hosts a sandboxed agent may reach<span class="more">Wildcards like <code>*.atlassian.net</code> are allowed. Add package registries (say <code>repo.maven.apache.org</code>, <code>registry.npmjs.org</code>) if builds need them.</span></label>
+    <input id="AGENT_DOMAINS" data-key="AGENT_DOMAINS" data-list data-words data-item="registry.npmjs.org" spellcheck="false">
+    <label for="AGENT_READ_HOSTS">Hosts allowed from a chat<span class="more">When the agent asks for a host that isn't on the list above, the chat shows a card and its request waits for your answer. <b>Always allow</b> puts the host here. These are for reading: sending data to one (a POST, say) asks again. Remove one to be asked again.</span></label>
+    <input id="AGENT_READ_HOSTS" data-key="AGENT_READ_HOSTS" data-list data-words data-item="www.rfc-editor.org" placeholder="none yet" spellcheck="false">
     <h3 id="asking" style="margin-top:28px">Without asking</h3>
-    <label for="COPILOT_ASSISTED_ALLOW">Never ask before<span class="more">In the sandbox, the agent runs everything without asking, and asks you only at its doors out: <code>git push</code> and GitHub changes (held at the sandbox's network until you click Allow), Jira changes through <code>acli</code>, and <code>outside</code> (a command run on your machine, like tests that start Docker containers). <code>outside</code> commands only match exactly, like <code>outside ./mvnw verify</code>.</span></label>
-    <input id="COPILOT_ASSISTED_ALLOW" data-key="COPILOT_ASSISTED_ALLOW" data-list data-item="acli jira workitem transition" placeholder="nothing" spellcheck="false">
+    <label for="AGENT_ASSISTED_ALLOW">Never ask before<span class="more">In the sandbox, the agent runs everything without asking, and asks you only at its doors out: <code>git push</code> and GitHub changes (held at the sandbox's network until you click Allow), Jira changes through <code>acli</code>, and <code>outside</code> (a command run on your machine, like tests that start Docker containers). <code>outside</code> commands only match exactly, like <code>outside ./mvnw verify</code>.</span></label>
+    <input id="AGENT_ASSISTED_ALLOW" data-key="AGENT_ASSISTED_ALLOW" data-list data-item="acli jira workitem transition" placeholder="nothing" spellcheck="false">
     <p class="hint">Jira and <code>outside</code> commands that start like one of these.</p>
-    <label for="COPILOT_GATE_RULES">Let through without asking<span class="more">Kinds of change you said to always allow, from <b>Allow, and always for…</b> on a card. Each still shows in the chat and on the <b>Changes</b> page. Remove one to be asked again.<br><br><code>merge-ready</code>: merging a PR of the chat's repo when CI is green, it's approved and has no conflicts.<br><code>delete-merged-branch</code>: deleting a branch whose PR is merged.<br><code>repo:owner/name</code>: everyday changes to that repo from any chat.<br><code>jira:KEY</code>: changes to tickets in that Jira project.</span></label>
-    <input id="COPILOT_GATE_RULES" data-key="COPILOT_GATE_RULES" data-list data-words data-item="repo:owner/name" placeholder="nothing yet" spellcheck="false">
+    <label for="AGENT_GATE_RULES">Let through without asking<span class="more">Kinds of change you said to always allow, from <b>Allow, and always for…</b> on a card. Each still shows in the chat and on the <b>Changes</b> page. Remove one to be asked again.<br><br><code>merge-ready</code>: merging a PR of the chat's repo when CI is green, it's approved and has no conflicts.<br><code>delete-merged-branch</code>: deleting a branch whose PR is merged.<br><code>repo:owner/name</code>: everyday changes to that repo from any chat.<br><code>jira:KEY</code>: changes to tickets in that Jira project.</span></label>
+    <input id="AGENT_GATE_RULES" data-key="AGENT_GATE_RULES" data-list data-words data-item="repo:owner/name" placeholder="nothing yet" spellcheck="false">
     <div id="team-gate" class="hint" hidden></div>
     <h3 id="vm-builds" style="margin-top:28px">VMs and builds</h3>
-    <label for="COPILOT_BUILDS">Run builds in<span class="more">Where sandboxed chats compile and run tests. <b>The chat's VM</b> keeps them off this machine's CPU: they wait in line for a VM like any <code>vm</code> command and show in <b>VMs</b>. <b>The sandbox</b> runs them on this machine (at low priority), and uses the VM only for tests that need Docker. The sandbox fences files and network, not CPU. Applies to chats started after you change it. Without a VM on this machine, builds run in the sandbox.</span></label>
-    <select id="COPILOT_BUILDS" data-key="COPILOT_BUILDS"><option value="">The chat's VM (default)</option><option value="sandbox">The sandbox, VM only for Docker</option></select>
-    <label for="COPILOT_VM_CPUS">VM size: cores and memory (GB)<span class="more">For each chat's VM. Empty uses the default shown: half this machine's cores (up to 12) and a quarter of its memory (4 to 16 GB). Memory the VM doesn't use stays yours. Kept within this machine: at most all its cores and half its memory. Applies to the next VM a chat starts; the first one after a change takes about 15 seconds longer (it saves a new snapshot).</span></label>
-    <div class="row"><input id="COPILOT_VM_CPUS" data-key="COPILOT_VM_CPUS" inputmode="numeric" spellcheck="false" style="max-width:8em"> <input id="COPILOT_VM_MEMORY_GB" data-key="COPILOT_VM_MEMORY_GB" aria-label="VM memory in GB" inputmode="decimal" spellcheck="false" style="max-width:8em"></div>
-    <label for="COPILOT_VM_MAX">VMs at the same time<span class="more">1 to 8, empty is 1. Another chat's <code>vm</code> command waits in line, and its chat shows where it is. A VM with nothing running in it gives its place to the next in line, and starts again from the snapshot on its chat's next command.</span></label>
-    <input id="COPILOT_VM_MAX" data-key="COPILOT_VM_MAX" inputmode="numeric" spellcheck="false" placeholder="1" style="max-width:8em">
-    <label for="COPILOT_VM_IMAGES">Images the VM copies from your Docker<span class="more">For private images tests need, say from your company's registry: a whole image like <code>registry.example.com/team/app:main</code>, or a name prefix like <code>registry.example.com/</code> (then the newest tag of each image there). Before each <code>vm</code> command, the ones your own Docker has are copied into the chat's VM if it doesn't have that version yet. Your registry login never goes in the VM; <code>docker pull</code> on your machine when an image changes.</span></label>
-    <input id="COPILOT_VM_IMAGES" data-key="COPILOT_VM_IMAGES" data-list data-item="registry.example.com/team/" placeholder="none" spellcheck="false">
-    <label for="COPILOT_VM_IMAGE_CACHE_GB">Image cache (GB)<span class="more">VMs pull Docker Hub images through a cache on this machine, so a layer an earlier VM pulled isn't downloaded again. Empty is 20 GB. Over it, the layers used longest ago go first; layers no VM used for 30 days go anyway. <b>VMs</b> shows what's in it and can empty it.</span></label>
-    <input id="COPILOT_VM_IMAGE_CACHE_GB" data-key="COPILOT_VM_IMAGE_CACHE_GB" inputmode="decimal" spellcheck="false" placeholder="20" style="max-width:8em">
+    <label for="AGENT_BUILDS">Run builds in<span class="more">Where sandboxed chats compile and run tests. <b>The chat's VM</b> keeps them off this machine's CPU: they wait in line for a VM like any <code>vm</code> command and show in <b>VMs</b>. <b>The sandbox</b> runs them on this machine (at low priority), and uses the VM only for tests that need Docker. The sandbox fences files and network, not CPU. Applies to chats started after you change it. Without a VM on this machine, builds run in the sandbox.</span></label>
+    <select id="AGENT_BUILDS" data-key="AGENT_BUILDS"><option value="">The chat's VM (default)</option><option value="sandbox">The sandbox, VM only for Docker</option></select>
+    <label for="AGENT_VM_CPUS">VM size: cores and memory (GB)<span class="more">For each chat's VM. Empty uses the default shown: half this machine's cores (up to 12) and a quarter of its memory (4 to 16 GB). Memory the VM doesn't use stays yours. Kept within this machine: at most all its cores and half its memory. Applies to the next VM a chat starts; the first one after a change takes about 15 seconds longer (it saves a new snapshot).</span></label>
+    <div class="row"><input id="AGENT_VM_CPUS" data-key="AGENT_VM_CPUS" inputmode="numeric" spellcheck="false" style="max-width:8em"> <input id="AGENT_VM_MEMORY_GB" data-key="AGENT_VM_MEMORY_GB" aria-label="VM memory in GB" inputmode="decimal" spellcheck="false" style="max-width:8em"></div>
+    <label for="AGENT_VM_MAX">VMs at the same time<span class="more">1 to 8, empty is 1. Another chat's <code>vm</code> command waits in line, and its chat shows where it is. A VM with nothing running in it gives its place to the next in line, and starts again from the snapshot on its chat's next command.</span></label>
+    <input id="AGENT_VM_MAX" data-key="AGENT_VM_MAX" inputmode="numeric" spellcheck="false" placeholder="1" style="max-width:8em">
+    <label for="AGENT_VM_IMAGES">Images the VM copies from your Docker<span class="more">For private images tests need, say from your company's registry: a whole image like <code>registry.example.com/team/app:main</code>, or a name prefix like <code>registry.example.com/</code> (then the newest tag of each image there). Before each <code>vm</code> command, the ones your own Docker has are copied into the chat's VM if it doesn't have that version yet. Your registry login never goes in the VM; <code>docker pull</code> on your machine when an image changes.</span></label>
+    <input id="AGENT_VM_IMAGES" data-key="AGENT_VM_IMAGES" data-list data-item="registry.example.com/team/" placeholder="none" spellcheck="false">
+    <label for="AGENT_VM_IMAGE_CACHE_GB">Image cache (GB)<span class="more">VMs pull Docker Hub images through a cache on this machine, so a layer an earlier VM pulled isn't downloaded again. Empty is 20 GB. Over it, the layers used longest ago go first; layers no VM used for 30 days go anyway. <b>VMs</b> shows what's in it and can empty it.</span></label>
+    <input id="AGENT_VM_IMAGE_CACHE_GB" data-key="AGENT_VM_IMAGE_CACHE_GB" inputmode="decimal" spellcheck="false" placeholder="20" style="max-width:8em">
     <h3 id="long-tasks" style="margin-top:28px">Long tasks<span class="more">Sandboxed chats run long commands (a full build, <code>vm</code> tests, waiting for CI) as background jobs with <code>bg</code>: the chat ends its turn, and Clearsky wakes it with the result when the job ends. Jobs show in the chat's side panel, where you can stop one. A restart waits for running jobs; <b>Restart now</b> cuts them short, and their chats hear so after the restart.<br><br>The watchdog nudges a chat that stops before its task is done: its turn hit a limit or ended with an error, its answer stops mid-step or says there's more to do, or the turn had no word and nothing running for a long time (then it's stopped first). It never nudges a chat that asks you something, waits on your OK, has a job running, or that you stopped. Your next message starts the count again; you can pause it per chat in the side panel.</span></h3>
-    <label for="COPILOT_NUDGES">Nudges per task<span class="more">0 to 10, empty is 3. 0 turns the watchdog off.</span></label>
-    <input id="COPILOT_NUDGES" data-key="COPILOT_NUDGES" inputmode="numeric" spellcheck="false" placeholder="3" style="max-width:8em">
-    <label for="COPILOT_NUDGE_MINUTES">Nudge after (minutes) and stuck after (minutes)<span class="more">How long a chat stays quiet after its turn before the nudge, so you can answer first (1 to 60, empty is 2); and how long a turn may go with no word and nothing running before it counts as stuck (5 to 120, empty is 15). A build or test that's running never counts as stuck.</span></label>
-    <div class="row"><input id="COPILOT_NUDGE_MINUTES" data-key="COPILOT_NUDGE_MINUTES" inputmode="numeric" spellcheck="false" placeholder="2" style="max-width:8em"> <input id="COPILOT_STUCK_MINUTES" data-key="COPILOT_STUCK_MINUTES" aria-label="Stuck after, in minutes" inputmode="numeric" spellcheck="false" placeholder="15" style="max-width:8em"></div>
-    <div class="row"><button class="save" data-keys="COPILOT_MODEL,COPILOT_EFFORT,COPILOT_PERMISSION,COPILOT_CWD,COPILOT_FOLDERS,COPILOT_ASSISTED_ALLOW,COPILOT_SANDBOX,COPILOT_SANDBOX_TOKEN,COPILOT_DISCLOSE,COPILOT_READ,COPILOT_DOMAINS,COPILOT_READ_HOSTS,COPILOT_VM_IMAGES,COPILOT_GATE_RULES,COPILOT_VM_CPUS,COPILOT_VM_MEMORY_GB,COPILOT_BUILDS,COPILOT_VM_MAX,COPILOT_VM_IMAGE_CACHE_GB,COPILOT_NUDGES,COPILOT_NUDGE_MINUTES,COPILOT_STUCK_MINUTES,CLEARSKY_AGENT,AGENT_COPILOT_FOR,AGENT_CLAUDE_FOR">Save</button><span class="msg"></span></div>
+    <label for="AGENT_NUDGES">Nudges per task<span class="more">0 to 10, empty is 3. 0 turns the watchdog off.</span></label>
+    <input id="AGENT_NUDGES" data-key="AGENT_NUDGES" inputmode="numeric" spellcheck="false" placeholder="3" style="max-width:8em">
+    <label for="AGENT_NUDGE_MINUTES">Nudge after (minutes) and stuck after (minutes)<span class="more">How long a chat stays quiet after its turn before the nudge, so you can answer first (1 to 60, empty is 2); and how long a turn may go with no word and nothing running before it counts as stuck (5 to 120, empty is 15). A build or test that's running never counts as stuck.</span></label>
+    <div class="row"><input id="AGENT_NUDGE_MINUTES" data-key="AGENT_NUDGE_MINUTES" inputmode="numeric" spellcheck="false" placeholder="2" style="max-width:8em"> <input id="AGENT_STUCK_MINUTES" data-key="AGENT_STUCK_MINUTES" aria-label="Stuck after, in minutes" inputmode="numeric" spellcheck="false" placeholder="15" style="max-width:8em"></div>
+    <div class="row"><button class="save" data-keys="AGENT_MODEL,AGENT_EFFORT,AGENT_PERMISSION,AGENT_CWD,AGENT_FOLDERS,AGENT_ASSISTED_ALLOW,AGENT_SANDBOX,AGENT_SANDBOX_TOKEN,AGENT_DISCLOSE,AGENT_READ,AGENT_DOMAINS,AGENT_READ_HOSTS,AGENT_VM_IMAGES,AGENT_GATE_RULES,AGENT_VM_CPUS,AGENT_VM_MEMORY_GB,AGENT_BUILDS,AGENT_VM_MAX,AGENT_VM_IMAGE_CACHE_GB,AGENT_NUDGES,AGENT_NUDGE_MINUTES,AGENT_STUCK_MINUTES,CLEARSKY_AGENT,AGENT_COPILOT_FOR,AGENT_CLAUDE_FOR">Save</button><span class="msg"></span></div>
     <h3 id="cost" style="margin-top:28px">Credits and cost<span class="more">The <a href="/#usage">Usage</a> page adds up the AI credits every chat used, from Copilot's own session logs, and shows what they cost. Credits become dollars at the price below (check your Copilot plan), and dollars become your currency at your rate. With the live rate on, Clearsky looks the rate up once a day from the European Central Bank's public rates (frankfurter.dev, no account or token); if that fails it uses your rate.</span></h3>
     <label for="COPILOT_CREDIT_USD">Dollars per credit</label>
     <input id="COPILOT_CREDIT_USD" data-key="COPILOT_CREDIT_USD" inputmode="decimal" spellcheck="false" placeholder="0.01" style="max-width:8em">
@@ -361,7 +361,7 @@
   toPart();
 })();
 const CSRF = '__CSRF__';
-const SECRET = new Set(['GITHUB_TOKEN', 'GOOGLE_CALENDAR_ICS', 'COPILOT_SANDBOX_TOKEN']);
+const SECRET = new Set(['GITHUB_TOKEN', 'GOOGLE_CALENDAR_ICS', 'AGENT_SANDBOX_TOKEN']);
 const $ = (s) => document.querySelector(s);
 
 
@@ -412,7 +412,7 @@ $('#scaf-go').onclick = async () => {
 };
 // Kinds of change your team pack suggests letting through: offered, yours to add (then Save).
 async function drawTeamGate() {
-  const t = (await (await fetch('/api/team')).json()).team, box = $('#team-gate'), input = $('#COPILOT_GATE_RULES');
+  const t = (await (await fetch('/api/team')).json()).team, box = $('#team-gate'), input = $('#AGENT_GATE_RULES');
   const have = new Set(input.value.split(/[\s,]+/).filter(Boolean));
   const todo = (t?.gate?.suggest || []).filter((r) => !have.has(r));
   box.hidden = !todo.length;
@@ -504,54 +504,54 @@ function render(s) {
   $('#VPN_NEEDED_BY').value = vp.neededBy || '';
   fetch('/api/vpn').then((r) => r.json()).then((v) => state($('#vpn-state'), v.known ? v.up : null, !v.known ? 'not checked' : v.up ? 'on' : 'off')).catch(() => {});
   const cp = s.copilot || {};
-  $('#COPILOT_FOLDERS').value = cp.folders || '';
+  $('#AGENT_FOLDERS').value = cp.folders || '';
   // In the container, a folder exists only if docker-compose mounts it.
   const um = $('#copilot-unmounted');
   um.hidden = !cp.unmounted?.length;
   um.innerHTML = cp.unmounted?.length ? `Not in Clearsky's container: ${cp.unmounted.map((f) => `<code>${esc(f)}</code>`).join(', ')}. Save, then run <code>clearsky docker up</code> on your machine: it mounts the folders set here (Clearsky restarts).` : '';
-  $('#COPILOT_CWD').value = cp.cwd || '';
-  $('#COPILOT_MODEL').value = cp.model || '';
+  $('#AGENT_CWD').value = cp.cwd || '';
+  $('#AGENT_MODEL').value = cp.model || '';
   $('#CLEARSKY_AGENT').value = cp.agent || '';
   $('#AGENT_COPILOT_FOR').value = cp.copilotFor || '';
   $('#AGENT_CLAUDE_FOR').value = cp.claudeFor || '';
-  $('#COPILOT_ASSISTED_ALLOW').value = cp.assistedAllow || '';
-  $('#COPILOT_SANDBOX_TOKEN').placeholder = cp.sandboxToken ? `${cp.sandboxToken}; paste a new one to replace` : 'leave empty to use your gh login';
-  $('#COPILOT_SANDBOX').value = cp.sandbox || 'off';
-  $('#COPILOT_DISCLOSE').value = cp.disclose ? 'on' : '';
-  $('#COPILOT_READ').value = cp.read || '';
+  $('#AGENT_ASSISTED_ALLOW').value = cp.assistedAllow || '';
+  $('#AGENT_SANDBOX_TOKEN').placeholder = cp.sandboxToken ? `${cp.sandboxToken}; paste a new one to replace` : 'leave empty to use your gh login';
+  $('#AGENT_SANDBOX').value = cp.sandbox || 'off';
+  $('#AGENT_DISCLOSE').value = cp.disclose ? 'on' : '';
+  $('#AGENT_READ').value = cp.read || '';
   $('#read-default').textContent = cp.readDefault || '';
-  $('#COPILOT_DOMAINS').value = cp.domains || '';
-  $('#COPILOT_READ_HOSTS').value = cp.readHosts || '';
-  $('#COPILOT_VM_IMAGES').value = cp.vmImages || '';
-  $('#COPILOT_GATE_RULES').value = cp.gateRules || '';
+  $('#AGENT_DOMAINS').value = cp.domains || '';
+  $('#AGENT_READ_HOSTS').value = cp.readHosts || '';
+  $('#AGENT_VM_IMAGES').value = cp.vmImages || '';
+  $('#AGENT_GATE_RULES').value = cp.gateRules || '';
   drawTeamGate().catch(() => {});
-  $('#COPILOT_VM_CPUS').value = cp.vmCpus || '';
-  $('#COPILOT_VM_MEMORY_GB').value = cp.vmMemoryGb || '';
-  $('#COPILOT_BUILDS').value = cp.builds === 'sandbox' ? 'sandbox' : '';
-  $('#COPILOT_VM_MAX').value = cp.vmMax || '';
-  $('#COPILOT_VM_IMAGE_CACHE_GB').value = cp.vmImageCacheGb || '';
-  $('#COPILOT_NUDGES').value = cp.nudges || '';
-  $('#COPILOT_NUDGE_MINUTES').value = cp.nudgeMinutes || '';
-  $('#COPILOT_STUCK_MINUTES').value = cp.stuckMinutes || '';
+  $('#AGENT_VM_CPUS').value = cp.vmCpus || '';
+  $('#AGENT_VM_MEMORY_GB').value = cp.vmMemoryGb || '';
+  $('#AGENT_BUILDS').value = cp.builds === 'sandbox' ? 'sandbox' : '';
+  $('#AGENT_VM_MAX').value = cp.vmMax || '';
+  $('#AGENT_VM_IMAGE_CACHE_GB').value = cp.vmImageCacheGb || '';
+  $('#AGENT_NUDGES').value = cp.nudges || '';
+  $('#AGENT_NUDGE_MINUTES').value = cp.nudgeMinutes || '';
+  $('#AGENT_STUCK_MINUTES').value = cp.stuckMinutes || '';
   $('#COPILOT_CREDIT_USD').value = cp.creditUsd || '';
   $('#CLEARSKY_CURRENCY').value = cp.currency || '';
   $('#CLEARSKY_FX_RATE').value = cp.fxRate || '';
   $('#CLEARSKY_FX_LIVE').value = cp.fxLive ? 'on' : '';
-  $('#COPILOT_VM_CPUS').placeholder = cp.vmDefault ? `${cp.vmDefault.cpus} cores` : 'cores';
-  $('#COPILOT_VM_MEMORY_GB').placeholder = cp.vmDefault ? `${cp.vmDefault.memGb} GB` : 'GB';
-  $('#COPILOT_DOMAINS').placeholder = cp.defaultDomains || '';
+  $('#AGENT_VM_CPUS').placeholder = cp.vmDefault ? `${cp.vmDefault.cpus} cores` : 'cores';
+  $('#AGENT_VM_MEMORY_GB').placeholder = cp.vmDefault ? `${cp.vmDefault.memGb} GB` : 'GB';
+  $('#AGENT_DOMAINS').placeholder = cp.defaultDomains || '';
   if (!loadMemory.done) { loadMemory.done = true; loadMemory(); }
   // The choices come from Copilot itself (models you've used, its access modes).
   fetch('/api/copilot').then((r) => r.json()).then((i) => {
     $('#cp-models').innerHTML = (i.models || []).map((m) => `<option value="${esc(m)}">`).join('');
     if (i.agent) $('#agent-now').innerHTML = `Chats run in <b>${esc(i.agent.product)}</b>${i.agent.available ? '' : `, which isn't installed: <code>${esc(i.agent.install?.command || '')}</code>`}${i.rules ? ', unless a list below says otherwise' : ''}.`;
-    $('#COPILOT_MODEL').placeholder = i.agent?.name === 'claude' ? "Claude Code's default" : "Copilot's default";
+    $('#AGENT_MODEL').placeholder = i.agent?.name === 'claude' ? "Claude Code's default" : "Copilot's default";
     // Claude Code has no effort setting here.
-    $('#COPILOT_EFFORT').hidden = $('label[for="COPILOT_EFFORT"]').hidden = !(i.efforts || []).length;
-    $('#COPILOT_EFFORT').innerHTML = `<option value="">Copilot's default</option>${(i.efforts || []).map((e) => `<option>${esc(e)}</option>`).join('')}`;
-    $('#COPILOT_PERMISSION').innerHTML = Object.entries(i.permissions || {}).map(([k, l]) => `<option value="${k === 'ask' ? '' : esc(k)}">${esc(l)}${i.permissionHints?.[k] ? ` · ${esc(i.permissionHints[k])}` : ''}</option>`).join('');
-    $('#COPILOT_EFFORT').value = cp.effort || '';
-    $('#COPILOT_PERMISSION').value = cp.permission || '';
+    $('#AGENT_EFFORT').hidden = $('label[for="AGENT_EFFORT"]').hidden = !(i.efforts || []).length;
+    $('#AGENT_EFFORT').innerHTML = `<option value="">Copilot's default</option>${(i.efforts || []).map((e) => `<option>${esc(e)}</option>`).join('')}`;
+    $('#AGENT_PERMISSION').innerHTML = Object.entries(i.permissions || {}).map(([k, l]) => `<option value="${k === 'ask' ? '' : esc(k)}">${esc(l)}${i.permissionHints?.[k] ? ` · ${esc(i.permissionHints[k])}` : ''}</option>`).join('');
+    $('#AGENT_EFFORT').value = cp.effort || '';
+    $('#AGENT_PERMISSION').value = cp.permission || '';
   }).catch(() => {});
 
   S.settings = s;

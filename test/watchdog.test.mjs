@@ -61,11 +61,11 @@ test('nudges are capped per task, wait a while, and start again with your messag
 
 test('settings and the nudge itself', () => {
   assert.deepEqual(watchdogSettings({}), { nudges: 3, minutes: 2, stuckMinutes: 15 });
-  assert.deepEqual(watchdogSettings({ COPILOT_NUDGES: '0', COPILOT_NUDGE_MINUTES: '500', COPILOT_STUCK_MINUTES: '1' }), { nudges: 0, minutes: 60, stuckMinutes: 5 });
-  assert.equal(validate({ COPILOT_NUDGES: '5' }).COPILOT_NUDGES, '5');
-  assert.throws(() => validate({ COPILOT_NUDGES: '11' }), /0 to 10/);
-  assert.throws(() => validate({ COPILOT_NUDGE_MINUTES: '0' }), /1 to 60/);
-  assert.throws(() => validate({ COPILOT_STUCK_MINUTES: '2' }), /5 to 120/);
+  assert.deepEqual(watchdogSettings({ AGENT_NUDGES: '0', AGENT_NUDGE_MINUTES: '500', AGENT_STUCK_MINUTES: '1' }), { nudges: 0, minutes: 60, stuckMinutes: 5 });
+  assert.equal(validate({ AGENT_NUDGES: '5' }).AGENT_NUDGES, '5');
+  assert.throws(() => validate({ AGENT_NUDGES: '11' }), /0 to 10/);
+  assert.throws(() => validate({ AGENT_NUDGE_MINUTES: '0' }), /1 to 60/);
+  assert.throws(() => validate({ AGENT_STUCK_MINUTES: '2' }), /5 to 120/);
   const t = nudgeText('cut-off', 1, 3);
   assert.ok(t.startsWith(AUTO_MARK));
   assert.match(t, /cut off.*Carry on.*\(Nudge 1 of 3\.\)/s);

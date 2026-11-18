@@ -19,6 +19,6 @@ test('the chat is told where its builds run', () => {
 });
 
 test('Run builds in takes vm or sandbox', () => {
-  assert.equal(validate({ COPILOT_BUILDS: 'sandbox' }).COPILOT_BUILDS, 'sandbox');
-  assert.throws(() => validate({ COPILOT_BUILDS: 'laptop' }), /vm or sandbox/);
+  assert.equal(validate({ AGENT_BUILDS: 'sandbox' }).AGENT_BUILDS, 'sandbox');
+  assert.throws(() => validate({ AGENT_BUILDS: 'laptop' }), /vm or sandbox/);
 });

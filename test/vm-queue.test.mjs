@@ -8,14 +8,14 @@ const state = (p) => Promise.race([p.then(() => 'in', () => 'out'), tick().then(
 
 test('how many VMs at once: 1 unless set to 1 to 8', () => {
   assert.equal(vmMax({}), 1);
-  assert.equal(vmMax({ COPILOT_VM_MAX: '' }), 1);
-  assert.equal(vmMax({ COPILOT_VM_MAX: '3' }), 3);
-  assert.equal(vmMax({ COPILOT_VM_MAX: '0' }), 1);
-  assert.equal(vmMax({ COPILOT_VM_MAX: '40' }), 8);
-  assert.equal(vmMax({ COPILOT_VM_MAX: 'lots' }), 1);
-  assert.equal(validate({ COPILOT_VM_MAX: '2' }).COPILOT_VM_MAX, '2');
-  assert.throws(() => validate({ COPILOT_VM_MAX: '0' }), /1 to 8/);
-  assert.throws(() => validate({ COPILOT_VM_MAX: 'two' }), /1 to 8/);
+  assert.equal(vmMax({ AGENT_VM_MAX: '' }), 1);
+  assert.equal(vmMax({ AGENT_VM_MAX: '3' }), 3);
+  assert.equal(vmMax({ AGENT_VM_MAX: '0' }), 1);
+  assert.equal(vmMax({ AGENT_VM_MAX: '40' }), 8);
+  assert.equal(vmMax({ AGENT_VM_MAX: 'lots' }), 1);
+  assert.equal(validate({ AGENT_VM_MAX: '2' }).AGENT_VM_MAX, '2');
+  assert.throws(() => validate({ AGENT_VM_MAX: '0' }), /1 to 8/);
+  assert.throws(() => validate({ AGENT_VM_MAX: 'two' }), /1 to 8/);
 });
 
 test('a second chat waits while the first one builds, and starts when it ends', async () => {
