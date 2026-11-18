@@ -9,7 +9,7 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseCommand, pickTool, fixVersionsOf, change, jiraScopes, createVersions, REDIRECT } from '../lib/jira-versions.mjs';
+import { parseCommand, pickTool, fixVersionsOf, change, jiraScopes, createVersions, sitesOf, REDIRECT } from '../lib/jira-versions.mjs';
 import makePlugin from '../source.mjs';
 import { core } from './core.mjs';
 
@@ -127,6 +127,35 @@ test('a decline changes nothing; nothing to change asks nothing; failures are re
   assert.deepEqual(client.issues['ACME-1'].fixVersions, []);
   const show = await v.run(parseCommand(['show', 'ACME-1', 'ACME-2']), async () => { throw new Error('show never asks'); });
   assert.equal(show.stdout, 'ACME-1: (none)\nACME-2: (none)');
+});
+
+test('the site: the setting, else Clearsky\'s Jira site, else the one the login sees; never a call without one', async () => {
+  const text = (t) => ({ content: [{ type: 'text', text: t }] });
+  assert.deepEqual(sitesOf(text(JSON.stringify([{ id: 'c1', url: 'https://acme.atlassian.net', name: 'acme' }]))), ['https://acme.atlassian.net']);
+  assert.deepEqual(sitesOf({ structuredContent: { resources: [{ id: 'c1', url: 'https://Acme.atlassian.net/' }] } }), ['https://acme.atlassian.net']);
+  assert.deepEqual(sitesOf(text(JSON.stringify({ sites: [{ cloudId: 'c1', url: 'https://a.atlassian.net' }, { url: 'https://a.atlassian.net' }] }))), ['https://a.atlassian.net']);
+  assert.deepEqual(sitesOf(text('You can reach these sites:\n- acme (https://acme.atlassian.net), cloud id c1')), ['https://acme.atlassian.net']);
+  assert.deepEqual(sitesOf(text('nothing here')), []);
+
+  const issues = { 'ACME-1': { fixVersions: [] } };
+  // Clearsky's own Jira site, so the site list isn't asked for.
+  let client = fakeClient(issues);
+  let v = createVersions({ client, clearskySite: async () => 'https://acme.atlassian.net' });
+  assert.equal((await v.run(parseCommand(['show', 'ACME-1']), async () => true)).code, 0);
+  assert.equal(client.calls.find((c) => c.name === 'getJiraIssue').args.cloudId, 'https://acme.atlassian.net');
+  assert.ok(!client.calls.some((c) => c.name === 'getAccessibleAtlassianResources'));
+
+  // A site list Clearsky can't use: a clear error, and no Jira call without a site.
+  for (const [answer, why] of [[{ content: [{ type: 'text', text: 'no sites' }] }, /couldn't find a Jira site/],
+    [{ content: [{ type: 'text', text: '[{"url":"https://a.atlassian.net"},{"url":"https://b.atlassian.net"}]' }] }, /sees 2 sites \(a\.atlassian\.net, b\.atlassian\.net\)/],
+    [{ isError: true, content: [{ type: 'text', text: 'scope missing' }] }, /wouldn't list your sites \(scope missing\)/]]) {
+    client = fakeClient(issues);
+    const call = client.callTool;
+    client.callTool = (n, a) => (n === 'getAccessibleAtlassianResources' ? (client.calls.push({ name: n }), answer) : call(n, a));
+    v = createVersions({ client, clearskySite: async () => null });
+    await assert.rejects(v.run(parseCommand(['show', 'ACME-1']), async () => true), (e) => why.test(e.message) && /Set Jira site under Settings → Plugins → Jira versions/.test(e.message) && e.site);
+    assert.ok(!client.calls.some((c) => c.name === 'getJiraIssue'), 'no call without a site');
+  }
 });
 
 // ---------------------------------------------------------------- the whole plugin, with a login
