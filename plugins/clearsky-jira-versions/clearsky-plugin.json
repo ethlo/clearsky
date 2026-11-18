@@ -1,7 +1,7 @@
 {
   "name": "jira-versions",
   "label": "Jira versions",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Lets Copilot chats add and remove Jira fix versions with `jira-versions …`, which acli can't, through Atlassian's MCP server and your own login. Each change asks you first.",
   "clearsky": 1,
   "entry": "source.mjs",
@@ -9,7 +9,7 @@
   "settings": {
     "JIRA_MCP_SITE": {
       "label": "Jira site (optional)",
-      "hint": "Your site's address, like acme.atlassian.net. Only needed when your login sees more than one site; otherwise the one it sees is used.",
+      "hint": "Your site's address, like acme.atlassian.net. Empty: the Jira site Clearsky already uses (JIRA_URL, or the one acli is logged in to).",
       "secret": false,
       "team": true,
       "pattern": "^\\s*(https?://)?[A-Za-z\\d][A-Za-z\\d.-]*\\.[A-Za-z]{2,}/?\\s*$",

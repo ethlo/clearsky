@@ -41,7 +41,7 @@ export default (lends, { store, fetchImpl = fetch } = {}) => {
           if (cmd.error) return { code: 2, stdout: '', stderr: `jira-versions: ${cmd.error}\n\n${USAGE}\n`, decided: 'refused' };
           const ask = (detail) => door.ask({ title: 'Change Jira fix versions as you', detail });
           try { return await j.run(cmd, ask); }
-          catch (e) { return { code: 1, stdout: '', stderr: `Clearsky: ${e.message}\n`, decided: e.auth ? 'not logged in' : 'failed' }; }
+          catch (e) { return { code: 1, stdout: '', stderr: `Clearsky: ${e.message}\n`, decided: e.auth ? 'not logged in' : e.site ? 'no site' : 'failed' }; }
         },
       },
     },

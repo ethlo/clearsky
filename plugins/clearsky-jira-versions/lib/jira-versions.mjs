@@ -55,7 +55,7 @@ export function parseCommand(argv) {
 
 // The tools this door uses, by name: the most specific match first.
 const PICK = {
-  sites: [/^getAccessibleAtlassianResources$/],
+  sites: [/^getAccessibleAtlassianResources$/, /accessible.*resources|atlassian.*(sites|resources)/i],
   read: [/^getJiraIssue$/, /^get.*jira.*issue$/i],
   edit: [/^editJiraIssue$/, /^(edit|update).*jira.*issue$/i],
 };
@@ -119,9 +119,30 @@ export function siteFrom(text) {
   } catch { return null; }
 }
 
+const siteError = (why) => Object.assign(new Error(`${why}. Set Jira site under Settings → Plugins → Jira versions (like acme.atlassian.net), or JIRA_URL for Clearsky's Jira`), { site: true });
+
+// The sites the server's site list names, as https://xyz.atlassian.net: from its structured
+// content or JSON text (a list, or { resources }, { sites } …), else any *.atlassian.net
+// address in the text. Each site once.
+export function sitesOf(r) {
+  const out = new Set();
+  const walk = (v, depth = 0) => {
+    if (!v || typeof v !== 'object' || depth > 4) return;
+    if (Array.isArray(v)) return v.forEach((x) => walk(x, depth + 1));
+    const u = typeof v.url === 'string' ? siteFrom(v.url) : null;
+    if (u) { out.add(u); return; }
+    for (const x of Object.values(v)) walk(x, depth + 1);
+  };
+  walk(r?.structuredContent);
+  const text = resultText(r);
+  if (!out.size) { try { walk(JSON.parse(text)); } catch { /* not JSON */ } }
+  if (!out.size) for (const m of text.matchAll(/\b[a-z\d][a-z\d-]*\.atlassian\.net\b/gi)) out.add(`https://${m[0].toLowerCase()}`);
+  return [...out];
+}
+
 // Runs a checked command with an MCP client ({ listTools(), callTool(name, args) }).
 // `ask(detail)` resolves true when you allowed the change in the chat.
-export function createVersions({ client, site = () => null, keepSite = () => {} }) {
+export function createVersions({ client, site = () => null, clearskySite = () => null, keepSite = () => {} }) {
   let toolsAt = 0, tools = null;
   const list = async () => {
     if (!tools || Date.now() - toolsAt > 10 * 60_000) { tools = await client.listTools(); toolsAt = Date.now(); }
@@ -132,18 +153,21 @@ export function createVersions({ client, site = () => null, keepSite = () => {} 
     if (!t) throw new Error(`the server offers no tool to ${step === 'edit' ? 'edit' : 'read'} a Jira ticket to this login (does the login have Jira? log in again under Settings → Plugins → Jira versions)`);
     return t;
   };
+  // The site: JIRA_MCP_SITE, else the Jira site Clearsky already uses (JIRA_URL, or the one acli
+  // is logged in to), else the one site the login sees. The server takes the site's address as
+  // its cloudId. Without one, nothing is sent: Jira would only answer with a validation error.
   const cloudId = async (ts) => {
-    const s = site();
+    const s = site() || siteFrom(await Promise.resolve(clearskySite()).catch(() => null));
     if (s) return s;
     const t = pickTool(ts, 'sites');
-    if (!t) return null;
+    if (!t) throw siteError('the server offers no tool to list the sites this login sees');
     const r = await client.callTool(t.name, {});
-    let found = null;
-    try { const j = JSON.parse(resultText(r)); found = (Array.isArray(j) ? j : j.resources || []).find((x) => x && (x.id || x.url)); } catch { /* not JSON */ }
-    if (!found) return null;
-    const id = found.url ? siteFrom(found.url) || found.id : found.id;
-    keepSite(id);
-    return id;
+    if (r?.isError) throw siteError(`the server wouldn't list your sites (${said(r)})`);
+    const found = sitesOf(r);
+    if (found.length > 1) throw siteError(`this login sees ${found.length} sites (${found.map((x) => new URL(x).host).join(', ')})`);
+    if (!found.length) throw siteError('couldn\'t find a Jira site in what the server sent');
+    keepSite(found[0]);
+    return found[0];
   };
   const said = (r) => resultText(r).replace(/\s+/g, ' ').trim().slice(0, 600) || 'an error';
 
@@ -231,7 +255,7 @@ export function createJiraVersionsMcp({ lends, store, open = (u) => lends.openUr
     }
     return { listTools: () => client.tools(), callTool: (n, a) => client.callTool(n, a) };
   }
-  const versions = () => createVersions({ client: mcp(), site: () => opts.site || store.get()?.site || null, keepSite: (site) => { const t = store.get(); if (t) store.set({ ...t, site }); } });
+  const versions = () => createVersions({ client: mcp(), site: () => opts.site || store.get()?.site || null, clearskySite: () => lends.jiraSite?.(), keepSite: (site) => { const t = store.get(); if (t) store.set({ ...t, site }); } });
 
   return {
     use,
