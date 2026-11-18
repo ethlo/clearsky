@@ -32,7 +32,7 @@ export { hiddenCalendars, planNow, moduleManifests, source, prReadKey, collect, 
 export { remoteRepo, findCheckout, worktreeFor } from '../lib/app/chat-env.mjs';
 export { JIRA_HINT, buildsWhere, buildsHint, typedPart, validRefs } from '../lib/app/chat-hints.mjs';
 export { jiraTargets } from '../lib/app/chat-gate.mjs';
-export { vmMaven } from '../lib/app/chat-builds.mjs';
+export { vmMaven, within } from '../lib/app/chat-builds.mjs';
 export { sessionTitle, linkSessions, itemSessionName } from '../lib/app/chat-sessions.mjs';
 export { standupText, standup } from '../lib/app/standup.mjs';
 export { pollAttention, keepAliveDelay } from '../lib/app/attention.mjs';

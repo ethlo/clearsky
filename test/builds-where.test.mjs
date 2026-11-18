@@ -22,3 +22,13 @@ test('Run builds in takes vm or sandbox', () => {
   assert.equal(validate({ AGENT_BUILDS: 'sandbox' }).AGENT_BUILDS, 'sandbox');
   assert.throws(() => validate({ AGENT_BUILDS: 'laptop' }), /vm or sandbox/);
 });
+
+test('a command in the VM\'s own checkout keeps its VM, also through a link; another folder moves it', async () => {
+  const { within } = await import('../bin/clearsky.mjs');
+  const links = { '/home/me/dev': '/data/dev' };
+  const resolve = (p) => Object.entries(links).reduce((x, [from, to]) => (x === from || x.startsWith(`${from}/`) ? to + x.slice(from.length) : x), p);
+  assert.ok(within('/data/dev/repo', '/data/dev/repo'));
+  assert.ok(within('/home/me/dev/repo/mod/', '/data/dev/repo', resolve));
+  assert.ok(!within('/data/dev/repo2', '/data/dev/repo', resolve));
+  assert.ok(!within('/data/dev', '/data/dev/repo', resolve));
+});
