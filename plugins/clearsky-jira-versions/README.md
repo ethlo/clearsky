@@ -8,6 +8,7 @@ Clearsky reaches Jira through `acli`, but acli can't set a ticket's fix versions
 jira-versions show KEY…                  each ticket's fix versions
 jira-versions add VERSION KEY…           add a fix version, keeping the others
 jira-versions remove VERSION KEY…        take a fix version off
+jira-versions raw KEY                    what Jira's server sends for a ticket, as it is
 ```
 
 It goes through Atlassian's remote MCP server (`https://mcp.atlassian.com/v2/mcp`) with your own login, and needs no API token: log in with your browser under Settings → Plugins → Jira versions. The login is kept in `~/.config/clearsky/jira-versions-mcp.json` and never goes in a chat's sandbox. It asks only for the Jira scopes the server lists, plus staying logged in.
