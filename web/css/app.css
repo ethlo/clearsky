@@ -629,7 +629,8 @@ a.ref:hover { border-bottom-style: solid; }
 #chat-log .msg.cp:not(:last-child) .nudge { display: none; }
 .perm { border: 1px solid var(--amber); background: var(--amber-soft); border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
 .perm-t { font-weight: 600; font-size: 13px; }
-.perm code { display: block; margin-top: 6px; white-space: pre-wrap; word-break: break-all; }
+.perm code { display: block; margin-top: 6px; white-space: pre-wrap; word-break: break-all; max-height: 18em; overflow: auto; }
+.perm-n { margin-top: 6px; font-size: 12.5px; color: var(--muted); }
 .perm-a { margin-top: 6px; font-size: 12.5px; padding-left: 8px; border-left: 3px solid var(--amber); }
 .perm-a.a-fine { border-left-color: var(--green); }
 .perm-b { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }

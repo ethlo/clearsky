@@ -956,7 +956,7 @@ function renderAnswer(segs, running = false) {
       return `<div class="tool s-${esc(g.status || 'pending')}">${stamp(g.start || g.at)}<span>${icon('tool', 13)}</span>${esc(g.title || 'Tool')}<i>${done ? '<b>✓</b>' : ''}${esc(said)}</i></div>`;
     }
     if (g.type === 'permission') {
-      return `<div class="perm"><div class="perm-t">${stamp(g.at)}${esc(g.title)}</div>${g.detail ? `<code>${esc(g.detail)}</code>` : ''}
+      return `<div class="perm"><div class="perm-t">${stamp(g.at)}${esc(g.title)}</div>${g.detail ? `<code>${esc(g.detail)}</code>` : ''}${g.note ? `<div class="perm-n">${esc(g.note)}</div>` : ''}
         ${g.advice ? `<div class="perm-a a-${g.advice.level === 'fine' ? 'fine' : 'check'}" title="Clearsky's advice, from GitHub's and Jira's facts (not from PR or ticket text). You decide.">${esc(g.advice.text)}</div>` : ''}
         <div class="perm-b">${g.answered ? `<span class="perm-done">${esc(g.answered)}</span>`
           : g.options.map((o) => `<button class="${/^allow/.test(o.kind) ? 'ok' : 'no'}" data-perm="${esc(g.id)}" data-option="${esc(o.id)}" data-name="${esc(o.name)}">${esc(o.name)}</button>`).join('')}</div></div>`;
