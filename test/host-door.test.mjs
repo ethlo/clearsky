@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { HostDoor, hostRule, ruleMatches } from '../lib/host-door.mjs';
+import { HostDoor, hostRule, ruleMatches, stepLines, describeRequest } from '../lib/host-door.mjs';
 
 const chat = (id, mode = 'sandboxed') => ({ id, mode });
 function door({ chats = [chat('a')], answers = [], ...rest } = {}) {
@@ -117,8 +117,8 @@ test('reading an allowed host goes through; sending data there asks', async () =
 test('the card says when Clearsky can\'t keep a host read only', async () => {
   const { d, asked } = door({ readable: () => false, answers: ['deny'] });
   await d.decide({ host: 'example.org', port: 8443 });
-  assert.match(asked[0].card.detail, /^example\.org:8443\n/);
-  assert.match(asked[0].card.detail, /sending as well as reading/);
+  assert.match(asked[0].card.detail, /^example\.org:8443 \(not the web's own port/);
+  assert.match(asked[0].card.note, /sending as well as reading/);
 });
 
 test('a card taken down at the end of the turn is not a Deny: the next turn asks again', async () => {
@@ -134,4 +134,72 @@ test('Copilot\'s fetch gives up after about 10 s: an Allow after 8 s tells the c
   const { d } = door({ now: () => t, answers: [() => { t = 9000; return 'allow'; }], late: (cs, rule) => told.push(rule) });
   assert.equal(await d.decide({ host: 'ref.example.org', port: 443 }), true);
   assert.deepEqual(told, ['ref.example.org']);
+});
+
+test('the first card names the agent\'s step that named the host, and says what it can\'t see yet', async () => {
+  const steps = () => stepLines([
+    { title: 'Viewing file', kind: 'read', input: { path: '/x/README.md' } },
+    { title: 'Fetching web content', kind: 'fetch', input: { url: 'https://docs.example.org/guide?page=2' } },
+  ], 'docs.example.org', 'Copilot');
+  const { d, asked } = door({ steps, answers: ['deny'] });
+  await d.decide({ host: 'docs.example.org', port: 443 });
+  const card = asked[0].card.detail;
+  assert.match(card, /^docs\.example\.org \(https\)\n/);
+  assert.match(card, /Copilot's step that names it: Fetching web content: https:\/\/docs\.example\.org\/guide\?page=2/);
+  assert.doesNotMatch(card, /README/);
+  assert.match(asked[0].card.note, /can't see the request yet/);
+  assert.match(asked[0].card.note, /HTTPS is encrypted/);
+  assert.match(asked[0].card.note, /sending data asks again with what it sends/);
+});
+
+test('step lines: no step names the host, or none is running', () => {
+  assert.deepEqual(stepLines([], 'a.example'), []);
+  assert.deepEqual(stepLines([{ title: 'Run tests', kind: 'execute', input: { command: 'npm test' } }], 'a.example', 'Copilot'),
+    ['Copilot\'s step running then (none names this host):', '  Run tests: npm test']);
+});
+
+test('no step running: the card says it is the agent itself or a program it started', async () => {
+  const { d, asked } = door({ answers: ['deny'] });
+  await d.decide({ host: 'telemetry.example', port: 443 });
+  assert.match(asked[0].card.detail, /No step was running/);
+});
+
+test('reading an allowed host shows in the chat, once per address in a turn', async () => {
+  const seen = [];
+  const { d } = door({ answers: ['chat'], seen: (cs, line) => seen.push([cs.map((c) => c.id), line]) });
+  await d.decide({ host: 'example.org', port: 443 });
+  await d.check(new Request('https://example.org/a?b=1'));
+  await d.check(new Request('https://example.org/a?b=1'));
+  await d.check(new Request('https://listed.example/x'), { listed: (h) => h === 'listed.example' });
+  assert.deepEqual(seen, [[['a'], 'GET example.org/a?b=1']]);
+  d.turnEnded('a');
+  await d.check(new Request('https://example.org/a?b=1'));
+  assert.equal(seen.length, 2);
+});
+
+test('the sending card shows the request: address, size, headers (logins hidden) and the body', async () => {
+  const { d, asked } = door({ answers: ['chat', 'deny'] });
+  await d.decide({ host: 'api.example.org', port: 443 });
+  const body = JSON.stringify({ model: 'demo', messages: [{ role: 'user', content: 'Hello from Acme' }] });
+  await d.check(new Request('https://api.example.org/v1/messages?beta=true', { method: 'POST', body,
+    headers: { 'content-type': 'application/json', 'content-length': String(body.length), 'x-api-key': 'fake_value_123', authorization: 'Bearer abc', 'user-agent': 'demo/1.0' } }));
+  const card = asked[1].card.detail;
+  assert.match(card, /^POST api\.example\.org\/v1\/messages\?beta=true\n/);
+  assert.match(card, new RegExp(`Sends ${body.length} bytes \\(application/json\\)`));
+  assert.match(card, /x-api-key: \(hidden, 14 characters\)/);
+  assert.match(card, /authorization: \(hidden/);
+  assert.match(card, /user-agent: demo\/1\.0/);
+  assert.doesNotMatch(card, /abc|fake_value/);
+  assert.match(card, /Body:\n\{"model":"demo".*\}$/);
+  assert.equal(asked[1].card.note, 'You allowed reading api.example.org; this sends data there.');
+});
+
+test('describeRequest: long text bodies are cut, binary ones not shown, no body said so', async () => {
+  const long = await describeRequest(new Request('https://a.example/up', { method: 'PUT', body: 'x'.repeat(5000), headers: { 'content-type': 'text/plain' } }));
+  assert.match(long, /Sends (5000 bytes|at least [\d.]+ KB) \(text\/plain\)/);
+  assert.match(long, /Body \(the start\):\nx{600}\n…/);
+  const bin = await describeRequest(new Request('https://a.example/up', { method: 'POST', body: new Uint8Array([0, 1, 2, 255]), headers: { 'content-type': 'application/octet-stream' } }));
+  assert.match(bin, /Body: not text \(application\/octet-stream\), not shown\./);
+  const none = await describeRequest(new Request('https://a.example/x', { method: 'DELETE' }));
+  assert.match(none, /Sends no body/);
 });
