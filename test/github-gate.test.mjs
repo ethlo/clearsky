@@ -261,3 +261,12 @@ test('GraphQL: an approval asks, a review that only comments doesn\'t, an unlist
   assert.equal(await why('mutation { addComment(input: {}) { clientMutationId } }'), null);
   assert.match(await why('mutation { followUser(input: {}) { clientMutationId } }'), /^followUser: not everyday work/);
 });
+
+test('a big push\'s probe (only a flush packet) goes through quietly; the push after it is judged', async () => {
+  const asked = [], told = [];
+  const f = githubFilter(async (what) => { asked.push(what); return false; }, { told: (what) => told.push(what), look: { fastForward: async () => true } });
+  const probe = new Request('https://github.com/acme/api.git/git-receive-pack', { method: 'POST', body: '0000' });
+  assert.equal((await f(probe)).action, 'allow');
+  assert.deepEqual([asked, told], [[], []]);
+  assert.equal(await risky(new Request('https://github.com/acme/api.git/git-receive-pack', { method: 'POST', body: 'junk' }), 'git push to acme/api'), 'a push Clearsky couldn\'t read');
+});
