@@ -177,6 +177,17 @@ test('reading an allowed host shows in the chat, once per address in a turn', as
   assert.equal(seen.length, 2);
 });
 
+test('reads that differ only by a digest show as one line (a docker pull)', async () => {
+  const seen = [];
+  const { d } = door({ answers: ['chat'], seen: (cs, line) => seen.push(line) });
+  await d.decide({ host: 'registry.example', port: 443 });
+  const a = 'a'.repeat(64), b = 'b'.repeat(64);
+  for (const p of [`blobs/sha256:${a}`, `blobs/sha256:${b}`, `manifests/sha256:${a}`, `manifests/sha256-${b}`, 'manifests/main']) {
+    await d.check(new Request(`https://registry.example/v2/acme/app/${p}`));
+  }
+  assert.deepEqual(seen, ['GET registry.example/v2/acme/app/blobs/…', 'GET registry.example/v2/acme/app/manifests/…', 'GET registry.example/v2/acme/app/manifests/main']);
+});
+
 test('the sending card shows the request: address, size, headers (logins hidden) and the body', async () => {
   const { d, asked } = door({ answers: ['chat', 'deny'] });
   await d.decide({ host: 'api.example.org', port: 443 });

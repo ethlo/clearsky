@@ -18,7 +18,7 @@ test('whether this machine can run the VM, and why not', () => {
 });
 
 test('the VM reaches Docker Hub (with its CDN) and Maven Central through the proxy', () => {
-  for (const h of ['registry-1.docker.io', 'production.cloudfront.docker.com', '*.cloudflare.docker.com', 'repo.maven.apache.org']) assert.ok(VM_DOMAINS.includes(h), h);
+  for (const h of ['registry-1.docker.io', 'production.cloudfront.docker.com', '*.cloudflare.docker.com', 'ghcr.io', 'mcr.microsoft.com', 'quay.io', 'repo.maven.apache.org']) assert.ok(VM_DOMAINS.includes(h), h);
   const s = mavenSettings({ port: 1, url: 'http://srt:tok3n@' });
   assert.match(s, /<host>10\.0\.2\.100<\/host><port>3128<\/port><username>srt<\/username><password>tok3n<\/password>/);
   assert.doesNotMatch(mavenSettings({ port: 1, url: 'http://' }), /username/);
