@@ -405,10 +405,12 @@ async function drawChanges() {
   el.innerHTML = list.length ? `<h4>Changed as you</h4>${changeRows(list, { chats: false })}<a href="#changes" class="more">All changes, from every chat</a>` : '';
 }
 
-// Files for the next message: dropped on the chat or picked with the paperclip, uploaded at once.
+// Files for the next message: dropped on the chat, pasted into the box or picked with the
+// paperclip, uploaded at once. Images get a thumbnail here and go to the agent as images too.
+const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
 async function attachFiles(list) {
   for (const file of [...list].slice(0, Math.max(0, 10 - chat.files.filter((x) => !x.pointed).length))) {
-    const f = { name: file.name, size: file.size, path: null };
+    const f = { name: file.name, size: file.size, path: null, thumb: IMAGE_TYPES.includes(file.type) ? URL.createObjectURL(file) : null };
     if (file.size > 25 * 1024 * 1024) { $('#chat-sub').textContent = `${file.name} is over 25 MB`; continue; }
     chat.files.push(f); drawRefs();
     try {
@@ -422,7 +424,17 @@ async function attachFiles(list) {
 }
 $('#cp-attach').onclick = () => $('#cp-file').click();
 $('#cp-file').onchange = (e) => { attachFiles(e.target.files); e.target.value = ''; };
-$('#cp-refs').addEventListener('click', (e) => { const b = e.target.closest('[data-unfile]'); if (b) { chat.files.splice(Number(b.dataset.unfile), 1); drawRefs(); } });
+$('#cp-refs').addEventListener('click', (e) => { const b = e.target.closest('[data-unfile]'); if (b) { const [f] = chat.files.splice(Number(b.dataset.unfile), 1); if (f?.thumb) URL.revokeObjectURL(f.thumb); drawRefs(); } });
+// Ctrl+V of a screenshot (or an image copied from a page or file manager): attached like a drop.
+// A pasted screenshot has no name of its own, so it gets one from the time.
+$('#chat-text').addEventListener('paste', (e) => {
+  const files = [...(e.clipboardData?.files || [])];
+  if (!files.length) return;
+  e.preventDefault();
+  const stamp = new Date().toTimeString().slice(0, 8).replace(/:/g, '');
+  attachFiles(files.map((file, i) => (file.name && file.name !== 'image.png') ? file
+    : new File([file], `pasted-${stamp}${files.length > 1 ? `-${i + 1}` : ''}.${(file.type.split('/')[1] || 'png').replace('jpeg', 'jpg')}`, { type: file.type })));
+});
 for (const ev of ['dragover', 'drop']) {
   $('#chat').addEventListener(ev, (e) => {
     if (!e.dataTransfer?.types?.includes('Files')) return;
@@ -1125,7 +1137,8 @@ function drawRefs() {
   for (const [i, f] of chat.files.entries()) {
     const el = document.createElement('span');
     el.className = 'ref file';
-    el.innerHTML = `<span title="${esc(f.pointed ? `${f.shown}: ${agentNow()} gets the path and reads it itself` : f.path || 'uploading')}">${f.pointed ? '@' : icon('clip', 12)} ${esc(f.name)}${f.dir ? '/' : ''}${f.path ? '' : ' …'}</span><button type="button" data-unfile="${i}" aria-label="Remove">✕</button>`;
+    if (f.thumb) el.classList.add('img');
+    el.innerHTML = `${f.thumb ? `<img src="${esc(f.thumb)}" alt="">` : ''}<span title="${esc(f.pointed ? `${f.shown}: ${agentNow()} gets the path and reads it itself` : f.path || 'uploading')}">${f.pointed ? '@' : f.thumb ? '' : icon('clip', 12)} ${esc(f.name)}${f.dir ? '/' : ''}${f.path ? '' : ' …'}</span><button type="button" data-unfile="${i}" aria-label="Remove">✕</button>`;
     $('#cp-refs').append(el);
   }
   for (const [i, r] of chat.refs.entries()) {
@@ -1212,8 +1225,9 @@ async function send(text, extra = {}) {
   const refs = chat.refs.map(({ kind, key, repo, number }) => ({ kind, key, repo, number }));
   const attachments = chat.files.filter((f) => !f.pointed).map((f) => f.path);
   const files = chat.files.filter((f) => f.pointed).map((f) => f.path);
-  const sentFiles = chat.files.map((f) => f.name);
-  addMsg('me', `${refs.length ? `<span class="refs-sent">${icon('clip', 13)} ${chat.refs.map((r) => esc(refLabel(r))).join(', ')}</span>` : ''}${sentFiles.length ? `<span class="refs-sent">${icon('clip', 13)} ${sentFiles.map(esc).join(', ')}</span>` : ''}${esc(text)}`);
+  const sentFiles = chat.files.filter((f) => !f.thumb).map((f) => f.name);
+  const sentImages = chat.files.filter((f) => f.thumb).map((f) => `<img src="${esc(f.thumb)}" alt="${esc(f.name)}" title="${esc(f.name)}">`).join('');
+  addMsg('me', `${refs.length ? `<span class="refs-sent">${icon('clip', 13)} ${chat.refs.map((r) => esc(refLabel(r))).join(', ')}</span>` : ''}${sentFiles.length ? `<span class="refs-sent">${icon('clip', 13)} ${sentFiles.map(esc).join(', ')}</span>` : ''}${sentImages ? `<span class="imgs-sent">${sentImages}</span>` : ''}${esc(text)}`);
   chat.refs = [];
   chat.files = [];
   chat.items = [...new Set([...chat.items, ...refs.map(refKeyOf)])];

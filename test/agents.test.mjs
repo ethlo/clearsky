@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, chmodSync, mkdirSync, readFileSync } from '
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { agentName, AGENTS, CLAUDE_MODES, claudeModel, findBin } from '../lib/agents.mjs';
-import { AcpAgent } from '../lib/acp.mjs';
+import { AcpAgent, imageBlock, IMAGE_MAX } from '../lib/acp.mjs';
 import { srtSettings } from '../lib/sandbox.mjs';
 import { checks } from '../lib/doctor.mjs';
 import { validate } from '../lib/settings.mjs';
@@ -144,4 +144,22 @@ test('each chat remembers its agent', async () => {
   setSessionAgent(file, 'chat-1', 'claude');
   setSessionAgent(file, 'chat-2', 'copilot');
   assert.deepEqual(sessionAgents(file), { 'chat-1': 'claude', 'chat-2': 'copilot' });
+});
+
+test('images go to the agent as ACP image blocks only when it takes them, and only real, small images', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cs-img-'));
+  writeFileSync(join(dir, 'shot.PNG'), 'png!');
+  writeFileSync(join(dir, 'notes.txt'), 'text');
+  writeFileSync(join(dir, 'huge.jpg'), Buffer.alloc(IMAGE_MAX + 1));
+  assert.deepEqual(imageBlock(join(dir, 'shot.PNG')), { type: 'image', mimeType: 'image/png', data: Buffer.from('png!').toString('base64') });
+  assert.equal(imageBlock(join(dir, 'notes.txt')), null);
+  assert.equal(imageBlock(join(dir, 'huge.jpg')), null, 'too big: its path only');
+  assert.equal(imageBlock(join(dir, 'gone.png')), null);
+  const sent = [];
+  const a = Object.assign(Object.create(AcpAgent.prototype), { sessionId: 's1', request: (m, p) => sent.push(p) });
+  a.init = { agentCapabilities: {} };
+  a.prompt('look', [join(dir, 'shot.PNG')]);
+  a.init = { agentCapabilities: { promptCapabilities: { image: true } } };
+  a.prompt('look', [join(dir, 'shot.PNG'), join(dir, 'notes.txt')]);
+  assert.deepEqual(sent.map((p) => p.prompt.map((b) => b.type)), [['text'], ['text', 'image']]);
 });

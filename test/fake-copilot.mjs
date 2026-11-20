@@ -19,7 +19,7 @@ if (args[0] === 'skill' && args[1] === 'list') {
   createInterface({ input: process.stdin }).on('line', (line) => {
     const m = JSON.parse(line);
     const upd = (sessionId, update) => out({ method: 'session/update', params: { sessionId, update } });
-    if (m.method === 'initialize') out({ id: m.id, result: { protocolVersion: 1, agentCapabilities: { loadSession: true, sessionCapabilities: { list: {} } } } });
+    if (m.method === 'initialize') out({ id: m.id, result: { protocolVersion: 1, agentCapabilities: { loadSession: true, sessionCapabilities: { list: {} }, promptCapabilities: { image: true } } } });
     else if (m.method === 'session/list') {
       out({ id: m.id, result: m.params.cursor
         ? { sessions: [{ sessionId: 'personal-1', cwd: '/tmp/me', title: 'Personal hack', updatedAt: new Date().toISOString() }, { sessionId: 'cli-old-session', cwd: '/tmp', title: 'From the terminal', updatedAt: '2026-10-01T10:00:00Z' }] }
@@ -46,7 +46,7 @@ if (args[0] === 'skill' && args[1] === 'list') {
       if (m.params.prompt[0].text === '/compact again') { say('Failed to run /compact: '); say('Error: Nothing to compact.'); out({ id: m.id, result: { stopReason: 'end_turn' } }); return; }
       const flags = args.filter((a, i) => a.startsWith('--') || ['shell', 'write', 'plan'].includes(a) && args[i - 1]?.startsWith('--'));
       say(`flags=${args.filter((a) => a.startsWith('--')).join(' ')} `);
-      say(`info=${JSON.stringify({ prompt: m.params.prompt[0].text, flags, session: sid, model: args.includes('--model') ? args[args.indexOf('--model') + 1] : null, hasToken: !!process.env.GITHUB_TOKEN })}\n`);
+      say(`info=${JSON.stringify({ prompt: m.params.prompt[0].text, flags, session: sid, model: args.includes('--model') ? args[args.indexOf('--model') + 1] : null, hasToken: !!process.env.GITHUB_TOKEN, images: m.params.prompt.slice(1).map((b) => `${b.type}:${b.mimeType}:${b.data}`) })}\n`);
       // A note for Copilot's memory, as Copilot is asked to suggest one (lib/memory.mjs).
       if (m.params.prompt[0].text.endsWith('remember this')) say('\n```remember\nrepo: acme/api\nRun the tests with npm test\n```\n');
       // Allowed tools run without asking, except a prompt that says "gated" (like a step Copilot's judge wants you to OK).

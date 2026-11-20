@@ -54,8 +54,16 @@ test('the chat panel talks to the local Copilot CLI with the chosen options', as
   assert.match(up.path, /attachments\/\w+\/notes_1\.txt$/);
   const attEvs = await events(await ask({ message: 'Read this', session: 'sess-1234', resume: true, permission: 'read', attachments: [up.path, '/etc/passwd'] }));
   assert.match(info0(attEvs).prompt, new RegExp(`Read this\\n\\nFiles I attached: ${up.path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`));
+  assert.deepEqual(info0(attEvs).images, [], 'a text file goes by its path only');
+
+  // A pasted image: named in the message like any file, and also sent to the agent as an image.
+  const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
+  const pic = await (await fetch(`${base}/api/copilot/attach?name=pasted-135700.png`, { method: 'POST', headers: { 'X-Clearsky-Token': csrf }, body: png })).json();
+  const picEvs = await events(await ask({ message: 'What is wrong here?', session: 'sess-1234', resume: true, permission: 'read', attachments: [pic.path] }));
+  assert.ok(info0(picEvs).prompt.endsWith(`Files I attached: ${pic.path}`));
+  assert.deepEqual(info0(picEvs).images, [`image:image/png:${png.toString('base64')}`]);
   const outs = await (await fetch(`${base}/api/copilot/outputs?chat=sess-1234`)).json();
-  const kept = outs.files.find((f) => f.kind === 'attached');
+  const kept = outs.files.find((f) => f.kind === 'attached' && f.name === 'notes_1.txt');
   assert.ok(kept && kept.name === 'notes_1.txt' && kept.exists, JSON.stringify(outs.files));
   assert.equal(await (await fetch(`${base}/api/copilot/file?chat=sess-1234&path=${encodeURIComponent(kept.path)}`)).text(), 'hello');
   assert.equal((await fetch(`${base}/api/copilot/file?chat=sess-1234&path=${encodeURIComponent('/etc/passwd')}`)).status, 404, 'only the chat\'s own files');

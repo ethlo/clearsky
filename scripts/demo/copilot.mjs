@@ -14,7 +14,7 @@ if (args[0] === 'skill' && args[1] === 'list') {
   createInterface({ input: process.stdin }).on('line', (line) => {
     const m = JSON.parse(line);
     const upd = (sessionId, update) => out({ method: 'session/update', params: { sessionId, update } });
-    if (m.method === 'initialize') out({ id: m.id, result: { protocolVersion: 1, agentCapabilities: { loadSession: true, sessionCapabilities: { list: {} } } } });
+    if (m.method === 'initialize') out({ id: m.id, result: { protocolVersion: 1, agentCapabilities: { loadSession: true, sessionCapabilities: { list: {} }, promptCapabilities: { image: true } } } });
     else if (m.method === 'session/list') out({ id: m.id, result: { sessions: args.length ? SESSIONS : [] } }); // as Claude Code: no past sessions
     else if (m.method === 'session/load') {
       sid = m.params.sessionId;
@@ -22,7 +22,7 @@ if (args[0] === 'skill' && args[1] === 'list') {
       out({ id: m.id, result: {} });
     } else if (m.method === 'session/new') out({ id: m.id, result: { sessionId: sid } });
     else if (m.method === 'session/prompt') {
-      upd(sid, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'This is a demo: nothing runs here.' } });
+      upd(sid, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: `This is a demo: nothing runs here.${(n => n ? ` (I got ${n === 1 ? 'your image' : `your ${n} images`}.)` : '')(m.params.prompt.filter((b) => b.type === 'image').length)}` } });
       out({ id: m.id, result: { stopReason: 'end_turn' } });
     } else if (m.id != null) out({ id: m.id, result: {} }); // session/set_mode and the like
   });

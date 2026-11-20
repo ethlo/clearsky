@@ -1263,3 +1263,9 @@ a.u-row:hover { background: var(--accent-soft); }
 .ni.cp .hot { color: var(--accent); display: inline-flex; vertical-align: -1px; margin-right: 3px; }
 .ni.cp .hot svg { fill: currentColor; stroke: none; }
 .hbadge.hot svg { fill: currentColor; stroke: none; vertical-align: -1px; }
+/* An image for the next message (pasted, dropped or picked): its thumbnail in the chip, and in
+   the message once sent. */
+.ref.img { padding-left: 3px; border-radius: 10px; }
+.ref.img img { width: 40px; height: 40px; object-fit: cover; border-radius: 6px; display: block; }
+.msg.me .imgs-sent { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.msg.me .imgs-sent img { max-width: 160px; max-height: 120px; border-radius: 8px; border: 1px solid var(--line); display: block; }
