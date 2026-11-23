@@ -571,6 +571,16 @@ a.ref:hover { border-bottom-style: solid; }
   padding: 3px 10px; cursor: pointer; }
 .chip:hover { border-color: var(--accent); color: var(--accent); }
 .chat-log { flex: 1; overflow-y: auto; padding: 18px 24px; display: flex; flex-direction: column; gap: 12px; }
+/* Drawn from the copy the page kept while the server checks for newer messages (see setStale). */
+.chat-log > * { transition: opacity .2s; }
+.chat-log.stale > * { opacity: .55; }
+.stale-note { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.stale-note .i { animation: spin 1s linear infinite; }
+.stale-note.bad { color: var(--amber); }
+.stale > .card-b { opacity: .6; transition: opacity .2s; }
+#v-list > .view-b { transition: opacity .2s; }
+#v-list.stale > .view-b { opacity: .6; }
+.card-h .stale-note { margin-left: 2px; }
 .cp-main .chat-log { max-width: none; padding-left: max(24px, calc((100% - 812px) / 2)); padding-right: max(24px, calc((100% - 812px) / 2)); }
 .msg { font-size: 13.5px; line-height: 1.6; overflow-wrap: anywhere; }
 .msg.me { align-self: flex-end; background: var(--accent-soft); color: var(--text); padding: 8px 12px; border-radius: 12px 12px 2px 12px; max-width: 85%; white-space: pre-wrap; }

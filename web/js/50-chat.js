@@ -576,7 +576,10 @@ function chatSub() {
   if (!$('#chat-title input')) $('#chat-title').textContent = chat.title || (chat.turns ? `${agentNow()} session` : 'New chat');
   const i = chat.info;
   // The header keeps to the title; mode and turns are in the composer and under This chat.
-  $('#chat-sub').textContent = i && !i.available ? 'Copilot CLI not found' : '';
+  const sub = $('#chat-sub');
+  if (i && !i.available) sub.textContent = 'Copilot CLI not found';
+  else if (chat.stale?.shown) sub.innerHTML = staleNote(chat.stale);
+  else sub.textContent = '';
   const hint = i?.permissionHints?.[$('#cp-perm').value];
   $('#cp-perm').title = hint ? `What ${agentNow()} may do without asking: ${hint}` : `What ${agentNow()} may do without asking`;
 }
@@ -856,6 +859,30 @@ function detach() {
   chat.stop = chat.halt = null;
   chat.queued = [];
   sendLabel();
+  setStale(null);
+}
+
+// A chat drawn from the copy the page kept, while the server checks it for newer messages: the
+// log steps back a little and the header says how old the copy is, until the answer lands. A
+// quick "nothing changed" never shows it (it waits a moment first). `failed`: the check didn't
+// get through, so what's on screen may be behind.
+function setStale(s) {
+  clearTimeout(setStale.timer);
+  chat.stale = s;
+  const paint = () => {
+    if (chat.stale) chat.stale.shown = true;
+    $('#chat-log').classList.toggle('stale', !!chat.stale && !chat.stale.failed);
+    chatSub();
+  };
+  if (s && !s.failed) setStale.timer = setTimeout(paint, STALE_AFTER_MS);
+  else paint();
+}
+const STALE_AFTER_MS = 250;
+function staleNote(s) {
+  const asOf = s.at ? ` as of ${esc(ago(s.at))}` : '';
+  return s.failed
+    ? `<span class="stale-note bad" title="Clearsky couldn't ask ${esc(agentNow())} what's new, so newer messages may be missing. Open the chat again to retry.">Couldn't check for newer messages · showing it${asOf}</span>`
+    : `<span class="stale-note" title="Shown from what this page kept. Newer messages appear as soon as ${esc(agentNow())} answers.">${icon('refresh', 12)}Updating… · showing it${asOf}</span>`;
 }
 
 function newChat() {
@@ -1013,6 +1040,7 @@ const HIST_KEEP = 30;
 const histCache = new Map();
 function keepHistory(h) {
   if (!h.stamp) return;
+  h.seenAt = new Date().toISOString(); // when the server last said this is how it is
   histCache.delete(h.id);
   histCache.set(h.id, h);
   while (histCache.size > HIST_KEEP) histCache.delete(histCache.keys().next().value);
@@ -1055,6 +1083,7 @@ async function openSession(id, cwd) {
   const fits = had && (!cwd || had.cwd === cwd);
   // Seen already: show it now, then ask whether it changed.
   let drawn = fits ? showSession(had) : -1;
+  if (fits) setStale({ at: had.seenAt });
   if (!fits) {
     // Nothing of the chat you were on carries over while this one loads (a real session can
     // take seconds): its own name if we know it, and an empty side pane.
@@ -1069,6 +1098,7 @@ async function openSession(id, cwd) {
     if (fits) q.set('have', had.stamp);
     const h = await getJson(`/api/copilot/sessions/${encodeURIComponent(id)}${q.size ? `?${q}` : ''}`);
     if (chat.view !== view) return; // you picked another chat meanwhile
+    setStale(null);
     // Unchanged: keep what's on screen (and its scroll), with what's live about it now.
     const fresh = h.same ? { ...had, ...h, messages: had.messages } : h;
     delete fresh.same;
@@ -1079,7 +1109,7 @@ async function openSession(id, cwd) {
     if (fresh.busy && !chat.stop) attachLive(fresh.id);
   } catch (e) {
     if (chat.view !== view) return;
-    if (fits) { chatSub(); return; } // still showing what it had
+    if (fits) { setStale({ at: had.seenAt, failed: true }); return; } // still showing what it had
     newChat();
     addMsg('cp', `<div class="err">Couldn't open that session: ${esc(e.message)}</div>`);
   }
@@ -1282,6 +1312,7 @@ async function send(text, extra = {}) {
   const here = () => chat.session === mine.id && chat.view === view;
   let halted = false;
   chat.stop = () => ctrl.abort(); // stop watching (switching chats); the turn goes on
+  setStale(null); // your turn is live now, whatever the check for news says
   chat.halt = () => { halted = true; haltTurn(mine.id); };
   sendLabel();
   drawCtx();

@@ -133,7 +133,7 @@ function catchUp(name) {
   if (catchingUp.has(name)) return;
   catchingUp.add(name);
   getJson(`/api/source/${name}?wait=1`).then((d) => { state[name] = d; if (name === 'jira') loadBranches(); renderToday(); drawFresh(); clearTimeout(catchUp.plan); catchUp.plan = setTimeout(loadPlan, 300); })
-    .catch(() => {}).finally(() => catchingUp.delete(name));
+    .catch(() => { if (state[name]?.refreshing) { delete state[name].refreshing; renderToday(); drawFresh(); } }).finally(() => catchingUp.delete(name));
 }
 
 // "↻ checked 3m ago" next to the page title: when Clearsky last checked what this list shows
@@ -148,10 +148,13 @@ function drawFresh() {
   const spinning = names.some((n) => loading.has(n) || state[n]?.refreshing);
   const what = FRESH_SOURCES[view]?.length === 1 ? `${SOURCE_NAME[FRESH_SOURCES[view][0]]} checked` : 'checked';
   const tip = names.map((n) => `${SOURCE_NAME[n] || n}: ${state[n]?.fetchedAt ? `checked ${ago(state[n].fetchedAt)}` : 'not yet'}`).join('\n');
+  // A saved answer shown while the new one is fetched: say how old it is, and dim the list.
+  const stale = names.filter((n) => state[n]?.refreshing).map((n) => state[n].fetchedAt).filter(Boolean).sort()[0];
+  $('#v-list').classList.toggle('stale', !!stale);
   for (const b of document.querySelectorAll('[data-fresh]')) {
     b.classList.toggle('spin', spinning);
-    b.title = `${tip}\nClick to check everything now`;
-    b.innerHTML = `${REFRESH_ICON}<span>${spinning ? 'Checking…' : times.length ? `${what} ${esc(ago(times[0]))}` : ''}</span>`;
+    b.title = `${stale ? 'Showing what Clearsky saved; the new answer is on its way.\n' : ''}${tip}\nClick to check everything now`;
+    b.innerHTML = `${REFRESH_ICON}<span>${stale ? `Updating · ${esc(ago(stale))}` : spinning ? 'Checking…' : times.length ? `${what} ${esc(ago(times[0]))}` : ''}</span>`;
   }
 }
 setInterval(drawFresh, 30_000);
@@ -409,10 +412,18 @@ const PANEL_SOURCES = { plan: ['calendar'], 'c-review': ['github'], 'c-prs': ['g
   'c-mentions': ['github', 'jiraMentions'], 'c-left': ['jira', 'github'] };
 const REFRESH_ICON = icon('refresh', 14);
 
+// A panel showing a saved answer while its new one is being fetched: it steps back a little and
+// says how old it is ("Updating · 12m ago"), until the new data lands.
+function panelStale(id) {
+  const names = PANEL_SOURCES[id] || [];
+  const old = names.filter((n) => state[n]?.refreshing).map((n) => state[n].fetchedAt).filter(Boolean).sort();
+  return old.length ? old[0] : null;
+}
 function refreshButton(id) {
   const names = PANEL_SOURCES[id];
   if (!names) return '';
-  const spinning = names.some((n) => loading.has(n)) || (id === 'plan' && loading.has('plan'));
+  const stale = panelStale(id);
+  const spinning = names.some((n) => loading.has(n)) || (id === 'plan' && loading.has('plan')) || !!stale;
   const times = names.map((n) => state[n]?.fetchedAt).filter(Boolean);
   const oldest = times.length ? times.sort()[0] : null;
   const tip = spinning ? 'Refreshing…' : `Refresh${oldest ? ` · updated ${ago(oldest)}` : ''} (Shift-click: everything)`;
@@ -422,7 +433,9 @@ function refreshButton(id) {
 function card(el, title, count, body) {
   // A "needs you" panel with nothing in it steps back.
   el.classList.toggle('clear', count === 0 && !el.closest('.quiet'));
-  el.innerHTML = `<div class="card-h"><h2>${esc(title)}</h2>${count != null ? `<span class="count">${count}</span>` : ''}${refreshButton(el.id)}</div>
+  const stale = panelStale(el.id);
+  el.classList.toggle('stale', !!stale);
+  el.innerHTML = `<div class="card-h"><h2>${esc(title)}</h2>${count != null ? `<span class="count">${count}</span>` : ''}${stale ? `<span class="stale-note" title="Shown from what Clearsky saved; the new answer is on its way">Updating · ${esc(ago(stale))}</span>` : ''}${refreshButton(el.id)}</div>
     <div class="card-b">${body}</div>`;
 }
 
