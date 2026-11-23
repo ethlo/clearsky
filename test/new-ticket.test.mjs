@@ -50,7 +50,7 @@ test('the picked project and fix version go into the command acli runs', () => {
   const a = ticketArgv(create('-p', 'PAY', '-s', 'Ledger CSV rounding', '-t', 'Bug', '-l', 'csv, ledger', '--parent', 'PAY-1', '-d', '## Why\n- it loses cents', '--json'), { project: 'PAY', version: '2.14' }, io);
   assert.deepEqual(a, create('--from-json', '/tmp/x/workitem.json', '--json'));
   const def = JSON.parse(files['workitem.json']);
-  assert.deepEqual({ ...def, description: def.description.type }, { summary: 'Ledger CSV rounding', type: 'Bug', label: ['csv', 'ledger'], parentIssueId: 'PAY-1', description: 'doc', projectKey: 'PAY',
+  assert.deepEqual({ ...def, description: def.description.type }, { summary: 'Ledger CSV rounding', type: 'Bug', labels: ['csv', 'ledger'], parentIssueId: 'PAY-1', description: 'doc', projectKey: 'PAY',
     additionalAttributes: { fixVersions: [{ name: '2.14' }] } });
   // its own --from-json: read from the chat's folder, project and version set
   const own = { ...io, readFile: (f) => (f === '/w/w.json' ? JSON.stringify({ summary: 'From file', projectKey: 'OLD', type: 'Story', additionalAttributes: { labels: ['x'] } }) : null) };
