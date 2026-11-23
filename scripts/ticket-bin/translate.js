@@ -12,6 +12,7 @@ ticket new --title "…" [--body "…"]        create one (Jira: --project KEY [
 ticket mine                                your open tickets
 
 <ref> is ABC-123 in Jira, owner/name#12 (or #12 in the repo's folder) on GitHub.
+A new Jira ticket shows me a card where I pick its project and fix version; don't ask me for them first.
 Write text in Markdown.`;
 
 const JIRA_KEY = /^[A-Z][A-Z0-9_]+-\d+$/i;

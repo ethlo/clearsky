@@ -968,10 +968,12 @@ function renderAnswer(segs, running = false) {
       return `<div class="tool s-${esc(g.status || 'pending')}">${stamp(g.start || g.at)}<span>${icon('tool', 13)}</span>${esc(g.title || 'Tool')}<i>${done ? '<b>✓</b>' : ''}${esc(said)}</i></div>`;
     }
     if (g.type === 'permission') {
+      const missing = permMissing(g);
       return `<div class="perm"><div class="perm-t">${stamp(g.at)}${esc(g.title)}</div>${g.detail ? `<code>${esc(g.detail)}</code>` : ''}${g.note ? `<div class="perm-n">${esc(g.note)}</div>` : ''}
         ${g.advice ? `<div class="perm-a a-${g.advice.level === 'fine' ? 'fine' : 'check'}" title="Clearsky's advice, from GitHub's and Jira's facts (not from PR or ticket text). You decide.">${esc(g.advice.text)}</div>` : ''}
+        ${g.fields && !g.answered ? permFields(g) : ''}
         <div class="perm-b">${g.answered ? `<span class="perm-done">${esc(g.answered)}</span>`
-          : g.options.map((o) => `<button class="${/^allow/.test(o.kind) ? 'ok' : 'no'}" data-perm="${esc(g.id)}" data-option="${esc(o.id)}" data-name="${esc(o.name)}">${esc(o.name)}</button>`).join('')}</div></div>`;
+          : g.options.map((o) => `<button class="${/^allow/.test(o.kind) ? 'ok' : 'no'}" data-perm="${esc(g.id)}" data-option="${esc(o.id)}" data-name="${esc(o.name)}"${missing && /^allow/.test(o.kind) ? ` disabled title="Pick ${esc(missing)} first"` : ''}>${esc(o.name)}</button>`).join('')}</div></div>`;
     }
     if (g.type === 'error') return `<div class="err">${stamp(g.at)}${esc(g.message)}</div>`;
     if (g.type === 'note') return `<div class="tool">${stamp(g.at)}<span>${icon('folder', 13)}</span>${esc(g.text)}</div>`;
@@ -980,6 +982,23 @@ function renderAnswer(segs, running = false) {
     // The whole answer, as Markdown (or as formatted text where the paste takes it).
     + (!running && segs.some((g) => g.type === 'text' && g.text.trim()) ? `<button type="button" class="b-copy ans" data-copy-answer title="Copy the answer" aria-label="Copy the answer">${icon('copy', 13)}</button>` : '')
     + (running && segs.moved ? `<div class="idle" data-at="${segs.moved}">Last activity ${clock(segs.moved)} · <b>${sinceNow(segs.moved)}</b></div>` : '') + (stuck ? `<button class="nudge" data-nudge title="Send ${agentNow()} “Try again.”">${icon('refresh', 13)} Nudge</button>` : '');
+}
+
+// A card's fields (a new ticket's project and fix version): what you picked lives on the card
+// (g.values), so a redraw keeps it. A field `by` another takes its choices from that one's value.
+const permValues = (g) => (g.values ||= Object.fromEntries((g.fields || []).map((f) => [f.name, f.value ?? null])));
+const permChoices = (g, f) => (f.by ? f.choices?.[permValues(g)[f.by]] || [] : f.options || []);
+function permMissing(g) {
+  const f = (g.fields || []).find((x) => x.required && !permChoices(g, x).some((o) => o.value === permValues(g)[x.name]));
+  return f ? f.label.toLowerCase() : '';
+}
+function permFields(g) {
+  const v = permValues(g);
+  return `<div class="perm-f">${g.fields.map((f) => {
+    const list = permChoices(g, f), note = f.by && f.notes?.[v[f.by]];
+    const blank = !list.some((o) => o.value === v[f.name]) ? `<option value="" disabled selected hidden>Pick one</option>` : '';
+    return `<label>${esc(f.label)}<select data-perm-field="${esc(f.name)}" data-perm-of="${esc(g.id)}">${blank}${list.map((o) => `<option value="${esc(o.value)}"${o.value === v[f.name] ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}</select>${note ? `<small>${esc(note)}</small>` : ''}</label>`;
+  }).join('')}</div>`;
 }
 
 // Reopen a Copilot session (from here, the terminal or an editor) with its conversation so far.
@@ -1380,7 +1399,7 @@ $('#chat-log').addEventListener('click', async (e) => {
   if (seg) seg.answered = b.dataset.name;
   b.closest('.perm-b').innerHTML = `<span class="perm-done">${esc(b.dataset.name)}</span>`;
   drawCtx();
-  try { await post('/api/copilot/permission', { chat: chat.session, id: b.dataset.perm, option: b.dataset.option }); }
+  try { await post('/api/copilot/permission', { chat: chat.session, id: b.dataset.perm, option: b.dataset.option, values: seg?.fields ? permValues(seg) : undefined }); }
   catch (err) { if (seg) seg.answered = `Couldn't send: ${err.message}`; }
 });
 
@@ -1748,4 +1767,17 @@ document.addEventListener('click', async (e) => {
   if (!b) return;
   try { await post('/api/copilot/folders', { chat: chat.session, remove: b.dataset.folderOff }); } catch {}
   drawInfo(true);
+});
+
+// A card's field changed (a new ticket's project or fix version): keep it, and draw the card again
+// (another project has other versions, and Create waits for a version).
+$('#chat-log').addEventListener('change', (e) => {
+  const s = e.target.closest('[data-perm-field]');
+  if (!s) return;
+  const card = s.closest('.perm'), seg = s.closest('.msg')?.segs?.find((g) => g.type === 'permission' && g.id === s.dataset.permOf);
+  if (!seg || !card) return;
+  const v = permValues(seg);
+  v[s.dataset.permField] = s.value;
+  for (const f of seg.fields) if (f.by === s.dataset.permField && !permChoices(seg, f).some((o) => o.value === v[f.name])) v[f.name] = null;
+  card.outerHTML = renderAnswer([seg]);
 });

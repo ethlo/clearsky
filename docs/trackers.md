@@ -28,6 +28,12 @@ ticket mine                                your open tickets
 
 `<ref>` is `ABC-123` in Jira, and `owner/name#12` (or `#12` inside the repo's folder) on GitHub. `ticket` only translates: it runs `acli jira workitem …` or `gh issue …`, so in the sandbox each change goes through the same door as before and asks you the same way. Text is Markdown; for Jira, Clearsky turns it into rich text.
 
+### A new Jira ticket asks for its project and fix version
+
+When a chat creates a Jira ticket (`ticket new`, or `acli jira workitem create` itself), Clearsky always asks first, in every mode and whatever Settings → Agent's never-ask list says. The card shows the ticket's summary and lets you pick its **project** (the one the chat named, then this chat's projects and your starred ones) and its **fix version** (that project's unreleased versions, as on the Versions page, or **No fix version**). **Create** waits until you've picked one.
+
+Many Jira setups let you set a fix version when a ticket is created but not change it later, and acli has no way to change it, so this is the time to get it right. A ticket with a fix version is sent to acli as a `--from-json` definition (the fix version in `additionalAttributes`), with its description as rich text.
+
 ### Code review waits for a reviewer
 
 A chat moves a Jira ticket to a review status (Code review, In Review, Ready for review) only once a person is asked to review its PR. Opening the PR isn't enough, and Copilot's PR reviewer doesn't count. Before the move, Clearsky looks up the ticket's PRs on GitHub (the key in the PR's title) and holds it while none of them has a person asked to review, or who has reviewed; the chat is told why and leaves the ticket In Progress. This holds even when Jira changes are on Settings → Agent's never-ask list. If GitHub can't be reached, the move goes ahead as before (and asks you as usual). You can still move a ticket yourself in Jira at any time.
