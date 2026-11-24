@@ -249,6 +249,9 @@ function prStateOf(k) {
   const p = k?.startsWith('pr:') && (state.github?.myPrs || []).find((x) => `pr:${x.repo}#${x.number}` === k);
   return p?.status ? `PR: ${p.status.label}${p.status.detail ? ` (${p.status.detail})` : ''}` : '';
 }
+// A chat at work on a plan: how far it is, and what it's on now.
+const planStep = (p) => (p ? `Step ${Math.min(p.done + 1, p.total)} of ${p.total}${p.now ? `: ${p.now.length > 70 ? `${p.now.slice(0, 69)}…` : p.now}` : ''}` : '');
+const planShort = (p) => (p ? `${p.done}/${p.total} done` : '');
 function sessionItems() {
   const order = { 'needs-you': 0, waiting: 1, working: 2 };
   const linked = (id) => Object.entries(cpLinks.links || {}).find(([, l]) => l.some((x) => x.id === id))?.[0];
@@ -258,8 +261,8 @@ function sessionItems() {
       // A chat on one of your PRs also shows where the PR stands (review rounds, CI, reviewer).
       const st = prStateOf(k);
       return { group: 'copilot', kind: 'session', sid: x.id, cwd: x.cwd, k: `cp:${x.id}`, key: k, live: x, title: x.title || `${AGENT} chat`,
-        ref: k ? k.replace(/^(pr|gh):[\w.-]+\//, '').replace('#', ' #').replace(/^issue:/, '') : folder, step: [st, k ? folder : ''].filter(Boolean).join(' · '),
-        glyph: `s-${x.status}`, label: [STATUS_TEXT[x.status] || x.status, x.status === 'needs-you' ? 'amber' : x.status === 'working' ? 'green' : 'blue'],
+        ref: k ? k.replace(/^(pr|gh):[\w.-]+\//, '').replace('#', ' #').replace(/^issue:/, '') : folder, step: [planStep(x.plan), st, k ? folder : ''].filter(Boolean).join(' · '),
+        glyph: `s-${x.status}`, label: [[STATUS_TEXT[x.status] || x.status, planShort(x.plan)].filter(Boolean).join(' · '), x.status === 'needs-you' ? 'amber' : x.status === 'working' ? 'green' : 'blue'],
         at: x.updatedAt, status: x.status };
     });
 }
