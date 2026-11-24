@@ -69,7 +69,7 @@ function chatTabs() {
     const current = id === chat.session && (chat.turns || chat.stop);
     const status = current && chat.stop ? ($('#chat-log .perm-b button') ? 'needs-you' : 'working') : live.get(id)?.status || 'closed';
     const key = Object.entries(cpLinks.links || {}).find(([, list]) => list.some((x) => x.id === id))?.[0];
-    return { id, hot: isHot(id), cwd: l?.cwd || r?.cwd, title: (current && chat.title) || (r?.title?.startsWith('/') && l?.title) || r?.title || l?.title || `${agentNow()} chat`, status, live: live.has(id), pr: prStateOf(key) };
+    return { id, hot: isHot(id), cwd: l?.cwd || r?.cwd, title: (current && chat.title) || (r?.title?.startsWith('/') && l?.title) || r?.title || l?.title || `${agentNow()} chat`, status, plan: live.get(id)?.plan, live: live.has(id), pr: prStateOf(key) };
   }).sort((a, b) => (b.live - a.live)).slice(0, 8);
 }
 function drawTabs() {
@@ -78,7 +78,7 @@ function drawTabs() {
   const folder = (d) => (d || '').split('/').filter(Boolean).pop() || '';
   $('#side-cp').innerHTML = tabs.map((t, i) => `<a class="ni cp${onChat && t.id === chat.session && !isNew ? ' on' : ''}" href="#copilot"
       data-tab="${esc(t.id)}" data-cwd="${esc(t.cwd || '')}" title="${esc(t.title)}${STATUS_TEXT[t.status] ? ` · ${STATUS_TEXT[t.status]}` : ''}${i < 9 ? ` (Alt+${i + 1})` : ''}">
-      <span class="live s-${esc(t.status)}"></span><span class="lab">${esc(t.title)}<small>${hotMark(t.hot)}${esc([STATUS_TEXT[t.status] || (t.live ? 'open' : ''), t.pr, folder(t.cwd)].filter(Boolean).join(' · '))}</small></span>
+      <span class="live s-${esc(t.status)}"></span><span class="lab">${esc(t.title)}<small>${hotMark(t.hot)}${esc([STATUS_TEXT[t.status] || (t.live ? 'open' : ''), t.status === 'working' && planShort(t.plan), t.pr, folder(t.cwd)].filter(Boolean).join(' · '))}</small></span>
       ${t.status === 'working' || t.status === 'needs-you' ? '' : `<span class="x" data-nudge-tab="${esc(t.id)}" title="Nudge: send ${agentNow()} “Try again.”" aria-label="Nudge">${icon('refresh', 12)}</span>`}
       ${t.live ? '' : `<span class="x" data-forget="${esc(t.id)}" title="Remove from this list" aria-label="Remove">✕</span>`}</a>`).join('')
     + (onChat && isNew ? '<a class="ni cp on" href="#copilot"><span class="live"></span><span class="lab">New chat</span></a>' : '')
@@ -965,6 +965,18 @@ function toolEvent(segs, e) {
   Object.assign(t, Object.fromEntries(Object.entries(e).filter(([, v]) => v != null)));
   if (['completed', 'failed'].includes(e.status)) t.end ||= e.at;
 }
+// The agent's plan (its to-do list): each update is the whole list. One per answer, kept where
+// it first showed up.
+function planEvent(segs, e) {
+  const p = segs.find((g) => g.type === 'plan');
+  if (p) p.entries = e.entries; else segs.push({ type: 'plan', entries: e.entries, at: e.at });
+}
+function planCard(g, running) {
+  const list = g.entries || [], done = list.filter((x) => x.status === 'completed').length;
+  const mark = { completed: '<b>✓</b>', in_progress: running ? '<b class="p-now"></b>' : '<b>–</b>', pending: '<b>○</b>' };
+  return `<div class="plan"><div class="plan-h">${icon('list', 13)}Plan<small>${done} of ${list.length} done</small></div>
+    <ol>${list.map((x) => `<li class="p-${esc(x.status)}${!running && x.status === 'in_progress' ? ' p-left' : ''}">${mark[x.status] || mark.pending}<span>${esc(x.content)}</span></li>`).join('')}</ol></div>`;
+}
 // When each line happened (local time), and how long a step took.
 const clock = (ms) => (ms ? new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '');
 const took = (a, b) => { const s = Math.round((b - a) / 1000); return s < 1 ? '' : s < 90 ? `${s}s` : `${Math.round(s / 60)} min`; };
@@ -990,6 +1002,7 @@ function renderAnswer(segs, running = false) {
       return `<div class="tool s-resumed"><span>${icon('refresh', 13)}</span>Picked up after an interruption: ${n === 1 ? 'a step that was running didn’t finish' : `${n} steps that were running didn’t finish`}, so ${agentNow()} checks and runs ${n === 1 ? 'it' : 'them'} again.</div>${md(g.text.replace(RESUME_WARN_ALL, '').trim())}`;
     }
     if (g.type === 'text') return md(g.text);
+    if (g.type === 'plan') return planCard(g, running);
     if (g.type === 'tool' && resumed && g.status === 'failed' && (!g.title || g.title === 'Tool')) return '';
     if (g.type === 'tool') {
       // A finished step is a quiet check; only failed, stopped or running ones say so in words.
@@ -1294,6 +1307,7 @@ async function send(text, extra = {}) {
     e.at ||= Date.now(); segs.moved = e.at;
     if (e.type === 'text') { if (last?.type === 'text') last.text += e.text; else segs.push({ type: 'text', text: e.text, at: e.at }); }
     else if (e.type === 'tool') toolEvent(segs, e);
+    else if (e.type === 'plan') planEvent(segs, e);
     else if (e.type === 'permission' || e.type === 'error') segs.push(e);
     // Answered in another chat (a GitHub change asks in every sandboxed chat that's working).
     else if (e.type === 'permission-done') { const g = segs.find((x) => x.type === 'permission' && x.id === e.id); if (g && !g.answered) g.answered = e.expired ? 'Not answered before the turn ended' : 'Answered'; }
@@ -1395,6 +1409,7 @@ async function attachLive(id) {
         e.at ||= Date.now(); segs.moved = e.at;
         if (e.type === 'text') { if (last?.type === 'text') last.text += e.text; else segs.push({ type: 'text', text: e.text, at: e.at }); }
         else if (e.type === 'tool') toolEvent(segs, e);
+        else if (e.type === 'plan') planEvent(segs, e);
         else if (e.type === 'permission' || e.type === 'error') segs.push(e);
         else if (e.type === 'permission-done') { const g = segs.find((x) => x.type === 'permission' && x.id === e.id); if (g && !g.answered) g.answered = e.expired ? 'Not answered before the turn ended' : 'Answered'; }
         else if (e.type === 'note') { segs.push({ type: 'note', text: e.text, at: e.at }); if (/^(GitHub|Jira):/.test(e.text)) setTimeout(drawChanges, 300); }
