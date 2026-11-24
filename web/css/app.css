@@ -924,6 +924,33 @@ time.at { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nu
 .read-ask button { flex: none; }
 
 /* Code in the file viewer: line numbers, light highlighting, and a diff with added and removed lines. */
+.rv-box { width: min(1200px, 100%); }
+.rv-sub { color: var(--muted); font-size: 12px; white-space: nowrap; }
+#rv-body { overflow: auto; flex: 1; }
+.rv-file { border-bottom: 1px solid var(--line); }
+.rv-file > header { position: sticky; top: 0; z-index: 1; display: flex; gap: 8px; align-items: baseline; padding: 7px 14px; background: var(--surface-2); cursor: pointer; font-size: 12.5px; border-bottom: 1px solid var(--line); }
+.rv-file.shut > header { border-bottom: 0; }
+.rv-file > header b { font: 500 12.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rv-file > header small { margin-left: auto; white-space: nowrap; }
+.rv-file > header em { font-style: normal; } .rv-file > header em.a { color: var(--green); } .rv-file > header em.d { color: var(--red); }
+.rv-new { font-size: 11px; color: var(--green); border: 1px solid currentColor; border-radius: 999px; padding: 0 6px; }
+.rv-n { font-size: 11px; color: #fff; background: var(--accent); border-radius: 999px; padding: 0 6px; }
+#rv-body .code { font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow-x: auto; padding: 4px 0; }
+#rv-body .code .ln i[data-rc] { cursor: pointer; }
+#rv-body .code .ln:hover i[data-rc] { color: var(--accent); opacity: 1; }
+.rv-note, .rv-edit { margin: 4px 14px 6px 100px; border: 1px solid var(--line-strong); border-left: 3px solid var(--accent); border-radius: 6px; background: var(--surface); font: 13px/1.45 inherit; font-family: inherit; white-space: pre-wrap; }
+.rv-note { display: flex; gap: 8px; padding: 6px 10px; }
+.rv-note span { flex: 1; }
+.rv-note button { border: 0; background: none; color: var(--muted); cursor: pointer; }
+.rv-edit { padding: 8px; display: flex; flex-direction: column; gap: 6px; white-space: normal; }
+.rv-edit textarea { font: inherit; font-size: 13px; border: 1px solid var(--line-strong); border-radius: 6px; padding: 6px 8px; background: var(--surface); color: var(--text); resize: vertical; }
+.rv-edit div { display: flex; gap: 6px; }
+.rv-edit button { border: 1px solid var(--line-strong); background: var(--surface); color: var(--text); border-radius: 6px; padding: 3px 10px; font-size: 12.5px; }
+.rv-edit button.ok { background: var(--accent); border-color: var(--accent); color: #fff; }
+.rv-empty { padding: 14px; color: var(--text-2); }
+.rv-foot { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 8px 14px; border-top: 1px solid var(--line); }
+.rv-foot .hint { color: var(--muted); font-size: 12px; }
+@media (max-width: 640px) { .rv-note, .rv-edit { margin-left: 14px; } .rv-foot .hint { display: none; } }
 .fv-tabs { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; }
 .fv-box header .fv-tabs button { font-size: 12px; padding: 3px 10px; color: var(--muted); border-radius: 0; }
 .fv-box header .fv-tabs button.on { background: var(--surface-2); color: var(--text); }

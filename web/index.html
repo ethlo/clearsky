@@ -136,6 +136,7 @@
     <header class="vh"><h1 title="What __AGENT__ changed as you on GitHub and Jira, and what it read in Grafana, from its sandbox">Agent's changes</h1><span class="spacer"></span></header>
     <div class="view-b"><div id="changes"></div></div>
   </section>
+  <div class="fview" id="review" hidden><div class="fv-box rv-box" role="dialog" aria-label="Review the change"><header><b id="rv-name">Review</b><small id="rv-sub" class="rv-sub"></small><span class="spacer"></span><button type="button" id="rv-reload" title="Look again" aria-label="Look again"><span data-i="refresh" data-size="14"></span></button><button type="button" id="rv-close" aria-label="Close">✕</button></header><div id="rv-body"></div><footer class="rv-foot"><span class="hint">Click a line number to comment. The comments go to the chat box as one message.</span><button type="button" class="icon-btn small primary" id="rv-send" disabled>Click a line number to comment</button></footer></div></div>
   <div class="fview" id="fview" hidden><div class="fv-box"><header><b id="fv-name"></b><span class="spacer"></span><span class="fv-tabs" id="fv-tabs" hidden><button type="button" data-fv-tab="diff">Changes</button><button type="button" data-fv-tab="file">File</button></span><a id="fv-code" title="Open in VS Code">VS Code</a><a id="fv-open" target="_blank" rel="noopener">Raw</a><button type="button" id="fv-close" aria-label="Close">✕</button></header><div id="fv-body"></div></div></div>
   <section class="view" id="v-links" hidden>
     <header class="vh"><h1 id="links-title">Links</h1><input type="search" id="links-filter" class="links-filter" placeholder="Filter" aria-label="Filter links"><span class="spacer"></span>
@@ -168,6 +169,7 @@
       <span class="sub" id="chat-sub" role="status"></span>
       <span class="spacer"></span>
       <span class="vh-acts">
+        <button class="icon-btn small" id="chat-review" title="Review the chat's whole change, and comment on lines"><span data-i="diff" data-size="14"></span>Review</button>
         <button class="icon-btn small" id="chat-rewind" title="Rewind: put the files back as they were before one of your messages (/rewind)"><span data-i="undo" data-size="14"></span>Rewind</button>
         <button class="icon-btn small" id="chat-hist-btn" title="All your __AGENT__ sessions: here, in the terminal or your editor"><span data-i="history" data-size="14"></span>History</button>
         <button class="icon-btn small" id="chat-new" title="New chat (Alt+N)"><span data-i="plus" data-size="14"></span>New</button>
