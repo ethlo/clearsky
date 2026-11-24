@@ -42,7 +42,7 @@ const NEEDS = { '/api/copilot/file': 404, '/api/copilot/job-log': 404, '/api/cop
 const WRITES = ['/api/calendar/hidden', '/api/copilot', '/api/copilot/attach', '/api/copilot/close', '/api/copilot/folders', '/api/copilot/jobs/stop',
   '/api/copilot/memory', '/api/copilot/permission', '/api/copilot/rename', '/api/copilot/rewind', '/api/copilot/stop', '/api/copilot/watchdog', '/api/demo/start', '/api/demo/stop',
   '/api/dismiss', '/api/handoffs', '/api/jira/star', '/api/links', '/api/links/import', '/api/login/github', '/api/login/jira', '/api/mute', '/api/open',
-  '/api/plugins/add', '/api/plugins/check', '/api/plugins/preview', '/api/plugins/remove', '/api/plugins/update', '/api/pr/merge', '/api/pr/request-review',
+  '/api/plugins/add', '/api/plugins/check', '/api/plugins/preview', '/api/plugins/remove', '/api/plugins/update', '/api/pr/merge', '/api/push/test', '/api/pr/request-review',
   '/api/read', '/api/restart', '/api/schedules', '/api/settings', '/api/team/join', '/api/team/scaffold', '/api/vm/stop', '/api/vms/image-cache/purge',
   '/api/source/github/login', '/api/source/github/logins'];
 

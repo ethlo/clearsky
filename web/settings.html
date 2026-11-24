@@ -145,6 +145,17 @@
     <label for="CLEARSKY_POLL_MINUTES">Check GitHub, mentions and plugins every … minutes</label>
     <input id="CLEARSKY_POLL_MINUTES" data-key="CLEARSKY_POLL_MINUTES" inputmode="numeric" placeholder="3">
     <div class="row"><button class="save" data-keys="CLEARSKY_STANDUP_TIME,CLEARSKY_WORKDAYS,CLEARSKY_WORKDAY_END,CLEARSKY_MENTION_DAYS,CLEARSKY_TIME_FORMAT,CLEARSKY_POLL_MINUTES">Save</button><span class="msg"></span></div>
+    <h3>Phone push<span class="more">When a chat has waited for your OK for a while, Clearsky sends a push through <a href="https://ntfy.sh" target="_blank" rel="noopener">ntfy</a> to the ntfy app on your phone. In the app, subscribe to a topic with a long random name (or use your own ntfy server), and paste its address here. Anyone who knows the address can read the topic, so treat it like a password. <b>Short</b> pushes say only that something waits: no repo, ticket or chat names leave this machine. <b>Full</b> names the chat and what it asks. Your OK is still given here, in Clearsky.</span></h3>
+    <p class="hint" id="push-now">Off.</p>
+    <label for="PUSH_URL">ntfy topic address</label>
+    <input id="PUSH_URL" data-key="PUSH_URL" type="password" autocomplete="off" placeholder="https://ntfy.sh/your-long-random-topic" spellcheck="false">
+    <label for="PUSH_TOKEN">Access token (only for a protected topic)</label>
+    <input id="PUSH_TOKEN" data-key="PUSH_TOKEN" type="password" autocomplete="off" placeholder="tk_…" spellcheck="false">
+    <label for="PUSH_DETAIL">What a push says</label>
+    <select id="PUSH_DETAIL" data-key="PUSH_DETAIL"><option value="">Short: only that something waits</option><option value="full">Full: the chat and what it asks</option></select>
+    <label for="PUSH_AFTER_SECONDS">Push after a card has waited … seconds</label>
+    <input id="PUSH_AFTER_SECONDS" data-key="PUSH_AFTER_SECONDS" inputmode="numeric" placeholder="60">
+    <div class="row"><button class="save" data-keys="PUSH_URL,PUSH_TOKEN,PUSH_DETAIL,PUSH_AFTER_SECONDS">Save</button><span class="msg"></span><button class="secondary" id="push-test" type="button">Send a test</button><button class="secondary" id="push-off" type="button">Turn off</button><span class="msg" id="push-msg"></span></div>
     <h3>Team pack<span class="more">Your team's shared setup: organizations, stand-up time, links and the agent's skills, from a git repo, an https link or a file the team keeps. Settings you changed yourself are kept. <code>clearsky team export</code> makes one from your settings.</span></h3>
     <p class="hint" id="team-now">Your team's shared setup.</p>
     <div class="row"><input id="team-from" placeholder="https://github.com/acme/clearsky-team.git" spellcheck="false" style="flex:1;min-width:220px"><button class="secondary" id="team-join" type="button">Join</button><span class="msg" id="team-msg"></span></div>
@@ -375,7 +386,7 @@
   toPart();
 })();
 const CSRF = '__CSRF__';
-const SECRET = new Set(['GITHUB_TOKEN', 'GOOGLE_CALENDAR_ICS', 'AGENT_SANDBOX_TOKEN']);
+const SECRET = new Set(['GITHUB_TOKEN', 'GOOGLE_CALENDAR_ICS', 'AGENT_SANDBOX_TOKEN', 'PUSH_URL', 'PUSH_TOKEN']);
 const $ = (s) => document.querySelector(s);
 
 
@@ -445,6 +456,14 @@ setInterval(() => { if (!document.hidden) loadRestart(); }, 10_000);
 
 // Try with demo data: the demo opens in a tab of its own (the tab is opened first, so the
 // browser doesn't take it for a pop-up).
+$('#push-test').onclick = async () => {
+  const m = $('#push-msg'); m.textContent = 'Sending…'; m.className = 'msg';
+  try { await post('/api/push/test', {}); m.textContent = 'Sent: check your phone.'; m.className = 'msg on'; } catch (e) { m.textContent = e.message; m.className = 'msg bad'; }
+};
+$('#push-off').onclick = async () => {
+  const m = $('#push-msg');
+  try { render(await post('/api/settings', { PUSH_URL: '', PUSH_TOKEN: '' })); m.textContent = 'Turned off.'; m.className = 'msg on'; } catch (e) { m.textContent = e.message; m.className = 'msg bad'; }
+};
 $('#demo-start').onclick = async () => {
   const tab = window.open('about:blank', '_blank');
   $('#demo-msg').textContent = 'Starting the demo…';
@@ -566,6 +585,13 @@ function render(s) {
   $('#CLEARSKY_MENTION_DAYS').value = s.mentionDays || '';
   $('#CLEARSKY_TIME_FORMAT').value = s.timeFormat || '24';
   $('#CLEARSKY_POLL_MINUTES').value = s.pollMinutes || '';
+  if (s.push) {
+    $('#push-now').textContent = s.push.url ? `On: a push goes to your ntfy topic when a chat has waited ${s.push.after || 60} seconds for your OK.` : 'Off: set a topic address to turn it on.';
+    $('#PUSH_URL').placeholder = s.push.url ? `${s.push.url}; paste a new one to replace` : 'https://ntfy.sh/your-long-random-topic';
+    $('#PUSH_TOKEN').placeholder = s.push.token ? `${s.push.token}; paste a new one to replace` : 'tk_…';
+    $('#PUSH_DETAIL').value = s.push.detail; $('#PUSH_AFTER_SECONDS').value = s.push.after;
+    $('#push-test').disabled = $('#push-off').disabled = !s.push.url;
+  }
   const vp = s.vpn || {};
   $('#VPN_CHECK').value = vp.check || '';
   $('#VPN_NEEDED_BY').value = vp.neededBy || '';
