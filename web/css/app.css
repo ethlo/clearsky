@@ -58,6 +58,9 @@ html, body { height: 100%; overflow: hidden; } /* the work area scrolls, not the
 .grp.folded > a.ni:not(.on):not(:has(b.hot)) { display: none; }
 .grp:not(:has(> a.ni:not([hidden]))) { display: none; }
 .side .sg button { margin-left: auto; border: 0; background: none; color: var(--muted); padding: 0 4px; border-radius: 4px; font-size: 15px; line-height: 1; }
+.side .sg button + button { margin-left: 0; }
+.side .ni.cp-hist { color: var(--muted); font-size: 12.5px; }
+.side .ni.cp-hist:hover { color: var(--accent); }
 .side .sg button:hover { color: var(--accent); background: var(--surface); }
 .ni { display: flex; align-items: center; gap: 9px; padding: 5px 8px; border-radius: 7px; color: var(--text-2); min-width: 0; border: 0; background: none;
   font: inherit; width: 100%; text-align: left; }

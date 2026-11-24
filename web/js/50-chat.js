@@ -81,11 +81,13 @@ function drawTabs() {
       <span class="live s-${esc(t.status)}"></span><span class="lab">${esc(t.title)}<small>${hotMark(t.hot)}${esc([STATUS_TEXT[t.status] || (t.live ? 'open' : ''), t.pr, folder(t.cwd)].filter(Boolean).join(' · '))}</small></span>
       ${t.status === 'working' || t.status === 'needs-you' ? '' : `<span class="x" data-nudge-tab="${esc(t.id)}" title="Nudge: send ${agentNow()} “Try again.”" aria-label="Nudge">${icon('refresh', 12)}</span>`}
       ${t.live ? '' : `<span class="x" data-forget="${esc(t.id)}" title="Remove from this list" aria-label="Remove">✕</span>`}</a>`).join('')
-    + (onChat && isNew ? '<a class="ni cp on" href="#copilot"><span class="live"></span><span class="lab">New chat</span></a>' : '');
+    + (onChat && isNew ? '<a class="ni cp on" href="#copilot"><span class="live"></span><span class="lab">New chat</span></a>' : '')
+    + `<a class="ni cp-hist" href="#copilot" data-hist title="All your ${agentNow()} chats, closed ones too"><span class="ico">${icon('history', 14)}</span><span class="lab">History</span></a>`;
 }
 $('#side-cp').addEventListener('click', (e) => {
   const f = e.target.closest('[data-forget]');
   if (f) { e.preventDefault(); e.stopPropagation(); recentChats = recentChats.filter((x) => x.id !== f.dataset.forget); saveRecent(); if (f.dataset.forget === chat.session) newChat(); else drawTabs(); return; }
+  if (e.target.closest('[data-hist]')) { e.preventDefault(); openHistory(); return; }
   const t = e.target.closest('[data-tab]');
   if (!t) return;
   e.preventDefault();
@@ -98,6 +100,7 @@ $('#side-cp').addEventListener('click', (e) => {
   openChat(true, true);
   if (t.dataset.tab !== chat.session || !chat.turns) openSession(t.dataset.tab, t.dataset.cwd);
 });
+$('#cp-hist-side').onclick = () => openHistory();
 $('#cp-new-side').onclick = () => { newChat(); openChat(true, true); $('#chat-text').focus(); };
 document.addEventListener('keydown', (e) => {
   if (!e.altKey || e.ctrlKey || e.metaKey) return;
@@ -1448,8 +1451,11 @@ function showChat(ready) {
   }
   if (!chat.info) loadCopilotInfo();
   drawCtx();
-  setTimeout(() => $('#chat-text').focus(), 0);
+  if (histNext) { histNext = false; showHistory(true); } else setTimeout(() => $('#chat-text').focus(), 0);
 }
+// The chat view with its History open, from anywhere (the menu's Chats header).
+let histNext = false;
+function openHistory() { histNext = true; openChat(true); }
 
 // ---------------------------------------------------------------- theme
 
