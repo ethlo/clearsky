@@ -20,7 +20,7 @@ const PAGES = { '/': 'text/html', '/index.html': 'text/html', '/settings': 'text
 const READS = {
   '/api/actions': ['actions'], '/api/agent-log': ['writes'], '/api/attention': ['lastPoll', 'dataVersion', 'items'], '/api/branches': ['branches'],
   '/api/builds': ['repos', 'checkedAt'], '/api/copilot': ['available', 'cwd', 'skills', 'agent', 'agents', 'commands'],
-  '/api/copilot/chat': ['running', 'busy', 'sandboxed'], '/api/copilot/files': ['files'], '/api/copilot/jobs': ['jobs', 'watchdog'],
+  '/api/copilot/chat': ['running', 'busy', 'sandboxed'], '/api/copilot/checkpoints': ['checkpoints', 'busy'], '/api/copilot/files': ['files'], '/api/copilot/jobs': ['jobs', 'watchdog'],
   '/api/copilot/links': ['links', 'live', 'actions'], '/api/copilot/map': ['chats'], '/api/copilot/memory': ['path', 'text', 'max'],
   '/api/copilot/sessions': ['cwd', 'sessions'], '/api/copilot/usage': ['total', 'today', 'week', 'month'], '/api/dismissed': ['dismissed', 'muted'],
   '/api/doctor': ['checks', 'ready', 'platform', 'tracker'], '/api/handoffs': ['handoffs', 'sandbox'], '/api/jira/projects': ['projects', 'starred'],
@@ -40,7 +40,7 @@ const NEEDS = { '/api/copilot/file': 404, '/api/copilot/job-log': 404, '/api/cop
 
 // Changes: POST only, and only with the page's token.
 const WRITES = ['/api/calendar/hidden', '/api/copilot', '/api/copilot/attach', '/api/copilot/close', '/api/copilot/folders', '/api/copilot/jobs/stop',
-  '/api/copilot/memory', '/api/copilot/permission', '/api/copilot/rename', '/api/copilot/stop', '/api/copilot/watchdog', '/api/demo/start', '/api/demo/stop',
+  '/api/copilot/memory', '/api/copilot/permission', '/api/copilot/rename', '/api/copilot/rewind', '/api/copilot/stop', '/api/copilot/watchdog', '/api/demo/start', '/api/demo/stop',
   '/api/dismiss', '/api/handoffs', '/api/jira/star', '/api/links', '/api/links/import', '/api/login/github', '/api/login/jira', '/api/mute', '/api/open',
   '/api/plugins/add', '/api/plugins/check', '/api/plugins/preview', '/api/plugins/remove', '/api/plugins/update', '/api/pr/merge', '/api/pr/request-review',
   '/api/read', '/api/restart', '/api/settings', '/api/team/join', '/api/team/scaffold', '/api/vm/stop', '/api/vms/image-cache/purge',
