@@ -25,7 +25,7 @@ const READS = {
   '/api/copilot/sessions': ['cwd', 'sessions'], '/api/copilot/usage': ['total', 'today', 'week', 'month'], '/api/dismissed': ['dismissed', 'muted'],
   '/api/doctor': ['checks', 'ready', 'platform', 'tracker'], '/api/handoffs': ['handoffs', 'sandbox'], '/api/jira/projects': ['projects', 'starred'],
   '/api/jira/starred': ['starred'], '/api/links': ['groups'], '/api/modules': ['modules'], '/api/notifications/log': ['log', 'pollMinutes'],
-  '/api/plan': ['plan', 'nextStandup', 'summary'], '/api/plugins': ['all', 'added', 'available'], '/api/restart': ['pending', 'busy', 'updateReady', 'reasons'],
+  '/api/plan': ['plan', 'nextStandup', 'summary'], '/api/plugins': ['all', 'added', 'available'], '/api/restart': ['pending', 'busy', 'updateReady', 'reasons'], '/api/schedules': ['schedules', 'running', 'sandbox'],
   '/api/servers': ['hosts'], '/api/settings': ['file', 'github', 'jira', 'tracker', 'calendar'], '/api/sources': ['tracker', 'sources', 'errors'],
   '/api/standup': ['generatedAt', 'since', 'nextStandup'], '/api/standup/say': ['text'], '/api/team': ['team'], '/api/vm': ['vm', 'support'],
   '/api/vms': ['limit', 'running', 'waiting', 'vms'], '/api/vpn': ['known', 'up'], '/api/work': ['generatedAt', 'plan', 'summary', 'github', 'jira'],
@@ -43,7 +43,7 @@ const WRITES = ['/api/calendar/hidden', '/api/copilot', '/api/copilot/attach', '
   '/api/copilot/memory', '/api/copilot/permission', '/api/copilot/rename', '/api/copilot/rewind', '/api/copilot/stop', '/api/copilot/watchdog', '/api/demo/start', '/api/demo/stop',
   '/api/dismiss', '/api/handoffs', '/api/jira/star', '/api/links', '/api/links/import', '/api/login/github', '/api/login/jira', '/api/mute', '/api/open',
   '/api/plugins/add', '/api/plugins/check', '/api/plugins/preview', '/api/plugins/remove', '/api/plugins/update', '/api/pr/merge', '/api/pr/request-review',
-  '/api/read', '/api/restart', '/api/settings', '/api/team/join', '/api/team/scaffold', '/api/vm/stop', '/api/vms/image-cache/purge',
+  '/api/read', '/api/restart', '/api/schedules', '/api/settings', '/api/team/join', '/api/team/scaffold', '/api/vm/stop', '/api/vms/image-cache/purge',
   '/api/source/github/login', '/api/source/github/logins'];
 
 const port = 17300 + Math.floor(Math.random() * 400);

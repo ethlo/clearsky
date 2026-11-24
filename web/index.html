@@ -44,6 +44,7 @@
     <div class="grp" data-grp="agent">
       <button type="button" class="sg" title="Hide or show these pages">Agent</button>
       <a class="ni" href="#handoffs" data-nav="handoffs" title="PRs and tickets you handed to the agent to work on by itself"><span class="ico" data-i="handoff"></span><span class="lab">Hand-offs</span><b id="n-handoffs"></b></a>
+      <a class="ni" href="#schedules" data-nav="schedules" title="Chats that start by themselves at times you pick"><span class="ico" data-i="clock"></span><span class="lab">Schedules</span></a>
       <a class="ni" href="#changes" data-nav="changes" title="What the agent changed as you on GitHub and Jira, from its sandbox"><span class="ico" data-i="spark"></span><span class="lab">Changes</span></a>
       <a class="ni" href="#usage" data-nav="usage" title="AI credits the agent used, and what they cost"><span class="ico" data-i="usage"></span><span class="lab">Usage</span><b id="n-usage"></b></a>
       <a class="ni" href="#vms" data-nav="vms" title="The VMs for builds with Docker: what runs in them and who waits for one"><span class="ico" data-i="vm"></span><span class="lab">VMs</span><b id="n-vms"></b></a>
@@ -121,6 +122,10 @@
   <section class="view" id="v-handoffs" hidden>
     <header class="vh"><h1 title="PRs and tickets you handed to __AGENT__ (✦ on a row → Hand off). It works on them one at a time, in the sandbox, and ends with a draft PR or a note on what it needs from you.">Hand-offs</h1><span class="sub" id="ho-sub"></span><span class="spacer"></span></header>
     <div class="view-b"><div class="page" id="handoffs"></div></div>
+  </section>
+  <section class="view" id="v-schedules" hidden>
+    <header class="vh"><h1 title="A message __AGENT__ gets in a new sandboxed chat at the times you pick. Anything that leaves the sandbox still waits for your OK.">Schedules</h1><span class="sub" id="sc-sub"></span><span class="spacer"></span><button class="icon-btn small" id="sc-new"><span data-i="plus" data-size="14"></span>New schedule</button></header>
+    <div class="view-b"><div class="page" id="schedules"></div></div>
   </section>
   <section class="view" id="v-usage" hidden>
     <header class="vh"><h1 title="The AI credits all __AGENT__ chats used, from their own session logs, and what they cost. Set the price and your currency in Settings → Agent.">Usage</h1><span class="spacer"></span>
