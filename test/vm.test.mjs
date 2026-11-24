@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VmImage, ChatVm, reapOrphans, cpuSample, cpuBusy, vmsLoad, vmSize, VM_DEFAULT, loginForwarder, loginHead, folderSync, applyDeletions, mavenCacheSync, vmExitText } from '../lib/vm.mjs';
+import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VM_NO_PROXY, dockerClient, FIREWALL, VmImage, ChatVm, reapOrphans, cpuSample, cpuBusy, vmsLoad, vmSize, VM_DEFAULT, loginForwarder, loginHead, folderSync, applyDeletions, mavenCacheSync, vmExitText } from '../lib/vm.mjs';
 import { registryWrite, githubFilter } from '../lib/github-gate.mjs';
 import { srtSettings } from '../lib/sandbox.mjs';
 import { needs, serveBroker } from '../lib/broker.mjs';
@@ -22,6 +22,24 @@ test('the VM reaches Docker Hub (with its CDN) and Maven Central through the pro
   const s = mavenSettings({ port: 1, url: 'http://srt:tok3n@' });
   assert.match(s, /<host>10\.0\.2\.100<\/host><port>3128<\/port><username>srt<\/username><password>tok3n<\/password>/);
   assert.doesNotMatch(mavenSettings({ port: 1, url: 'http://' }), /username/);
+});
+
+test('docker build steps and containers in the VM get the proxy; private addresses stay off it', () => {
+  const c = dockerClient('http://10.0.2.100:3128').proxies.default;
+  assert.equal(c.httpProxy, 'http://10.0.2.100:3128');
+  assert.equal(c.httpsProxy, 'http://10.0.2.100:3128');
+  for (const h of ['localhost', '127.0.0.1', '172.16.0.0/12', 'host.testcontainers.internal']) assert.ok(c.noProxy.split(',').includes(h), h);
+  assert.equal(c.noProxy, VM_NO_PROXY);
+  // The package repositories Dockerfiles commonly use are on the list; anything else asks.
+  for (const h of ['deb.debian.org', 'dl-cdn.alpinelinux.org', 'download.docker.com']) assert.ok(VM_DOMAINS.includes(h), h);
+  assert.ok(!VM_DOMAINS.some((d) => d === '*' || d.startsWith('*.amazonaws')), 'no blanket hosts');
+});
+
+test('the VM refuses what skips the proxy at once, for itself and its containers, and nothing inside', () => {
+  for (const chain of ['OUTPUT', 'DOCKER-USER']) assert.match(FIREWALL, new RegExp(`iptables -I ${chain} 1 -o "\\$up" ! -d 10\\.0\\.2\\.0/24 -j REJECT`));
+  // Only the way out (QEMU's network card), so containers still reach each other.
+  assert.ok(!/iptables -I \S+ 1 (?!-o)/.test(FIREWALL));
+  assert.match(FIREWALL, /ip6tables -I DOCKER-USER 1 -o "\$up" -j REJECT/);
 });
 
 test('the prepared image: our keys, Docker and Maven via the proxy, nothing left that slows a boot', () => {
