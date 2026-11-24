@@ -1599,6 +1599,7 @@ const SLASH = [
   { name: 'new', description: 'Start a new chat', run: () => newChat() },
   { name: 'history', description: `Your ${agentNow()} sessions`, run: () => showHistory(true) },
   { name: 'ref', description: 'Attach a PR, ticket or file', run: () => openRefPick() },
+  { name: 'rewind', description: 'Put the files back as they were before one of your messages ', run: () => openRewind() },
 ];
 let slash = null;
 function slashItems() {
@@ -1833,3 +1834,51 @@ $('#chat-log').addEventListener('change', (e) => {
   for (const f of seg.fields) if (f.by === s.dataset.permField && !permChoices(seg, f).some((o) => o.value === v[f.name])) v[f.name] = null;
   card.outerHTML = renderAnswer([seg]);
 });
+
+// ---------------------------------------------------------------- rewind
+// /rewind: put this chat's files back to how they were before
+// one of your messages. Clearsky saves the folder before each message you send (lib/checkpoints.mjs);
+// git's commits and branches aren't touched, and the agent is told with your next message.
+async function openRewind() {
+  if (!chat.session || !chat.turns) { $('#chat-sub').textContent = 'Nothing to rewind yet: send a message first.'; return; }
+  $('#chat-log .rewind:not(.done)')?.closest('.msg')?.remove();
+  const el = addMsg('cp', '<div class="rewind"><div class="rewind-t">Rewind</div><p class="rewind-n">Looking for checkpoints…</p></div>');
+  let d;
+  try { d = await getJson(`/api/copilot/checkpoints?chat=${encodeURIComponent(chat.session)}`); } catch (e) { el.querySelector('.rewind-n').textContent = e.message; return; }
+  el.querySelector('.rewind').outerHTML = rewindCard(d);
+  $('#chat-log').scrollTop = $('#chat-log').scrollHeight;
+}
+function rewindCard(d) {
+  const list = d.checkpoints || [];
+  const files = (n) => (n == null ? '' : n === 0 ? 'no changes since' : `${n} file${n === 1 ? '' : 's'} changed since`);
+  return `<div class="rewind"><div class="rewind-t">${icon('history', 14)}Rewind<small>Puts the files back as they were before that message. Commits, branches and pushes stay as they are.</small></div>
+    ${d.busy ? `<p class="rewind-n">${esc(agentNow())} is working. Stop it first, then rewind.</p>` : ''}
+    ${list.length ? `<ul>${list.map((c) => `<li class="k-${esc(c.kind)}"><div><b>${esc(c.kind === 'rewind' ? c.text : `“${c.text || '(no text)'}”`)}</b>
+      <small>${stamp(Date.parse(c.at))}${esc([c.kind === 'rewind' ? 'undoes that rewind' : 'before this message', files(c.files), tilde(c.root)].filter(Boolean).join(' · '))}</small></div>
+      <span class="rewind-b">${c.files === 0 ? '' : `<button type="button" data-rewind="${esc(c.id)}"${d.busy ? ' disabled' : ''}>Put files back</button>`}${c.kind === 'message' ? `<button type="button" data-rewind="${esc(c.id)}" data-edit="${esc(c.text)}"${d.busy ? ' disabled' : ''} title="Put the files back and the message in the box, to change and send again">…and edit message</button>` : ''}</span></li>`).join('')}</ul>`
+      : '<p class="rewind-n">No checkpoints for this chat yet. Clearsky saves one before each message you send in a git repo.</p>'}
+    <div class="rewind-x"><button type="button" data-rewind-close>Close</button></div></div>`;
+}
+$('#chat-log').addEventListener('click', async (e) => {
+  if (e.target.closest('[data-rewind-close]')) { e.target.closest('.msg')?.remove(); return; }
+  const b = e.target.closest('[data-rewind]');
+  if (!b) return;
+  const card = b.closest('.rewind');
+  card.querySelectorAll('button').forEach((x) => { x.disabled = true; });
+  try {
+    const r = await post('/api/copilot/rewind', { chat: chat.session, id: b.dataset.rewind });
+    const n = r.changed.length;
+    card.classList.add('done');
+    card.innerHTML = `<div class="rewind-t">${icon('history', 14)}Rewound<small>${esc(tilde(r.root))}</small></div>
+      <p class="rewind-n">${n ? `Put back ${n} file${n === 1 ? '' : 's'}: ${esc(r.changed.slice(0, 8).join(', '))}${n > 8 ? ', …' : ''}.` : 'The files were already like that.'} ${esc(agentNow())} hears of it with your next message.</p>
+      <div class="rewind-x"><button type="button" data-rewind="${esc(r.undo)}">Undo</button></div>`;
+    if (b.dataset.edit != null) { const ta = $('#chat-text'); ta.value = b.dataset.edit; ta.focus(); ta.dispatchEvent(new Event('input')); }
+    setTimeout(drawOutputs, 300);
+  } catch (err) {
+    card.querySelectorAll('button').forEach((x) => { x.disabled = false; });
+    let m = card.querySelector('.rewind-e');
+    if (!m) { m = Object.assign(document.createElement('p'), { className: 'rewind-n rewind-e' }); card.append(m); }
+    m.textContent = err.message;
+  }
+});
+$('#chat-rewind').onclick = () => openRewind();
