@@ -35,7 +35,7 @@ const READS = {
 };
 
 // Reads that need to be told what to read: without it they say so, and don't fall over.
-const NEEDS = { '/api/copilot/file': 404, '/api/copilot/job-log': 404, '/api/copilot/outputs': 400, '/api/jira/version': 400, '/api/jira/versions': 400,
+const NEEDS = { '/api/copilot/change': 400, '/api/copilot/file': 404, '/api/copilot/job-log': 404, '/api/copilot/outputs': 400, '/api/jira/version': 400, '/api/jira/versions': 400,
   '/api/pr': 400, '/api/pr/reviewers': 400, '/api/source/nope': 404, '/api/nope': 404, '/nope': 404 };
 
 // Changes: POST only, and only with the page's token.
