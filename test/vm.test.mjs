@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VM_NO_PROXY, dockerClient, FIREWALL, VmImage, ChatVm, reapOrphans, cpuSample, cpuBusy, vmsLoad, vmSize, VM_DEFAULT, loginForwarder, loginHead, folderSync, applyDeletions, mavenCacheSync, vmExitText, hostContainers, registryLoginHint } from '../lib/vm.mjs';
+import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VM_NO_PROXY, dockerClient, FIREWALL, VmImage, ChatVm, reapOrphans, cpuSample, cpuBusy, vmsLoad, vmSize, VM_DEFAULT, loginForwarder, loginHead, folderSync, applyDeletions, mavenCacheSync, vmExitText, hostContainers, registryLoginHint, pullRefs, refusedRefs, imageNamed } from '../lib/vm.mjs';
 import { registryWrite, githubFilter } from '../lib/github-gate.mjs';
 import { srtSettings } from '../lib/sandbox.mjs';
 import { needs, serveBroker } from '../lib/broker.mjs';
@@ -339,7 +339,6 @@ test('a pull a registry refuses for want of a login says the VM has none, and wh
   const said = 'Error response from daemon: Head "https://registry.example.com/v2/team/app/manifests/1": no basic auth credentials\n';
   const hint = registryLoginHint(['docker', 'pull', '-q', 'registry.example.com/team/app:1'], said);
   assert.match(hint, /no login for registry\.example\.com/);
-  assert.match(hint, /pull registry\.example\.com\/team\/app:1 on their own machine/);
   assert.match(hint, /Images the VM copies from your Docker/);
   assert.equal(registryLoginHint(['docker', 'pull', 'registry.example.com/team/app:1'], 'net/http: timeout'), '', 'not a login problem');
   assert.equal(registryLoginHint(['./mvnw', 'verify'], said), '', 'only for docker');
@@ -350,4 +349,37 @@ test('images are copied from your Docker or Podman: the setting, else whichever 
   assert.equal(hostContainers({}, () => true), 'docker');
   assert.equal(hostContainers({}, (b) => b === 'podman'), 'podman');
   assert.equal(hostContainers({}, () => false), null);
+});
+
+test('private images the VM can\'t pull: which a command names, which a registry refused, which Settings names', () => {
+  assert.deepEqual(pullRefs(['docker', 'pull', '-q', '--platform', 'linux/amd64', 'registry.example.com/team/app:1']), ['registry.example.com/team/app:1']);
+  assert.deepEqual(pullRefs(['docker', 'pull', 'alpine:3']), [], 'Docker Hub needs no login: the VM pulls it itself');
+  assert.deepEqual(pullRefs(['docker', 'run', 'registry.example.com/team/app:1']), []);
+  assert.deepEqual(pullRefs(['./mvnw', 'pull', 'registry.example.com/team/app:1']), []);
+  assert.deepEqual(pullRefs(['docker', 'pull', 'registry.example.com/team/app;rm -rf /']), [], 'only image names');
+
+  const said = 'Error response from daemon: Head "https://registry.example.com/v2/team/app/manifests/1.2": no basic auth credentials\n'
+    + 'failed to resolve reference "registry.example.com:5000/base/jdk:21": unauthorized\n'
+    + 'Error response from daemon: Head "https://registry.example.com/v2/team/db/manifests/sha256:' + 'a'.repeat(64) + '": no basic auth credentials\n';
+  assert.deepEqual(refusedRefs(said, ['docker', 'compose', 'up']).sort(), ['registry.example.com/team/app:1.2', `registry.example.com/team/db@sha256:${'a'.repeat(64)}`, 'registry.example.com:5000/base/jdk:21'].sort());
+
+  const named = ['registry.example.com/team/', 'other.example.org/one/app:2'];
+  assert.ok(imageNamed('registry.example.com/team/app:1', named));
+  assert.ok(imageNamed('other.example.org/one/app:2', named));
+  assert.ok(!imageNamed('other.example.org/one/app:3', named), 'a whole image is that tag only');
+  assert.ok(!imageNamed('registry.example.com/elsewhere/app:1', named));
+  assert.ok(!imageNamed('registry.example.com/team/app:1', []));
+});
+
+test('a refused pull of an image not named in Settings says where to name it', () => {
+  const hint = registryLoginHint(['docker', 'pull', 'registry.example.com/team/app:1'], 'no basic auth credentials');
+  assert.match(hint, /add registry\.example\.com\/ to Settings/);
+  assert.match(hint, /pulls such images with the user's own login on their machine/);
+});
+
+test('fetchImages pulls nothing that Settings doesn\'t name', async () => {
+  const vm = Object.create(ChatVm.prototype);
+  vm.images = () => ['registry.example.com/team/'];
+  vm.event = () => { throw new Error('nothing to say'); };
+  assert.deepEqual(await vm.fetchImages(['other.example.org/x/y:1', 'alpine:3']), { got: [], failed: [] });
 });
