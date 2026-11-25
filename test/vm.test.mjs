@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VM_NO_PROXY, dockerClient, FIREWALL, VmImage, ChatVm, reapOrphans, cpuSample, cpuBusy, vmsLoad, vmSize, VM_DEFAULT, loginForwarder, loginHead, folderSync, applyDeletions, mavenCacheSync, vmExitText, hostContainers, registryLoginHint, pullRefs, refusedRefs, imageNamed } from '../lib/vm.mjs';
+import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VM_NO_PROXY, dockerClient, FIREWALL, VmImage, ChatVm, reapOrphans, cpuSample, cpuBusy, vmsLoad, vmSize, VM_DEFAULT, loginForwarder, loginHead, folderSync, applyDeletions, mavenCacheSync, vmExitText, hostContainers, registryLoginHint, pullRefs, refusedRefs, imageNamed, imageRefs } from '../lib/vm.mjs';
 import { registryWrite, githubFilter } from '../lib/github-gate.mjs';
 import { srtSettings } from '../lib/sandbox.mjs';
 import { needs, serveBroker } from '../lib/broker.mjs';
@@ -381,5 +381,21 @@ test('fetchImages pulls nothing that Settings doesn\'t name', async () => {
   const vm = Object.create(ChatVm.prototype);
   vm.images = () => ['registry.example.com/team/'];
   vm.event = () => { throw new Error('nothing to say'); };
-  assert.deepEqual(await vm.fetchImages(['other.example.org/x/y:1', 'alpine:3']), { got: [], failed: [] });
+  assert.deepEqual(await vm.fetchImages(['other.example.org/x/y:1', 'alpine:3']), { got: [], failed: [], pulled: [] });
+});
+
+test('the private images a vm command names are copied in first, whatever tag the copy before it took', () => {
+  assert.deepEqual(imageRefs(['docker', 'image', 'inspect', 'registry.example.com/team/app:1.0', 'registry.example.com/team/db:main', '--format', '{{json .Config}}']),
+    ['registry.example.com/team/app:1.0', 'registry.example.com/team/db:main']);
+  assert.deepEqual(imageRefs(['docker', 'run', '--rm', '-v', './data:/data', 'registry.example.com/team/app:1.0', 'sh']), ['registry.example.com/team/app:1.0']);
+  assert.deepEqual(imageRefs(['docker', 'run', 'alpine:3']), [], 'Docker Hub: the VM pulls it');
+  assert.deepEqual(imageRefs(['docker', 'compose', 'up']), []);
+  assert.deepEqual(imageRefs(['./mvnw', 'verify', 'registry.example.com/team/app:1.0']), []);
+});
+
+test('fetchImages with pull "missing" pulls nothing that Settings doesn\'t name either', async () => {
+  const vm = Object.create(ChatVm.prototype);
+  vm.images = () => [];
+  vm.event = () => { throw new Error('nothing to say'); };
+  assert.deepEqual(await vm.fetchImages(['registry.example.com/team/app:1'], { pull: 'missing' }), { got: [], failed: [], pulled: [] });
 });
