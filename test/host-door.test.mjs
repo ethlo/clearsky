@@ -153,6 +153,14 @@ test('a Deny while a VM command waited: it says so', async () => {
   assert.match(await note, /didn't allow it/);
 });
 
+test('a host the door refuses is turned away at once, with no card', async () => {
+  const { d, asked } = door({ refuse: (h, p) => h === 'registry.example.com' && p === 443, answers: ['allow'] });
+  assert.equal(await d.decide({ host: 'registry.example.com', port: 443 }), false);
+  assert.equal(asked.length, 0);
+  assert.equal(await d.decide({ host: 'example.org', port: 443 }), true, 'others still ask');
+  assert.equal(asked.length, 1);
+});
+
 test('reading an allowed host goes through; sending data there asks', async () => {
   const { d, asked } = door({ answers: ['chat', 'deny', 'allow'] });
   await d.decide({ host: 'example.org', port: 443 });

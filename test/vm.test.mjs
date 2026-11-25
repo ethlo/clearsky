@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VM_NO_PROXY, dockerClient, FIREWALL, VmImage, ChatVm, reapOrphans, cpuSample, cpuBusy, vmsLoad, vmSize, VM_DEFAULT, loginForwarder, loginHead, folderSync, applyDeletions, mavenCacheSync, vmExitText, hostContainers, registryLoginHint, pullRefs, refusedRefs, imageNamed, imageRefs } from '../lib/vm.mjs';
+import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VM_NO_PROXY, dockerClient, FIREWALL, VmImage, ChatVm, reapOrphans, cpuSample, cpuBusy, vmsLoad, vmSize, VM_DEFAULT, loginForwarder, loginHead, folderSync, applyDeletions, mavenCacheSync, vmExitText, hostContainers, registryLoginHint, pullRefs, refusedRefs, imageNamed, imageRefs, registryLogins } from '../lib/vm.mjs';
 import { registryWrite, githubFilter } from '../lib/github-gate.mjs';
 import { srtSettings } from '../lib/sandbox.mjs';
 import { needs, serveBroker } from '../lib/broker.mjs';
@@ -339,7 +339,6 @@ test('a pull a registry refuses for want of a login says the VM has none, and wh
   const said = 'Error response from daemon: Head "https://registry.example.com/v2/team/app/manifests/1": no basic auth credentials\n';
   const hint = registryLoginHint(['docker', 'pull', '-q', 'registry.example.com/team/app:1'], said);
   assert.match(hint, /no login for registry\.example\.com/);
-  assert.match(hint, /Images the VM copies from your Docker/);
   assert.equal(registryLoginHint(['docker', 'pull', 'registry.example.com/team/app:1'], 'net/http: timeout'), '', 'not a login problem');
   assert.equal(registryLoginHint(['./mvnw', 'verify'], said), '', 'only for docker');
 });
@@ -373,8 +372,8 @@ test('private images the VM can\'t pull: which a command names, which a registry
 
 test('a refused pull of an image not named in Settings says where to name it', () => {
   const hint = registryLoginHint(['docker', 'pull', 'registry.example.com/team/app:1'], 'no basic auth credentials');
-  assert.match(hint, /add registry\.example\.com\/ to Settings/);
-  assert.match(hint, /pulls such images with the user's own login on their machine/);
+  assert.match(hint, /log in to registry\.example\.com on their machine/);
+  assert.match(hint, /pulls such images with that login on their machine/);
 });
 
 test('fetchImages pulls nothing that Settings doesn\'t name', async () => {
@@ -398,4 +397,29 @@ test('fetchImages with pull "missing" pulls nothing that Settings doesn\'t name 
   vm.images = () => [];
   vm.event = () => { throw new Error('nothing to say'); };
   assert.deepEqual(await vm.fetchImages(['registry.example.com/team/app:1'], { pull: 'missing' }), { got: [], failed: [], pulled: [] });
+});
+
+test('the registries your Docker or Podman is logged in to: hosts only, never a secret, never Docker Hub', () => {
+  const files = {
+    '/h/.docker/config.json': JSON.stringify({ auths: { 'https://index.docker.io/v1/': { auth: 'x' }, 'registry.example.com': { auth: 'c2VjcmV0' } },
+      credHelpers: { '123.dkr.ecr.example.com': 'ecr-login' }, credsStore: 'desktop' }),
+    '/run/user/1/containers/auth.json': JSON.stringify({ auths: { 'quay.example.org:5000': { auth: 'y' } } }),
+  };
+  const stores = [];
+  const got = registryLogins({ env: { XDG_RUNTIME_DIR: '/run/user/1' }, home: '/h', read: (f) => { if (!(f in files)) throw new Error('none'); return files[f]; },
+    list: (store) => { stores.push(store); return ['https://images.example.net', 'docker.io']; } });
+  assert.deepEqual([...got].sort(), ['123.dkr.ecr.example.com', 'images.example.net', 'quay.example.org:5000', 'registry.example.com']);
+  assert.deepEqual(stores, ['desktop']);
+  assert.deepEqual([...registryLogins({ env: {}, home: '/none', read: () => { throw new Error('no file'); } })], []);
+});
+
+test('a VM with logins: images on those registries come through your Docker with no setting', async () => {
+  const vm = Object.create(ChatVm.prototype);
+  vm.images = () => [];
+  vm.logins = () => new Set(['registry.example.com']);
+  const said = [];
+  vm.event = (t) => said.push(t);
+  // (No docker here: the pull on "your machine" fails, which shows it was tried.)
+  const r = await vm.fetchImages(['registry.example.com/team/app:1', 'other.example.org/x:1'], { pull: 'missing' });
+  assert.deepEqual(r.failed.map(([ref]) => ref), ['registry.example.com/team/app:1']);
 });
