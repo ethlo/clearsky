@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VmImage, ChatVm, reapOrphans, cpuSample, cpuBusy, vmsLoad, vmSize, VM_DEFAULT, loginForwarder, loginHead, folderSync, applyDeletions, mavenCacheSync, vmExitText, registryLoginHint } from '../lib/vm.mjs';
+import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VM_NO_PROXY, dockerClient, FIREWALL, VmImage, ChatVm, reapOrphans, cpuSample, cpuBusy, vmsLoad, vmSize, VM_DEFAULT, loginForwarder, loginHead, folderSync, applyDeletions, mavenCacheSync, vmExitText, hostContainers, registryLoginHint } from '../lib/vm.mjs';
 import { registryWrite, githubFilter } from '../lib/github-gate.mjs';
 import { srtSettings } from '../lib/sandbox.mjs';
 import { needs, serveBroker } from '../lib/broker.mjs';
@@ -24,12 +24,30 @@ test('the VM reaches Docker Hub (with its CDN) and Maven Central through the pro
   assert.doesNotMatch(mavenSettings({ port: 1, url: 'http://' }), /username/);
 });
 
+test('docker build steps and containers in the VM get the proxy; private addresses stay off it', () => {
+  const c = dockerClient('http://10.0.2.100:3128').proxies.default;
+  assert.equal(c.httpProxy, 'http://10.0.2.100:3128');
+  assert.equal(c.httpsProxy, 'http://10.0.2.100:3128');
+  for (const h of ['localhost', '127.0.0.1', '172.16.0.0/12', 'host.testcontainers.internal']) assert.ok(c.noProxy.split(',').includes(h), h);
+  assert.equal(c.noProxy, VM_NO_PROXY);
+  // The package repositories Dockerfiles commonly use are on the list; anything else asks.
+  for (const h of ['deb.debian.org', 'dl-cdn.alpinelinux.org', 'download.docker.com']) assert.ok(VM_DOMAINS.includes(h), h);
+  assert.ok(!VM_DOMAINS.some((d) => d === '*' || d.startsWith('*.amazonaws')), 'no blanket hosts');
+});
+
+test('the VM refuses what skips the proxy at once, for itself and its containers, and nothing inside', () => {
+  for (const chain of ['OUTPUT', 'DOCKER-USER']) assert.match(FIREWALL, new RegExp(`iptables -I ${chain} 1 -o "\\$up" ! -d 10\\.0\\.2\\.0/24 -j REJECT`));
+  // Only the way out (QEMU's network card), so containers still reach each other.
+  assert.ok(!/iptables -I \S+ 1 (?!-o)/.test(FIREWALL));
+  assert.match(FIREWALL, /ip6tables -I DOCKER-USER 1 -o "\$up" -j REJECT/);
+});
+
 test('the prepared image: our keys, Docker and Maven via the proxy, nothing left that slows a boot', () => {
   const c = cloudConfig({ key: 'ssh-ed25519 AAAA you\n', hostKey: '-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----\n', hostPub: 'ssh-ed25519 BBBB host\n', proxy: 'http://srt:t@10.0.2.100:3128' });
   assert.match(c, /^#cloud-config\n/);
   assert.match(c, /ed25519_private: \|\n    -----BEGIN OPENSSH PRIVATE KEY-----\n    abc\n/);
   assert.match(c, /http_proxy: http:\/\/srt:t@10\.0\.2\.100:3128/);
-  assert.match(c, /packages: \[docker\.io, maven, rsync\]/);
+  assert.match(c, /packages: \[docker\.io, docker-compose-v2, docker-buildx, maven, rsync\]/);
   assert.match(cloudConfig({ key: 'k', hostKey: 'h', hostPub: 'p', proxy: 'x', uid: 1234 }), /    uid: 1234\n/);
   for (const s of ['PerSourcePenalties no', 'systemctl disable docker.service docker.socket', 'snapd.seeded.service', 'systemd-networkd-wait-online', 'rm -f /etc/apt/apt.conf.d/90cloud-init-aptproxy', 'cloud-init clean --logs', 'cloud-init.disabled']) assert.ok(c.includes(s), s);
 });
@@ -325,4 +343,11 @@ test('a pull a registry refuses for want of a login says the VM has none, and wh
   assert.match(hint, /Images the VM copies from your Docker/);
   assert.equal(registryLoginHint(['docker', 'pull', 'registry.example.com/team/app:1'], 'net/http: timeout'), '', 'not a login problem');
   assert.equal(registryLoginHint(['./mvnw', 'verify'], said), '', 'only for docker');
+});
+
+test('images are copied from your Docker or Podman: the setting, else whichever is installed (docker first)', () => {
+  assert.equal(hostContainers({ AGENT_HOST_CONTAINERS: 'podman' }, () => true), 'podman');
+  assert.equal(hostContainers({}, () => true), 'docker');
+  assert.equal(hostContainers({}, (b) => b === 'podman'), 'podman');
+  assert.equal(hostContainers({}, () => false), null);
 });

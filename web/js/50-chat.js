@@ -69,7 +69,7 @@ function chatTabs() {
     const current = id === chat.session && (chat.turns || chat.stop);
     const status = current && chat.stop ? ($('#chat-log .perm-b button') ? 'needs-you' : 'working') : live.get(id)?.status || 'closed';
     const key = Object.entries(cpLinks.links || {}).find(([, list]) => list.some((x) => x.id === id))?.[0];
-    return { id, hot: isHot(id), cwd: l?.cwd || r?.cwd, title: (current && chat.title) || (r?.title?.startsWith('/') && l?.title) || r?.title || l?.title || `${agentNow()} chat`, status, live: live.has(id), pr: prStateOf(key) };
+    return { id, hot: isHot(id), cwd: l?.cwd || r?.cwd, title: (current && chat.title) || (r?.title?.startsWith('/') && l?.title) || r?.title || l?.title || `${agentNow()} chat`, status, plan: live.get(id)?.plan, live: live.has(id), pr: prStateOf(key) };
   }).sort((a, b) => (b.live - a.live)).slice(0, 8);
 }
 function drawTabs() {
@@ -78,14 +78,16 @@ function drawTabs() {
   const folder = (d) => (d || '').split('/').filter(Boolean).pop() || '';
   $('#side-cp').innerHTML = tabs.map((t, i) => `<a class="ni cp${onChat && t.id === chat.session && !isNew ? ' on' : ''}" href="#copilot"
       data-tab="${esc(t.id)}" data-cwd="${esc(t.cwd || '')}" title="${esc(t.title)}${STATUS_TEXT[t.status] ? ` · ${STATUS_TEXT[t.status]}` : ''}${i < 9 ? ` (Alt+${i + 1})` : ''}">
-      <span class="live s-${esc(t.status)}"></span><span class="lab">${esc(t.title)}<small>${hotMark(t.hot)}${esc([STATUS_TEXT[t.status] || (t.live ? 'open' : ''), t.pr, folder(t.cwd)].filter(Boolean).join(' · '))}</small></span>
+      <span class="live s-${esc(t.status)}"></span><span class="lab">${esc(t.title)}<small>${hotMark(t.hot)}${esc([STATUS_TEXT[t.status] || (t.live ? 'open' : ''), t.status === 'working' && planShort(t.plan), t.pr, folder(t.cwd)].filter(Boolean).join(' · '))}</small></span>
       ${t.status === 'working' || t.status === 'needs-you' ? '' : `<span class="x" data-nudge-tab="${esc(t.id)}" title="Nudge: send ${agentNow()} “Try again.”" aria-label="Nudge">${icon('refresh', 12)}</span>`}
       ${t.live ? '' : `<span class="x" data-forget="${esc(t.id)}" title="Remove from this list" aria-label="Remove">✕</span>`}</a>`).join('')
-    + (onChat && isNew ? '<a class="ni cp on" href="#copilot"><span class="live"></span><span class="lab">New chat</span></a>' : '');
+    + (onChat && isNew ? '<a class="ni cp on" href="#copilot"><span class="live"></span><span class="lab">New chat</span></a>' : '')
+    + `<a class="ni cp-hist" href="#copilot" data-hist title="All your ${agentNow()} chats, closed ones too"><span class="ico">${icon('history', 14)}</span><span class="lab">History</span></a>`;
 }
 $('#side-cp').addEventListener('click', (e) => {
   const f = e.target.closest('[data-forget]');
   if (f) { e.preventDefault(); e.stopPropagation(); recentChats = recentChats.filter((x) => x.id !== f.dataset.forget); saveRecent(); if (f.dataset.forget === chat.session) newChat(); else drawTabs(); return; }
+  if (e.target.closest('[data-hist]')) { e.preventDefault(); openHistory(); return; }
   const t = e.target.closest('[data-tab]');
   if (!t) return;
   e.preventDefault();
@@ -98,6 +100,7 @@ $('#side-cp').addEventListener('click', (e) => {
   openChat(true, true);
   if (t.dataset.tab !== chat.session || !chat.turns) openSession(t.dataset.tab, t.dataset.cwd);
 });
+$('#cp-hist-side').onclick = () => openHistory();
 $('#cp-new-side').onclick = () => { newChat(); openChat(true, true); $('#chat-text').focus(); };
 document.addEventListener('keydown', (e) => {
   if (!e.altKey || e.ctrlKey || e.metaKey) return;
@@ -962,6 +965,18 @@ function toolEvent(segs, e) {
   Object.assign(t, Object.fromEntries(Object.entries(e).filter(([, v]) => v != null)));
   if (['completed', 'failed'].includes(e.status)) t.end ||= e.at;
 }
+// The agent's plan (its to-do list): each update is the whole list. One per answer, kept where
+// it first showed up.
+function planEvent(segs, e) {
+  const p = segs.find((g) => g.type === 'plan');
+  if (p) p.entries = e.entries; else segs.push({ type: 'plan', entries: e.entries, at: e.at });
+}
+function planCard(g, running) {
+  const list = g.entries || [], done = list.filter((x) => x.status === 'completed').length;
+  const mark = { completed: '<b>✓</b>', in_progress: running ? '<b class="p-now"></b>' : '<b>–</b>', pending: '<b>○</b>' };
+  return `<div class="plan"><div class="plan-h">${icon('list', 13)}Plan<small>${done} of ${list.length} done</small></div>
+    <ol>${list.map((x) => `<li class="p-${esc(x.status)}${!running && x.status === 'in_progress' ? ' p-left' : ''}">${mark[x.status] || mark.pending}<span>${esc(x.content)}</span></li>`).join('')}</ol></div>`;
+}
 // When each line happened (local time), and how long a step took.
 const clock = (ms) => (ms ? new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '');
 const took = (a, b) => { const s = Math.round((b - a) / 1000); return s < 1 ? '' : s < 90 ? `${s}s` : `${Math.round(s / 60)} min`; };
@@ -987,6 +1002,7 @@ function renderAnswer(segs, running = false) {
       return `<div class="tool s-resumed"><span>${icon('refresh', 13)}</span>Picked up after an interruption: ${n === 1 ? 'a step that was running didn’t finish' : `${n} steps that were running didn’t finish`}, so ${agentNow()} checks and runs ${n === 1 ? 'it' : 'them'} again.</div>${md(g.text.replace(RESUME_WARN_ALL, '').trim())}`;
     }
     if (g.type === 'text') return md(g.text);
+    if (g.type === 'plan') return planCard(g, running);
     if (g.type === 'tool' && resumed && g.status === 'failed' && (!g.title || g.title === 'Tool')) return '';
     if (g.type === 'tool') {
       // A finished step is a quiet check; only failed, stopped or running ones say so in words.
@@ -1023,6 +1039,8 @@ function permFields(g) {
   const v = permValues(g);
   return `<div class="perm-f">${g.fields.map((f) => {
     const list = permChoices(g, f), note = f.by && f.notes?.[v[f.by]];
+    // Nothing to choose (a project without fix versions): no field.
+    if (list.length < 2 && !note && (!list.length || list[0].value === (f.value ?? ''))) return '';
     const blank = !list.some((o) => o.value === v[f.name]) ? `<option value="" disabled selected hidden>Pick one</option>` : '';
     return `<label>${esc(f.label)}<select data-perm-field="${esc(f.name)}" data-perm-of="${esc(g.id)}">${blank}${list.map((o) => `<option value="${esc(o.value)}"${o.value === v[f.name] ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}</select>${note ? `<small>${esc(note)}</small>` : ''}</label>`;
   }).join('')}</div>`;
@@ -1291,6 +1309,7 @@ async function send(text, extra = {}) {
     e.at ||= Date.now(); segs.moved = e.at;
     if (e.type === 'text') { if (last?.type === 'text') last.text += e.text; else segs.push({ type: 'text', text: e.text, at: e.at }); }
     else if (e.type === 'tool') toolEvent(segs, e);
+    else if (e.type === 'plan') planEvent(segs, e);
     else if (e.type === 'permission' || e.type === 'error') segs.push(e);
     // Answered in another chat (a GitHub change asks in every sandboxed chat that's working).
     else if (e.type === 'permission-done') { const g = segs.find((x) => x.type === 'permission' && x.id === e.id); if (g && !g.answered) g.answered = e.expired ? 'Not answered before the turn ended' : 'Answered'; }
@@ -1392,6 +1411,7 @@ async function attachLive(id) {
         e.at ||= Date.now(); segs.moved = e.at;
         if (e.type === 'text') { if (last?.type === 'text') last.text += e.text; else segs.push({ type: 'text', text: e.text, at: e.at }); }
         else if (e.type === 'tool') toolEvent(segs, e);
+        else if (e.type === 'plan') planEvent(segs, e);
         else if (e.type === 'permission' || e.type === 'error') segs.push(e);
         else if (e.type === 'permission-done') { const g = segs.find((x) => x.type === 'permission' && x.id === e.id); if (g && !g.answered) g.answered = e.expired ? 'Not answered before the turn ended' : 'Answered'; }
         else if (e.type === 'note') { segs.push({ type: 'note', text: e.text, at: e.at }); if (/^(GitHub|Jira):/.test(e.text)) setTimeout(drawChanges, 300); }
@@ -1448,8 +1468,11 @@ function showChat(ready) {
   }
   if (!chat.info) loadCopilotInfo();
   drawCtx();
-  setTimeout(() => $('#chat-text').focus(), 0);
+  if (histNext) { histNext = false; showHistory(true); } else setTimeout(() => $('#chat-text').focus(), 0);
 }
+// The chat view with its History open, from anywhere (the menu's Chats header).
+let histNext = false;
+function openHistory() { histNext = true; openChat(true); }
 
 // ---------------------------------------------------------------- theme
 
@@ -1578,6 +1601,7 @@ const SLASH = [
   { name: 'new', description: 'Start a new chat', run: () => newChat() },
   { name: 'history', description: `Your ${agentNow()} sessions`, run: () => showHistory(true) },
   { name: 'ref', description: 'Attach a PR, ticket or file', run: () => openRefPick() },
+  { name: 'rewind', description: 'Put the files back as they were before one of your messages ', run: () => openRewind() },
 ];
 let slash = null;
 function slashItems() {
@@ -1801,7 +1825,7 @@ document.addEventListener('click', async (e) => {
 });
 
 // A card's field changed (a new ticket's project or fix version): keep it, and draw the card again
-// (another project has other versions, and Create waits for a version).
+// (another project has other versions, or none).
 $('#chat-log').addEventListener('change', (e) => {
   const s = e.target.closest('[data-perm-field]');
   if (!s) return;
@@ -1809,6 +1833,54 @@ $('#chat-log').addEventListener('change', (e) => {
   if (!seg || !card) return;
   const v = permValues(seg);
   v[s.dataset.permField] = s.value;
-  for (const f of seg.fields) if (f.by === s.dataset.permField && !permChoices(seg, f).some((o) => o.value === v[f.name])) v[f.name] = null;
+  for (const f of seg.fields) if (f.by === s.dataset.permField && !permChoices(seg, f).some((o) => o.value === v[f.name])) v[f.name] = f.value ?? null;
   card.outerHTML = renderAnswer([seg]);
 });
+
+// ---------------------------------------------------------------- rewind
+// /rewind: put this chat's files back to how they were before
+// one of your messages. Clearsky saves the folder before each message you send (lib/checkpoints.mjs);
+// git's commits and branches aren't touched, and the agent is told with your next message.
+async function openRewind() {
+  if (!chat.session || !chat.turns) { $('#chat-sub').textContent = 'Nothing to rewind yet: send a message first.'; return; }
+  $('#chat-log .rewind:not(.done)')?.closest('.msg')?.remove();
+  const el = addMsg('cp', '<div class="rewind"><div class="rewind-t">Rewind</div><p class="rewind-n">Looking for checkpoints…</p></div>');
+  let d;
+  try { d = await getJson(`/api/copilot/checkpoints?chat=${encodeURIComponent(chat.session)}`); } catch (e) { el.querySelector('.rewind-n').textContent = e.message; return; }
+  el.querySelector('.rewind').outerHTML = rewindCard(d);
+  $('#chat-log').scrollTop = $('#chat-log').scrollHeight;
+}
+function rewindCard(d) {
+  const list = d.checkpoints || [];
+  const files = (n) => (n == null ? '' : n === 0 ? 'no changes since' : `${n} file${n === 1 ? '' : 's'} changed since`);
+  return `<div class="rewind"><div class="rewind-t">${icon('history', 14)}Rewind<small>Puts the files back as they were before that message. Commits, branches and pushes stay as they are.</small></div>
+    ${d.busy ? `<p class="rewind-n">${esc(agentNow())} is working. Stop it first, then rewind.</p>` : ''}
+    ${list.length ? `<ul>${list.map((c) => `<li class="k-${esc(c.kind)}"><div><b>${esc(c.kind === 'rewind' ? c.text : `“${c.text || '(no text)'}”`)}</b>
+      <small>${stamp(Date.parse(c.at))}${esc([c.kind === 'rewind' ? 'undoes that rewind' : 'before this message', files(c.files), tilde(c.root)].filter(Boolean).join(' · '))}</small></div>
+      <span class="rewind-b">${c.files === 0 ? '' : `<button type="button" data-rewind="${esc(c.id)}"${d.busy ? ' disabled' : ''}>Put files back</button>`}${c.kind === 'message' ? `<button type="button" data-rewind="${esc(c.id)}" data-edit="${esc(c.text)}"${d.busy ? ' disabled' : ''} title="Put the files back and the message in the box, to change and send again">…and edit message</button>` : ''}</span></li>`).join('')}</ul>`
+      : '<p class="rewind-n">No checkpoints for this chat yet. Clearsky saves one before each message you send in a git repo.</p>'}
+    <div class="rewind-x"><button type="button" data-rewind-close>Close</button></div></div>`;
+}
+$('#chat-log').addEventListener('click', async (e) => {
+  if (e.target.closest('[data-rewind-close]')) { e.target.closest('.msg')?.remove(); return; }
+  const b = e.target.closest('[data-rewind]');
+  if (!b) return;
+  const card = b.closest('.rewind');
+  card.querySelectorAll('button').forEach((x) => { x.disabled = true; });
+  try {
+    const r = await post('/api/copilot/rewind', { chat: chat.session, id: b.dataset.rewind });
+    const n = r.changed.length;
+    card.classList.add('done');
+    card.innerHTML = `<div class="rewind-t">${icon('history', 14)}Rewound<small>${esc(tilde(r.root))}</small></div>
+      <p class="rewind-n">${n ? `Put back ${n} file${n === 1 ? '' : 's'}: ${esc(r.changed.slice(0, 8).join(', '))}${n > 8 ? ', …' : ''}.` : 'The files were already like that.'} ${esc(agentNow())} hears of it with your next message.</p>
+      <div class="rewind-x"><button type="button" data-rewind="${esc(r.undo)}">Undo</button></div>`;
+    if (b.dataset.edit != null) { const ta = $('#chat-text'); ta.value = b.dataset.edit; ta.focus(); ta.dispatchEvent(new Event('input')); }
+    setTimeout(drawOutputs, 300);
+  } catch (err) {
+    card.querySelectorAll('button').forEach((x) => { x.disabled = false; });
+    let m = card.querySelector('.rewind-e');
+    if (!m) { m = Object.assign(document.createElement('p'), { className: 'rewind-n rewind-e' }); card.append(m); }
+    m.textContent = err.message;
+  }
+});
+$('#chat-rewind').onclick = () => openRewind();

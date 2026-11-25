@@ -39,6 +39,7 @@ function route() {
   $('#v-notes').hidden = h !== 'notifications';
   $('#v-changes').hidden = h !== 'changes';
   $('#v-handoffs').hidden = h !== 'handoffs';
+  $('#v-schedules').hidden = h !== 'schedules';
   $('#v-builds').hidden = h !== 'builds';
   $('#v-versions').hidden = h !== 'versions';
   $('#v-servers').hidden = h !== 'servers';
@@ -56,6 +57,7 @@ function route() {
   if (h === 'notifications') renderNotes();
   if (h === 'changes') renderChanges();
   if (h === 'handoffs') loadHandoffs();
+  if (h === 'schedules') loadSchedules();
   if (h === 'builds') loadBuilds(false);
   if (h === 'versions') loadVersions(false);
   if (h === 'servers') loadServers();

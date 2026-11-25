@@ -20,12 +20,12 @@ const PAGES = { '/': 'text/html', '/index.html': 'text/html', '/settings': 'text
 const READS = {
   '/api/actions': ['actions'], '/api/agent-log': ['writes'], '/api/attention': ['lastPoll', 'dataVersion', 'items'], '/api/branches': ['branches'],
   '/api/builds': ['repos', 'checkedAt'], '/api/copilot': ['available', 'cwd', 'skills', 'agent', 'agents', 'commands'],
-  '/api/copilot/chat': ['running', 'busy', 'sandboxed'], '/api/copilot/files': ['files'], '/api/copilot/jobs': ['jobs', 'watchdog'],
+  '/api/copilot/chat': ['running', 'busy', 'sandboxed'], '/api/copilot/checkpoints': ['checkpoints', 'busy'], '/api/copilot/files': ['files'], '/api/copilot/jobs': ['jobs', 'watchdog'],
   '/api/copilot/links': ['links', 'live', 'actions'], '/api/copilot/map': ['chats'], '/api/copilot/memory': ['path', 'text', 'max'],
   '/api/copilot/sessions': ['cwd', 'sessions'], '/api/copilot/usage': ['total', 'today', 'week', 'month'], '/api/dismissed': ['dismissed', 'muted'],
   '/api/doctor': ['checks', 'ready', 'platform', 'tracker'], '/api/handoffs': ['handoffs', 'sandbox'], '/api/jira/projects': ['projects', 'starred'],
   '/api/jira/starred': ['starred'], '/api/links': ['groups'], '/api/modules': ['modules'], '/api/notifications/log': ['log', 'pollMinutes'],
-  '/api/plan': ['plan', 'nextStandup', 'summary'], '/api/plugins': ['all', 'added', 'available'], '/api/restart': ['pending', 'busy', 'updateReady', 'reasons'],
+  '/api/plan': ['plan', 'nextStandup', 'summary'], '/api/plugins': ['all', 'added', 'available'], '/api/restart': ['pending', 'busy', 'updateReady', 'reasons'], '/api/schedules': ['schedules', 'running', 'sandbox'],
   '/api/servers': ['hosts'], '/api/settings': ['file', 'github', 'jira', 'tracker', 'calendar'], '/api/sources': ['tracker', 'sources', 'errors'],
   '/api/standup': ['generatedAt', 'since', 'nextStandup'], '/api/standup/say': ['text'], '/api/team': ['team'], '/api/vm': ['vm', 'support'],
   '/api/vms': ['limit', 'running', 'waiting', 'vms'], '/api/vpn': ['known', 'up'], '/api/work': ['generatedAt', 'plan', 'summary', 'github', 'jira'],
@@ -35,15 +35,15 @@ const READS = {
 };
 
 // Reads that need to be told what to read: without it they say so, and don't fall over.
-const NEEDS = { '/api/copilot/file': 404, '/api/copilot/job-log': 404, '/api/copilot/outputs': 400, '/api/jira/version': 400, '/api/jira/versions': 400,
+const NEEDS = { '/api/copilot/change': 400, '/api/copilot/file': 404, '/api/copilot/job-log': 404, '/api/copilot/outputs': 400, '/api/jira/version': 400, '/api/jira/versions': 400,
   '/api/pr': 400, '/api/pr/reviewers': 400, '/api/source/nope': 404, '/api/nope': 404, '/nope': 404 };
 
 // Changes: POST only, and only with the page's token.
 const WRITES = ['/api/calendar/hidden', '/api/copilot', '/api/copilot/attach', '/api/copilot/close', '/api/copilot/folders', '/api/copilot/jobs/stop',
-  '/api/copilot/memory', '/api/copilot/permission', '/api/copilot/rename', '/api/copilot/stop', '/api/copilot/watchdog', '/api/demo/start', '/api/demo/stop',
+  '/api/copilot/memory', '/api/copilot/permission', '/api/copilot/rename', '/api/copilot/rewind', '/api/copilot/stop', '/api/copilot/watchdog', '/api/demo/start', '/api/demo/stop',
   '/api/dismiss', '/api/handoffs', '/api/jira/star', '/api/links', '/api/links/import', '/api/login/github', '/api/login/jira', '/api/mute', '/api/open',
-  '/api/plugins/add', '/api/plugins/check', '/api/plugins/preview', '/api/plugins/remove', '/api/plugins/update', '/api/pr/merge', '/api/pr/request-review',
-  '/api/read', '/api/restart', '/api/settings', '/api/team/join', '/api/team/scaffold', '/api/vm/stop', '/api/vms/image-cache/purge',
+  '/api/plugins/add', '/api/plugins/check', '/api/plugins/preview', '/api/plugins/remove', '/api/plugins/update', '/api/pr/merge', '/api/push/test', '/api/pr/request-review',
+  '/api/read', '/api/restart', '/api/schedules', '/api/settings', '/api/team/join', '/api/team/scaffold', '/api/vm/stop', '/api/vms/image-cache/purge',
   '/api/source/github/login', '/api/source/github/logins'];
 
 const port = 17300 + Math.floor(Math.random() * 400);

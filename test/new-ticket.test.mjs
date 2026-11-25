@@ -26,7 +26,8 @@ test('the card offers the named project first, then the chat\'s and starred ones
   const [project, version] = fields;
   assert.deepEqual(project.options.map((o) => o.value), ['PAY', 'WEB', 'OPS']);
   assert.equal(project.value, 'PAY');
-  assert.equal(version.value, null, 'you pick one: nothing is picked for you');
+  assert.equal(version.value, '', 'optional: starts on No fix version');
+  assert.ok(!version.required);
   assert.deepEqual(version.choices.PAY.map((o) => o.label), ['2.14 (2026-12-02)', '2.15', 'No fix version']);
   assert.deepEqual(version.choices.WEB.map((o) => o.value), ['']);
   assert.ok(version.notes.OPS && !version.notes.WEB, 'a project whose versions couldn\'t be read says so');
@@ -35,7 +36,7 @@ test('the card offers the named project first, then the chat\'s and starred ones
   assert.deepEqual(pickedTicket(fields, { project: 'WEB', version: '' }), { project: 'WEB', version: null });
   assert.equal(pickedTicket(fields, { project: 'PAY', version: '2.13' }), null, 'released: not offered');
   assert.equal(pickedTicket(fields, { project: 'EVIL', version: '' }), null);
-  assert.equal(pickedTicket(fields, { project: 'PAY' }), null, 'no version picked');
+  assert.deepEqual(pickedTicket(fields, { project: 'PAY' }), { project: 'PAY', version: null }, 'no version picked: none');
   assert.deepEqual(openVersions([{ name: '1', released: true }]).map((v) => v.name), ['1'], 'all released: offered anyway');
   assert.deepEqual(ticketFields({ project: null }).at(0).options, []);
 });

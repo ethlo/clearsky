@@ -44,13 +44,14 @@
     <div class="grp" data-grp="agent">
       <button type="button" class="sg" title="Hide or show these pages">Agent</button>
       <a class="ni" href="#handoffs" data-nav="handoffs" title="PRs and tickets you handed to the agent to work on by itself"><span class="ico" data-i="handoff"></span><span class="lab">Hand-offs</span><b id="n-handoffs"></b></a>
+      <a class="ni" href="#schedules" data-nav="schedules" title="Chats that start by themselves at times you pick"><span class="ico" data-i="clock"></span><span class="lab">Schedules</span></a>
       <a class="ni" href="#changes" data-nav="changes" title="What the agent changed as you on GitHub and Jira, from its sandbox"><span class="ico" data-i="spark"></span><span class="lab">Changes</span></a>
       <a class="ni" href="#usage" data-nav="usage" title="AI credits the agent used, and what they cost"><span class="ico" data-i="usage"></span><span class="lab">Usage</span><b id="n-usage"></b></a>
       <a class="ni" href="#vms" data-nav="vms" title="The VMs for builds with Docker: what runs in them and who waits for one"><span class="ico" data-i="vm"></span><span class="lab">VMs</span><b id="n-vms"></b></a>
       <a class="ni" href="#map" data-nav="map" title="Per chat: every repo, ticket and environment the agent worked on"><span class="ico" data-i="map"></span><span class="lab">Map</span></a>
     </div>
   </nav>
-  <div class="sg">Chats <button type="button" id="cp-new-side" title="New chat (Alt+N)" aria-label="New chat"><span data-i="plus" data-size="14"></span></button></div>
+  <div class="sg">Chats <button type="button" id="cp-hist-side" title="History: all your __AGENT__ chats, closed ones too" aria-label="Chat history"><span data-i="history" data-size="14"></span></button><button type="button" id="cp-new-side" title="New chat (Alt+N)" aria-label="New chat"><span data-i="plus" data-size="14"></span></button></div>
   <div id="side-cp"></div>
   <div class="sg" id="side-personal-h" hidden>Personal</div>
   <nav id="side-personal"><a class="ni" href="#links-personal" data-nav="links-personal" id="nav-links-personal" hidden><span class="ico" data-i="link"></span><span class="lab">Links</span></a></nav>
@@ -122,6 +123,10 @@
     <header class="vh"><h1 title="PRs and tickets you handed to __AGENT__ (✦ on a row → Hand off). It works on them one at a time, in the sandbox, and ends with a draft PR or a note on what it needs from you.">Hand-offs</h1><span class="sub" id="ho-sub"></span><span class="spacer"></span></header>
     <div class="view-b"><div class="page" id="handoffs"></div></div>
   </section>
+  <section class="view" id="v-schedules" hidden>
+    <header class="vh"><h1 title="A message __AGENT__ gets in a new sandboxed chat at the times you pick. Anything that leaves the sandbox still waits for your OK.">Schedules</h1><span class="sub" id="sc-sub"></span><span class="spacer"></span><button class="icon-btn small" id="sc-new"><span data-i="plus" data-size="14"></span>New schedule</button></header>
+    <div class="view-b"><div class="page" id="schedules"></div></div>
+  </section>
   <section class="view" id="v-usage" hidden>
     <header class="vh"><h1 title="The AI credits all __AGENT__ chats used, from their own session logs, and what they cost. Set the price and your currency in Settings → Agent.">Usage</h1><span class="spacer"></span>
       <div class="vh-acts"><button type="button" class="icon-btn" id="usage-refresh" title="Count again" aria-label="Count again"><span data-i="refresh" data-size="14"></span></button></div></header>
@@ -131,6 +136,7 @@
     <header class="vh"><h1 title="What __AGENT__ changed as you on GitHub and Jira, and what it read in Grafana, from its sandbox">Agent's changes</h1><span class="spacer"></span></header>
     <div class="view-b"><div id="changes"></div></div>
   </section>
+  <div class="fview" id="review" hidden><div class="fv-box rv-box" role="dialog" aria-label="Review the change"><header><b id="rv-name">Review</b><small id="rv-sub" class="rv-sub"></small><span class="spacer"></span><button type="button" id="rv-reload" title="Look again" aria-label="Look again"><span data-i="refresh" data-size="14"></span></button><button type="button" id="rv-close" aria-label="Close">✕</button></header><div id="rv-body"></div><footer class="rv-foot"><span class="hint">Click a line number to comment. The comments go to the chat box as one message.</span><button type="button" class="icon-btn small primary" id="rv-send" disabled>Click a line number to comment</button></footer></div></div>
   <div class="fview" id="fview" hidden><div class="fv-box"><header><b id="fv-name"></b><span class="spacer"></span><span class="fv-tabs" id="fv-tabs" hidden><button type="button" data-fv-tab="diff">Changes</button><button type="button" data-fv-tab="file">File</button></span><a id="fv-code" title="Open in VS Code">VS Code</a><a id="fv-open" target="_blank" rel="noopener">Raw</a><button type="button" id="fv-close" aria-label="Close">✕</button></header><div id="fv-body"></div></div></div>
   <section class="view" id="v-links" hidden>
     <header class="vh"><h1 id="links-title">Links</h1><input type="search" id="links-filter" class="links-filter" placeholder="Filter" aria-label="Filter links"><span class="spacer"></span>
@@ -163,6 +169,8 @@
       <span class="sub" id="chat-sub" role="status"></span>
       <span class="spacer"></span>
       <span class="vh-acts">
+        <button class="icon-btn small" id="chat-review" title="Review the chat's whole change, and comment on lines"><span data-i="diff" data-size="14"></span>Review</button>
+        <button class="icon-btn small" id="chat-rewind" title="Rewind: put the files back as they were before one of your messages (/rewind)"><span data-i="undo" data-size="14"></span>Rewind</button>
         <button class="icon-btn small" id="chat-hist-btn" title="All your __AGENT__ sessions: here, in the terminal or your editor"><span data-i="history" data-size="14"></span>History</button>
         <button class="icon-btn small" id="chat-new" title="New chat (Alt+N)"><span data-i="plus" data-size="14"></span>New</button>
         <button class="icon-btn small" id="cp-details" type="button" title="What this chat is about, what it made and what it did, across the whole width" aria-pressed="false"><span data-i="panel" data-size="14"></span>Details</button>
