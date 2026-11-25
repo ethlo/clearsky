@@ -32,3 +32,8 @@ test('a command in the VM\'s own checkout keeps its VM, also through a link; ano
   assert.ok(!within('/data/dev/repo2', '/data/dev/repo', resolve));
   assert.ok(!within('/data/dev', '/data/dev/repo', resolve));
 });
+
+test('Your containers takes docker or podman', () => {
+  assert.equal(validate({ AGENT_HOST_CONTAINERS: 'podman' }).AGENT_HOST_CONTAINERS, 'podman');
+  assert.throws(() => validate({ AGENT_HOST_CONTAINERS: 'lxc' }), /docker or podman/);
+});
