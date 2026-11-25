@@ -74,6 +74,29 @@ test('a plugin\'s door runs by its own name or as `door <name>`, and only doors 
   } finally { server.close(); }
 });
 
+test('what Clearsky has to tell the chat comes with its command\'s output: a door\'s and a `vm` command\'s', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'broker-notes-'));
+  const path = join(dir, 's', 'broker.sock');
+  const work = join(dir, 'work'); mkdirSync(work);
+  const asked = [];
+  const doors = (n) => (n === 'grafana' ? async () => ({ code: 0, stdout: 'ok\n', stderr: '' }) : null);
+  const vm = async (req, out, err) => { err('pull timed out\n'); return 1; };
+  const notes = async (key, o) => { asked.push([key, o]); return '\nClearsky: registry.example.com is allowed now: run the command again.\n'; };
+  const server = serveBroker({ path, doors, vm, notes, where: (key) => (key === 'k1' ? [work] : null) });
+  await new Promise((r) => server.once('listening', r));
+  const bin = (n) => fileURLToPath(new URL(`../scripts/sandbox-bin/${n}`, import.meta.url));
+  const go = (n, args, { key = 'k1' } = {}) => new Promise((r) => execFile(process.execPath, [bin(n), ...args],
+    { cwd: work, env: { ...process.env, CLEARSKY_BROKER_SOCKET: path, CLEARSKY_BROKER_KEY: key } }, (e, out, err) => r({ code: e ? e.code : 0, out, err })));
+  try {
+    const a = await go('grafana', ['logs']);
+    assert.equal(a.out, 'ok\n'); assert.match(a.err, /allowed now/);
+    const b = await go('vm', ['docker', 'pull', 'registry.example.com/team/app:1']);
+    assert.equal(b.code, 1); assert.match(b.err, /pull timed out\n\nClearsky: registry\.example\.com is allowed now/);
+    assert.deepEqual(asked, [['k1', { code: 0 }], ['k1', { code: 1, vm: true }]]);
+    assert.equal((await go('grafana', ['logs'], { key: 'closed' })).err.includes('allowed now'), false, 'a closed chat hears nothing');
+  } finally { server.close(); }
+});
+
 test('acli text in a file from the chat or its scratch folder goes to Jira as an ADF file', async () => {
   const { writeFileSync, readFileSync, realpathSync } = await import('node:fs');
   const dir = realpathSync(mkdtempSync(join(tmpdir(), 'broker-')));

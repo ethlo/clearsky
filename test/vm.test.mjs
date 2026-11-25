@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VM_NO_PROXY, dockerClient, FIREWALL, VmImage, ChatVm, reapOrphans, cpuSample, cpuBusy, vmsLoad, vmSize, VM_DEFAULT, loginForwarder, loginHead, folderSync, applyDeletions, mavenCacheSync, vmExitText, hostContainers } from '../lib/vm.mjs';
+import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VM_NO_PROXY, dockerClient, FIREWALL, VmImage, ChatVm, reapOrphans, cpuSample, cpuBusy, vmsLoad, vmSize, VM_DEFAULT, loginForwarder, loginHead, folderSync, applyDeletions, mavenCacheSync, vmExitText, hostContainers, registryLoginHint } from '../lib/vm.mjs';
 import { registryWrite, githubFilter } from '../lib/github-gate.mjs';
 import { srtSettings } from '../lib/sandbox.mjs';
 import { needs, serveBroker } from '../lib/broker.mjs';
@@ -333,6 +333,16 @@ test('a VM\'s start and stop go to Clearsky\'s log too; its commands don\'t', ()
   vm.event('VM up in 1.0s'); vm.event('$ mvn verify', 'run'); vm.event(vmExitText(null, 'SIGKILL')); vm.event('Copied the folder in in 1.0s');
   assert.equal(lines.length, 2);
   assert.match(lines[1], /^VM ab12 \(\/w\/repo\): The VM stopped unexpectedly \(killed by SIGKILL/);
+});
+
+test('a pull a registry refuses for want of a login says the VM has none, and where to name the image', () => {
+  const said = 'Error response from daemon: Head "https://registry.example.com/v2/team/app/manifests/1": no basic auth credentials\n';
+  const hint = registryLoginHint(['docker', 'pull', '-q', 'registry.example.com/team/app:1'], said);
+  assert.match(hint, /no login for registry\.example\.com/);
+  assert.match(hint, /pull registry\.example\.com\/team\/app:1 on their own machine/);
+  assert.match(hint, /Images the VM copies from your Docker/);
+  assert.equal(registryLoginHint(['docker', 'pull', 'registry.example.com/team/app:1'], 'net/http: timeout'), '', 'not a login problem');
+  assert.equal(registryLoginHint(['./mvnw', 'verify'], said), '', 'only for docker');
 });
 
 test('images are copied from your Docker or Podman: the setting, else whichever is installed (docker first)', () => {

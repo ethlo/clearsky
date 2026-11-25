@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { HostDoor, hostRule, ruleMatches, stepLines, describeRequest } from '../lib/host-door.mjs';
+import { HostDoor, hostRule, ruleMatches, stepLines, describeRequest, commandNotes } from '../lib/host-door.mjs';
 
 const chat = (id, mode = 'sandboxed') => ({ id, mode });
 function door({ chats = [chat('a')], answers = [], ...rest } = {}) {
@@ -97,6 +97,60 @@ test('a slow Allow (past the request\'s own patience) also tells the chat', asyn
   const { d } = door({ now: () => t, lateMs: 1000, answers: [() => { t = 5000; return 'allow'; }], late: (cs, rule) => told.push(rule) });
   assert.equal(await d.decide({ host: 'example.org', port: 443 }), true);
   assert.deepEqual(told, ['example.org']);
+});
+
+test('a VM command that gave up while its host was asked waits for the answer, then says to run it again', async () => {
+  // Docker gives up on the proxy after a minute; the Allow came three seconds later.
+  let release;
+  const untold = new Map();
+  const { d } = door({ answers: [() => new Promise((r) => { release = r; })],
+    late: (cs, rule) => { for (const c of cs) untold.set(c.id, new Map([[rule, `Clearsky: ${rule} is allowed now.`]])); } });
+  const request = d.decide({ host: 'registry.example.com', port: 443 });
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(d.waiting('a').map((w) => w.rule), ['registry.example.com']);
+  assert.deepEqual(d.waiting('b'), []);
+  const note = commandNotes({ door: d, id: 'a', untold, code: 1, vm: true });
+  release('chat');
+  assert.equal(await request, true);
+  const said = await note;
+  assert.match(said, /registry\.example\.com is allowed now: run the command again/);
+  assert.equal(said.match(/allowed now/g).length, 1, 'said once, not also as the late note');
+  assert.equal(untold.has('a'), false);
+  assert.deepEqual(d.waiting('a'), [], 'answered: no card waits');
+});
+
+test('a late Allow while the chat works goes into its next command\'s output; a card nobody answers isn\'t a Deny', async () => {
+  const untold = new Map([['a', new Map([['example.org', 'Clearsky: example.org is allowed now.']])]]);
+  const { d } = door();
+  assert.equal(await commandNotes({ door: d, id: 'a', untold, code: 0 }), '\nClearsky: example.org is allowed now.\n');
+  assert.equal(await commandNotes({ door: d, id: 'a', untold, code: 0 }), '', 'told once');
+  // A failed command with nothing asked: nothing to say, no wait.
+  assert.equal(await commandNotes({ door: d, id: 'a', untold, code: 1, vm: true }), '');
+
+  let release;
+  const { d: d2 } = door({ answers: [() => new Promise((r) => { release = r; })] });
+  const request = d2.decide({ host: 'registry.example.com', port: 443 });
+  await new Promise((r) => setImmediate(r));
+  const note = commandNotes({ door: d2, id: 'a', untold, code: 1, vm: true });
+  release('expired');
+  assert.equal(await request, false);
+  assert.match(await note, /still waits for the user's answer.*isn't unreachable/);
+  // And one the user doesn't answer in time: the command doesn't wait for ever.
+  const { d: d3 } = door({ holdMs: 20, answers: [() => new Promise(() => {})] });
+  d3.decide({ host: 'registry.example.com', port: 443 });
+  await new Promise((r) => setImmediate(r));
+  assert.match(await commandNotes({ door: d3, id: 'a', untold, code: 1, vm: true, waitMs: 10 }), /still waits/);
+});
+
+test('a Deny while a VM command waited: it says so', async () => {
+  let release;
+  const { d } = door({ answers: [() => new Promise((r) => { release = r; })] });
+  const request = d.decide({ host: 'registry.example.com', port: 443 });
+  await new Promise((r) => setImmediate(r));
+  const note = commandNotes({ door: d, id: 'a', untold: new Map(), code: 1, vm: true });
+  release('deny');
+  assert.equal(await request, false);
+  assert.match(await note, /didn't allow it/);
 });
 
 test('reading an allowed host goes through; sending data there asks', async () => {
