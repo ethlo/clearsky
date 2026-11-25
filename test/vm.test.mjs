@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VM_NO_PROXY, dockerClient, FIREWALL, VmImage, ChatVm, reapOrphans, cpuSample, cpuBusy, vmsLoad, vmSize, VM_DEFAULT, loginForwarder, loginHead, folderSync, applyDeletions, mavenCacheSync, vmExitText } from '../lib/vm.mjs';
+import { vmSupport, mavenSettings, javaEnv, cloudConfig, vmArgs, pullFailure, VM_DOMAINS, VM_NO_PROXY, dockerClient, FIREWALL, VmImage, ChatVm, reapOrphans, cpuSample, cpuBusy, vmsLoad, vmSize, VM_DEFAULT, loginForwarder, loginHead, folderSync, applyDeletions, mavenCacheSync, vmExitText, hostContainers } from '../lib/vm.mjs';
 import { registryWrite, githubFilter } from '../lib/github-gate.mjs';
 import { srtSettings } from '../lib/sandbox.mjs';
 import { needs, serveBroker } from '../lib/broker.mjs';
@@ -47,7 +47,7 @@ test('the prepared image: our keys, Docker and Maven via the proxy, nothing left
   assert.match(c, /^#cloud-config\n/);
   assert.match(c, /ed25519_private: \|\n    -----BEGIN OPENSSH PRIVATE KEY-----\n    abc\n/);
   assert.match(c, /http_proxy: http:\/\/srt:t@10\.0\.2\.100:3128/);
-  assert.match(c, /packages: \[docker\.io, maven, rsync\]/);
+  assert.match(c, /packages: \[docker\.io, docker-compose-v2, docker-buildx, maven, rsync\]/);
   assert.match(cloudConfig({ key: 'k', hostKey: 'h', hostPub: 'p', proxy: 'x', uid: 1234 }), /    uid: 1234\n/);
   for (const s of ['PerSourcePenalties no', 'systemctl disable docker.service docker.socket', 'snapd.seeded.service', 'systemd-networkd-wait-online', 'rm -f /etc/apt/apt.conf.d/90cloud-init-aptproxy', 'cloud-init clean --logs', 'cloud-init.disabled']) assert.ok(c.includes(s), s);
 });
@@ -333,4 +333,11 @@ test('a VM\'s start and stop go to Clearsky\'s log too; its commands don\'t', ()
   vm.event('VM up in 1.0s'); vm.event('$ mvn verify', 'run'); vm.event(vmExitText(null, 'SIGKILL')); vm.event('Copied the folder in in 1.0s');
   assert.equal(lines.length, 2);
   assert.match(lines[1], /^VM ab12 \(\/w\/repo\): The VM stopped unexpectedly \(killed by SIGKILL/);
+});
+
+test('images are copied from your Docker or Podman: the setting, else whichever is installed (docker first)', () => {
+  assert.equal(hostContainers({ AGENT_HOST_CONTAINERS: 'podman' }, () => true), 'podman');
+  assert.equal(hostContainers({}, () => true), 'docker');
+  assert.equal(hostContainers({}, (b) => b === 'podman'), 'podman');
+  assert.equal(hostContainers({}, () => false), null);
 });
