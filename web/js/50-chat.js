@@ -1039,6 +1039,8 @@ function permFields(g) {
   const v = permValues(g);
   return `<div class="perm-f">${g.fields.map((f) => {
     const list = permChoices(g, f), note = f.by && f.notes?.[v[f.by]];
+    // Nothing to choose (a project without fix versions): no field.
+    if (list.length < 2 && !note && (!list.length || list[0].value === (f.value ?? ''))) return '';
     const blank = !list.some((o) => o.value === v[f.name]) ? `<option value="" disabled selected hidden>Pick one</option>` : '';
     return `<label>${esc(f.label)}<select data-perm-field="${esc(f.name)}" data-perm-of="${esc(g.id)}">${blank}${list.map((o) => `<option value="${esc(o.value)}"${o.value === v[f.name] ? ' selected' : ''}>${esc(o.label)}</option>`).join('')}</select>${note ? `<small>${esc(note)}</small>` : ''}</label>`;
   }).join('')}</div>`;
@@ -1823,7 +1825,7 @@ document.addEventListener('click', async (e) => {
 });
 
 // A card's field changed (a new ticket's project or fix version): keep it, and draw the card again
-// (another project has other versions, and Create waits for a version).
+// (another project has other versions, or none).
 $('#chat-log').addEventListener('change', (e) => {
   const s = e.target.closest('[data-perm-field]');
   if (!s) return;
@@ -1831,7 +1833,7 @@ $('#chat-log').addEventListener('change', (e) => {
   if (!seg || !card) return;
   const v = permValues(seg);
   v[s.dataset.permField] = s.value;
-  for (const f of seg.fields) if (f.by === s.dataset.permField && !permChoices(seg, f).some((o) => o.value === v[f.name])) v[f.name] = null;
+  for (const f of seg.fields) if (f.by === s.dataset.permField && !permChoices(seg, f).some((o) => o.value === v[f.name])) v[f.name] = f.value ?? null;
   card.outerHTML = renderAnswer([seg]);
 });
 
