@@ -54,7 +54,7 @@ test('the sandbox lets the agent write its own state, and reach its own service'
   assert.ok(cc.filesystem.allowRead.includes('/home/me/.claude'));
   assert.ok(!cc.filesystem.allowWrite.includes('/home/me/.copilot'));
   assert.ok(!cc.filesystem.allowRead.includes('/home/me/.copilot'));
-  assert.ok(AGENTS.claude.hosts.includes('api.anthropic.com'));
+  assert.ok(AGENTS.claude.hosts.includes('*.anthropic.com'));
 });
 
 test('findBin: as set, on PATH, else under nvm', () => {
@@ -162,4 +162,12 @@ test('images go to the agent as ACP image blocks only when it takes them, and on
   a.init = { agentCapabilities: { promptCapabilities: { image: true } } };
   a.prompt('look', [join(dir, 'shot.PNG'), join(dir, 'notes.txt')]);
   assert.deepEqual(sent.map((p) => p.prompt.map((b) => b.type)), [['text'], ['text', 'image']]);
+});
+
+test('Claude Code reaches its own service without asking: sign-in refresh, API, connectors', async () => {
+  const { ruleMatches } = await import('../lib/host-door.mjs');
+  const own = (host) => AGENTS.claude.hosts.some((r) => ruleMatches(r, host, 443));
+  for (const h of ['platform.claude.com', 'api.anthropic.com', 'console.anthropic.com', 'statsig.anthropic.com', 'mcp-proxy.anthropic.com', 'claude.ai', 'claude.com'])
+    assert.ok(own(h), h);
+  assert.ok(!own('anthropic.com.evil.example') && !own('notclaude.ai'));
 });

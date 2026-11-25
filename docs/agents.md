@@ -14,7 +14,7 @@ Both speak the [Agent Client Protocol](https://agentclientprotocol.com), which i
 | More folders | `--add-dir` | the session's extra folders |
 | Skills | `.github/skills` and `~/.copilot/skills` | `.claude/skills`, `.github/skills` and `~/.claude/skills` |
 | Its state, writable in the sandbox | `~/.copilot`, `~/.cache/copilot` | `~/.claude`, `~/.cache/claude` |
-| Its hosts in the sandbox | `*.githubcopilot.com` | `api.anthropic.com`, `claude.ai`, `statsig.anthropic.com` |
+| Its hosts in the sandbox | `*.githubcopilot.com` | `anthropic.com`, `claude.ai`, `claude.com` and their subdomains (the API, its sign-in at `platform.claude.com`, connectors, usage reports): never asked about |
 | Usage page, `usage` line | AI credits from its session logs | not counted: see your Claude or Anthropic account |
 
 Left on **Automatic**, it's Copilot when the Copilot CLI is installed, else Claude Code when its adapter is, so nothing changes for people who had Copilot.

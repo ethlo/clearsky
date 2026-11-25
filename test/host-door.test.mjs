@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { HostDoor, hostRule, ruleMatches, stepLines, describeRequest, commandNotes } from '../lib/host-door.mjs';
+import { HostDoor, hostRule, ruleMatches, stepLines, describeRequest, commandNotes, redact } from '../lib/host-door.mjs';
 
 const chat = (id, mode = 'sandboxed') => ({ id, mode });
 function door({ chats = [chat('a')], answers = [], ...rest } = {}) {
@@ -275,4 +275,22 @@ test('describeRequest: long text bodies are cut, binary ones not shown, no body 
   assert.match(bin, /Body: not text \(application\/octet-stream\), not shown\./);
   const none = await describeRequest(new Request('https://a.example/x', { method: 'DELETE' }));
   assert.match(none, /Sends no body/);
+});
+
+test('describeRequest: logins in the body, the address and header values are hidden', async () => {
+  const card = await describeRequest(new Request('https://login.example/v1/oauth/token?client_secret=s3cret&x=1', {
+    method: 'POST', headers: { 'content-type': 'application/json', 'x-extra': 'Bearer abcdefghijklmnop' },
+    body: JSON.stringify({ grant_type: 'refresh_token', refresh_token: 'sk-ant-ort01-aaaaaaaaaaaaaaaa', client_id: 'id-1', password: 'pw' }),
+  }));
+  assert.doesNotMatch(card, /sk-ant-ort01|s3cret|abcdefghijklmnop|"pw"/);
+  assert.match(card, /"refresh_token":"\(hidden, 29 characters\)"/);
+  assert.match(card, /"client_id":"id-1"/); // what isn't a login still shows
+  assert.match(card, /client_secret=\(hidden, 6 characters\)&x=1/);
+});
+
+test('redact: token shapes anywhere, form fields, a value cut at the preview end', () => {
+  assert.equal(redact('grant_type=refresh_token&refresh_token=abc123&scope=x'), 'grant_type=refresh_token&refresh_token=(hidden, 6 characters)&scope=x');
+  assert.equal(redact('see ghp_aaaaaaaaaaaaaaaaaaaaaaaa here'), 'see (hidden, 28 characters) here');
+  assert.equal(redact('{"access_token":"abcdef'), '{"access_token":"(hidden, 6 characters)');
+  assert.equal(redact('{"name":"token","tokens":3}'), '{"name":"token","tokens":3}');
 });
