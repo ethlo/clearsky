@@ -30,7 +30,7 @@ ticket mine                                your open tickets
 
 ### A new Jira ticket asks for its project and fix version
 
-When a chat creates a Jira ticket (`ticket new`, or `acli jira workitem create` itself), Clearsky always asks first, in every mode and whatever Settings → Agent's never-ask list says. The card shows the ticket's summary and lets you pick its **project** (the one the chat named, then this chat's projects and your starred ones) and its **fix version** (that project's unreleased versions, as on the Versions page, or **No fix version**). **Create** waits until you've picked one.
+When a chat creates a Jira ticket (`ticket new`, or `acli jira workitem create` itself), Clearsky always asks first, in every mode and whatever Settings → Agent's never-ask list says. The card shows the ticket's summary and lets you pick its **project** (the one the chat named, then this chat's projects and your starred ones) and its **fix version** (that project's unreleased versions, as on the Versions page). The fix version is optional and starts on **No fix version**; a project without versions shows no version field at all.
 
 Many Jira setups let you set a fix version when a ticket is created but not change it later, and acli has no way to change it, so this is the time to get it right. A ticket with a fix version is sent to acli as a `--from-json` definition (the fix version in `additionalAttributes`), with its description as rich text.
 
