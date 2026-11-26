@@ -43,3 +43,17 @@ test('map: builds and test runs are told from other shell steps', () => {
   assert.equal(buildKind('git status'), null);
   assert.equal(buildKind('cd api && ./gradlew build'), 'build');
 });
+
+test('map: a change the proxy could not put down to one chat is no chat\'s, only counted', () => {
+  const writes = [
+    { at: '2026-01-01T10:03:00Z', where: 'github', what: 'POST acme/web/pulls', target: 'acme/web', chats: [{ id: 'c1' }], unsure: true, decided: 'auto' },
+    { at: '2026-01-01T10:02:00Z', where: 'github', what: 'POST acme/api/pulls', target: 'acme/api', chats: [{ id: 'c1' }, { id: 'c2' }], decided: 'auto' },
+    { at: '2026-01-01T10:01:00Z', where: 'jira', what: 'acli jira workitem comment --key ABC-1', target: 'ABC-1', chats: [{ id: 'c1' }], decided: 'auto' },
+  ];
+  const chats = buildMap(writes);
+  const c1 = chats.find((c) => c.id === 'c1'), c2 = chats.find((c) => c.id === 'c2');
+  assert.deepEqual(c1.nodes.map((n) => `${n.kind}:${n.key}`), ['ticket:ABC-1']);
+  assert.equal(c1.shared, 2);
+  assert.deepEqual(c2.nodes, []);
+  assert.equal(c2.shared, 1);
+});

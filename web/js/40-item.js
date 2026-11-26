@@ -245,7 +245,7 @@ function mapNode(n, jira) {
 }
 function mapChat(ch, jira, { head = true } = {}) {
   const name = ch.title || recentChats.find((r) => r.id === ch.id)?.title || `A ${AGENT} chat`;
-  return `<div class="mapc">${head ? `<div class="mh"><a href="#copilot" data-sid="${esc(ch.id)}">${esc(name)}</a><small>${ch.live ? 'open · ' : ''}${ch.at ? `last ${esc(ago(ch.at))}` : ''}${ch.shared ? ` · ${ch.shared} change${ch.shared > 1 ? 's' : ''} could have been another working chat's` : ''}</small></div>` : ''}
+  return `<div class="mapc">${head ? `<div class="mh"><a href="#copilot" data-sid="${esc(ch.id)}">${esc(name)}</a><small>${ch.live ? 'open · ' : ''}${ch.at ? `last ${esc(ago(ch.at))}` : ''}${ch.shared ? ` · ${ch.shared} change${ch.shared > 1 ? 's' : ''} left out: another working chat may have made ${ch.shared > 1 ? 'them' : 'it'}` : ''}</small></div>` : ''}
     <ul class="mapn">${ch.nodes.map((n) => mapNode(n, jira)).join('')}</ul></div>`;
 }
 document.addEventListener('click', (e) => {

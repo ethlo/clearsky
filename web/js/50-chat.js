@@ -452,6 +452,8 @@ const fsize = (n) => (n == null ? '' : n < 1024 ? `${n} B` : n < 1048576 ? `${Ma
 const FILE_KIND = { attached: 'you attached', pointed: 'you pointed at', research: 'research', file: 'its files', wrote: 'written' };
 async function drawOutputs() {
   const el = $('#cp-out'), id = chat.turns ? chat.session : null;
+  // Another chat's outputs never stay up while this one's load.
+  if (el.dataset.chat !== (id || '')) { el.dataset.chat = id || ''; el.hidden = true; el.innerHTML = ''; }
   let d = null;
   if (id) try { d = await getJson(`/api/copilot/outputs?chat=${encodeURIComponent(id)}`); } catch {}
   if (id !== (chat.turns ? chat.session : null)) return;
