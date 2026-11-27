@@ -80,6 +80,15 @@ test('the chat panel talks to the local Copilot CLI with the chosen options', as
   const ptPrompt = info0(ptEvs).prompt;
   assert.match(ptPrompt, /Why did it fail\?\n\nFiles I'm pointing you at \(read them from disk, and only the parts you need\): ~\/dev\/proj\/logs\/big-run\.log$/);
   assert.ok(!ptPrompt.includes('line\nline'), 'the contents stay on disk');
+  // The Markdown viewer reads .md files (and their pictures) in the chat's folders, by path or
+  // relative to the chat's folder, and says where the file is. Other files there are not served.
+  writeFileSync(join(home, 'dev', 'proj', 'logs', 'NOTES.md'), '# Notes');
+  const doc = await fetch(`${base}/api/copilot/file?chat=sess-1234&path=${encodeURIComponent('~/dev/proj/logs/NOTES.md')}`);
+  assert.equal(doc.status, 200);
+  assert.equal(await doc.text(), '# Notes');
+  assert.match(decodeURIComponent(doc.headers.get('x-file-path')), /\/dev\/proj\/logs\/NOTES\.md$/);
+  assert.equal((await fetch(`${base}/api/copilot/file?chat=sess-1234&path=${encodeURIComponent('~/dev/proj/logs/big-run.log')}`)).status, 404, 'only Markdown, not any file in the folders');
+  assert.equal((await fetch(`${base}/api/copilot/file?chat=sess-1234&path=${encodeURIComponent('/etc/x.md')}`)).status, 404, 'not outside the chat\'s folders');
   const outs2 = await (await fetch(`${base}/api/copilot/outputs?chat=sess-1234`)).json();
   assert.ok(outs2.files.some((f) => f.kind === 'pointed' && f.name === 'big-run.log'), JSON.stringify(outs2.files));
   const bad = await ask({ message: 'And this', session: 'sess-1234', resume: true, permission: 'read', files: ['/etc/passwd'] });

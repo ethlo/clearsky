@@ -170,7 +170,39 @@ for (const s of SESSIONS) {
   writeFileSync(join(d, 'workspace.yaml'), `id: ${s.sessionId}\ncwd: ${s.cwd}\n${s.branch ? `repository: acme/payments-api\nbranch: ${s.branch}\n` : ''}`);
 }
 const files = join(copilotHome, 'session-state', CHAT.id);
-writeFileSync(join(files, 'research', 'rounding.md'), '# Rounding in split refunds\n\nEach part was rounded on its own (HALF_EVEN), so 100.00 split three ways gave 33.33 × 3 = 99.99.\n\nFix: round every part but the last, and give the last part what is left.\n\n| parts | before | after |\n|---|---|---|\n| 3 × 33.33 | 99.99 | 100.00 |\n| 7 × 14.29 | 100.03 | 100.00 |\n');
+writeFileSync(join(files, 'research', 'rounding.md'), `# Rounding in split refunds
+
+Each part was rounded on its own (\`HALF_EVEN\`), so 100.00 split three ways gave 33.33 × 3 = **99.99**. See [the fix](#the-fix) and [the design notes](${CHAT.cwd}/docs/refunds.md).
+
+## What we found
+
+- PAY-412 refunds across two methods lose a cent now and then
+- Dev's review on acme/payments-api#479 asked for a test that proves the parts add up
+- [x] Reproduced with 3 × 33.33
+- [ ] Check the CSV ledger export (PAY-420)
+
+## The fix
+
+Round every part but the last, and give the last part what is left.
+
+\`\`\`java
+// The last part takes what the others left, so the parts always add up.
+BigDecimal left = total;
+for (int i = 0; i < parts - 1; i++) {
+  BigDecimal p = share.setScale(2, RoundingMode.HALF_EVEN);
+  out.add(p);
+  left = left.subtract(p);
+}
+out.add(left);
+\`\`\`
+
+| parts | before | after |
+|---|---|---|
+| 3 × 33.33 | 99.99 | 100.00 |
+| 7 × 14.29 | 100.03 | 100.00 |
+
+> Rounding each part is fine; rounding the *total* twice is not.
+`);
 writeFileSync(join(files, 'files', 'refund-cases.csv'), 'payment,methods,refund,expected\nP-1001,card+giftcard,40.00,card 30.00 / giftcard 10.00\nP-1002,card,100.00,card 100.00\nP-1003,card+invoice,33.33,card 16.67 / invoice 16.66\n');
 const chat = [{ id: CHAT.id }];
 const log = [
@@ -219,6 +251,9 @@ ${fix ? `        BigDecimal left = refund;
     }
 }
 `;
+mkdirSync(join(CHAT.cwd, 'docs'), { recursive: true });
+writeFileSync(join(CHAT.cwd, 'docs', 'refunds.md'), '# Refunds\n\nA refund can be split across the methods a payment was made with: card first, then gift card, then invoice.\n\n## Rules\n\n1. A part never exceeds what that method paid.\n2. The parts add up to the refund, to the cent ([why](../README.md)).\n3. A refund larger than the payment is refused.\n\n## Endpoints\n\n| Method | Path | What |\n|---|---|---|\n| `POST` | `/payments/{id}/refunds` | Start a refund |\n| `GET` | `/refunds/{id}` | Its parts and status |\n');
+writeFileSync(join(CHAT.cwd, 'README.md'), '# payments-api\n\nPayments and refunds for Acme. Design notes are in [docs/refunds.md](docs/refunds.md).\n');
 const git = (...a) => execFileSync('git', ['-C', CHAT.cwd, ...a], { stdio: 'ignore', env: { ...process.env, GIT_AUTHOR_NAME: 'Alex', GIT_AUTHOR_EMAIL: 'alex@example.com', GIT_COMMITTER_NAME: 'Alex', GIT_COMMITTER_EMAIL: 'alex@example.com' } });
 writeFileSync(join(src, 'RefundSplitter.java'), SPLITTER(false));
 try { git('init', '-q', '-b', 'main'); git('add', '-A'); git('commit', '-q', '-m', 'Refunds'); git('remote', 'add', 'origin', 'https://github.com/acme/payments-api.git'); git('branch', 'PAY-420-ledger-csv'); git('checkout', '-q', '-b', 'PAY-412-partial-refunds'); } catch { /* no git: no diff */ }
