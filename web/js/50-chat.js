@@ -530,32 +530,61 @@ function drawFview(tab) {
   if (!s) return;
   s.tab = tab;
   document.querySelectorAll('[data-fv-tab]').forEach((b) => b.classList.toggle('on', b.dataset.fvTab === tab));
+  body.classList.toggle('doc', tab === 'doc');
   if (tab === 'diff') body.innerHTML = diffView(s.diff, s.name);
+  else if (tab === 'doc') body.innerHTML = `<article class="md-doc">${mdDocument(s.text.slice(0, 1_000_000), s.path.replace(/\/[^/]*$/, ''))}</article>`;
   else body.innerHTML = s.text.length > 300_000 ? `${codeView(s.text.slice(0, 300_000), s.name)}<p class="muted">… cut here; open it in VS Code for the rest.</p>` : codeView(s.text, s.name);
 }
 document.addEventListener('click', (e) => { const t = e.target.closest('[data-fv-tab]'); if (t) drawFview(t.dataset.fvTab); });
-document.addEventListener('click', async (e) => {
+// Files open in a viewer over the page: code highlighted, Markdown as a document (Preview),
+// with its source and what the chat changed a tab away. A Markdown link to another file opens
+// that one in its place; Back returns.
+let fvTrail = [];
+document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-fview]');
   if (!b) return;
-  const pth = b.dataset.fview, src = `/api/copilot/file?chat=${encodeURIComponent(chat.session)}&path=${encodeURIComponent(pth)}`;
+  e.preventDefault();
+  if (fvState && b.closest('#fv-body')) fvTrail.push({ path: fvState.path, tab: fvState.tab, top: $('#fv-body').scrollTop });
+  else if (!b.closest('#fview')) fvTrail = [];
+  // A relative path in a chat answer is the chat's folder's (a document's are resolved when drawn).
+  const pth = b.dataset.fview;
+  openFview(/^[~/]/.test(pth) || !chat.cwd ? pth : docPath(chat.cwd, pth), { at: b.dataset.fvAt });
+});
+async function openFview(pth, { tab = null, at = null, top = 0 } = {}) {
+  const src = fileSrc(pth);
   const name = pth.split('/').pop();
   if (/\.pdf$/i.test(name)) { window.open(src, '_blank', 'noopener'); return; }
   fvState = null;
   $('#fv-name').textContent = name; $('#fv-name').title = pth; $('#fv-open').href = src; $('#fv-code').href = vscodeUrl(pth);
-  $('#fv-tabs').hidden = true; $('#fview').hidden = false;
+  $('#fv-tabs').hidden = true; $('#fview').hidden = false; $('#fv-back').hidden = !fvTrail.length;
   const body = $('#fv-body');
-  if (/\.(png|jpe?g|gif|webp)$/i.test(name)) { body.innerHTML = `<img alt="${esc(name)}" src="${esc(src)}">`; return; }
+  body.classList.remove('doc');
+  if (/\.(png|jpe?g|gif|webp|svg)$/i.test(name)) { body.innerHTML = `<img alt="${esc(name)}" src="${esc(src)}">`; return; }
   body.innerHTML = '<span class="typing">Loading</span>';
   try {
     const [r, d] = await Promise.all([fetch(src), getJson(`${src}&diff=1`).catch(() => ({ diff: '' }))]);
-    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
+    if (!r.ok) throw new Error(r.status === 404 ? `${pth} isn't a file this chat can show.` : (await r.json().catch(() => ({}))).error || r.statusText);
     if (!/^text\/plain/.test(r.headers.get('content-type') || '')) { body.innerHTML = `<p>No preview for this kind of file. <a href="${esc(vscodeUrl(pth))}">Open it in VS Code</a> or <a href="${esc(src)}">download it</a>.</p>`; return; }
-    fvState = { name, text: await r.text(), diff: d.diff || '' };
-    $('#fv-tabs').hidden = !fvState.diff;
-    drawFview(fvState.diff ? 'diff' : 'file');
+    const real = decodeURIComponent(r.headers.get('X-File-Path') || '') || pth;
+    fvState = { name, path: real, text: await r.text(), diff: d.diff || '' };
+    $('#fv-name').title = real; $('#fv-code').href = vscodeUrl(real);
+    const doc = MD_FILE.test(name);
+    document.querySelector('[data-fv-tab="doc"]').hidden = !doc;
+    $('#fv-tabs').hidden = !doc && !fvState.diff;
+    document.querySelector('[data-fv-tab="diff"]').hidden = !fvState.diff;
+    drawFview(tab || (doc ? 'doc' : fvState.diff ? 'diff' : 'file'));
+    if (at) $(`#md-${CSS.escape(at)}`)?.scrollIntoView(); else body.scrollTop = top;
   } catch (err) { body.innerHTML = `<div class="err">${esc(err.message)}</div>`; }
+}
+// A link to a heading in the document scrolls to it.
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('[data-md-anchor]');
+  if (!a) return;
+  e.preventDefault();
+  $(`#md-${CSS.escape(a.dataset.mdAnchor)}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
-const closeFview = () => { $('#fview').hidden = true; $('#fv-body').innerHTML = ''; fvState = null; };
+$('#fv-back').onclick = () => { const p = fvTrail.pop(); if (p) openFview(p.path, p); };
+const closeFview = () => { $('#fview').hidden = true; $('#fv-body').innerHTML = ''; fvState = null; fvTrail = []; };
 $('#fv-close').onclick = closeFview;
 $('#fview').addEventListener('click', (e) => { if (e.target.id === 'fview') closeFview(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#fview').hidden) closeFview(); });
@@ -594,16 +623,49 @@ const jiraBaseGuess = () => standupData?.jiraBase || (state.jira?.assigned?.[0]?
 // Just enough Markdown for chat answers: code blocks, inline code, bold, and links for
 // URLs, Jira keys and PRs (which get hover cards). A ```choices block is a question with
 // buttons (Copilot is asked to use one when you should pick: see CHOICES_HINT on the server).
+// The Markdown viewer reads whole documents with the same code (mdDocument): then headings keep
+// their level, code blocks are highlighted by their language, chat cards are plain code, and
+// relative links and pictures are the document's folder's. Set only while one is drawn.
+let mdDoc = null;
 function md(text) {
   // Fenced blocks: an opening ```lang line, then everything up to a closing ``` line. One still
   // open (Copilot is mid-answer) shows as code so far.
   const re = /^```([\w-]*)[ \t]*\n([\s\S]*?)^```[ \t]*$/gm;
-  const block = (lang, body) => (lang === 'choices' ? choicesCard(body) : lang === 'remember' ? rememberCard(body) : lang === 'new-task' ? newTaskCard(body) : `<div class="cblock"><button type="button" class="b-copy" data-copy-block title="Copy" aria-label="Copy">${icon('copy', 13)}</button><pre><code>${esc(body.replace(/\n$/, ''))}</code></pre></div>`);
+  const block = (lang, body) => (mdDoc ? docCode(lang, body) : lang === 'choices' ? choicesCard(body) : lang === 'remember' ? rememberCard(body) : lang === 'new-task' ? newTaskCard(body) : `<div class="cblock"><button type="button" class="b-copy" data-copy-block title="Copy" aria-label="Copy">${icon('copy', 13)}</button><pre><code>${esc(body.replace(/\n$/, ''))}</code></pre></div>`);
   let out = '', last = 0, m;
   while ((m = re.exec(text))) { out += mdText(text.slice(last, m.index), last > 0); out += block(m[1], m[2]); last = re.lastIndex; }
   const rest = text.slice(last), open = rest.match(/^```([\w-]*)[ \t]*\n/m);
   if (!open) return out + mdText(rest, last > 0);
-  return out + mdText(rest.slice(0, open.index), last > 0) + (['choices', 'remember', 'new-task'].includes(open[1]) ? '' : block('', rest.slice(open.index + open[0].length)));
+  return out + mdText(rest.slice(0, open.index), last > 0) + (!mdDoc && ['choices', 'remember', 'new-task'].includes(open[1]) ? '' : block(open[1], rest.slice(open.index + open[0].length)));
+}
+const docCode = (lang, body) => `<div class="cblock"><button type="button" class="b-copy" data-copy-block title="Copy" aria-label="Copy">${icon('copy', 13)}</button><pre><code>${lang && !/^(te?xt|plain|console|output)$/i.test(lang) ? highlight(body.replace(/\n$/, ''), `x.${lang}`) : esc(body.replace(/\n$/, ''))}</code></pre></div>`;
+// A whole Markdown document, for the viewer: dir is its folder, for its relative links.
+function mdDocument(text, dir) {
+  mdDoc = { dir, ids: new Map() };
+  try { return md(text.replace(/\r\n?/g, '\n').replace(/^---\n[\s\S]*?\n---\n/, '').replace(/<!--[\s\S]*?-->/g, '')); } finally { mdDoc = null; }
+}
+// A path a document links to, from its folder: "../docs/a.md" from /x/y is /x/docs/a.md.
+function docPath(dir, rel) {
+  try { rel = decodeURI(rel); } catch { /* as written */ }
+  if (/^[~/]/.test(rel) || !dir) return rel;
+  const parts = dir.split('/');
+  for (const seg of rel.split('/')) { if (seg === '..') { if (parts.length > 1) parts.pop(); } else if (seg && seg !== '.') parts.push(seg); }
+  return parts.join('/') || '/';
+}
+const MD_FILE = /\.(md|markdown)$/i;
+const fileSrc = (pth) => `/api/copilot/file?chat=${encodeURIComponent(chat.session)}&path=${encodeURIComponent(pth)}`;
+// A heading's anchor, the way GitHub makes them: "## Fix it, now" is #fix-it-now.
+const slug = (t) => t.toLowerCase().replace(/<[^>]+>/g, '').replace(/[^\p{L}\p{N}\s_-]/gu, '').trim().replace(/\s/g, '-');
+// [label](target) that isn't a web address: a heading in this document, another Markdown file
+// (opens in the viewer), or anything else, which is shown as its label.
+function mdLink(label, target) {
+  const [pth, frag] = target.split('#');
+  if (!pth && frag) return mdDoc ? `<a href="#" data-md-anchor="${esc(slug(frag))}">${label}</a>` : label;
+  if (MD_FILE.test(pth)) {
+    const full = mdDoc ? docPath(mdDoc.dir, pth) : pth;
+    return `<a href="#" data-fview="${esc(full)}"${frag ? ` data-fv-at="${esc(slug(frag))}"` : ''} title="${esc(full)}">${label}</a>`;
+  }
+  return label;
 }
 function mdText(part, afterBlock) {
   // "> " lines (a draft comment, a quote from a thread) as one quote, with a Copy button that
@@ -625,8 +687,14 @@ function mdText(part, afterBlock) {
 function mdInline(text) {
   const keep = [];
   const hold = (html) => `\u0001${keep.push(html) - 1}\u0001`;
-  let t = text.replace(/`([^`\n]+)`/g, (m, c) => hold(`<code>${esc(c)}</code>`));
+  // `docs/plan.md` opens in the Markdown viewer.
+  let t = text.replace(/`([^`\n]+)`/g, (m, c) => hold(/^[\w~./-]+\.(md|markdown)$/i.test(c) ? mdLink(`<code>${esc(c)}</code>`, c) : `<code>${esc(c)}</code>`));
+  // Pictures: a document's own (its folder's) are shown; ones on the web, which the page may not
+  // load, are a link.
+  t = t.replace(/!\[([^\]\n]*)\]\(<?([^\s)>]+)>?(?:\s+"[^"]*")?\)/g, (m, alt, src) => hold(/^https?:\/\//.test(src) ? `<a href="${esc(src)}" target="_blank" rel="noopener">${esc(alt || src)}</a>`
+    : mdDoc && !/^[a-z]+:/i.test(src) ? `<img class="md-img" alt="${esc(alt)}" src="${esc(fileSrc(docPath(mdDoc.dir, src)))}">` : esc(alt)));
   t = t.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g, (m, label, url) => hold(`<a href="${esc(url)}" target="_blank" rel="noopener">${linkify(label, jiraBaseGuess())}</a>`));
+  t = t.replace(/\[([^\]\n]+)\]\(<?([^\s)>:]+)>?\)/g, (m, label, target) => hold(mdLink(linkify(label, jiraBaseGuess()), target)));
   t = t.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, (m, pre, url) => pre + hold(`<a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a>`));
   // Emphasis as markers before escaping, so the tags linkify writes are never touched.
   t = t.replace(/\*\*([^*\n]+)\*\*/g, '\u0002b$1\u0003b').replace(/__([^_\n]+)__/g, '\u0002b$1\u0003b')
@@ -648,7 +716,16 @@ function mdBlocks(text) {
     if (/^\u0000\d+\u0000$/.test(line.trim())) { flush(); out.push(line.trim()); continue; }
     if (!line.trim()) { flush(); continue; }
     const h = line.match(/^(#{1,6})\s+(.*)$/);
-    if (h) { flush(); const l = Math.min(6, h[1].length + 2); out.push(`<h${l}>${mdInline(h[2])}</h${l}>`); continue; }
+    if (h) {
+      flush();
+      const title = h[2].replace(/\s+#+\s*$/, '');
+      if (!mdDoc) { const l = Math.min(6, h[1].length + 2); out.push(`<h${l}>${mdInline(title)}</h${l}>`); continue; }
+      // Anchors as GitHub makes them, a second "Notes" being notes-1.
+      const base = slug(title), n = mdDoc.ids.get(base) || 0;
+      mdDoc.ids.set(base, n + 1);
+      out.push(`<h${h[1].length} id="md-${esc(n ? `${base}-${n}` : base)}">${mdInline(title)}</h${h[1].length}>`);
+      continue;
+    }
     if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) { flush(); out.push('<hr>'); continue; }
     // A table: a | row, then a |---| line.
     if (line.includes('|') && /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/.test(lines[i + 1] || '')) {
